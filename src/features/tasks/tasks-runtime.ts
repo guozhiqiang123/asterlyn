@@ -6,6 +6,7 @@ import {
   taskTreeBranchKeys,
   taskTreeDefaultExpandedKeys,
 } from "./tasks-tree.ts";
+import { DisclosureState } from "../../presentation/hierarchical-collection.ts";
 import { renderTasksView, TASKS_RENDER_BATCH_SIZE, type TasksCopy } from "./tasks-view.ts";
 
 export interface TasksRuntimeOptions {
@@ -25,7 +26,7 @@ export class TasksRuntime {
   private readonly controller: TasksController;
   private readonly options: TasksRuntimeOptions;
   private visibleLimit = TASKS_RENDER_BATCH_SIZE;
-  private expandedTreeNodes = new Set<string>([TASK_TREE_ROOT_KEY]);
+  private treeDisclosure = expandedDisclosure([TASK_TREE_ROOT_KEY]);
   private treeExpansionTouched = false;
   private presentation: TaskPresentation = "all-tasks-tree";
 
@@ -39,7 +40,7 @@ export class TasksRuntime {
     this.options = options;
     this.release = controller.subscribe((change) => {
       if (change.reason === "workspace") {
-        this.expandedTreeNodes = new Set([TASK_TREE_ROOT_KEY]);
+        this.treeDisclosure = expandedDisclosure([TASK_TREE_ROOT_KEY]);
         this.treeExpansionTouched = false;
       }
       if (change.reason === "providers") this.reconcileExpandedTree(change.state);
@@ -64,7 +65,7 @@ export class TasksRuntime {
     if (!host) return;
     const focus = captureTasksFocus(host);
     const copy = this.options.copy?.();
-    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.expandedTreeNodes, this.presentation);
+    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.treeDisclosure.snapshot.exceptions, this.presentation);
     syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
@@ -182,8 +183,7 @@ export class TasksRuntime {
   private toggleTreeNode(key: string): void {
     if (this.controller.state.query.trim()) return;
     this.treeExpansionTouched = true;
-    if (this.expandedTreeNodes.has(key)) this.expandedTreeNodes.delete(key);
-    else this.expandedTreeNodes.add(key);
+    this.treeDisclosure.toggle(key);
     this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
     this.render();
   }
@@ -191,10 +191,11 @@ export class TasksRuntime {
   private reconcileExpandedTree(state: TasksState): void {
     const tree = buildTaskTree(state.entries, state.identity?.root ?? "", this.options.copy?.().title ?? "Tasks");
     const available = taskTreeBranchKeys(tree);
-    this.expandedTreeNodes = this.treeExpansionTouched
-      ? new Set([...this.expandedTreeNodes].filter((key) => available.has(key)))
+    const expanded = this.treeExpansionTouched
+      ? new Set([...available].filter((key) => this.treeDisclosure.isExpanded(key)))
       : taskTreeDefaultExpandedKeys(tree);
-    this.expandedTreeNodes.add(TASK_TREE_ROOT_KEY);
+    expanded.add(TASK_TREE_ROOT_KEY);
+    this.treeDisclosure = expandedDisclosure(expanded);
   }
 
   private handleTreeNavigation(host: HTMLElement, row: HTMLElement, event: KeyboardEvent): boolean {
@@ -246,6 +247,10 @@ export class TasksRuntime {
   }
 
   private host(): HTMLElement | null { return this.root.querySelector<HTMLElement>("#tasks-tool-host"); }
+}
+
+function expandedDisclosure(keys: Iterable<string>): DisclosureState {
+  return new DisclosureState({ defaultExpanded: false, exceptions: new Set(keys) });
 }
 
 export function syncTasksHeaderRefresh(root: ParentNode, state: TasksState, copy?: TasksCopy): void {

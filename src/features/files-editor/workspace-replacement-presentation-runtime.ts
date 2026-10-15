@@ -16,6 +16,7 @@ import type { WorkspaceReplacementController, WorkspaceReplacementFileSession, W
 import { buildWorkspaceReplacementActionDocument, replacementActionForChunk } from "./workspace-replacement-diff-session.ts";
 import { EMBEDDED_EDITABLE_DIFF_CAPABILITIES } from "../../shared/diff-review/diff-review-model.ts";
 import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
+import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 import type { GitBlameRuntime } from "./editor-gutter.ts";
 
 export interface WorkspaceReplacementPresentationOptions {
@@ -146,8 +147,9 @@ export class WorkspaceReplacementPresentationRuntime {
         whitespace: editor.whitespace, whitespaceTitle: editor.whitespaceTitle,
       },
     });
+    const fileToolbar = renderReplacementFileToolbar(this.fileView, copy);
     host.innerHTML = `<div class="replacement-tool-layout">
-      <aside class="replacement-tool-files"><div class="replacement-tool-summary" role="group" aria-label="${escapeAttribute(copy.replacementMapping)}"><span>${escapeHtml(copy.replaceLabel)}</span><code title="${escapeAttribute(state.request.query)}">${escapeHtml(state.request.query)}</code><label for="replacement-tool-text">${escapeHtml(copy.withLabel)}</label><input id="replacement-tool-text" type="text" value="${escapeAttribute(replacementText)}" /><small class="replacement-tool-draft ${draftChanged ? "" : "hidden"}">${escapeHtml(copy.previewChanged)}</small></div><div class="replacement-tool-file-toolbar"><button class="compact-icon-button ${this.fileView === "tree" ? "active" : ""}" data-replacement-file-view type="button" aria-pressed="${this.fileView === "tree"}" title="${escapeAttribute(this.fileView === "tree" ? copy.flatView : copy.treeView)}">${icon("eye", 14)}</button><button class="compact-icon-button" data-replacement-expand type="button" title="${escapeAttribute(copy.expandAll)}" ${this.fileView === "tree" ? "" : "disabled"}>${icon("expand", 14)}</button><button class="compact-icon-button" data-replacement-collapse type="button" title="${escapeAttribute(copy.collapseAll)}" ${this.fileView === "tree" ? "" : "disabled"}>${icon("collapse", 14)}</button></div><div class="replacement-tool-file-list compact-file-tree ${this.fileView}" role="${this.fileView === "tree" ? "tree" : "listbox"}">${files}</div></aside><div class="workbench-splitter vertical replacement-tool-splitter" id="replacement-tool-splitter" aria-label="${escapeAttribute(copy.resizeFileList)}"></div>
+      <aside class="replacement-tool-files"><div class="replacement-tool-summary" role="group" aria-label="${escapeAttribute(copy.replacementMapping)}"><span>${escapeHtml(copy.replaceLabel)}</span><code title="${escapeAttribute(state.request.query)}">${escapeHtml(state.request.query)}</code><label for="replacement-tool-text">${escapeHtml(copy.withLabel)}</label><input id="replacement-tool-text" type="text" value="${escapeAttribute(replacementText)}" /><small class="replacement-tool-draft ${draftChanged ? "" : "hidden"}">${escapeHtml(copy.previewChanged)}</small></div>${fileToolbar}<div class="replacement-tool-file-list compact-file-tree ${this.fileView}" role="${this.fileView === "tree" ? "tree" : "listbox"}">${files}</div></aside><div class="workbench-splitter vertical replacement-tool-splitter" id="replacement-tool-splitter" aria-label="${escapeAttribute(copy.resizeFileList)}"></div>
       <section class="replacement-tool-comparison"><div class="replacement-tool-toolbar"><strong id="replacement-tool-path">${escapeHtml(this.selectedPath ?? "")}</strong><div class="replacement-tool-actions"><span class="replacement-tool-save-state" id="replacement-tool-save-state"></span>${diffToolbar}<button class="primary-button replacement-tool-review" id="replacement-tool-review" type="button" ${draftChanged ? "disabled" : ""}>${escapeHtml(copy.reviewAndApply)}</button><button class="secondary-button replacement-tool-save hidden" id="replacement-tool-save" type="button" disabled>${escapeHtml(copy.saveFile)}</button></div></div><div class="replacement-tool-diff diff-surface editable-diff-surface" id="replacement-tool-diff"></div></section>
     </div>`;
     this.syncUnchangedButton();
@@ -271,18 +273,18 @@ export class WorkspaceReplacementPresentationRuntime {
     this.bindPreviewInput(text, () => this.syncToolDraft());
     this.root.querySelector<HTMLElement>(".replacement-tool-file-list")
       ?.addEventListener("click", (event) => this.activateFileTree(event));
-    this.root.querySelector<HTMLButtonElement>("[data-replacement-file-view]")
+    this.root.querySelector<HTMLButtonElement>('.replacement-tool-file-toolbar [data-collection-command="view"]')
       ?.addEventListener("click", () => {
         this.fileView = this.fileView === "tree" ? "flat" : "tree";
         this.renderFileList();
       });
-    this.root.querySelector<HTMLButtonElement>("[data-replacement-expand]")
+    this.root.querySelector<HTMLButtonElement>('.replacement-tool-file-toolbar [data-collection-command="expand"]')
       ?.addEventListener("click", () => {
         const files = this.options.controller.state.replacement.preview?.files ?? [];
         this.expandedDirectories = new Set(allDirectoryPaths(replacementTree(files)));
         this.renderFileList();
       });
-    this.root.querySelector<HTMLButtonElement>("[data-replacement-collapse]")
+    this.root.querySelector<HTMLButtonElement>('.replacement-tool-file-toolbar [data-collection-command="collapse"]')
       ?.addEventListener("click", () => {
         this.expandedDirectories = new Set();
         this.renderFileList();
@@ -372,13 +374,13 @@ export class WorkspaceReplacementPresentationRuntime {
     list.setAttribute("role", this.fileView === "tree" ? "tree" : "listbox");
     list.innerHTML = this.renderFiles(files);
     list.scrollTop = scrollTop;
-    const view = this.root.querySelector<HTMLButtonElement>("[data-replacement-file-view]");
+    const view = this.root.querySelector<HTMLButtonElement>('.replacement-tool-file-toolbar [data-collection-command="view"]');
     if (view) {
       view.classList.toggle("active", this.fileView === "tree");
       view.setAttribute("aria-pressed", String(this.fileView === "tree"));
       view.title = this.fileView === "tree" ? this.options.copy().flatView : this.options.copy().treeView;
     }
-    for (const selector of ["[data-replacement-expand]", "[data-replacement-collapse]"]) {
+    for (const selector of ['.replacement-tool-file-toolbar [data-collection-command="expand"]', '.replacement-tool-file-toolbar [data-collection-command="collapse"]']) {
       const button = this.root.querySelector<HTMLButtonElement>(selector);
       if (button) button.disabled = this.fileView !== "tree";
     }
@@ -633,6 +635,29 @@ export class WorkspaceReplacementPresentationRuntime {
     if (!element) throw new Error(`Missing workspace replacement element: ${selector}`);
     return element;
   }
+}
+
+function renderReplacementFileToolbar(
+  fileView: "tree" | "flat",
+  copy: ReplacementCopy,
+): string {
+  return renderHierarchicalCollectionToolbar({
+    mode: fileView,
+    className: "replacement-tool-file-toolbar",
+    ariaLabel: copy.resizeFileList,
+    commands: [
+      {
+        id: "view",
+        label: fileView === "tree" ? copy.flatView : copy.treeView,
+        icon: "eye",
+        iconSize: 14,
+        pressed: fileView === "tree",
+        active: fileView === "tree",
+      },
+      { id: "expand", label: copy.expandAll, icon: "expand", iconSize: 14, disabled: fileView !== "tree" },
+      { id: "collapse", label: copy.collapseAll, icon: "collapse", iconSize: 14, disabled: fileView !== "tree" },
+    ],
+  });
 }
 
 function replacementTree(files: readonly WorkspaceReplacementFilePreview[]): ProjectTreeNode[] {

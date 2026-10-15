@@ -5,11 +5,13 @@ export interface CollectionToolbarCommand {
   readonly id: string;
   readonly elementId?: string;
   readonly label: string;
+  readonly title?: string;
   readonly icon: Parameters<typeof icon>[0];
   readonly iconSize?: number;
   readonly disabled?: boolean;
   readonly pressed?: boolean;
   readonly active?: boolean;
+  readonly separatorBefore?: boolean;
 }
 
 export interface CollectionToolbarState {
@@ -31,7 +33,8 @@ function renderCommand(command: CollectionToolbarCommand): string {
   const disabled = command.disabled ? " disabled" : "";
   const elementId = command.elementId ? ` id="${escapeHtml(command.elementId)}"` : "";
   const active = command.active ? " active" : "";
-  return `<button type="button" class="compact-icon-button hierarchical-collection-toolbar-command${active}"${elementId} data-collection-command="${escapeHtml(command.id)}" aria-label="${escapeHtml(command.label)}" title="${escapeHtml(command.label)}"${pressed}${disabled}>${icon(command.icon, command.iconSize ?? 14)}</button>`;
+  const separator = command.separatorBefore ? '<span class="toolbar-separator" aria-hidden="true"></span>' : "";
+  return `${separator}<button type="button" class="compact-icon-button hierarchical-collection-toolbar-command${active}"${elementId} data-collection-command="${escapeHtml(command.id)}" aria-label="${escapeHtml(command.label)}" title="${escapeHtml(command.title ?? command.label)}"${pressed}${disabled}>${icon(command.icon, command.iconSize ?? 14)}</button>`;
 }
 
 function escapeHtml(value: string): string {

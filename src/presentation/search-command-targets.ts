@@ -19,10 +19,10 @@ export interface SearchCommandDefinition {
 }
 
 export const SEARCH_COMMAND_DEFINITIONS: readonly SearchCommandDefinition[] = [
-  search(SEARCH_COMMANDS.locateCurrent, "locate-current", (catalog) => catalog.projectFiles.locateCurrentFile, "find results locate current file", '[data-find-action="locate"]'),
-  search(SEARCH_COMMANDS.toggleResultsView, "toggle-results-view", (catalog) => catalog.projectFiles.showAs(`${catalog.projectFiles.flatList} / ${catalog.projectFiles.directoryTree}`), "find results tree flat view", '[data-find-action="view"]'),
-  search(SEARCH_COMMANDS.expandResults, "expand-results", (catalog) => catalog.projectFiles.expandSelectedFolder, "find results expand selected folder", '[data-find-action="expand"]'),
-  search(SEARCH_COMMANDS.collapseResults, "collapse-results", (catalog) => catalog.projectFiles.collapseSelectedFolder, "find results collapse selected folder", '[data-find-action="collapse"]'),
+  search(SEARCH_COMMANDS.locateCurrent, "locate-current", (catalog) => catalog.projectFiles.locateCurrentFile, "find results locate current file", '#terminal-header-actions [data-collection-command="locate"]'),
+  search(SEARCH_COMMANDS.toggleResultsView, "toggle-results-view", (catalog) => catalog.projectFiles.showAs(`${catalog.projectFiles.flatList} / ${catalog.projectFiles.directoryTree}`), "find results tree flat view", '#terminal-header-actions [data-collection-command="view"]'),
+  search(SEARCH_COMMANDS.expandResults, "expand-results", (catalog) => catalog.projectFiles.expandSelectedFolder, "find results expand selected folder", '#terminal-header-actions [data-collection-command="expand"]'),
+  search(SEARCH_COMMANDS.collapseResults, "collapse-results", (catalog) => catalog.projectFiles.collapseSelectedFolder, "find results collapse selected folder", '#terminal-header-actions [data-collection-command="collapse"]'),
 ];
 
 export const SEARCH_REPLACEMENT_DOM_COMMANDS: readonly DomCommandDefinition[] = [

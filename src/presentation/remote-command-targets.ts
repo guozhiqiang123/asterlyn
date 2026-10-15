@@ -30,9 +30,9 @@ export const REMOTE_COMMAND_DEFINITIONS: readonly RemoteCommandDefinition[] = [
   remote(REMOTE_COMMANDS.manage, "manage", WORKBENCH_FOCUS_SCOPES, (catalog) => catalog.remote.management.title, "manage add edit delete git remotes"),
   remote(REMOTE_COMMANDS.openFileDiff, "open-file-diff", REVIEW_SCOPES, (catalog) => catalog.remote.openOutgoingDiff, "push review selected outgoing file diff", '[data-push-file-action="diff"]'),
   remote(REMOTE_COMMANDS.openCurrentFile, "open-current-file", REVIEW_SCOPES, (catalog) => catalog.editor.openSource, "push review open selected current file", '[data-push-file-action="open"]'),
-  remote(REMOTE_COMMANDS.toggleFileView, "toggle-file-view", REVIEW_SCOPES, (catalog) => catalog.remote.showPushedFilesAs(`${catalog.remote.flatList} / ${catalog.remote.folderTree}`), "push review files tree flat view", '[data-push-file-action="view"]'),
-  remote(REMOTE_COMMANDS.expandFolders, "expand-folders", REVIEW_SCOPES, (catalog) => catalog.remote.expandPushedFolders, "push review expand all file folders", '[data-push-file-action="expand"]'),
-  remote(REMOTE_COMMANDS.collapseFolders, "collapse-folders", REVIEW_SCOPES, (catalog) => catalog.remote.collapsePushedFolders, "push review collapse all file folders", '[data-push-file-action="collapse"]'),
+  remote(REMOTE_COMMANDS.toggleFileView, "toggle-file-view", REVIEW_SCOPES, (catalog) => catalog.remote.showPushedFilesAs(`${catalog.remote.flatList} / ${catalog.remote.folderTree}`), "push review files tree flat view", '.push-file-toolbar [data-collection-command="view"]'),
+  remote(REMOTE_COMMANDS.expandFolders, "expand-folders", REVIEW_SCOPES, (catalog) => catalog.remote.expandPushedFolders, "push review expand all file folders", '.push-file-toolbar [data-collection-command="expand"]'),
+  remote(REMOTE_COMMANDS.collapseFolders, "collapse-folders", REVIEW_SCOPES, (catalog) => catalog.remote.collapsePushedFolders, "push review collapse all file folders", '.push-file-toolbar [data-collection-command="collapse"]'),
   remote(REMOTE_COMMANDS.loadMore, "load-more", REVIEW_SCOPES, (catalog) => catalog.remote.showMore, "push review load more outgoing commits", "#push-load-more"),
 ];
 

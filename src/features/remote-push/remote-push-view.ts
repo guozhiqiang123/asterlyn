@@ -23,6 +23,7 @@ import { compactDirectoryChain } from "../../presentation/compact-file-tree.ts";
 import { sortFilesByName } from "../../presentation/file-name-order.ts";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { formatPresentationDateTime } from "../../presentation/date-time.ts";
+import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import {
   filesForPushReview,
@@ -374,7 +375,17 @@ function pushFileToolbar(model: RemotePushDialogViewModel, selected: boolean): s
   const localization = model.localization ?? DEFAULT_LOCALIZATION;
   const copy = localization.catalog.remote;
   const nextView = state.pushFileView === "tree" ? copy.flatList : copy.folderTree;
-  return `<div class="push-file-toolbar" role="toolbar" aria-label="${escapeAttribute(copy.pushedFileToolbar)}"><button class="compact-icon-button" type="button" data-push-file-action="diff" title="${escapeAttribute(copy.openOutgoingDiff)}" aria-label="${escapeAttribute(copy.openOutgoingDiff)}" ${selected && !state.pushFileActionLoading ? "" : "disabled"}>${state.pushFileActionLoading ? '<span class="spinner"></span>' : icon("diff", 14)}</button><button class="compact-icon-button" type="button" data-push-file-action="open" title="${escapeAttribute(localization.catalog.editor.openSource)}" aria-label="${escapeAttribute(localization.catalog.editor.openSource)}" ${selected && model.selectedProjectFileAvailable ? "" : "disabled"}>${icon("locate", 14)}</button><button class="compact-icon-button ${state.pushFileView === "tree" ? "active" : ""}" type="button" data-push-file-action="view" title="${escapeAttribute(copy.showPushedFilesAs(nextView))}" aria-label="${escapeAttribute(copy.showPushedFilesAs(nextView))}" aria-pressed="${state.pushFileView === "tree"}">${icon("eye", 14)}</button><button class="compact-icon-button" type="button" data-push-file-action="expand" title="${escapeAttribute(copy.expandPushedFolders)}" aria-label="${escapeAttribute(copy.expandPushedFolders)}" ${state.pushFileView === "flat" ? "disabled" : ""}>${icon("expand", 14)}</button><button class="compact-icon-button" type="button" data-push-file-action="collapse" title="${escapeAttribute(copy.collapsePushedFolders)}" aria-label="${escapeAttribute(copy.collapsePushedFolders)}" ${state.pushFileView === "flat" ? "disabled" : ""}>${icon("collapse", 14)}</button></div>`;
+  return renderHierarchicalCollectionToolbar({
+    mode: state.pushFileView,
+    ariaLabel: copy.pushedFileToolbar,
+    className: "push-file-toolbar",
+    leadingHtml: `<button class="compact-icon-button" type="button" data-push-file-action="diff" title="${escapeAttribute(copy.openOutgoingDiff)}" aria-label="${escapeAttribute(copy.openOutgoingDiff)}" ${selected && !state.pushFileActionLoading ? "" : "disabled"}>${state.pushFileActionLoading ? '<span class="spinner"></span>' : icon("diff", 14)}</button><button class="compact-icon-button" type="button" data-push-file-action="open" title="${escapeAttribute(localization.catalog.editor.openSource)}" aria-label="${escapeAttribute(localization.catalog.editor.openSource)}" ${selected && model.selectedProjectFileAvailable ? "" : "disabled"}>${icon("locate", 14)}</button>`,
+    commands: [
+      { id: "view", label: copy.showPushedFilesAs(nextView), icon: "eye", pressed: state.pushFileView === "tree", active: state.pushFileView === "tree" },
+      { id: "expand", label: copy.expandPushedFolders, icon: "expand", disabled: state.pushFileView === "flat" },
+      { id: "collapse", label: copy.collapsePushedFolders, icon: "collapse", disabled: state.pushFileView === "flat" },
+    ],
+  });
 }
 
 function renderPushFileTreeNode(node: CommitFileTreeNode, depth: number, model: RemotePushDialogViewModel): string {

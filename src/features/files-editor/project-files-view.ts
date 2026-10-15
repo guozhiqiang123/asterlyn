@@ -13,6 +13,7 @@ import {
   compactDirectoryChain,
 } from "../../presentation/compact-file-tree.ts";
 import { isProjectTreeRowSelected } from "./project-files-selection.ts";
+import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 
 export const PROJECT_TREE_MOUNT_LIMIT = 200;
 export const PROJECT_TREE_ROW_HEIGHT = COMPACT_FILE_TREE_ROW_HEIGHT;
@@ -41,10 +42,16 @@ export function renderProjectToolbar(
 ): string {
   const canLocate = Boolean(activePath && findProjectTreeNode(tree, activePath));
   const canChangeSubtree = state.selection?.kind === "directory";
-  return `
-    <button class="compact-icon-button" id="locate-project-file" type="button" aria-label="${escapeAttribute(copy.locateCurrentFile)}" title="${escapeAttribute(copy.locateCurrentFile)}" ${canLocate ? "" : "disabled"}>${icon("locate", 14)}</button>
-    <button class="compact-icon-button" id="expand-project-folder" type="button" aria-label="${escapeAttribute(copy.expandSelectedFolder)}" title="${escapeAttribute(copy.expandSelectedFolder)}" ${canChangeSubtree ? "" : "disabled"}>${icon("expand", 14)}</button>
-    <button class="compact-icon-button" id="collapse-project-folder" type="button" aria-label="${escapeAttribute(copy.collapseSelectedFolder)}" title="${escapeAttribute(copy.collapseSelectedFolder)}" ${canChangeSubtree ? "" : "disabled"}>${icon("collapse", 14)}</button>`;
+  return renderHierarchicalCollectionToolbar({
+    mode: "tree",
+    className: "project-files-toolbar",
+    ariaLabel: copy.projectFiles,
+    leadingHtml: `<button class="compact-icon-button" id="locate-project-file" type="button" aria-label="${escapeAttribute(copy.locateCurrentFile)}" title="${escapeAttribute(copy.locateCurrentFile)}"${canLocate ? "" : " disabled"}>${icon("locate", 14)}</button>`,
+    commands: [
+      { id: "expand", elementId: "expand-project-folder", label: copy.expandSelectedFolder, icon: "expand", disabled: !canChangeSubtree },
+      { id: "collapse", elementId: "collapse-project-folder", label: copy.collapseSelectedFolder, icon: "collapse", disabled: !canChangeSubtree },
+    ],
+  });
 }
 
 export function renderProjectNavigation(

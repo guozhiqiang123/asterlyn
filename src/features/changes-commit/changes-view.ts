@@ -1,5 +1,6 @@
 import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
+import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 import type { FileChange, RepositorySnapshot } from "../../models.ts";
 import {
   buildChangeFileTree,
@@ -155,10 +156,10 @@ function syncChangeToolbar(currentNavigation: HTMLElement, nextNavigation: HTMLE
   const next = nextNavigation.querySelector<HTMLElement>(":scope > .change-toolbar");
   if (!current || !next) return;
   current.className = next.className;
-  for (const button of current.querySelectorAll<HTMLButtonElement>("[data-change-action]")) {
-    const action = button.dataset.changeAction;
+  for (const button of current.querySelectorAll<HTMLButtonElement>("[data-collection-command]")) {
+    const action = button.dataset.collectionCommand;
     const candidate = action
-      ? next.querySelector<HTMLButtonElement>(`[data-change-action="${action}"]`)
+      ? next.querySelector<HTMLButtonElement>(`[data-collection-command="${action}"]`)
       : null;
     if (!candidate) continue;
     button.className = candidate.className;
@@ -272,15 +273,19 @@ function renderChangeToolbar(
     : null;
   const revertUnsupported = !changeSupportsRestore(snapshot, selected);
   const nextView = state.fileView === "tree" ? copy.flatList : copy.directoryTree;
-  return `<div class="change-toolbar" role="toolbar" aria-label="${escapeAttribute(copy.commitFileActions)}">
-    <button class="compact-icon-button" type="button" data-change-action="refresh" title="${escapeAttribute(copy.refreshChanges)}" aria-label="${escapeAttribute(copy.refreshChanges)}">${icon("refresh", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="revert" title="${escapeAttribute(revertUnsupported ? copy.selectTrackedToRestore : copy.restoreToHead)}" aria-label="${escapeAttribute(copy.restoreChanges)}" ${revertUnsupported ? "disabled" : ""}>${icon("revert", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="diff" title="${escapeAttribute(copy.openSelectedDiff)}" aria-label="${escapeAttribute(copy.openSelectedDiff)}" ${selected ? "" : "disabled"}>${icon("diff", 15)}</button>
-    <span class="toolbar-separator" aria-hidden="true"></span>
-    <button class="compact-icon-button ${state.fileView === "tree" ? "active" : ""}" type="button" data-change-action="view" title="${escapeAttribute(copy.showAs(nextView))}" aria-label="${escapeAttribute(copy.showAs(nextView))}" aria-pressed="${state.fileView === "tree"}">${icon("eye", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="expand" title="${escapeAttribute(copy.expandAll)}" aria-label="${escapeAttribute(copy.expandAll)}" ${state.fileView === "flat" ? "disabled" : ""}>${icon("expand", 15)}</button>
-    <button class="compact-icon-button" type="button" data-change-action="collapse" title="${escapeAttribute(copy.collapseAll)}" aria-label="${escapeAttribute(copy.collapseAll)}" ${state.fileView === "flat" ? "disabled" : ""}>${icon("collapse", 15)}</button>
-  </div>`;
+  return renderHierarchicalCollectionToolbar({
+    mode: state.fileView,
+    className: "change-toolbar",
+    ariaLabel: copy.commitFileActions,
+    commands: [
+      { id: "refresh", elementId: "change-action-refresh", label: copy.refreshChanges, icon: "refresh", iconSize: 15 },
+      { id: "revert", elementId: "change-action-revert", label: copy.restoreChanges, title: revertUnsupported ? copy.selectTrackedToRestore : copy.restoreToHead, icon: "revert", iconSize: 15, disabled: revertUnsupported },
+      { id: "diff", elementId: "change-action-diff", label: copy.openSelectedDiff, icon: "diff", iconSize: 15, disabled: !selected },
+      { id: "view", elementId: "change-action-view", label: copy.showAs(nextView), icon: "eye", iconSize: 15, pressed: state.fileView === "tree", active: state.fileView === "tree", separatorBefore: true },
+      { id: "expand", elementId: "change-action-expand", label: copy.expandAll, icon: "expand", iconSize: 15, disabled: state.fileView === "flat" },
+      { id: "collapse", elementId: "change-action-collapse", label: copy.collapseAll, icon: "collapse", iconSize: 15, disabled: state.fileView === "flat" },
+    ],
+  });
 }
 
 export function changeSupportsRestore(

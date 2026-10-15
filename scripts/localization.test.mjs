@@ -108,6 +108,9 @@ test("Simplified Chinese catalog is lazy-loadable and renders shell and settings
 
   const projectToolbar = renderProjectToolbar({ selection: null }, [], null, catalog.projectFiles);
   assert.match(projectToolbar, /在项目中定位当前文件/);
+  assert.match(projectToolbar, /data-collection-mode="tree"/);
+  assert.match(projectToolbar, /id="expand-project-folder"/);
+  assert.match(projectToolbar, /id="collapse-project-folder"/);
   const diffControls = renderDiffControls({
     imageDiff: false, textReady: true, previousFile: null, nextFile: null,
     canOpenSource: true, expanded: false, preferences: { diffLayout: "split", showWhitespace: false },

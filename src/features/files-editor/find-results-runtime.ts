@@ -115,9 +115,9 @@ export class FindResultsRuntime {
     if (actions.dataset.findBound === "true") return;
     actions.dataset.findBound = "true";
     actions.addEventListener("click", (event) => {
-      const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-find-action]");
+      const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-collection-command]");
       if (!button || !actions.contains(button)) return;
-      this.activateHeaderAction(button.dataset.findAction ?? "");
+      this.activateHeaderAction(button.dataset.collectionCommand ?? "");
     });
   }
 

@@ -1890,7 +1890,6 @@ export class AsterlynApp {
       "data-project-directory",
       "data-project-file",
       "data-change-path",
-      "data-change-action",
       "data-change-disclosure",
       "data-include-path",
       "data-include-directory",
@@ -3452,9 +3451,9 @@ export class AsterlynApp {
         this.remoteRuntime.push.setPushDirectoryExpanded(path, details.open);
       });
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-push-file-action]").forEach((button) => {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-push-file-action], .push-file-toolbar [data-collection-command]").forEach((button) => {
       button.addEventListener("click", () => {
-        const action = button.dataset.pushFileAction;
+        const action = button.dataset.pushFileAction ?? button.dataset.collectionCommand;
         if (action === "view") {
           this.remoteRuntime.push.togglePushFileView();
         } else if (action === "expand") {
@@ -4813,9 +4812,9 @@ export class AsterlynApp {
   }
 
   private bindChangeEvents(scope: ParentNode = this.root): void {
-    scope.querySelectorAll<HTMLButtonElement>("[data-change-action]").forEach((button) => {
+    scope.querySelectorAll<HTMLButtonElement>(".change-toolbar [data-collection-command]").forEach((button) => {
       button.addEventListener("click", () => {
-        const action = button.dataset.changeAction;
+        const action = button.dataset.collectionCommand;
         if (action === "refresh") {
           void this.refresh();
         } else if (action === "revert") {
@@ -4997,8 +4996,8 @@ export class AsterlynApp {
       candidate.setAttribute("aria-selected", String(primary));
     });
     const selected = this.selectedChangeModel(snapshot);
-    const diff = this.root.querySelector<HTMLButtonElement>("[data-change-action='diff']");
-    const revert = this.root.querySelector<HTMLButtonElement>("[data-change-action='revert']");
+    const diff = this.root.querySelector<HTMLButtonElement>(".change-toolbar [data-collection-command='diff']");
+    const revert = this.root.querySelector<HTMLButtonElement>(".change-toolbar [data-collection-command='revert']");
     if (diff) diff.disabled = false;
     if (revert) {
       const unsupported = !changeSupportsRestore(

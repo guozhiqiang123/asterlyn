@@ -85,7 +85,9 @@ test("replacement presentation delegates toolbar markup to the shared renderer",
     import.meta.url,
   ), "utf8");
   assert.match(source, /renderDiffReviewToolbar\(\{/u);
+  assert.match(source, /renderHierarchicalCollectionToolbar\(\{/u);
   assert.match(source, /namespace: "replacement"/u);
+  assert.match(source, /data-collection-command/u);
   assert.doesNotMatch(source, /data-replacement-tool-change|data-replacement-tool-unchanged/u);
 });
 

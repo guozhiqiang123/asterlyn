@@ -32,11 +32,13 @@ test("flat projection and ancestor/descendant queries preserve stable order", ()
 });
 
 test("toolbar renders declaration-only command IDs and escapes labels", () => {
-  const html = renderHierarchicalCollectionToolbar({ mode: "tree", ariaLabel: "File controls", commands: [{ id: "view<&", elementId: "view", label: "Tree <view>", icon: "chevron-down", pressed: true, active: true }] });
+  const html = renderHierarchicalCollectionToolbar({ mode: "tree", ariaLabel: "File controls", commands: [{ id: "view<&", elementId: "view", label: "Tree <view>", title: "Switch to flat & list", icon: "chevron-down", pressed: true, active: true, separatorBefore: true }] });
   assert.match(html, /data-collection-command="view&lt;&amp;"/u);
   assert.match(html, /aria-label="Tree &lt;view&gt;"/u);
+  assert.match(html, /title="Switch to flat &amp; list"/u);
   assert.match(html, /aria-pressed="true"/u);
   assert.match(html, /id="view"/u);
+  assert.match(html, /toolbar-separator/u);
   assert.match(html, /compact-icon-button[^"']*active/u);
   assert.doesNotMatch(html, /onclick|javascript:/iu);
 });

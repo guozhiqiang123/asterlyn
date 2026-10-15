@@ -50,7 +50,7 @@ test("Changes commands reuse enabled controls and the exact current-selection ad
   const refresh = button();
   const commit = button();
   const targets = new Map([
-    ['[data-change-action="refresh"]', refresh],
+    ['.change-toolbar [data-collection-command="refresh"]', refresh],
     ["#commit-button", commit],
   ]);
   const actions = [];

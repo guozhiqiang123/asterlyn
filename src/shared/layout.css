@@ -226,6 +226,13 @@
   gap: 2px;
 }
 
+.hierarchical-collection-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
 .terminal-session-status {
   overflow: hidden;
   max-width: min(260px, 30vw);

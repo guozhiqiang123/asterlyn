@@ -1,5 +1,6 @@
 import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
+import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 import type { LocaleCatalog } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
 import { projectTreeRows } from "./project-files-view.ts";
@@ -38,10 +39,16 @@ export function renderFindHeaderActions(
   const selectedDirectory = state.fileSelection?.kind === "directory";
   const canLocate = activePath !== null;
   const nextView = state.fileView === "tree" ? catalog.projectFiles.flatList : catalog.projectFiles.directoryTree;
-  return `<button class="compact-icon-button" type="button" data-find-action="locate" aria-label="${escapeAttribute(catalog.projectFiles.locateCurrentFile)}" title="${escapeAttribute(catalog.projectFiles.locateCurrentFile)}" ${canLocate ? "" : "disabled"}>${icon("locate", 14)}</button>
-    <button class="compact-icon-button ${state.fileView === "tree" ? "active" : ""}" type="button" data-find-action="view" aria-label="${escapeAttribute(catalog.projectFiles.showAs(nextView))}" title="${escapeAttribute(catalog.projectFiles.showAs(nextView))}" aria-pressed="${state.fileView === "tree"}">${icon("eye", 14)}</button>
-    <button class="compact-icon-button" type="button" data-find-action="expand" aria-label="${escapeAttribute(catalog.projectFiles.expandSelectedFolder)}" title="${escapeAttribute(catalog.projectFiles.expandSelectedFolder)}" ${state.fileView === "tree" && selectedDirectory ? "" : "disabled"}>${icon("expand", 14)}</button>
-    <button class="compact-icon-button" type="button" data-find-action="collapse" aria-label="${escapeAttribute(catalog.projectFiles.collapseSelectedFolder)}" title="${escapeAttribute(catalog.projectFiles.collapseSelectedFolder)}" ${state.fileView === "tree" && selectedDirectory ? "" : "disabled"}>${icon("collapse", 14)}</button>`;
+  return renderHierarchicalCollectionToolbar({
+    mode: state.fileView,
+    ariaLabel: catalog.navigation.findWindow,
+    commands: [
+      { id: "locate", label: catalog.projectFiles.locateCurrentFile, icon: "locate", disabled: !canLocate },
+      { id: "view", label: catalog.projectFiles.showAs(nextView), icon: "eye", pressed: state.fileView === "tree", active: state.fileView === "tree" },
+      { id: "expand", label: catalog.projectFiles.expandSelectedFolder, icon: "expand", disabled: !(state.fileView === "tree" && selectedDirectory) },
+      { id: "collapse", label: catalog.projectFiles.collapseSelectedFolder, icon: "collapse", disabled: !(state.fileView === "tree" && selectedDirectory) },
+    ],
+  });
 }
 
 function renderFindFiles(
