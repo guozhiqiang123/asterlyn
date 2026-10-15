@@ -87,6 +87,7 @@ pub(crate) fn read_plugin_task_cache(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn write_plugin_task_cache(
     workspace_root: String,
     plugin_id: String,

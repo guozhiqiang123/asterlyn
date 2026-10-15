@@ -1066,7 +1066,7 @@ mod tests {
         fs::create_dir(&workspace).unwrap();
         fs::write(workspace.join("build.gradle"), b"plugins {}").unwrap();
         let fingerprint = ready_fingerprint(&workspace);
-        assert_eq!(fingerprint.files[0].modified_at_epoch_ms.is_some(), true);
+        assert!(fingerprint.files[0].modified_at_epoch_ms.is_some());
         let cache = directory.path().join("cache");
         let payload = BASE64.encode(b"snapshot");
         write_cache(

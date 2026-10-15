@@ -403,5 +403,16 @@ task, primary error, and relevant source location.
 
 ## Implementation status
 
-- PMTC0: planned in this document; implementation begins only after the documentation-only commit.
-- PMTC1–PMTC7: not started.
+- PMTC0: complete in `5f6947a`; the architecture decision and phased plan were committed before
+  implementation.
+- PMTC1: complete in `812cd7a`; host-managed bundled-plugin state and stable manifests landed.
+- PMTC2: complete in `de5903e`; Settings plugin management and Android presentation preferences
+  landed.
+- PMTC3: complete in `38ae4c5`; plugin-owned tool headers gained typed Settings navigation.
+- PMTC4: complete in `e953063`; complete and Quick Actions module trees share exact task identities.
+- PMTC5: complete in `0c54887`; the bounded native fingerprint and snapshot cache capability landed.
+- PMTC6: complete across `a3cd373` and `c32df9c`; visible cache states, safe invalidation, verified
+  restore, refresh/write ordering, and Android provider integration landed.
+- PMTC7: complete; FilesRecovery performance, lifecycle, production build, and rendered-native
+  evidence are recorded in
+  [`../benchmarks/2026-10-15-filesrecovery-plugin-task-cache.md`](../benchmarks/2026-10-15-filesrecovery-plugin-task-cache.md).
