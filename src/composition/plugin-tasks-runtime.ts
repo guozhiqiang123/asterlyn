@@ -24,6 +24,7 @@ import { RecentTaskStore, type RecentTaskStorage } from "../application/tasks/re
 import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
 import type { TaskTerminalSessionPort } from "../application/tasks/task-terminal-session.ts";
 import type { HostNotificationPublisher } from "../application/notifications/index.ts";
+import { pluginTaskTerminalNotification } from "./plugin-task-feedback.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -56,11 +57,15 @@ export class PluginTasksRuntime {
   private readonly artifactBridge: TaskArtifactBridge;
   private readonly reconcileAfterTask: ((identity: PluginWorkspaceIdentity) => void | Promise<void>) | undefined;
   private readonly authorization: PluginTaskAuthorizationRuntime;
+  private readonly copy: () => TasksCopy;
+  private readonly notificationPublisher: HostNotificationPublisher | undefined;
   private readonly managementListeners = new Set<(snapshot: PluginManagementSnapshot) => void>();
   private readonly releaseManagement: () => void;
   private identity: PluginWorkspaceIdentity | null = null;
 
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
+    this.copy = options.copy;
+    this.notificationPublisher = options.notificationPublisher;
     this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
     this.artifactBridge = options.artifactBridge;
     this.reconcileAfterTask = options.reconcileAfterTask;
@@ -245,6 +250,17 @@ export class PluginTasksRuntime {
     if (result.status === "succeeded") {
       if (plan.artifactSearch) this.scheduleArtifactDiscovery(identity, plan);
       void Promise.resolve().then(() => this.reconcileAfterTask?.(identity)).catch(this.reportError);
+    }
+    if (this.matches(identity)) {
+      const notification = pluginTaskTerminalNotification(
+        this.copy(),
+        plan.request.pluginId,
+        plan.request.label,
+        result.status,
+      );
+      if (notification && this.notificationPublisher) {
+        try { this.notificationPublisher.publish(notification); } catch (error) { this.reportError(error); }
+      }
     }
     return result;
   }
