@@ -22,6 +22,8 @@ import type { TaskRunState } from "../application/tasks/index.ts";
 import { PluginContributionRuntime } from "./plugin-contribution-runtime.ts";
 import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
 import { createPluginTaskCacheCapability } from "./plugin-task-cache-capability.ts";
+import type { HostNotificationPublisher } from "../application/notifications/index.ts";
+import { createPluginNotificationCapability } from "./plugin-notification-capability.ts";
 
 export interface PluginCompositionRuntimeOptions {
   readonly registerCommand: (descriptor: CommandDescriptor) => () => void;
@@ -46,6 +48,8 @@ export interface PluginCompositionRuntimeOptions {
   readonly loadPlugins?: () => Promise<readonly BundledPlugin[]>;
   readonly preferenceStore?: PluginPreferenceStore;
   readonly taskCacheBridge?: PluginTaskCacheBridge;
+  readonly notificationPublisher?: HostNotificationPublisher;
+  readonly locale?: () => string;
 }
 
 /** Window-scoped orchestration. Bundled plugin code stays behind a lazy project-evidence gate. */
@@ -72,6 +76,13 @@ export class PluginCompositionRuntime {
         identity,
         pluginId,
       ),
+      options.notificationPublisher === undefined
+        ? undefined
+        : (plugin) => createPluginNotificationCapability(
+            plugin,
+            options.locale ?? (() => "en-US"),
+            options.notificationPublisher as HostNotificationPublisher,
+          ),
     );
     this.contributions = new PluginContributionRuntime(this.runtime.contributions, options);
     this.preferences = options.preferenceStore ?? new PluginPreferenceStore(

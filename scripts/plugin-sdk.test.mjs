@@ -6,6 +6,7 @@ import {
   PLUGIN_SDK_MAJOR,
   PLUGIN_SDK_VERSION,
   SDK_PLUGIN_LOCALIZATION_LIMITS,
+  SDK_PLUGIN_NOTIFICATION_LIMITS,
 } from "../packages/plugin-sdk/index.ts";
 import { representativePlugin } from "../packages/plugin-sdk/fixture.ts";
 import { adaptPluginManifest, adaptSdkPluginCatalog, assertCompatiblePluginSdk } from "../src/application/plugins/plugin-sdk-adapter.ts";
@@ -25,8 +26,9 @@ const manifest = {
 
 test("host adapter accepts the supported SDK major and preserves declarative metadata", () => {
   assert.equal(PLUGIN_SDK_MAJOR, 1);
-  assert.equal(PLUGIN_SDK_VERSION, "1.2.0");
+  assert.equal(PLUGIN_SDK_VERSION, "1.3.0");
   assert.equal(Object.isFrozen(SDK_PLUGIN_LOCALIZATION_LIMITS), true);
+  assert.equal(Object.isFrozen(SDK_PLUGIN_NOTIFICATION_LIMITS), true);
   assert.deepEqual(adaptPluginManifest(manifest), {
     id: "example.plugin",
     version: "1.2.3",

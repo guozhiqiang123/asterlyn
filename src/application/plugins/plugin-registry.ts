@@ -7,6 +7,8 @@ import type {
   PluginActivationContext,
   PluginActivationReport,
   PluginTaskCacheCapability,
+  PluginNotificationCapability,
+  PluginNotificationRequest,
   PluginWorkspaceIdentity,
   RegisteredPluginContribution,
 } from "./plugin-types.ts";
@@ -120,6 +122,10 @@ export class PluginRuntime {
     pluginId: string,
     identity: PluginWorkspaceIdentity,
   ) => PluginTaskCacheCapability;
+  private readonly notificationsFor: (
+    plugin: BundledPlugin,
+    identity: PluginWorkspaceIdentity,
+  ) => PluginNotificationCapability | undefined;
 
   constructor(
     contributions = new PluginContributionRegistry(),
@@ -128,10 +134,15 @@ export class PluginRuntime {
       pluginId: string,
       identity: PluginWorkspaceIdentity,
     ) => PluginTaskCacheCapability = unavailableTaskCache,
+    notificationsFor: (
+      plugin: BundledPlugin,
+      identity: PluginWorkspaceIdentity,
+    ) => PluginNotificationCapability | undefined = () => undefined,
   ) {
     this.contributions = contributions;
     this.reportDiagnostic = reportDiagnostic;
     this.taskCacheFor = taskCacheFor;
+    this.notificationsFor = notificationsFor;
   }
 
   async activate(
@@ -199,6 +210,7 @@ export class PluginRuntime {
         plugin,
         { identity, evidence: snapshot },
         this.taskCacheFor(plugin.id, identity),
+        this.notificationsFor(plugin, identity),
       );
       try {
         const returned = await plugin.activate(scope.context);
@@ -328,6 +340,7 @@ class ActivationScope {
     plugin: BundledPlugin,
     source: { readonly identity: PluginWorkspaceIdentity; readonly evidence: PluginEvidenceSnapshot },
     taskCache: PluginTaskCacheCapability,
+    notifications: PluginNotificationCapability | undefined,
   ) {
     this.batch = batch;
     this.plugin = plugin;
@@ -336,6 +349,15 @@ class ActivationScope {
       identity: source.identity,
       evidence: source.evidence,
       taskCache,
+      ...(notifications === undefined
+        ? {}
+        : {
+            notifications: Object.freeze({
+              publish: (request: PluginNotificationRequest) => {
+                if (!this.released) notifications.publish(request);
+              },
+            }),
+          }),
       contribute: (contribution) => {
         const staged = this.batch.stage(this.plugin, contribution, this);
         return {

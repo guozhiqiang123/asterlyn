@@ -63,6 +63,7 @@ export function adaptSdkPluginModule(module: SdkPluginModule): BundledPlugin {
     identity: adaptPluginWorkspaceIdentity(context.identity),
     evidence: adaptEvidence(context.evidence),
     taskCache: context.taskCache,
+    ...(context.notifications === undefined ? {} : { notifications: context.notifications }),
     contribute: (contribution) => context.contribute(adaptContribution(contribution)),
   });
   const adaptMatchContext = (context: PluginMatchContext): SdkPluginMatchContext => ({

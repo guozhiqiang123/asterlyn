@@ -8,6 +8,8 @@ import type {
 import type {
   SdkPluginManifest,
   SdkPluginLocalization,
+  SdkPluginNotificationCapability,
+  SdkPluginNotificationRequest,
   SdkHierarchicalCollection,
   SdkSettingDescriptor,
   SdkSettingOption,
@@ -30,6 +32,8 @@ export type PluginTaskRefreshPlan = SdkTaskRefreshPlan;
 export type PluginTaskRunPlan = SdkTaskRunPlan;
 export type PluginTaskExecutionRequest = SdkTaskExecutionRequest;
 export type PluginTaskAuthorizationDescriptor = SdkTaskAuthorizationDescriptor;
+export type PluginNotificationRequest = SdkPluginNotificationRequest;
+export type PluginNotificationCapability = SdkPluginNotificationCapability;
 export type PluginWorkspaceTrustPresentation = "unavailable" | "loading" | "unknown" | "trusted" | "denied" | "error";
 
 /** A host-owned deep link into a plugin's settings. */
@@ -125,6 +129,7 @@ export interface PluginActivationContext {
   readonly identity: PluginWorkspaceIdentity;
   readonly evidence: PluginEvidenceSnapshot;
   readonly taskCache: PluginTaskCacheCapability;
+  readonly notifications?: PluginNotificationCapability;
   contribute(contribution: PluginContribution): Disposable;
 }
 

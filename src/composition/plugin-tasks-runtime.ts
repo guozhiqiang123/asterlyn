@@ -23,6 +23,7 @@ import { PluginTaskBusyError } from "./plugin-contribution-runtime.ts";
 import { RecentTaskStore, type RecentTaskStorage } from "../application/tasks/recent-task-store.ts";
 import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
 import type { TaskTerminalSessionPort } from "../application/tasks/task-terminal-session.ts";
+import type { HostNotificationPublisher } from "../application/notifications/index.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -36,6 +37,7 @@ export interface PluginTasksRuntimeOptions {
   readonly recentTaskStorage?: RecentTaskStorage;
   readonly reconcileAfterTask?: (identity: PluginWorkspaceIdentity) => void | Promise<void>;
   readonly taskTerminal?: TaskTerminalSessionPort;
+  readonly notificationPublisher?: HostNotificationPublisher;
 }
 
 export interface PluginWorkspaceCatalog {
@@ -99,6 +101,8 @@ export class PluginTasksRuntime {
       executeTaskRun: (identity, plan, signal, progressChanged) => this.executeTaskRun(identity, plan, signal, progressChanged),
       providerRefreshTitle: (providerLabel) => `${options.copy().refresh}: ${providerLabel}`,
       taskCacheBridge: options.taskCacheBridge,
+      notificationPublisher: options.notificationPublisher,
+      locale: options.locale,
     });
     this.releaseManagement = this.plugins.subscribeManagement((snapshot) => {
       this.applyTaskPresentation(snapshot);

@@ -214,6 +214,33 @@ test("no-match activation leaves the registry empty", async () => {
   assert.deepEqual(runtime.contributions.list(), []);
 });
 
+test("plugin notification capability is optional, scoped, and revoked on deactivation", async () => {
+  const published = [];
+  let capability;
+  const runtime = new PluginRuntime(
+    undefined,
+    undefined,
+    undefined,
+    (owner) => ({ publish: (request) => published.push([owner.id, request]) }),
+  );
+  await runtime.activate(identity, {}, [plugin("notifier", (context) => {
+    capability = context.notifications;
+    capability?.publish({ kind: "info", messageKey: "name" });
+  })]);
+  assert.ok(capability);
+  assert.deepEqual(published, [["notifier", { kind: "info", messageKey: "name" }]]);
+  await runtime.deactivate();
+  capability.publish({ kind: "error", messageKey: "description" });
+  assert.equal(published.length, 1);
+
+  let unavailable = "unset";
+  const olderHost = new PluginRuntime();
+  await olderHost.activate(identity, {}, [plugin("old-host", (context) => {
+    unavailable = context.notifications;
+  })]);
+  assert.equal(unavailable, undefined);
+});
+
 function plugin(id, activate) {
   return {
     id,

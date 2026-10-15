@@ -68,9 +68,18 @@ export function resolvePluginMessage(
   locale: string,
   key: string,
 ): string {
+  return resolvePluginMessageOrNull(localization, locale, key) ?? key;
+}
+
+/** Resolves admitted plugin copy without exposing an unresolved key to presentation. */
+export function resolvePluginMessageOrNull(
+  localization: SdkPluginLocalization,
+  locale: string,
+  key: string,
+): string | null {
   return localization.locales[locale]?.[key]
     ?? localization.locales[localization.defaultLocale]?.[key]
-    ?? key;
+    ?? null;
 }
 
 function referencedMessageKeys(

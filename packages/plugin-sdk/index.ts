@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.2.0" as const;
+export const PLUGIN_SDK_VERSION = "1.3.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -14,6 +14,23 @@ export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
   maxValueLength: 4_096,
   maxTotalCharacters: 262_144,
 });
+
+export const SDK_PLUGIN_NOTIFICATION_LIMITS = Object.freeze({
+  maxMessageKeyLength: 128,
+  maxResolvedMessageLength: 512,
+});
+
+export type SdkPluginNotificationKind = "info" | "success" | "warning" | "error";
+
+export interface SdkPluginNotificationRequest {
+  readonly kind: SdkPluginNotificationKind;
+  readonly messageKey: string;
+}
+
+/** Optional, host-rendered plain-text notifications bound to the activating plugin. */
+export interface SdkPluginNotificationCapability {
+  publish(request: SdkPluginNotificationRequest): void;
+}
 
 export interface SdkWorkspaceIdentity {
   readonly root: string;
@@ -208,6 +225,7 @@ export interface SdkPluginActivationContext {
   readonly identity: SdkWorkspaceIdentity;
   readonly evidence: readonly SdkWorkspaceEvidence[];
   readonly taskCache: SdkPluginTaskCacheCapability;
+  readonly notifications?: SdkPluginNotificationCapability;
   contribute(contribution: SdkPluginContribution): SdkDisposable;
 }
 export interface SdkPluginMatchContext { readonly identity: SdkWorkspaceIdentity; readonly evidence: readonly SdkWorkspaceEvidence[]; }
