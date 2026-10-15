@@ -169,7 +169,7 @@ export class TaskExecutionRuntime {
       const preferred = focusedAction
         ? host.querySelector<HTMLElement>(`[data-task-execution-action="${focusedAction}"]`)
         : null;
-      (preferred ?? host.querySelector<HTMLElement>("button:not([disabled])"))?.focus();
+      (preferred ?? host.querySelector<HTMLElement>("[data-host-default-focus]:not([disabled])") ?? host.querySelector<HTMLElement>("button:not([disabled])"))?.focus();
     });
   }
 

@@ -113,7 +113,7 @@ test("task execution reports starting and cancelling immediately and only expose
   assert.equal(controller.state.status, "starting");
   let html = renderTaskExecutionReview(controller.state, EN_US_TASK_EXECUTION_COPY);
   assert.match(html, /Starting…/u);
-  assert.match(html, /data-task-execution-action="confirm" disabled/u);
+  assert.match(html, /data-host-action="confirm"[^>]*disabled[^>]*data-task-execution-action="confirm"/u);
 
   await Promise.resolve();
   finishStart({ protocolVersion: 1, runId: "run-feedback", reviewId: "review-1", workspaceRoot: "/repo" });
@@ -128,7 +128,7 @@ test("task execution reports starting and cancelling immediately and only expose
   assert.equal(controller.state.status, "cancelling");
   html = renderTaskExecutionReview(controller.state, EN_US_TASK_EXECUTION_COPY);
   assert.match(html, /Cancelling…/u);
-  assert.match(html, /data-task-execution-action="cancel" disabled/u);
+  assert.match(html, /data-host-action="cancel"[^>]*disabled[^>]*data-task-execution-action="cancel"/u);
   finishCancel();
   await cancellation;
   listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-feedback", workspaceRoot: "/repo", sequence: 1, status: "cancelled", message: null, exitCode: null });
@@ -452,9 +452,13 @@ test("review UI shows canonical executable, trust actions, ARIA, and merged UTF-
   };
   const html = renderTaskExecutionReview(state, EN_US_TASK_EXECUTION_COPY);
   assert.match(html, /aria-modal="true"/);
+  assert.match(html, /class="dialog task-execution-review"/u);
   assert.match(html, /\/repo\/gradlew/);
   assert.match(html, /data-task-execution-action="trust"/);
   assert.match(html, /data-task-execution-action="deny"/);
+  assert.match(html, /class="danger-button"[^>]*data-task-execution-action="deny"/u);
+  assert.match(html, /class="primary-button"[^>]*data-task-execution-action="trust"/u);
+  assert.match(html, /Do not trust workspace/u);
   assert.match(html, /€/u);
   assert.doesNotMatch(html, /�/u);
   assert.match(html, /&lt;script&gt;/u);
@@ -471,6 +475,7 @@ test("terminal execution UI keeps errors and exposes retry and close output", ()
   assert.match(html, /Gradle failed/);
   assert.match(html, /data-task-execution-action="retry"/);
   assert.match(html, /data-task-execution-action="close"/);
+  assert.match(html, /class="primary-button"[^>]*data-task-execution-action="retry"/u);
   assert.doesNotMatch(html, /data-task-execution-action="confirm"/);
 });
 

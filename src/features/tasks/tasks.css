@@ -141,26 +141,11 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.task-execution-review {
-  position: fixed;
-  z-index: 120;
-  top: 50%;
-  left: 50%;
+.dialog.task-execution-review {
   box-sizing: border-box;
   width: min(680px, calc(100vw - 32px));
   max-height: min(760px, calc(100vh - 32px));
   overflow: auto;
-  padding: 20px;
-  transform: translate(-50%, -50%);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--bg-panel);
-  box-shadow: 0 16px 48px var(--shadow-dialog), 0 0 0 100vmax var(--surface-scrim);
-}
-
-.task-execution-review h2 {
-  margin: 0 0 16px;
-  font-size: 16px;
 }
 
 .task-execution-review dl {
@@ -243,14 +228,6 @@
 .task-artifacts li code {
   color: var(--text-muted);
   font-size: 10px;
-}
-
-.task-execution-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
 }
 
 .tasks-row {

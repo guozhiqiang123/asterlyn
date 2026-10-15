@@ -1,6 +1,7 @@
 import type { TaskExecutionState } from "../../application/tasks/task-execution-controller.ts";
 import type { TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
 import type { TaskArtifactDiscovery } from "../../models.ts";
+import { renderHostAction, renderHostDialog, type HostAction } from "../../presentation/host-presentation.ts";
 
 export type TaskArtifactViewState =
   | { readonly status: "loading" }
@@ -15,12 +16,51 @@ export function renderTaskExecutionReview(state: TaskExecutionState, copy: TaskE
   const active = state.status === "queued" || state.status === "running" || state.status === "cancelling";
   const output = renderOutput(state);
   const artifacts = terminal && state.status === "succeeded" ? renderArtifacts(artifactState, copy) : "";
-  const actions = terminal
-    ? `<button type="button" data-task-execution-action="retry">${escapeHtml(copy.retry)}</button><button type="button" data-task-execution-action="close">${escapeHtml(copy.closeOutput)}</button>`
-    : active
-      ? `<button type="button" data-task-execution-action="cancel" ${state.status === "cancelling" ? "disabled" : ""}>${escapeHtml(state.status === "cancelling" ? copy.cancelling : copy.cancel)}</button>`
-      : `${review.trust !== "trusted" ? `<button type="button" data-task-execution-action="trust" ${state.status === "starting" ? "disabled" : ""}>${escapeHtml(copy.trustAction)}</button>` : ""}${review.trust === "trusted" || review.trust === "unknown" ? `<button type="button" data-task-execution-action="deny" ${state.status === "starting" ? "disabled" : ""}>${escapeHtml(copy.deny)}</button>` : ""}<button type="button" data-task-execution-action="confirm" ${state.status !== "review" || review.trust !== "trusted" ? "disabled" : ""}>${escapeHtml(state.status === "starting" ? copy.starting : copy.confirm)}</button><button type="button" data-task-execution-action="cancel">${escapeHtml(copy.cancel)}</button>`;
-  return `<section class="task-execution-review" role="dialog" aria-modal="true" aria-labelledby="task-execution-title"><h2 id="task-execution-title">${escapeHtml(copy.title)}</h2><dl><dt>${escapeHtml(copy.provenance)}</dt><dd>${escapeHtml(review.pluginId)} / ${escapeHtml(review.providerId)} / ${escapeHtml(review.taskId)} — ${escapeHtml(review.label)}</dd><dt>${escapeHtml(copy.executable)}</dt><dd><code>${escapeHtml(review.canonicalExecutablePath)}</code><small> (${escapeHtml(review.executablePath)})</small></dd><dt>${escapeHtml(copy.arguments)}</dt><dd>${args}</dd><dt>${escapeHtml(copy.cwd)}</dt><dd><code>${escapeHtml(review.cwd)}</code></dd><dt>${escapeHtml(copy.trust)}</dt><dd>${escapeHtml(review.trust)}</dd></dl>${review.trust !== "trusted" ? `<p role="alert">${escapeHtml(copy.trustRequired)}</p>` : ""}<p role="status" aria-live="polite">${escapeHtml((copy.status[state.status] ?? state.status))}</p>${state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : ""}${output ? `<pre class="task-execution-output">${output}</pre>` : ""}${state.outputTruncated ? `<p role="alert">${escapeHtml(copy.outputTruncated)}</p>` : ""}${artifacts}<div class="task-execution-actions">${actions}</div></section>`;
+  const actions = taskExecutionActions(state, copy, terminal, active);
+  const bodyHtml = `<dl><dt>${escapeHtml(copy.provenance)}</dt><dd>${escapeHtml(review.pluginId)} / ${escapeHtml(review.providerId)} / ${escapeHtml(review.taskId)} — ${escapeHtml(review.label)}</dd><dt>${escapeHtml(copy.executable)}</dt><dd><code>${escapeHtml(review.canonicalExecutablePath)}</code><small> (${escapeHtml(review.executablePath)})</small></dd><dt>${escapeHtml(copy.arguments)}</dt><dd>${args}</dd><dt>${escapeHtml(copy.cwd)}</dt><dd><code>${escapeHtml(review.cwd)}</code></dd><dt>${escapeHtml(copy.trust)}</dt><dd>${escapeHtml(review.trust)}</dd></dl>${review.trust !== "trusted" ? `<p role="alert">${escapeHtml(copy.trustRequired)}</p>` : ""}<p role="status" aria-live="polite">${escapeHtml((copy.status[state.status] ?? state.status))}</p>${state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : ""}${output ? `<pre class="task-execution-output">${output}</pre>` : ""}${state.outputTruncated ? `<p role="alert">${escapeHtml(copy.outputTruncated)}</p>` : ""}${artifacts}`;
+  return renderHostDialog({ id: "task-execution", title: copy.title, className: "task-execution-review", bodyHtml, actions });
+}
+
+function taskExecutionActions(
+  state: TaskExecutionState,
+  copy: TaskExecutionCopy,
+  terminal: boolean,
+  active: boolean,
+): readonly HostAction[] {
+  if (terminal) return [
+    taskExecutionAction("close", copy.closeOutput, "neutral"),
+    taskExecutionAction("retry", copy.retry, "recommended", { defaultFocus: true }),
+  ];
+  if (active) return [taskExecutionAction(
+    "cancel",
+    state.status === "cancelling" ? copy.cancelling : copy.cancel,
+    "neutral",
+    { disabled: state.status === "cancelling", defaultFocus: state.status !== "cancelling" },
+  )];
+  const review = state.review!;
+  const starting = state.status === "starting";
+  const leading = review.trust === "trusted" || review.trust === "unknown"
+    ? [taskExecutionAction("deny", copy.denyTrust, "destructive", { placement: "leading", disabled: starting })]
+    : [];
+  const trailing: HostAction[] = [taskExecutionAction("cancel", copy.cancel, "neutral")];
+  if (review.trust === "trusted") {
+    trailing.push(taskExecutionAction("confirm", starting ? copy.starting : copy.confirm, "recommended", {
+      disabled: state.status !== "review",
+      defaultFocus: state.status === "review",
+    }));
+  } else {
+    trailing.push(taskExecutionAction("trust", copy.trustAction, "recommended", { defaultFocus: true }));
+  }
+  return [...leading, ...trailing];
+}
+
+function taskExecutionAction(
+  id: string,
+  label: string,
+  intent: HostAction["intent"],
+  options: Pick<HostAction, "placement" | "disabled" | "defaultFocus"> = {},
+): HostAction {
+  return { id, label, intent, ...options, attributes: { "data-task-execution-action": id } };
 }
 function escapeHtml(value: string): string { return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character); }
 function renderOutput(state: TaskExecutionState): string {
@@ -39,7 +79,15 @@ function renderArtifacts(state: TaskArtifactViewState | null, copy: TaskExecutio
   if (state.status === "unavailable") return `<section class="task-artifacts" aria-labelledby="task-artifacts-title"><h3 id="task-artifacts-title">${escapeHtml(copy.artifacts)}</h3><p role="status">${escapeHtml(copy.artifactUnavailable)}</p></section>`;
   const rows = state.discovery.artifacts.map((artifact, index) => {
     const name = artifact.workspacePath.split("/").at(-1) ?? artifact.workspacePath;
-    return `<li><span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(artifact.kind.toLocaleUpperCase())} · ${escapeHtml(copy.artifactSize(artifact.byteLength))}</small><code>${escapeHtml(artifact.workspacePath)}</code></span><button type="button" data-task-execution-action="reveal-artifact" data-task-artifact-index="${index}" title="${escapeHtml(copy.revealArtifact)}">${escapeHtml(copy.revealArtifact)}</button></li>`;
+    const reveal = renderHostAction({
+      id: `reveal-artifact.${index}`,
+      label: copy.revealArtifact,
+      intent: "neutral",
+      compact: true,
+      title: copy.revealArtifact,
+      attributes: { "data-task-execution-action": "reveal-artifact", "data-task-artifact-index": index },
+    });
+    return `<li><span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(artifact.kind.toLocaleUpperCase())} · ${escapeHtml(copy.artifactSize(artifact.byteLength))}</small><code>${escapeHtml(artifact.workspacePath)}</code></span>${reveal}</li>`;
   }).join("");
   const content = rows ? `<ul>${rows}</ul>` : `<p role="status">${escapeHtml(copy.artifactNone)}</p>`;
   const truncated = state.discovery.truncated ? `<p role="alert">${escapeHtml(copy.artifactTruncated)}</p>` : "";

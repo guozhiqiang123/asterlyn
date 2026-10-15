@@ -64,6 +64,7 @@ test("successful task UI renders escaped bounded artifacts and Reveal actions", 
   assert.match(html, /&lt;app&gt;\.apk/u);
   assert.match(html, /data-task-execution-action="reveal-artifact"/u);
   assert.match(html, /data-task-artifact-index="0"/u);
+  assert.match(html, /class="secondary-button compact"/u);
   assert.match(html, /Artifact results were truncated/u);
   assert.doesNotMatch(html, /<app>/u);
 });

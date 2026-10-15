@@ -6,6 +6,7 @@ export interface HostAction {
   readonly label: string;
   readonly intent: HostActionIntent;
   readonly placement?: HostActionPlacement;
+  readonly compact?: boolean;
   readonly disabled?: boolean;
   readonly defaultFocus?: boolean;
   readonly elementId?: string;
@@ -49,13 +50,14 @@ export interface HostDialog {
 
 export function renderHostAction(action: HostAction): string {
   validateAction(action);
-  const className = action.intent === "recommended"
+  const baseClassName = action.intent === "recommended"
     ? "primary-button"
     : action.intent === "destructive"
       ? "danger-button"
       : action.intent === "quiet"
         ? "secondary-button host-action-quiet"
         : "secondary-button";
+  const className = `${baseClassName}${action.compact ? " compact" : ""}`;
   const disabled = action.disabled ? " disabled" : "";
   const defaultFocus = action.defaultFocus ? " data-host-default-focus" : "";
   const elementId = action.elementId ? ` id="${escapeAttribute(action.elementId)}"` : "";
