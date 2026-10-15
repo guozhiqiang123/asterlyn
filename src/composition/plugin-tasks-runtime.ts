@@ -22,6 +22,7 @@ import { PluginCompositionRuntime } from "./plugin-runtime.ts";
 import { PluginTaskBusyError } from "./plugin-contribution-runtime.ts";
 import { RecentTaskStore, type RecentTaskStorage } from "../application/tasks/recent-task-store.ts";
 import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
+import type { TaskTerminalSessionPort } from "../application/tasks/task-terminal-session.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -34,6 +35,7 @@ export interface PluginTasksRuntimeOptions {
   readonly taskCacheBridge: PluginTaskCacheBridge;
   readonly recentTaskStorage?: RecentTaskStorage;
   readonly reconcileAfterTask?: (identity: PluginWorkspaceIdentity) => void | Promise<void>;
+  readonly taskTerminal?: TaskTerminalSessionPort;
 }
 
 export interface PluginWorkspaceCatalog {
@@ -85,6 +87,7 @@ export class PluginTasksRuntime {
           this.plugins.managementSnapshot,
           request.pluginId,
         ),
+        taskTerminal: options.taskTerminal,
       },
     );
     this.plugins = new PluginCompositionRuntime({
@@ -217,7 +220,7 @@ export class PluginTasksRuntime {
     plan: PluginTaskRefreshPlan,
     signal: AbortSignal,
   ): Promise<PluginTaskExecutionResult> {
-    return this.executeTask(identity, plan, signal);
+    return this.executeTask(identity, plan, signal, "background");
   }
 
   private async executeTaskRun(
@@ -225,7 +228,7 @@ export class PluginTasksRuntime {
     plan: PluginTaskRunPlan,
     signal: AbortSignal,
   ): Promise<PluginTaskExecutionResult> {
-    const result = await this.executeTask(identity, plan, signal);
+    const result = await this.executeTask(identity, plan, signal, "terminal");
     this.recentTasks?.record({
       pluginId: plan.request.pluginId,
       providerId: plan.request.providerId,
@@ -278,6 +281,7 @@ export class PluginTasksRuntime {
     identity: PluginWorkspaceIdentity,
     plan: PluginTaskRefreshPlan,
     signal: AbortSignal,
+    presentation: "background" | "terminal",
   ): Promise<PluginTaskExecutionResult> {
     return new Promise<PluginTaskExecutionResult>((resolve) => {
       let settled = false;
@@ -305,7 +309,7 @@ export class PluginTasksRuntime {
         complete({ status: "cancelled", outputs: [], truncated: false, error: "Task refresh was cancelled." });
         return;
       }
-      void this.execution.prepare(identity, plan.request, complete).then(() => {
+      void this.execution.prepare(identity, plan.request, complete, presentation).then(() => {
         if (signal.aborted) abort();
       }).catch((error) => complete({
         status: "crashed",

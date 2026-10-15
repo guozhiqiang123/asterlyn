@@ -259,6 +259,109 @@ test("confirmed execution moves to the Tasks panel while retaining terminal outp
   }
 });
 
+test("user task execution projects one reviewed run into the host Terminal", async () => {
+  const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
+  class FakeElement { isConnected = true; focus() {} }
+  const host = {
+    innerHTML: "", contains: () => false,
+    querySelector(selector) { return selector === ".task-execution-review" && this.innerHTML.includes("task-execution-review") ? {} : null; },
+    replaceChildren() { this.innerHTML = ""; },
+  };
+  const root = {
+    addEventListener: () => undefined, matches: () => false,
+    querySelector: (selector) => selector === "#task-execution-host" ? host : null,
+  };
+  globalThis.HTMLElement = FakeElement;
+  globalThis.document = { activeElement: null };
+  try {
+    const listeners = [];
+    const calls = [];
+    const bridge = {
+      native: false,
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+      setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
+      prepareTaskExecution: async () => review,
+      startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-terminal", reviewId: "review-1", workspaceRoot: "/repo" }),
+      cancelTaskExecution: async () => {},
+      subscribeTaskSession: async (listener) => { listeners.push(listener); return () => {}; },
+    };
+    const taskTerminal = {
+      begin: (session) => calls.push(["begin", session]),
+      append: (sessionId, frame) => calls.push(["append", sessionId, frame]),
+      update: (sessionId, status, error, truncated) => calls.push(["update", sessionId, status, error, truncated]),
+      reveal: (sessionId) => { calls.push(["reveal", sessionId]); return true; },
+    };
+    const controller = new TaskExecutionController(bridge);
+    let finish;
+    const completion = new Promise((resolve) => { finish = resolve; });
+    const runtime = new TaskExecutionRuntime(root, controller, () => EN_US_TASK_EXECUTION_COPY, {
+      backgroundAfterStart: () => true,
+      taskTerminal,
+    });
+    runtime.activate(identity);
+    await runtime.prepare(identity, {
+      pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug",
+      executablePath: "gradlew", args: ["assembleDebug"],
+    }, finish, "terminal");
+    await controller.confirm(identity);
+    assert.equal(calls.filter(([kind]) => kind === "begin").length, 1);
+    assert.equal(calls[0][1].executablePath, "/repo/gradlew");
+    assert.deepEqual(calls[0][1].args, ["assembleDebug"]);
+    listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-terminal", workspaceRoot: "/repo", sequence: 1, status: "running", message: null, exitCode: null });
+    listeners[0]({ protocolVersion: 1, kind: "output", runId: "run-terminal", workspaceRoot: "/repo", sequence: 2, stream: "stdout", dataBase64: "b2sK" });
+    listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-terminal", workspaceRoot: "/repo", sequence: 3, status: "succeeded", message: null, exitCode: 0 });
+    assert.equal((await completion).status, "succeeded");
+    assert.deepEqual(calls.filter(([kind]) => kind === "append").map(([, sessionId, frame]) => [sessionId, frame.dataBase64]), [["review-1", "b2sK"]]);
+    assert.equal(calls.filter(([kind, , status]) => kind === "update" && status === "succeeded").length, 1);
+    assert.equal(runtime.reveal("android.gradle:assembleDebug", identity), true);
+    assert.deepEqual(calls.at(-1), ["reveal", "review-1"]);
+    assert.equal(host.innerHTML, "");
+    runtime.dispose();
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.HTMLElement = previous.HTMLElement;
+  }
+});
+
+test("background task execution never opens the host Terminal", async () => {
+  const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
+  class FakeElement { isConnected = true; focus() {} }
+  const host = { innerHTML: "", contains: () => false, querySelector: () => null, replaceChildren() { this.innerHTML = ""; } };
+  const root = { addEventListener: () => undefined, matches: () => false, querySelector: (selector) => selector === "#task-execution-host" ? host : null };
+  globalThis.HTMLElement = FakeElement;
+  globalThis.document = { activeElement: null };
+  try {
+    const listeners = [];
+    let began = 0;
+    const bridge = {
+      native: false,
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+      setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
+      prepareTaskExecution: async () => review,
+      startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-discovery", reviewId: "review-1", workspaceRoot: "/repo" }),
+      cancelTaskExecution: async () => {},
+      subscribeTaskSession: async (listener) => { listeners.push(listener); return () => {}; },
+    };
+    const controller = new TaskExecutionController(bridge);
+    const runtime = new TaskExecutionRuntime(root, controller, () => EN_US_TASK_EXECUTION_COPY, {
+      backgroundAfterStart: () => true,
+      taskTerminal: { begin: () => { began += 1; }, append() {}, update() {}, reveal: () => false },
+    });
+    runtime.activate(identity);
+    await runtime.prepare(identity, {
+      pluginId: "android", providerId: "gradle", taskId: "discover", label: "Gradle tasks",
+      executablePath: "gradlew", args: ["tasks"],
+    }, () => undefined, "background");
+    await controller.confirm(identity);
+    listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-discovery", workspaceRoot: "/repo", sequence: 1, status: "succeeded", message: null, exitCode: 0 });
+    assert.equal(began, 0);
+    runtime.dispose();
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.HTMLElement = previous.HTMLElement;
+  }
+});
+
 test("a remembered exact task starts in the background without reopening the review", async () => {
   const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
   class FakeElement { isConnected = true; focus() {} }

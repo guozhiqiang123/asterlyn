@@ -4,6 +4,10 @@ import type {
   TaskWorkspaceIdentity,
 } from "../../application/tasks/task-execution-controller.ts";
 import type { TaskExecutionRequest } from "../../models.ts";
+import type {
+  TaskTerminalSessionPort,
+  TaskTerminalSessionStatus,
+} from "../../application/tasks/task-terminal-session.ts";
 import type { PluginTaskExecutionResult } from "../../application/plugins/plugin-types.ts";
 import type { TaskArtifact, TaskArtifactDiscovery } from "../../models.ts";
 import { EN_US_TASK_EXECUTION_COPY, type TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
@@ -17,7 +21,10 @@ export interface TaskExecutionRuntimeOptions {
   readonly backgroundAfterStart?: (request: TaskExecutionRequest) => boolean;
   readonly executionTimeoutMs?: (request: TaskExecutionRequest) => number | null;
   readonly taskConfirmation?: (request: TaskExecutionRequest) => TaskConfirmationPresentation | null;
+  readonly taskTerminal?: TaskTerminalSessionPort;
 }
+
+export type TaskExecutionPresentation = "background" | "terminal";
 
 export interface TaskArtifactAttachmentTarget {
   readonly root: string;
@@ -61,6 +68,9 @@ export class TaskExecutionRuntime {
   private executionTimeoutMs: number | null = null;
   private executionTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private taskConfirmation: TaskConfirmationPresentation | null = null;
+  private executionPresentation: TaskExecutionPresentation = "background";
+  private projectedTerminalSessionId: string | null = null;
+  private projectedTerminalOutputCount = 0;
 
   constructor(
     root: HTMLElement,
@@ -73,6 +83,7 @@ export class TaskExecutionRuntime {
     this.copy = copy;
     this.options = options;
     this.unsubscribe = controller.subscribe((state) => {
+      this.projectTaskTerminal(state);
       this.observeTerminal(state);
       this.backgroundStartedExecution(state);
       this.render();
@@ -119,6 +130,8 @@ export class TaskExecutionRuntime {
     this.clearExecutionTimer();
     this.executionTimeoutMs = null;
     this.taskConfirmation = null;
+    this.executionPresentation = "background";
+    this.resetTaskTerminalProjection();
     this.terminalState = null;
     this.invalidateArtifacts();
     this.controller.activateWorkspace(identity);
@@ -129,6 +142,7 @@ export class TaskExecutionRuntime {
     identity: TaskWorkspaceIdentity,
     request: TaskExecutionRequest,
     finished: (result: PluginTaskExecutionResult) => void,
+    presentation: TaskExecutionPresentation = "background",
   ): Promise<void> {
     if (this.finished) throw new Error("A task execution review is already active.");
     this.identity = identity;
@@ -136,6 +150,8 @@ export class TaskExecutionRuntime {
     this.backgroundOnStart = this.options.backgroundAfterStart?.(request) === true;
     this.executionTimeoutMs = this.options.executionTimeoutMs?.(request) ?? null;
     this.taskConfirmation = this.options.taskConfirmation?.(request) ?? null;
+    this.executionPresentation = presentation;
+    this.resetTaskTerminalProjection();
     this.terminalState = null;
     this.invalidateArtifacts();
     try {
@@ -162,6 +178,7 @@ export class TaskExecutionRuntime {
   reveal(taskKey: string, identity: TaskWorkspaceIdentity): boolean {
     const review = this.terminalState?.review;
     if (!review || !sameIdentity(this.identity, identity) || executionTaskKey(review) !== taskKey) return false;
+    if (this.executionPresentation === "terminal" && this.options.taskTerminal?.reveal(review.reviewId)) return true;
     this.open();
     this.render();
     return true;
@@ -333,6 +350,46 @@ export class TaskExecutionRuntime {
       truncated: state.outputTruncated,
       error: state.error,
     });
+  }
+
+  private projectTaskTerminal(state: TaskExecutionState): void {
+    const terminal = this.options.taskTerminal;
+    const review = state.review;
+    if (this.executionPresentation !== "terminal" || !terminal || !review) return;
+    const sessionId = review.reviewId;
+    try {
+      if (this.projectedTerminalSessionId !== sessionId) {
+        if (state.status === "review") return;
+        const identity = this.identity;
+        if (!identity) return;
+        this.projectedTerminalSessionId = sessionId;
+        this.projectedTerminalOutputCount = 0;
+        terminal.begin({
+          sessionId,
+          workspaceRoot: identity.root,
+          taskKey: executionTaskKey(review),
+          label: review.label,
+          executablePath: review.canonicalExecutablePath,
+          args: [...review.args],
+          workingDirectory: review.cwd,
+          cancel: () => this.cancel(identity),
+        });
+      }
+      for (const output of state.outputs.slice(this.projectedTerminalOutputCount)) {
+        terminal.append(sessionId, output);
+      }
+      this.projectedTerminalOutputCount = state.outputs.length;
+      if (state.status !== "idle" && state.status !== "review") {
+        terminal.update(sessionId, state.status as TaskTerminalSessionStatus, state.error, state.outputTruncated);
+      }
+    } catch (error) {
+      this.options.reportError?.(error);
+    }
+  }
+
+  private resetTaskTerminalProjection(): void {
+    this.projectedTerminalSessionId = null;
+    this.projectedTerminalOutputCount = 0;
   }
 
   private displayState(): TaskExecutionState | null {
