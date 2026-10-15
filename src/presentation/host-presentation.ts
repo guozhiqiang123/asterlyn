@@ -107,7 +107,8 @@ export function renderHostDialogActions(actions: readonly HostAction[]): string 
   validateActions(actions);
   const leading = actions.filter((action) => action.placement === "leading");
   const trailing = actions.filter((action) => action.placement !== "leading");
-  const spacer = leading.length > 0 && trailing.length > 0 ? '<span class="dialog-spacer"></span>' : "";
+  let spacer = "";
+  if (leading.length && trailing.length) spacer = '<span class="dialog-spacer"></span>';
   return `<div class="dialog-actions">${leading.map(renderHostAction).join("")}${spacer}${trailing.map(renderHostAction).join("")}</div>`;
 }
 
