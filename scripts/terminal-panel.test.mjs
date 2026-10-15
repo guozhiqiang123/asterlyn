@@ -7,9 +7,10 @@ import {
   normalizeTaskTerminalOutput,
   taskTerminalActionAvailable,
   taskTerminalCommandLine,
+  taskTerminalInteractionMode,
   terminalActionAvailable,
 } from "../src/features/terminal/terminal-panel.ts";
-import { TerminalWriteBuffer } from "../src/features/terminal/terminal-view.ts";
+import { TerminalView, TerminalWriteBuffer } from "../src/features/terminal/terminal-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 
 const idle = {
@@ -72,6 +73,37 @@ test("task terminal header exposes cancel while active and new session after com
   assert.match(finishedHeader, /assembleDebug — Succeeded/u);
   assert.match(finishedHeader, /data-terminal-action="close"[^>]*disabled/u);
   assert.doesNotMatch(finishedHeader, /data-terminal-action="restart"[^>]*disabled/u);
+  assert.equal(taskTerminalInteractionMode("running"), "task-running");
+  assert.equal(taskTerminalInteractionMode("failed"), "task-complete");
+});
+
+test("completed task terminals become read-only and lose their live cursor", () => {
+  const classes = new Set();
+  const terminal = {
+    options: { disableStdin: false, cursorBlink: true, cursorInactiveStyle: "outline" },
+  };
+  const terminalView = Object.create(TerminalView.prototype);
+  terminalView.parent = {
+    classList: {
+      toggle(name, enabled) {
+        if (enabled) classes.add(name);
+        else classes.delete(name);
+      },
+    },
+  };
+  terminalView.terminal = terminal;
+
+  terminalView.setInteractionMode("task-complete");
+  assert.equal(terminal.options.disableStdin, true);
+  assert.equal(terminal.options.cursorBlink, false);
+  assert.equal(terminal.options.cursorInactiveStyle, "none");
+  assert.equal(classes.has("terminal-task-complete"), true);
+
+  terminalView.setInteractionMode("interactive");
+  assert.equal(terminal.options.disableStdin, false);
+  assert.equal(terminal.options.cursorBlink, true);
+  assert.equal(terminal.options.cursorInactiveStyle, "outline");
+  assert.equal(classes.has("terminal-task-complete"), false);
 });
 
 test("reviewed task command summary is display-only and escapes terminal controls", () => {

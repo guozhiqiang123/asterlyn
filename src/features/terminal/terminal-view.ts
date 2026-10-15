@@ -47,6 +47,8 @@ export interface TerminalViewActions {
   readonly keyboard?: (event: KeyboardEvent) => boolean;
 }
 
+export type TerminalInteractionMode = "interactive" | "task-running" | "task-complete";
+
 export class TerminalView {
   private parent: HTMLElement | null = null;
   private terminal: XtermTerminal | null = null;
@@ -58,6 +60,7 @@ export class TerminalView {
   private generation = 0;
   private ready = false;
   private actions: TerminalViewActions | null = null;
+  private interactionMode: TerminalInteractionMode = "interactive";
   private readonly pendingWrites = new TerminalWriteBuffer();
 
   mount(parent: HTMLElement, actions: TerminalViewActions): void {
@@ -67,6 +70,7 @@ export class TerminalView {
       return;
     }
     if (this.parent === parent && !this.terminal) return;
+    this.parent?.classList.remove("terminal-task-complete");
     this.disposeRuntime();
     this.parent = parent;
     const generation = ++this.generation;
@@ -100,6 +104,7 @@ export class TerminalView {
         parent.removeAttribute("aria-busy");
         this.terminal = terminal;
         this.fitAddon = fitAddon;
+        this.applyInteractionMode();
         this.flushPendingWrites();
         this.inputDisposable = terminal.onData((data) => this.actions?.input(data));
         if (typeof ResizeObserver === "function") {
@@ -134,6 +139,11 @@ export class TerminalView {
     else this.pendingWrites.push(bytes);
   }
 
+  setInteractionMode(mode: TerminalInteractionMode): void {
+    this.interactionMode = mode;
+    this.applyInteractionMode();
+  }
+
   clear(): void {
     this.pendingWrites.clear();
     this.terminal?.clear();
@@ -156,8 +166,18 @@ export class TerminalView {
   dispose(): void {
     this.generation += 1;
     this.disposeRuntime();
+    this.parent?.classList.remove("terminal-task-complete");
     this.parent = null;
     this.actions = null;
+  }
+
+  private applyInteractionMode(): void {
+    const taskComplete = this.interactionMode === "task-complete";
+    this.parent?.classList.toggle("terminal-task-complete", taskComplete);
+    if (!this.terminal) return;
+    this.terminal.options.disableStdin = this.interactionMode !== "interactive";
+    this.terminal.options.cursorBlink = !taskComplete;
+    this.terminal.options.cursorInactiveStyle = taskComplete ? "none" : "outline";
   }
 
   private requestFit(): void {

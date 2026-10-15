@@ -12,7 +12,7 @@ import {
 } from "../../application/tasks/task-terminal-session.ts";
 import { icon } from "../../icons.ts";
 import { TerminalController, type TerminalState } from "./terminal-controller.ts";
-import { TerminalView } from "./terminal-view.ts";
+import { TerminalView, type TerminalInteractionMode } from "./terminal-view.ts";
 
 interface TerminalPanelFeedback {
   readonly status: (message: string, kind: "normal" | "busy" | "warning" | "success") => void;
@@ -67,7 +67,10 @@ export class TerminalPanel {
 
   installWorkspace(root: string): void {
     const changed = this.controller.state.root !== root;
-    if (changed && this.taskSession?.descriptor.workspaceRoot !== root) this.taskSession = null;
+    if (changed && this.taskSession?.descriptor.workspaceRoot !== root) {
+      this.taskSession = null;
+      this.view.setInteractionMode("interactive");
+    }
     this.controller.installWorkspace(root);
     if (changed) this.view.reset();
   }
@@ -111,6 +114,7 @@ export class TerminalPanel {
     this.installWorkspace(session.workspaceRoot);
     this.taskSession = { descriptor: session, status: "starting", error: null, outputTruncated: false, outputEndedWithCarriageReturn: false };
     this.view.reset();
+    this.view.setInteractionMode("task-running");
     this.view.write(new TextEncoder().encode(taskTerminalCommandLine(session)));
     void this.controller.close().catch((error) => this.feedback.error(error));
     this.renderHeader();
@@ -145,6 +149,7 @@ export class TerminalPanel {
     this.taskSession = { ...current, status, error, outputTruncated };
     if (becameTruncated) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(this.taskCopy.outputTruncated)}]\r\n`));
     if (becameTerminal) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(taskTerminalSummary(this.taskSession, this.taskCopy))}]\r\n`));
+    this.view.setInteractionMode(taskTerminalInteractionMode(status));
     this.renderHeader();
     const kind = status === "succeeded" ? "success" : isActiveTaskTerminalStatus(status) ? "busy" : status === "cancelled" ? "normal" : "warning";
     this.feedback.status(taskTerminalSummary(this.taskSession, this.taskCopy), kind);
@@ -167,6 +172,7 @@ export class TerminalPanel {
     const dimensions = this.view.dimensions() ?? { cols: 80, rows: 24 };
     if (action === "restart") {
       this.taskSession = null;
+      this.view.setInteractionMode("interactive");
       this.view.reset();
       await this.controller.restart(dimensions.cols, dimensions.rows);
     } else if (action === "clear") {
@@ -279,6 +285,10 @@ export function taskTerminalActionAvailable(status: TaskTerminalSessionStatus, a
   if (action === "clear") return true;
   if (action === "close") return isActiveTaskTerminalStatus(status);
   return isTerminalTaskTerminalStatus(status);
+}
+
+export function taskTerminalInteractionMode(status: TaskTerminalSessionStatus): TerminalInteractionMode {
+  return isTerminalTaskTerminalStatus(status) ? "task-complete" : "task-running";
 }
 
 export function taskTerminalCommandLine(session: TaskTerminalSessionDescriptor): string {

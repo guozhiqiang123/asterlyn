@@ -291,6 +291,10 @@
   border-radius: 0;
 }
 
+.terminal-tool-host.terminal-task-complete .xterm-cursor-layer {
+  display: none;
+}
+
 .git-tool-pane {
   display: grid;
   overflow: hidden;
