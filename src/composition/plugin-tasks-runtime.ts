@@ -1,7 +1,6 @@
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type {
   PluginManagementSnapshot,
-  PluginManagementEntry,
   PluginSettingValue,
   PluginSettingsTargetResolution,
   PluginWorkspaceInvalidation,
@@ -13,7 +12,7 @@ import type { TaskExecutionBridge } from "../protocol/task-execution.ts";
 import { parseTaskArtifactDiscovery, type TaskArtifactBridge } from "../protocol/task-artifacts.ts";
 import { TaskExecutionController } from "../application/tasks/task-execution-controller.ts";
 import { TaskExecutionRuntime } from "../features/tasks/task-execution-runtime.ts";
-import type { TaskConfirmationPresentation } from "../features/tasks/task-execution-view.ts";
+import { PluginTaskAuthorizationRuntime } from "../features/tasks/plugin-task-authorization-runtime.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
 import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY } from "../localization/task-execution-copy.ts";
 import { TasksController } from "../features/tasks/tasks-controller.ts";
@@ -52,19 +51,20 @@ export class PluginTasksRuntime {
   private readonly recentTasks: RecentTaskStore | null;
   private readonly artifactBridge: TaskArtifactBridge;
   private readonly reconcileAfterTask: ((identity: PluginWorkspaceIdentity) => void | Promise<void>) | undefined;
-  private readonly executionBridge: TaskExecutionBridge;
-  private readonly locale: () => "en-US" | "zh-CN";
+  private readonly authorization: PluginTaskAuthorizationRuntime;
   private readonly managementListeners = new Set<(snapshot: PluginManagementSnapshot) => void>();
   private readonly releaseManagement: () => void;
-  private readonly workspaceTrust = new Map<string, "loading" | "unknown" | "trusted" | "denied" | "error">();
   private identity: PluginWorkspaceIdentity | null = null;
 
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
     this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
     this.artifactBridge = options.artifactBridge;
     this.reconcileAfterTask = options.reconcileAfterTask;
-    this.executionBridge = options.executionBridge;
-    this.locale = options.locale ?? (() => "en-US");
+    this.authorization = new PluginTaskAuthorizationRuntime(
+      options.executionBridge,
+      options.locale ?? (() => "en-US"),
+      options.reportError,
+    );
     const controller = new TasksController();
     const executionController = new TaskExecutionController(options.executionBridge);
     this.execution = new TaskExecutionRuntime(
@@ -81,7 +81,10 @@ export class PluginTasksRuntime {
         visibilityChanged: () => this.render(),
         backgroundAfterStart: () => true,
         executionTimeoutMs: (request) => request.pluginId === "dev.asterlyn.android-gradle" && request.providerId === "gradle-tasks" && request.taskId === "discover" ? 120_000 : null,
-        taskConfirmation: (request) => this.taskConfirmationPresentation(request.pluginId),
+        taskConfirmation: (request) => this.authorization.taskConfirmation(
+          this.plugins.managementSnapshot,
+          request.pluginId,
+        ),
       },
     );
     this.plugins = new PluginCompositionRuntime({
@@ -112,16 +115,15 @@ export class PluginTasksRuntime {
 
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
-    this.workspaceTrust.clear();
+    this.authorization.activate(identity);
     this.tasks.activate(identity);
     this.execution.activate(identity);
     await this.plugins.activateWorkspace(identity);
     const snapshot = this.plugins.managementSnapshot;
     if (snapshot.entries.some((entry) => entry.taskAuthorization !== undefined)) {
-      await this.loadWorkspaceTrust(snapshot);
-    } else {
-      this.publishManagement();
+      await this.authorization.load(snapshot);
     }
+    this.publishManagement();
   }
 
   async updateWorkspaceEvidence(
@@ -152,7 +154,8 @@ export class PluginTasksRuntime {
   async loadPluginManagement(): Promise<PluginManagementSnapshot> {
     const snapshot = await this.plugins.loadManagementCatalog();
     this.applyTaskPresentation(snapshot);
-    await this.loadWorkspaceTrust(snapshot);
+    await this.authorization.load(snapshot);
+    this.publishManagement();
     return this.pluginManagementSnapshot;
   }
 
@@ -174,28 +177,12 @@ export class PluginTasksRuntime {
   }
 
   async setPluginWorkspaceTrust(pluginId: string, trusted: boolean): Promise<boolean> {
-    const identity = this.identity;
-    const entry = this.plugins.managementSnapshot.entries.find((candidate) => candidate.id === pluginId);
-    if (!identity || !entry?.taskAuthorization) return false;
-    const current = this.workspaceTrust.get(pluginId);
-    const requested = trusted ? "trusted" : "denied";
-    if (current === requested) return false;
-    this.workspaceTrust.set(pluginId, "loading");
-    this.publishManagement();
     try {
-      const result = await this.executionBridge.setWorkspaceTrust(identity.root, pluginId, requested);
-      if (!this.matches(identity) || result.workspaceRoot !== identity.root ||
-        result.pluginId !== pluginId || result.state !== requested) {
-        throw new Error("Plugin workspace trust response is stale.");
-      }
-      this.workspaceTrust.set(pluginId, result.state);
+      const changed = await this.authorization.set(this.plugins.managementSnapshot, pluginId, trusted);
       this.publishManagement();
-      return true;
+      return changed;
     } catch (error) {
-      if (this.matches(identity)) {
-        this.workspaceTrust.set(pluginId, "error");
-        this.publishManagement();
-      }
+      this.publishManagement();
       throw error;
     }
   }
@@ -278,55 +265,8 @@ export class PluginTasksRuntime {
     if (setting !== undefined && isTaskPresentation(setting)) this.tasks.setPresentation(setting);
   }
 
-  private taskConfirmationPresentation(pluginId: string): TaskConfirmationPresentation | null {
-    const entry = this.plugins.managementSnapshot.entries.find((candidate) => candidate.id === pluginId);
-    const descriptor = entry?.taskAuthorization?.taskConfirmation;
-    if (!entry || !descriptor) return null;
-    return {
-      label: pluginMessage(entry, this.locale(), descriptor.rememberLabelKey),
-      ...(descriptor.rememberDescriptionKey === undefined
-        ? {}
-        : { description: pluginMessage(entry, this.locale(), descriptor.rememberDescriptionKey) }),
-    };
-  }
-
-  private async loadWorkspaceTrust(snapshot: PluginManagementSnapshot): Promise<void> {
-    const identity = this.identity;
-    if (!identity) {
-      this.workspaceTrust.clear();
-      this.publishManagement();
-      return;
-    }
-    const pluginIds = snapshot.entries
-      .filter((entry) => entry.taskAuthorization !== undefined)
-      .map((entry) => entry.id);
-    for (const pluginId of pluginIds) this.workspaceTrust.set(pluginId, "loading");
-    this.publishManagement();
-    await Promise.all(pluginIds.map(async (pluginId) => {
-      try {
-        const result = await this.executionBridge.readWorkspaceTrust(identity.root, pluginId);
-        if (!this.matches(identity) || result.workspaceRoot !== identity.root || result.pluginId !== pluginId) return;
-        this.workspaceTrust.set(pluginId, result.state);
-      } catch (error) {
-        if (this.matches(identity)) this.workspaceTrust.set(pluginId, "error");
-        this.reportError(error);
-      }
-    }));
-    if (this.matches(identity)) this.publishManagement();
-  }
-
   private managementSnapshot(snapshot: PluginManagementSnapshot): PluginManagementSnapshot {
-    return Object.freeze({
-      schemaVersion: 1,
-      entries: Object.freeze(snapshot.entries.map((entry) => entry.taskAuthorization === undefined
-        ? entry
-        : Object.freeze({
-            ...entry,
-            workspaceTrust: this.identity
-              ? (this.workspaceTrust.get(entry.id) ?? "loading")
-              : "unavailable",
-          }))),
-    });
+    return this.authorization.project(snapshot);
   }
 
   private publishManagement(): void {
@@ -375,11 +315,6 @@ export class PluginTasksRuntime {
       }));
     });
   }
-}
-
-function pluginMessage(entry: PluginManagementEntry, locale: string, key: string): string {
-  return entry.localization.locales[locale]?.[key] ??
-    entry.localization.locales[entry.localization.defaultLocale]?.[key] ?? key;
 }
 
 function browserPathPlatform(): "posix" | "windows" {
