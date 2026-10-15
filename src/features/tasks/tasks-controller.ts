@@ -11,6 +11,8 @@ import {
   taskEntryKey,
   workspaceIdentityEqual,
   type TaskProviderProjection,
+  type TaskProviderCollection,
+  type TaskProviderCollectionNode,
   type TasksEntry,
   type TasksState,
   type TasksStatus,
@@ -189,11 +191,58 @@ function normalizeProvider(candidate: TaskProviderProjection): TaskProviderProje
   const safeTasks = cache && cache.status !== "ready"
     ? normalizedTasks.map((task) => ({ ...task, runnable: false }))
     : normalizedTasks;
+  const collection = normalizeProviderCollection(candidate.collection, id, safeTasks);
   return {
     id,
     label,
     snapshot: { status, tasks: safeTasks, unavailableReason, error, ...(cache ? { cache } : {}) },
+    ...(collection ? { collection } : {}),
   };
+}
+
+function normalizeProviderCollection(
+  value: TaskProviderProjection["collection"],
+  providerId: string,
+  tasks: readonly TaskDescriptor[],
+): TaskProviderCollection | undefined {
+  if (!value || typeof value !== "object" || value.providerId !== providerId || value.source !== "contributed" ||
+    typeof value.truncated !== "boolean" || !Array.isArray(value.nodes)) return undefined;
+  const taskIds = new Set(tasks.map((task) => task.id));
+  const nodeIds = new Set<string>();
+  const referencedTasks = new Set<string>();
+  const nodes: TaskProviderCollectionNode[] = [];
+  for (const candidate of value.nodes) {
+    if (!candidate || typeof candidate !== "object") return undefined;
+    const id = boundedString(candidate.id);
+    const label = boundedString(candidate.label);
+    if (!id || !label || nodeIds.has(id) || (candidate.kind !== "group" && candidate.kind !== "task") ||
+      !Number.isSafeInteger(candidate.order) || candidate.order < 0 || !Number.isSafeInteger(candidate.depth) || candidate.depth < 0) return undefined;
+    let parentId: string | null = null;
+    if (candidate.parentId !== null) {
+      const normalizedParentId = boundedString(candidate.parentId);
+      if (!normalizedParentId) return undefined;
+      parentId = normalizedParentId;
+    }
+    let taskId: string | undefined;
+    if (candidate.kind === "task") {
+      taskId = boundedString(candidate.taskId);
+      if (!taskId || !taskIds.has(taskId) || referencedTasks.has(taskId)) return undefined;
+      referencedTasks.add(taskId);
+    } else if (candidate.taskId !== undefined) return undefined;
+    nodeIds.add(id);
+    nodes.push({
+      id,
+      parentId,
+      label,
+      kind: candidate.kind,
+      order: candidate.order,
+      depth: candidate.depth,
+      ...(taskId ? { taskId } : {}),
+      ...(candidate.metadata ? { metadata: { ...candidate.metadata } } : {}),
+    });
+  }
+  if (nodes.some((node) => node.parentId !== null && !nodeIds.has(node.parentId))) return undefined;
+  return { providerId, nodes, truncated: value.truncated, source: "contributed" };
 }
 
 const CACHE_STATUSES = new Set<TaskProviderCacheStatus>(["validating", "ready", "stale"]);

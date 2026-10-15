@@ -17,6 +17,8 @@ import type {
 } from "../application/plugins/index.ts";
 import type { TaskProviderSnapshot } from "../application/tasks/index.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
+import type { TaskProviderCollection } from "../features/tasks/tasks-model.ts";
+import { normalizeHierarchicalCollection } from "../application/plugins/plugin-collection-adapter.ts";
 import { validTaskArtifactHints } from "../protocol/task-artifacts.ts";
 
 type RegisteredCommand = Extract<RegisteredPluginContribution, { readonly kind: "command" }>;
@@ -289,11 +291,16 @@ export class PluginContributionRuntime {
   private publishProviders(): void {
     if (!this.identity || this.disposed) return;
     const projections = [...this.providers.values()]
-      .map(({ contribution }) => ({
-        id: contribution.qualifiedId,
-        label: contribution.label,
-        snapshot: snapshotSafely(contribution, this.options.reportError),
-      }))
+      .map(({ contribution }) => {
+        const snapshot = snapshotSafely(contribution, this.options.reportError);
+        const collection = collectionSafely(contribution, this.options.reportError);
+        return {
+          id: contribution.qualifiedId,
+          label: contribution.label,
+          snapshot,
+          ...(collection ? { collection } : {}),
+        };
+      })
       .sort((left, right) => left.id.localeCompare(right.id));
     this.options.replaceProviders(this.identity, projections);
   }
@@ -305,6 +312,38 @@ export class PluginContributionRuntime {
   private abortRefresh(): void {
     this.refreshAbort?.abort();
     this.refreshAbort = null;
+  }
+}
+
+function collectionSafely(
+  contribution: RegisteredProvider,
+  reportError: (error: unknown) => void,
+): TaskProviderCollection | undefined {
+  if (!contribution.collections) return undefined;
+  try {
+    const candidates = contribution.collections();
+    if (!Array.isArray(candidates)) throw new Error(`Invalid collection list from ${contribution.qualifiedId}`);
+    if (candidates.length === 0) return undefined;
+    const matches = candidates.filter((candidate) => candidate?.providerId === contribution.id);
+    if (matches.length !== 1) {
+      throw new Error(`Expected one collection for provider ${contribution.id}; received ${matches.length}`);
+    }
+    const normalized = normalizeHierarchicalCollection(matches[0]!);
+    const prefix = `${contribution.qualifiedId}:collection:`;
+    const qualify = (id: string): string => `${prefix}${encodeURIComponent(id)}`;
+    return {
+      providerId: contribution.qualifiedId,
+      nodes: normalized.nodes.map((node) => ({
+        ...node,
+        id: qualify(node.id),
+        parentId: node.parentId === null ? null : qualify(node.parentId),
+      })),
+      truncated: normalized.truncated,
+      source: "contributed",
+    };
+  } catch (error) {
+    reportError(error);
+    return undefined;
   }
 }
 

@@ -9,6 +9,25 @@ export interface TaskProviderProjection {
   readonly id: string;
   readonly label: string;
   readonly snapshot: TaskProviderSnapshot;
+  readonly collection?: TaskProviderCollection;
+}
+
+export interface TaskProviderCollectionNode {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly label: string;
+  readonly kind: "group" | "task";
+  readonly order: number;
+  readonly depth: number;
+  readonly taskId?: string;
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+
+export interface TaskProviderCollection {
+  readonly providerId: string;
+  readonly nodes: readonly TaskProviderCollectionNode[];
+  readonly truncated: boolean;
+  readonly source: "contributed";
 }
 
 export type TasksStatus = "empty" | "unavailable" | "loading" | "error" | "ready";

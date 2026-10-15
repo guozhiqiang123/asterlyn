@@ -82,6 +82,47 @@ test("provider snapshot failures are isolated as error projections", async () =>
   await runtime.dispose();
 });
 
+test("provider collections are validated, qualified, and isolated from task snapshots", async () => {
+  const runtime = new PluginRuntime();
+  const errors = [];
+  let providers = [];
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, next) => { providers = next; },
+    reportError: (error) => errors.push(error),
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle",
+    snapshot: () => ({ status: "ready", tasks: [{ id: ":app:assemble", label: "assemble", group: "Build", runnable: true }] }),
+    collections: () => [{
+      providerId: "tasks", truncated: false, nodes: [
+        { id: "app", parentId: null, label: "app", kind: "group", order: 0 },
+        { id: "app.build", parentId: "app", label: "Build", kind: "group", order: 0 },
+        { id: "app.assemble", parentId: "app.build", label: "assemble", kind: "task", order: 0, taskId: ":app:assemble" },
+      ],
+    }],
+  }))]);
+  assert.equal(providers[0].collection.providerId, "android.tasks");
+  assert.deepEqual(providers[0].collection.nodes.map((node) => [node.id, node.parentId]), [
+    ["android.tasks:collection:app", null],
+    ["android.tasks:collection:app.build", "android.tasks:collection:app"],
+    ["android.tasks:collection:app.assemble", "android.tasks:collection:app.build"],
+  ]);
+  assert.equal(errors.length, 0);
+  await runtime.deactivate();
+  await runtime.activate(identity, {}, [plugin("broken", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Broken",
+    snapshot: () => ({ status: "ready", tasks: [] }),
+    collections: () => [{ providerId: "other", truncated: false, nodes: [] }],
+  }))]);
+  assert.equal(providers[0].snapshot.status, "ready");
+  assert.equal(providers[0].collection, undefined);
+  assert.match(String(errors.at(-1)), /Expected one collection/u);
+  adapter.dispose();
+  await runtime.dispose();
+});
+
 test("provider refresh exposes only a typed execution plan and deduplicates concurrent requests", async () => {
   const runtime = new PluginRuntime();
   const plans = [];

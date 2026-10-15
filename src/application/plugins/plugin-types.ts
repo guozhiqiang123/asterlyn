@@ -7,6 +7,7 @@ import type {
 } from "../../protocol/plugin-task-cache.ts";
 import type {
   SdkPluginManifest,
+  SdkHierarchicalCollection,
   SdkSettingDescriptor,
   SdkSettingOption,
   SdkTaskExecutionRequest,
@@ -85,6 +86,7 @@ export interface PluginProviderContribution {
   /** Stable settings entry ID; pluginId is always supplied by the host. */
   readonly settingsFocus?: string;
   readonly snapshot: () => TaskProviderSnapshot;
+  readonly collections?: () => readonly SdkHierarchicalCollection[];
   readonly subscribe?: (listener: () => void) => Disposable;
   readonly refresh?: () => PluginTaskRefreshPlan | null | Promise<PluginTaskRefreshPlan | null>;
   readonly invalidate?: (invalidation: PluginWorkspaceInvalidation) => void | Promise<void>;

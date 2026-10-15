@@ -143,6 +143,27 @@ test("controller preserves valid Gradle project paths and filters by module", ()
   assert.deepEqual(controller.state.visibleEntries.map((entry) => entry.task.id), [":app:assembleDebug"]);
 });
 
+test("controller retains only collections whose task leaves join the normalized snapshot", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  const collection = {
+    providerId: "gradle", source: "contributed", truncated: false,
+    nodes: [
+      { id: "root", parentId: null, label: "Tasks", kind: "group", order: 0, depth: 0 },
+      { id: "leaf", parentId: "root", label: "assemble", kind: "task", order: 0, depth: 1, taskId: ":app:assemble" },
+    ],
+  };
+  controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: ready([
+    task(":app:assemble", "assemble", "Build"),
+  ]), collection }]);
+  assert.deepEqual(controller.state.providers[0].collection, collection);
+  controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: ready([
+    task(":app:assemble", "assemble", "Build"),
+  ]), collection: { ...collection, nodes: [{ ...collection.nodes[1], taskId: ":missing" }] } }]);
+  assert.equal(controller.state.providers[0].collection, undefined);
+  assert.deepEqual(controller.state.entries.map((entry) => entry.task.id), [":app:assemble"]);
+});
+
 test("controller retains a FilesRecovery-scale provider catalog for full-text filtering", () => {
   const controller = new TasksController();
   controller.activate(identity);
