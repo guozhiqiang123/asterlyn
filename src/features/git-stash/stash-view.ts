@@ -6,6 +6,7 @@ import type { ChangeKind, CommitFileChange, StashEntry } from "../../models.ts";
 import { compactDirectoryChain } from "../../presentation/compact-file-tree.ts";
 import { sortFilesByName } from "../../presentation/file-name-order.ts";
 import { buildCommitFileTree, type CommitFileTreeNode } from "../../presentation/git-presentation.ts";
+import { renderHierarchicalCollectionToolbar, type CollectionToolbarCommand } from "../../presentation/hierarchical-collection-toolbar.ts";
 import { stashDomKey, stashKey, type StashState } from "./stash-controller.ts";
 
 export function renderStashList(state: StashState, copy: StashCopy, locale: string): string {
@@ -32,10 +33,20 @@ export function renderStashDetails(
   const nextView = state.fileView === "tree" ? history.flatList : history.directoryTree;
   return `<div class="stash-detail">
     <div class="stash-detail-summary"><span>${icon("stash", 15)}</span><strong>${escapeHtml(entry.subject)}</strong><code>${escapeHtml(entry.reference)}</code></div>
-    <div class="commit-files-toolbar"><span class="commit-files-label">${icon("folder", 13)}<span>${escapeHtml(history.files)}</span><b>${localization.number.format(files.length)}</b></span><button class="compact-icon-button" id="stash-file-view-toggle" type="button" aria-label="${escapeAttribute(history.showChangedFilesAs(nextView))}" aria-pressed="${state.fileView === "tree"}" title="${escapeAttribute(history.showChangedFilesAs(nextView))}">${icon("eye", 14)}</button><button class="compact-icon-button" id="stash-file-expand-all" type="button" aria-label="${escapeAttribute(history.expandChangedFolders)}" title="${escapeAttribute(history.expandChangedFolders)}" ${state.fileView === "flat" || files.length === 0 ? "disabled" : ""}>${icon("expand", 14)}</button><button class="compact-icon-button" id="stash-file-collapse-all" type="button" aria-label="${escapeAttribute(history.collapseChangedFolders)}" title="${escapeAttribute(history.collapseChangedFolders)}" ${state.fileView === "flat" || files.length === 0 ? "disabled" : ""}>${icon("collapse", 14)}</button></div>
+    ${stashFilesToolbar(history.files, localization.number.format(files.length), state.fileView, [{ id: "stash-file-view-toggle", label: history.showChangedFilesAs(nextView), icon: "eye", pressed: state.fileView === "tree" }, { id: "stash-file-expand-all", label: history.expandChangedFolders, icon: "expand", disabled: state.fileView === "flat" || files.length === 0 }, { id: "stash-file-collapse-all", label: history.collapseChangedFolders, icon: "collapse", disabled: state.fileView === "flat" || files.length === 0 }])}
     <div class="stash-files commit-file-list compact-file-tree ${state.fileView}" id="stash-file-list" role="listbox" aria-label="${escapeAttribute(copy.filesAria)}">${stashFileRows(state, entry, localization)}</div>
     <div class="stash-actions"><button class="primary-button" type="button" data-stash-action="apply">${escapeHtml(copy.apply)}</button><button class="secondary-button" type="button" data-stash-action="pop">${escapeHtml(copy.pop)}</button></div>
   </div>`;
+}
+
+function stashFilesToolbar(label: string, count: string, mode: StashState["fileView"], commands: readonly CollectionToolbarCommand[]): string {
+  return renderHierarchicalCollectionToolbar({
+    mode,
+    ariaLabel: label,
+    className: "commit-files-toolbar",
+    leadingHtml: `<span class="commit-files-label">${icon("folder", 13)}<span>${escapeHtml(label)}</span><b>${count}</b></span>`,
+    commands: commands.map((command) => ({ ...command, elementId: command.id })),
+  });
 }
 
 function stashRow(entry: StashEntry, selected: boolean, locale: string): string {
