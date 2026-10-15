@@ -38,7 +38,8 @@
   outline: none;
 }
 
-.tasks-tree-row {
+.tasks-tree-row,
+.tasks-row {
   --tasks-tree-indent: calc(8px + var(--tree-depth, 0) * 16px);
   min-width: 0;
 }
@@ -243,7 +244,7 @@
 .tasks-row {
   display: grid;
   width: 100%;
-  min-height: 32px;
+  min-height: 28px;
   box-sizing: border-box;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px;
@@ -289,9 +290,10 @@
 .tasks-tree-leaf-spacer { width: 12px; }
 
 .tasks-row-copy {
-  display: grid;
+  display: flex;
   min-width: 0;
-  gap: 1px;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .tasks-row-copy strong,

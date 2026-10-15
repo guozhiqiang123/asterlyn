@@ -39,6 +39,7 @@ test("Tasks view renders accessible grouped declarative rows and escapes content
   assert.match(html, /data-task-key="p:1"/);
   assert.match(html, /Run &quot;debug&quot;/);
   assert.match(html, /aria-selected="true"/);
+  assert.doesNotMatch(html, /<small>1<\/small>/u);
 });
 
 test("Tasks view renders all non-ready states without task rows", () => {

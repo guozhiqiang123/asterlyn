@@ -130,12 +130,14 @@ test("native macOS chrome keeps the trailing settings action inset from the wind
 test("bottom tool close stays right-aligned when feature actions are hidden", async () => {
   const source = await readFile(new URL("../src/shared/layout.css", import.meta.url), "utf8");
   assert.match(source, /\.bottom-tool-hide\s*\{[^}]*margin-left:\s*auto;/s);
-  assert.match(
-    source,
-    /\.terminal-header-actions:not\(\.hidden\)\s*\+\s*\.git-operation-open\.hidden\s*\+\s*\.tasks-header-refresh\.hidden\s*\+\s*\.plugin-settings-open\.hidden\s*\+\s*\.bottom-tool-hide\s*\{[^}]*margin-left:\s*0;/s,
-  );
-  assert.match(source, /\.tasks-header-refresh:not\(\.hidden\)\s*\{[^}]*margin-left:\s*auto;/s);
-  assert.match(source, /\.plugin-settings-open:not\(\.hidden\)\s*\+\s*\.bottom-tool-hide\s*\{[^}]*margin-left:\s*0;/s);
+  assert.match(source, /\.bottom-tool-header-actions\s*\{[^}]*display:\s*flex;[^}]*margin-left:\s*auto;/s);
+  assert.match(source, /\.bottom-tool-header-actions\s*>\s*\.compact-icon-button,[^}]*\{[^}]*margin-left:\s*0;/s);
+});
+
+test("task leaves share the branch depth indentation", async () => {
+  const source = await readFile(new URL("../src/features/tasks/tasks.css", import.meta.url), "utf8");
+  assert.match(source, /\.tasks-tree-row,\s*\.tasks-row\s*\{[^}]*--tasks-tree-indent:\s*calc\(8px \+ var\(--tree-depth, 0\) \* 16px\);/s);
+  assert.match(source, /\.tasks-row\s*\{[^}]*padding:\s*0 8px 0 var\(--tasks-tree-indent\);/s);
 });
 
 test("keyboard shortcut keycaps use one UI font metric independent of editor preferences", async () => {

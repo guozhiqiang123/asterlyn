@@ -206,11 +206,7 @@
   font-size: 11px;
 }
 
-.bottom-tool-header .git-operation-open {
-  margin-left: auto;
-}
-
-.terminal-header-actions {
+.bottom-tool-header-actions {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -218,16 +214,16 @@
   margin-left: auto;
 }
 
-.terminal-header-actions:not(.hidden) + .git-operation-open.hidden + .tasks-header-refresh.hidden + .plugin-settings-open.hidden + .bottom-tool-hide {
+.bottom-tool-header-actions > .compact-icon-button,
+.bottom-tool-header-actions > .terminal-header-actions {
   margin-left: 0;
 }
 
-.tasks-header-refresh:not(.hidden) {
-  margin-left: auto;
-}
-
-.plugin-settings-open:not(.hidden) + .bottom-tool-hide {
-  margin-left: 0;
+.terminal-header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
 }
 
 .terminal-session-status {
