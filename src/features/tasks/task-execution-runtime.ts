@@ -25,6 +25,7 @@ export interface TaskExecutionRuntimeOptions {
 }
 
 export type TaskExecutionPresentation = "background" | "terminal";
+export type TaskExecutionProgress = "queued" | "running";
 
 export interface TaskArtifactAttachmentTarget {
   readonly root: string;
@@ -71,6 +72,8 @@ export class TaskExecutionRuntime {
   private executionPresentation: TaskExecutionPresentation = "background";
   private projectedTerminalSessionId: string | null = null;
   private projectedTerminalOutputCount = 0;
+  private progressChanged: ((status: TaskExecutionProgress) => void) | null = null;
+  private projectedProgress: TaskExecutionProgress | null = null;
 
   constructor(
     root: HTMLElement,
@@ -84,6 +87,7 @@ export class TaskExecutionRuntime {
     this.options = options;
     this.unsubscribe = controller.subscribe((state) => {
       this.projectTaskTerminal(state);
+      this.projectProgress(state);
       this.observeTerminal(state);
       this.backgroundStartedExecution(state);
       this.render();
@@ -131,6 +135,8 @@ export class TaskExecutionRuntime {
     this.executionTimeoutMs = null;
     this.taskConfirmation = null;
     this.executionPresentation = "background";
+    this.progressChanged = null;
+    this.projectedProgress = null;
     this.resetTaskTerminalProjection();
     this.terminalState = null;
     this.invalidateArtifacts();
@@ -143,6 +149,7 @@ export class TaskExecutionRuntime {
     request: TaskExecutionRequest,
     finished: (result: PluginTaskExecutionResult) => void,
     presentation: TaskExecutionPresentation = "background",
+    progressChanged?: (status: TaskExecutionProgress) => void,
   ): Promise<void> {
     if (this.finished) throw new Error("A task execution review is already active.");
     this.identity = identity;
@@ -151,6 +158,8 @@ export class TaskExecutionRuntime {
     this.executionTimeoutMs = this.options.executionTimeoutMs?.(request) ?? null;
     this.taskConfirmation = this.options.taskConfirmation?.(request) ?? null;
     this.executionPresentation = presentation;
+    this.progressChanged = progressChanged ?? null;
+    this.projectedProgress = null;
     this.resetTaskTerminalProjection();
     this.terminalState = null;
     this.invalidateArtifacts();
@@ -163,6 +172,8 @@ export class TaskExecutionRuntime {
     } catch (error) {
       if (this.controller.state.status === "starting") this.fail(error);
       if (this.finished === finished) this.finished = null;
+      this.progressChanged = null;
+      this.projectedProgress = null;
       this.visible = false;
       this.backgroundOnStart = false;
       this.clearExecutionTimer();
@@ -208,6 +219,8 @@ export class TaskExecutionRuntime {
     if (this.finished && this.controller.state.status === "idle") {
       const finished = this.finished;
       this.finished = null;
+      this.progressChanged = null;
+      this.projectedProgress = null;
       this.visible = false;
       this.backgroundOnStart = false;
       this.clearExecutionTimer();
@@ -263,6 +276,8 @@ export class TaskExecutionRuntime {
     }
     this.visible = false;
     this.backgroundOnStart = false;
+    this.progressChanged = null;
+    this.projectedProgress = null;
     this.clearExecutionTimer();
     this.terminalState = null;
     this.invalidateArtifacts();
@@ -329,6 +344,8 @@ export class TaskExecutionRuntime {
     if (state.status === "idle") {
       const finished = this.finished;
       this.finished = null;
+      this.progressChanged = null;
+      this.projectedProgress = null;
       this.visible = false;
       this.backgroundOnStart = false;
       this.clearExecutionTimer();
@@ -344,6 +361,8 @@ export class TaskExecutionRuntime {
     this.terminalState = state;
     const finished = this.finished;
     this.finished = null;
+    this.progressChanged = null;
+    this.projectedProgress = null;
     finished({
       status: state.status,
       outputs: state.outputs,
@@ -385,6 +404,12 @@ export class TaskExecutionRuntime {
     } catch (error) {
       this.options.reportError?.(error);
     }
+  }
+
+  private projectProgress(state: TaskExecutionState): void {
+    if (!this.progressChanged || (state.status !== "queued" && state.status !== "running") || state.status === this.projectedProgress) return;
+    this.projectedProgress = state.status;
+    this.progressChanged(state.status);
   }
 
   private resetTaskTerminalProjection(): void {

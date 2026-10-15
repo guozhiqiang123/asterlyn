@@ -109,7 +109,7 @@ export class TerminalPanel {
 
   beginTask(session: TaskTerminalSessionDescriptor): void {
     this.installWorkspace(session.workspaceRoot);
-    this.taskSession = { descriptor: session, status: "starting", error: null, outputTruncated: false };
+    this.taskSession = { descriptor: session, status: "starting", error: null, outputTruncated: false, outputEndedWithCarriageReturn: false };
     this.view.reset();
     this.view.write(new TextEncoder().encode(taskTerminalCommandLine(session)));
     void this.controller.close().catch((error) => this.feedback.error(error));
@@ -118,9 +118,15 @@ export class TerminalPanel {
   }
 
   appendTask(sessionId: string, frame: TaskTerminalOutputFrame): void {
-    if (this.taskSession?.descriptor.sessionId !== sessionId) return;
+    const current = this.taskSession;
+    if (current?.descriptor.sessionId !== sessionId) return;
     try {
-      this.view.write(decodeBase64(frame.dataBase64));
+      const normalized = normalizeTaskTerminalOutput(
+        decodeBase64(frame.dataBase64),
+        current.outputEndedWithCarriageReturn,
+      );
+      this.taskSession = { ...current, outputEndedWithCarriageReturn: normalized.outputEndedWithCarriageReturn };
+      this.view.write(normalized.bytes);
     } catch (error) {
       this.feedback.error(error);
     }
@@ -211,6 +217,37 @@ interface TaskTerminalPresentation {
   readonly status: TaskTerminalSessionStatus;
   readonly error: string | null;
   readonly outputTruncated: boolean;
+  readonly outputEndedWithCarriageReturn: boolean;
+}
+
+export interface NormalizedTaskTerminalOutput {
+  readonly bytes: Uint8Array;
+  readonly outputEndedWithCarriageReturn: boolean;
+}
+
+/** Converts pipe-style LF newlines into terminal CRLF without breaking split CRLF frames. */
+export function normalizeTaskTerminalOutput(
+  bytes: Uint8Array,
+  outputEndedWithCarriageReturn = false,
+): NormalizedTaskTerminalOutput {
+  let previousWasCarriageReturn = outputEndedWithCarriageReturn;
+  let insertedCarriageReturns = 0;
+  for (const byte of bytes) {
+    if (byte === 0x0a && !previousWasCarriageReturn) insertedCarriageReturns += 1;
+    previousWasCarriageReturn = byte === 0x0d;
+  }
+  if (insertedCarriageReturns === 0) {
+    return { bytes, outputEndedWithCarriageReturn: previousWasCarriageReturn };
+  }
+  const normalized = new Uint8Array(bytes.length + insertedCarriageReturns);
+  let offset = 0;
+  previousWasCarriageReturn = outputEndedWithCarriageReturn;
+  for (const byte of bytes) {
+    if (byte === 0x0a && !previousWasCarriageReturn) normalized[offset++] = 0x0d;
+    normalized[offset++] = byte;
+    previousWasCarriageReturn = byte === 0x0d;
+  }
+  return { bytes: normalized, outputEndedWithCarriageReturn: previousWasCarriageReturn };
 }
 
 export function taskTerminalPort(panel: TerminalPanel): TaskTerminalSessionPort {

@@ -110,6 +110,25 @@ test("task execution requires a reviewed trusted workspace and rejects stale eve
   assert.equal(controller.state.status, "idle");
 });
 
+test("the first output frame promotes a queued task to running", async () => {
+  const events = [];
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
+    prepareTaskExecution: async () => review,
+    startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-output-first", reviewId: "review-1", workspaceRoot: "/repo" }),
+    cancelTaskExecution: async () => {},
+    subscribeTaskSession: async (listener) => { events.push(listener); return () => {}; },
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", args: [] });
+  await controller.confirm(identity);
+  events[0]({ protocolVersion: 1, kind: "output", runId: "run-output-first", workspaceRoot: "/repo", sequence: 1, stream: "stdout", dataBase64: "b2sK" });
+  assert.equal(controller.state.status, "running");
+});
+
 test("FilesRecovery-scale task output remains complete through terminal delivery", async () => {
   const listeners = [];
   const bridge = {
@@ -293,6 +312,7 @@ test("user task execution projects one reviewed run into the host Terminal", asy
     };
     const controller = new TaskExecutionController(bridge);
     let finish;
+    const progress = [];
     const completion = new Promise((resolve) => { finish = resolve; });
     const runtime = new TaskExecutionRuntime(root, controller, () => EN_US_TASK_EXECUTION_COPY, {
       backgroundAfterStart: () => true,
@@ -302,7 +322,7 @@ test("user task execution projects one reviewed run into the host Terminal", asy
     await runtime.prepare(identity, {
       pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug",
       executablePath: "gradlew", args: ["assembleDebug"],
-    }, finish, "terminal");
+    }, finish, "terminal", (status) => progress.push(status));
     await controller.confirm(identity);
     assert.equal(calls.filter(([kind]) => kind === "begin").length, 1);
     assert.equal(calls[0][1].executablePath, "/repo/gradlew");
@@ -311,6 +331,7 @@ test("user task execution projects one reviewed run into the host Terminal", asy
     listeners[0]({ protocolVersion: 1, kind: "output", runId: "run-terminal", workspaceRoot: "/repo", sequence: 2, stream: "stdout", dataBase64: "b2sK" });
     listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-terminal", workspaceRoot: "/repo", sequence: 3, status: "succeeded", message: null, exitCode: 0 });
     assert.equal((await completion).status, "succeeded");
+    assert.deepEqual(progress, ["queued", "running"]);
     assert.deepEqual(calls.filter(([kind]) => kind === "append").map(([, sessionId, frame]) => [sessionId, frame.dataBase64]), [["review-1", "b2sK"]]);
     assert.equal(calls.filter(([kind, , status]) => kind === "update" && status === "succeeded").length, 1);
     assert.equal(runtime.reveal("android.gradle:assembleDebug", identity), true);

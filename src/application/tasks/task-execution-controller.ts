@@ -239,8 +239,9 @@ export class TaskExecutionController {
     let next: TaskExecutionState = { ...this.value, lastSequence: event.sequence };
     if (event.kind === "output") {
       const bytes = estimateBase64Bytes(event.dataBase64);
-      if (next.outputBytes + bytes <= MAX_OUTPUT_BYTES) next = { ...next, outputs: [...next.outputs, { stream: event.stream, dataBase64: event.dataBase64 }], outputBytes: next.outputBytes + bytes };
-      else next = { ...next, outputTruncated: true };
+      const status = next.status === "queued" ? "running" : next.status;
+      if (next.outputBytes + bytes <= MAX_OUTPUT_BYTES) next = { ...next, status, outputs: [...next.outputs, { stream: event.stream, dataBase64: event.dataBase64 }], outputBytes: next.outputBytes + bytes };
+      else next = { ...next, status, outputTruncated: true };
     } else if (event.kind === "truncated") next = { ...next, outputTruncated: true };
     else {
       const status = next.status === "cancelling" && event.status === "running" ? "cancelling" : event.status;

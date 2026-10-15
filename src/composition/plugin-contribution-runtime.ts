@@ -16,6 +16,7 @@ import type {
   RegisteredPluginContribution,
 } from "../application/plugins/index.ts";
 import type { TaskProviderSnapshot } from "../application/tasks/index.ts";
+import type { TaskRunState } from "../application/tasks/index.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
 import type { TaskProviderCollection } from "../features/tasks/tasks-model.ts";
 import { normalizeHierarchicalCollection } from "../application/plugins/plugin-collection-adapter.ts";
@@ -40,6 +41,7 @@ export interface PluginContributionRuntimeOptions {
     identity: PluginWorkspaceIdentity,
     plan: PluginTaskRunPlan,
     signal: AbortSignal,
+    progressChanged: (status: Extract<TaskRunState, "queued" | "running">) => void,
   ) => Promise<PluginTaskExecutionResult>;
   readonly providerRefreshTitle?: (providerLabel: string) => string;
 }
@@ -56,6 +58,7 @@ export class PluginContributionRuntime {
   private refreshInFlight: Promise<void> | null = null;
   private refreshAbort: AbortController | null = null;
   private runInFlight: Promise<void> | null = null;
+  private activeRun: { readonly providerQualifiedId: string; readonly taskId: string; readonly status: Extract<TaskRunState, "queued" | "running"> } | null = null;
 
   constructor(
     registry: PluginContributionRegistry,
@@ -87,6 +90,7 @@ export class PluginContributionRuntime {
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
     this.refreshInFlight = null;
     this.runInFlight = null;
+    this.activeRun = null;
     this.options.replaceProviders(this.identity, []);
   }
 
@@ -161,13 +165,24 @@ export class PluginContributionRuntime {
     this.publishProviders();
     const abort = new AbortController();
     this.refreshAbort = abort;
+    this.activeRun = { providerQualifiedId: contribution.qualifiedId, taskId, status: "queued" };
+    this.publishProviders();
     try {
-      const result = await this.options.executeTaskRun(identity, plan, abort.signal);
+      const result = await this.options.executeTaskRun(identity, plan, abort.signal, (status) => {
+        if (!this.matches(identity) || this.activeRun?.providerQualifiedId !== contribution.qualifiedId || this.activeRun.taskId !== taskId || this.activeRun.status === status) return;
+        this.activeRun = { ...this.activeRun, status };
+        this.publishProviders();
+      });
       if (this.matches(identity) && this.providers.get(contribution.qualifiedId)?.contribution === contribution) {
         plan.apply(result);
+        this.activeRun = null;
         this.publishProviders();
       }
     } finally {
+      if (this.activeRun?.providerQualifiedId === contribution.qualifiedId && this.activeRun.taskId === taskId) {
+        this.activeRun = null;
+        this.publishProviders();
+      }
       if (this.refreshAbort === abort) this.refreshAbort = null;
     }
   }
@@ -292,7 +307,11 @@ export class PluginContributionRuntime {
     if (!this.identity || this.disposed) return;
     const projections = [...this.providers.values()]
       .map(({ contribution }) => {
-        const snapshot = snapshotSafely(contribution, this.options.reportError);
+        const snapshot = overlayActiveRun(
+          snapshotSafely(contribution, this.options.reportError),
+          contribution.qualifiedId,
+          this.activeRun,
+        );
         const collection = collectionSafely(contribution, this.options.reportError);
         return {
           id: contribution.qualifiedId,
@@ -313,6 +332,18 @@ export class PluginContributionRuntime {
     this.refreshAbort?.abort();
     this.refreshAbort = null;
   }
+}
+
+function overlayActiveRun(
+  snapshot: TaskProviderSnapshot,
+  providerQualifiedId: string,
+  activeRun: { readonly providerQualifiedId: string; readonly taskId: string; readonly status: Extract<TaskRunState, "queued" | "running"> } | null,
+): TaskProviderSnapshot {
+  if (!activeRun || activeRun.providerQualifiedId !== providerQualifiedId) return snapshot;
+  return {
+    ...snapshot,
+    tasks: snapshot.tasks.map((task) => task.id === activeRun.taskId ? { ...task, runState: activeRun.status } : task),
+  };
 }
 
 function collectionSafely(

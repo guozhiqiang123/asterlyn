@@ -321,7 +321,10 @@ test("task execution uses the current provider identity and reports concurrent r
     replaceProviders: (_identity, providers) => projections.push(providers),
     reportError: (error) => { throw error; },
     executeTaskRefresh: async () => { throw new Error("not used"); },
-    executeTaskRun: async () => new Promise((resolve) => { finishExecution = resolve; }),
+    executeTaskRun: async (_identity, _plan, _signal, progressChanged) => new Promise((resolve) => {
+      progressChanged("running");
+      finishExecution = resolve;
+    }),
   });
   adapter.activateWorkspace(identity);
   await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
@@ -337,7 +340,7 @@ test("task execution uses the current provider identity and reports concurrent r
   }))]);
   const running = adapter.runTask("android.tasks::app:assembleDebug", identity);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(projections.at(-1)[0].snapshot.tasks[0].runState, "queued");
+  assert.equal(projections.at(-1)[0].snapshot.tasks[0].runState, "running");
   await assert.rejects(adapter.runTask("android.tasks::app:assembleDebug", identity), { name: "PluginTaskBusyError" });
   finishExecution({ status: "succeeded", outputs: [], truncated: false, error: null });
   await running;

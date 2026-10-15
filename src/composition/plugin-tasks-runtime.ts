@@ -11,7 +11,7 @@ import type { ProjectFile } from "../models.ts";
 import type { TaskExecutionBridge } from "../protocol/task-execution.ts";
 import { parseTaskArtifactDiscovery, type TaskArtifactBridge } from "../protocol/task-artifacts.ts";
 import { TaskExecutionController } from "../application/tasks/task-execution-controller.ts";
-import { TaskExecutionRuntime } from "../features/tasks/task-execution-runtime.ts";
+import { TaskExecutionRuntime, type TaskExecutionProgress } from "../features/tasks/task-execution-runtime.ts";
 import { PluginTaskAuthorizationRuntime } from "../features/tasks/plugin-task-authorization-runtime.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
 import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY } from "../localization/task-execution-copy.ts";
@@ -96,7 +96,7 @@ export class PluginTasksRuntime {
       reportDiagnostic: (diagnostic) => options.reportError(diagnostic.error ?? new Error(diagnostic.message)),
       reportError: options.reportError,
       executeTaskRefresh: (identity, plan, signal) => this.executeTaskRefresh(identity, plan, signal),
-      executeTaskRun: (identity, plan, signal) => this.executeTaskRun(identity, plan, signal),
+      executeTaskRun: (identity, plan, signal, progressChanged) => this.executeTaskRun(identity, plan, signal, progressChanged),
       providerRefreshTitle: (providerLabel) => `${options.copy().refresh}: ${providerLabel}`,
       taskCacheBridge: options.taskCacheBridge,
     });
@@ -227,8 +227,9 @@ export class PluginTasksRuntime {
     identity: PluginWorkspaceIdentity,
     plan: PluginTaskRunPlan,
     signal: AbortSignal,
+    progressChanged: (status: TaskExecutionProgress) => void,
   ): Promise<PluginTaskExecutionResult> {
-    const result = await this.executeTask(identity, plan, signal, "terminal");
+    const result = await this.executeTask(identity, plan, signal, "terminal", progressChanged);
     this.recentTasks?.record({
       pluginId: plan.request.pluginId,
       providerId: plan.request.providerId,
@@ -282,6 +283,7 @@ export class PluginTasksRuntime {
     plan: PluginTaskRefreshPlan,
     signal: AbortSignal,
     presentation: "background" | "terminal",
+    progressChanged?: (status: TaskExecutionProgress) => void,
   ): Promise<PluginTaskExecutionResult> {
     return new Promise<PluginTaskExecutionResult>((resolve) => {
       let settled = false;
@@ -309,7 +311,7 @@ export class PluginTasksRuntime {
         complete({ status: "cancelled", outputs: [], truncated: false, error: "Task refresh was cancelled." });
         return;
       }
-      void this.execution.prepare(identity, plan.request, complete, presentation).then(() => {
+      void this.execution.prepare(identity, plan.request, complete, presentation, progressChanged).then(() => {
         if (signal.aborted) abort();
       }).catch((error) => complete({
         status: "crashed",

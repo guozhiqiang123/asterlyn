@@ -18,6 +18,7 @@ import {
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
+import type { TaskRunState } from "../application/tasks/index.ts";
 import { PluginContributionRuntime } from "./plugin-contribution-runtime.ts";
 import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
 import { createPluginTaskCacheCapability } from "./plugin-task-cache-capability.ts";
@@ -39,6 +40,7 @@ export interface PluginCompositionRuntimeOptions {
     identity: PluginWorkspaceIdentity,
     plan: PluginTaskRunPlan,
     signal: AbortSignal,
+    progressChanged: (status: Extract<TaskRunState, "queued" | "running">) => void,
   ) => Promise<PluginTaskExecutionResult>;
   readonly providerRefreshTitle?: (providerLabel: string) => string;
   readonly loadPlugins?: () => Promise<readonly BundledPlugin[]>;

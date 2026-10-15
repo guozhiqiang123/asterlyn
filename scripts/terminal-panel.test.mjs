@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   renderTaskTerminalHeader,
   renderTerminalHeader,
+  normalizeTaskTerminalOutput,
   taskTerminalActionAvailable,
   taskTerminalCommandLine,
   terminalActionAvailable,
@@ -92,4 +93,15 @@ test("terminal pre-mount output buffer is bounded and reports omitted bytes", ()
   assert.equal(drained.omittedBytes, 3);
   assert.deepEqual([...drained.chunks[0]], [4, 5, 6, 7]);
   assert.deepEqual(buffer.drain(), { chunks: [], omittedBytes: 0 });
+});
+
+test("task pipe output converts bare LF to CRLF across frame boundaries", () => {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const first = normalizeTaskTerminalOutput(encoder.encode("one\ntwo\r"));
+  assert.equal(decoder.decode(first.bytes), "one\r\ntwo\r");
+  assert.equal(first.outputEndedWithCarriageReturn, true);
+  const second = normalizeTaskTerminalOutput(encoder.encode("\nthree\nfour\rprogress"), first.outputEndedWithCarriageReturn);
+  assert.equal(decoder.decode(second.bytes), "\nthree\r\nfour\rprogress");
+  assert.equal(second.outputEndedWithCarriageReturn, false);
 });
