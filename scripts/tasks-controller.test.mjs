@@ -113,6 +113,23 @@ test("controller preserves only bounded known task run states", () => {
   assert.equal(controller.state.entries[1].task.runState, undefined);
 });
 
+test("controller normalizes cache metadata and disables stale cached tasks", () => {
+  const controller = new TasksController();
+  controller.activate(identity);
+  controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: {
+    status: "ready", cache: { status: "stale", staleReason: "fingerprint-mismatch", restoredTaskCount: 1 },
+    tasks: [task("assemble", "assembleDebug")],
+  } }]);
+  assert.deepEqual(controller.state.providers[0].snapshot.cache, { status: "stale", staleReason: "fingerprint-mismatch", restoredTaskCount: 1 });
+  assert.equal(controller.state.entries[0].task.runnable, false);
+  controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: {
+    status: "ready", cache: { status: "stale", staleReason: "invented", restoredTaskCount: 999999 },
+    tasks: [task("assemble", "assembleDebug")],
+  } }]);
+  assert.equal(controller.state.providers[0].snapshot.cache, undefined);
+  assert.equal(controller.state.entries[0].task.runnable, true);
+});
+
 test("controller preserves valid Gradle project paths and filters by module", () => {
   const controller = new TasksController();
   controller.activate(identity);

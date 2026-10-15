@@ -1,5 +1,20 @@
 export type TaskProviderStatus = "unavailable" | "loading" | "ready" | "error";
 
+export type TaskProviderCacheStatus = "validating" | "ready" | "stale";
+export type TaskProviderStaleReason =
+  | "fingerprint-mismatch"
+  | "watcher-change"
+  | "overflow-recovery"
+  | "cache-expired"
+  | "cache-corrupt"
+  | "fingerprint-unavailable";
+
+export interface TaskProviderCacheMetadata {
+  readonly status: TaskProviderCacheStatus;
+  readonly staleReason?: TaskProviderStaleReason;
+  readonly restoredTaskCount?: number;
+}
+
 export type TaskRunState =
   | "idle"
   | "queued"
@@ -40,4 +55,6 @@ export interface TaskProviderSnapshot {
   readonly tasks: readonly TaskDescriptor[];
   readonly unavailableReason?: TaskProviderUnavailableReason;
   readonly error?: string;
+  /** Host-reviewed cache state; it never grants execution authority. */
+  readonly cache?: TaskProviderCacheMetadata;
 }

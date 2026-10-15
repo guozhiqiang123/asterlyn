@@ -12,7 +12,7 @@ const copy = {
     "evidence-incomplete": "Incomplete evidence",
     "workspace-untrusted": "Untrusted workspace",
   },
-  error: "Error", noResults: "No results", queryPlaceholder: "Filter", run: "Run", retry: "Retry", revealOutput: "Reveal", notRunnable: "Disabled", androidQuickActions: "Quick actions", quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" }, quickActionModule: "Module", quickActionVariant: "Variant", status: { failed: "Failed" },
+  error: "Error", noResults: "No results", queryPlaceholder: "Filter", run: "Run", retry: "Retry", revealOutput: "Reveal", notRunnable: "Disabled", androidQuickActions: "Quick actions", quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" }, quickActionModule: "Module", quickActionVariant: "Variant", cacheValidating: "Verifying configuration", cacheRestored: (count) => `${count} restored`, cacheStale: "Showing stale tasks", cacheStaleReasons: { "fingerprint-mismatch": "Configuration changed", "watcher-change": "Watcher changed", "overflow-recovery": "Overflow recovery", "cache-expired": "Cache expired", "cache-corrupt": "Cache corrupt", "fingerprint-unavailable": "Fingerprint unavailable" }, refreshStale: "Refresh", retainedTasks: (count) => `Previous ${count}`, status: { failed: "Failed" },
 };
 
 function expanded(entries, root = "/project") {
@@ -112,4 +112,25 @@ test("terminal tasks expose localized status, retry, and output actions", () => 
   assert.match(html, /role="status">Failed/);
   assert.match(html, /data-task-action="retry"/);
   assert.match(html, /data-task-action="reveal-output"/);
+});
+
+test("cache validation and stale states retain the tree but never enable Run", () => {
+  const entry = { key: "p:cached", providerId: "p", providerLabel: "P", task: { id: "cached", label: "cached", group: "Build", runnable: false } };
+  const base = { identity: { root: "/project", generation: 1 }, status: "ready", providers: [{ id: "p", label: "P", snapshot: { status: "ready", tasks: [entry.task] } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null };
+  const validating = renderTasksView({ ...base, providers: [{ ...base.providers[0], snapshot: { ...base.providers[0].snapshot, cache: { status: "validating" } } }] }, copy, 250, expanded([entry]));
+  assert.match(validating, /Verifying configuration/u);
+  assert.match(validating, /data-task-key="p:cached"/u);
+  assert.match(validating, /data-task-action="run"[^>]*disabled/u);
+  const stale = renderTasksView({ ...base, providers: [{ ...base.providers[0], snapshot: { ...base.providers[0].snapshot, cache: { status: "stale", staleReason: "fingerprint-mismatch" } } }] }, copy, 250, expanded([entry]));
+  assert.match(stale, /Configuration changed/u);
+  assert.match(stale, /data-tasks-action="refresh"/u);
+  assert.match(stale, /data-task-key="p:cached"/u);
+});
+
+test("failed refresh explains that the previous task tree is retained", () => {
+  const entry = { key: "p:cached", providerId: "p", providerLabel: "P", task: { id: "cached", label: "cached", group: "Build", runnable: false } };
+  const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "error", providers: [{ id: "p", label: "P", snapshot: { status: "error", tasks: [entry.task], error: "Gradle failed" } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: "Gradle failed", unavailableReason: null }, copy, 250, expanded([entry]));
+  assert.match(html, /Gradle failed/u);
+  assert.match(html, /Previous 1/u);
+  assert.match(html, /data-task-key="p:cached"/u);
 });

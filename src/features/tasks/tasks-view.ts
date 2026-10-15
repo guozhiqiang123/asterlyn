@@ -1,4 +1,5 @@
-import type { AndroidTaskQuickActionKind, TaskProviderUnavailableReason } from "../../application/tasks/task-types.ts";
+import type { AndroidTaskQuickActionKind, TaskProviderStaleReason, TaskProviderUnavailableReason } from "../../application/tasks/task-types.ts";
+import type { TaskProviderCacheMetadata } from "../../application/tasks/task-types.ts";
 import { icon } from "../../icons.ts";
 import type { TaskPresentation, TasksState } from "./tasks-model.ts";
 import {
@@ -37,6 +38,12 @@ export interface TasksCopy {
   readonly quickActionKinds: Readonly<Record<AndroidTaskQuickActionKind, string>>;
   readonly quickActionModule: string;
   readonly quickActionVariant: string;
+  readonly cacheValidating: string;
+  readonly cacheRestored: (count: number) => string;
+  readonly cacheStale: string;
+  readonly cacheStaleReasons: Readonly<Record<TaskProviderStaleReason, string>>;
+  readonly refreshStale: string;
+  readonly retainedTasks: (count: number) => string;
   readonly status: Readonly<Record<string, string>>;
 }
 
@@ -71,6 +78,16 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" },
   quickActionModule: "Module",
   quickActionVariant: "Variant",
+  cacheValidating: "Verifying project configuration…",
+  cacheRestored: (count: number) => `${count} task${count === 1 ? "" : "s"} restored from cache`,
+  cacheStale: "Showing the last discovered task list; refresh to verify it.",
+  cacheStaleReasons: {
+    "fingerprint-mismatch": "Project configuration changed.", "watcher-change": "A watched project file changed.",
+    "overflow-recovery": "File watching recovered incompletely.", "cache-expired": "The cached task list has expired.",
+    "cache-corrupt": "The cached task list is invalid.", "fingerprint-unavailable": "Project configuration could not be verified.",
+  },
+  refreshStale: "Refresh Gradle tasks",
+  retainedTasks: (count: number) => `Showing the previous ${count} task${count === 1 ? "" : "s"}.`,
   status: { idle: "Idle", queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", crashed: "Crashed" },
 });
 
@@ -147,6 +164,17 @@ function renderStatus(state: TasksState, copy: TasksCopy): string {
   }
   if (state.status === "loading") return renderLoading(state, copy);
   if (state.status === "error") return renderError(state, copy);
+  const cache = cacheMetadata(state);
+  if (cache?.status === "validating") {
+    return `<div class="tasks-cache-state" data-tasks-cache-state="validating" role="status" aria-live="polite"><strong>${escapeHtml(copy.cacheValidating)}</strong></div>`;
+  }
+  if (cache?.status === "stale") {
+    const reason = cache.staleReason ? (copy.cacheStaleReasons[cache.staleReason] ?? copy.cacheStale) : copy.cacheStale;
+    return `<div class="tasks-cache-state" data-tasks-cache-state="stale" role="status"><strong>${escapeHtml(copy.cacheStale)}</strong><small>${escapeHtml(reason)}</small><button type="button" data-tasks-action="refresh">${escapeHtml(copy.refreshStale)}</button></div>`;
+  }
+  if (cache?.status === "ready" && cache.restoredTaskCount !== undefined) {
+    return `<p class="tasks-discovery-count" data-tasks-cache-state="ready" role="status">${escapeHtml(copy.cacheRestored(cache.restoredTaskCount))}</p>${state.visibleEntries.length === 0 ? message(copy.noResults) : ""}`;
+  }
   if (state.status === "ready") return `<p class="tasks-discovery-count" role="status">${escapeHtml(copy.discovered(state.entries.length))}</p>${state.visibleEntries.length === 0 ? message(copy.noResults) : ""}`;
   if (state.visibleEntries.length === 0) return message(copy.noResults);
   return "";
@@ -164,7 +192,16 @@ function renderLoading(state: TasksState, copy: TasksCopy): string {
 
 function renderError(state: TasksState, copy: TasksCopy): string {
   const detail = state.error ? `<small>${escapeHtml(state.error)}</small>` : "";
-  return `<div class="tasks-discovery-state tasks-discovery-error" data-tasks-discovery-state="error" role="alert"><span class="tasks-discovery-copy"><strong>${escapeHtml(copy.error)}</strong>${detail}</span><button type="button" data-tasks-action="refresh">${escapeHtml(copy.retryDiscovery)}</button></div>`;
+  const retained = state.entries.length > 0 ? `<small>${escapeHtml(copy.retainedTasks(state.entries.length))}</small>` : "";
+  return `<div class="tasks-discovery-state tasks-discovery-error" data-tasks-discovery-state="error" role="alert"><span class="tasks-discovery-copy"><strong>${escapeHtml(copy.error)}</strong>${detail}${retained}</span><button type="button" data-tasks-action="refresh">${escapeHtml(copy.retryDiscovery)}</button></div>`;
+}
+
+function cacheMetadata(state: TasksState): TaskProviderCacheMetadata | null {
+  const metadata = state.providers.map((provider) => provider.snapshot.cache).filter(Boolean) as TaskProviderCacheMetadata[];
+  if (metadata.some((value) => value.status === "validating")) return { status: "validating" };
+  const stale = metadata.find((value) => value.status === "stale");
+  if (stale) return stale;
+  return metadata.find((value) => value.status === "ready") ?? null;
 }
 
 function taskRow(
@@ -175,6 +212,8 @@ function taskRow(
   const { entry, label } = row.node;
   const { runnable, disabledReason, runState, description } = entry.task;
   const discoveryLoading = state.status === "loading";
+  const cacheState = cacheMetadata(state);
+  const cacheLocked = cacheState !== null && cacheState.status !== "ready";
   const selected = entry.key === state.visibleEntries[state.selectedIndex]?.key;
   const active = runState === "queued" || runState === "running";
   const terminal = runState === "succeeded" || runState === "failed" || runState === "cancelled" || runState === "crashed";
@@ -186,7 +225,7 @@ function taskRow(
     ? `<span class="tasks-row-actions"><button type="button" data-task-action="retry" title="${escapeAttribute(copy.retry)}" ${discoveryLoading ? "disabled" : ""}>${escapeHtml(copy.retry)}</button><button type="button" data-task-action="reveal-output" title="${escapeAttribute(copy.revealOutput)}">${escapeHtml(copy.revealOutput)}</button></span>`
     : "";
   const tooltip = [entry.task.id, description, title].filter(Boolean).join(" · ");
-  return `<div role="treeitem" tabindex="-1" class="tasks-row" data-task-tree-row data-task-tree-key="${escapeAttribute(row.node.key)}" data-task-tree-parent="${escapeAttribute(row.node.parentKey)}" data-task-key="${escapeAttribute(entry.key)}" style="--tree-depth:${row.depth}" aria-level="${row.depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(tooltip)}" ${runnable && !active && !discoveryLoading ? "" : "disabled"}><span class="tasks-tree-leaf-spacer"></span>${icon("file", 13)}<span class="tasks-row-copy"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(entry.task.id)}</small>${status}</span></button>${actions}</div>`;
+  return `<div role="treeitem" tabindex="-1" class="tasks-row" data-task-tree-row data-task-tree-key="${escapeAttribute(row.node.key)}" data-task-tree-parent="${escapeAttribute(row.node.parentKey)}" data-task-key="${escapeAttribute(entry.key)}" style="--tree-depth:${row.depth}" aria-level="${row.depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(tooltip)}" ${runnable && !cacheLocked && !active && !discoveryLoading ? "" : "disabled"}><span class="tasks-tree-leaf-spacer"></span>${icon("file", 13)}<span class="tasks-row-copy"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(entry.task.id)}</small>${status}</span></button>${actions}</div>`;
 }
 
 function message(text: string): string { return `<p class="tasks-message" role="status">${escapeHtml(text)}</p>`; }

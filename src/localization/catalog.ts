@@ -1,5 +1,5 @@
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
-import type { TaskProviderUnavailableReason } from "../application/tasks/task-types.ts";
+import type { TaskProviderStaleReason, TaskProviderUnavailableReason } from "../application/tasks/task-types.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts"; import type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 import type { KeybindingCopy } from "./keybinding-copy.ts"; export type { KeybindingCopy } from "./keybinding-copy.ts";
@@ -127,7 +127,7 @@ export interface TerminalCopy {
   closed: string; outputTruncated(bytes: number): string;
 }
 
-export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; cancelDiscovery: string; error: string; retryDiscovery: string; discovered(count: number): string; providerLoading(provider: string): string; showing(count: number, total: number): string; showMore: string; expand(label: string): string; collapse(label: string): string; busy: string; noResults: string; queryPlaceholder: string; run: string; retry: string; revealOutput: string; notRunnable: string; androidQuickActions: string; quickActionKinds: Readonly<Record<"assemble" | "bundle" | "install" | "uninstall", string>>; quickActionModule: string; quickActionVariant: string; status: Readonly<Record<string, string>>; }
+export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; cancelDiscovery: string; error: string; retryDiscovery: string; discovered(count: number): string; providerLoading(provider: string): string; showing(count: number, total: number): string; showMore: string; expand(label: string): string; collapse(label: string): string; busy: string; noResults: string; queryPlaceholder: string; run: string; retry: string; revealOutput: string; notRunnable: string; androidQuickActions: string; quickActionKinds: Readonly<Record<"assemble" | "bundle" | "install" | "uninstall", string>>; quickActionModule: string; quickActionVariant: string; cacheValidating: string; cacheRestored(count: number): string; cacheStale: string; cacheStaleReasons: Readonly<Record<TaskProviderStaleReason, string>>; refreshStale: string; retainedTasks(count: number): string; status: Readonly<Record<string, string>>; }
 
 export interface SettingsCopy {
   planned: string; available: string;

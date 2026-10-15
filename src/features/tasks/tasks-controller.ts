@@ -2,6 +2,9 @@ import type {
   TaskDescriptor,
   AndroidTaskQuickActionKind,
   TaskProviderUnavailableReason,
+  TaskProviderCacheMetadata,
+  TaskProviderCacheStatus,
+  TaskProviderStaleReason,
   TaskRunState,
 } from "../../application/tasks/task-types.ts";
 import {
@@ -182,10 +185,37 @@ function normalizeProvider(candidate: TaskProviderProjection): TaskProviderProje
   }
   const unavailableReason = isUnavailableReason(source.unavailableReason) ? source.unavailableReason : undefined;
   const error = boundedString(source.error);
+  const cache = normalizeCacheMetadata(source.cache);
+  const safeTasks = cache && cache.status !== "ready"
+    ? normalizedTasks.map((task) => ({ ...task, runnable: false }))
+    : normalizedTasks;
   return {
     id,
     label,
-    snapshot: { status, tasks: normalizedTasks, unavailableReason, error },
+    snapshot: { status, tasks: safeTasks, unavailableReason, error, ...(cache ? { cache } : {}) },
+  };
+}
+
+const CACHE_STATUSES = new Set<TaskProviderCacheStatus>(["validating", "ready", "stale"]);
+const STALE_REASONS = new Set<TaskProviderStaleReason>([
+  "fingerprint-mismatch", "watcher-change", "overflow-recovery", "cache-expired", "cache-corrupt", "fingerprint-unavailable",
+]);
+
+function normalizeCacheMetadata(value: unknown): TaskProviderCacheMetadata | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const source = value as { readonly status?: unknown; readonly staleReason?: unknown; readonly restoredTaskCount?: unknown };
+  if (!CACHE_STATUSES.has(source.status as TaskProviderCacheStatus)) return undefined;
+  const status = source.status as TaskProviderCacheStatus;
+  if (source.staleReason !== undefined &&
+    (status !== "stale" || !STALE_REASONS.has(source.staleReason as TaskProviderStaleReason))) return undefined;
+  if (source.restoredTaskCount !== undefined &&
+    (!Number.isSafeInteger(source.restoredTaskCount) || (source.restoredTaskCount as number) < 0 ||
+      (source.restoredTaskCount as number) > MAX_TASKS_PER_PROVIDER)) return undefined;
+  return {
+    status,
+    ...(status === "stale" && source.staleReason !== undefined ? { staleReason: source.staleReason as TaskProviderStaleReason } : {}),
+    ...(source.restoredTaskCount !== undefined ? { restoredTaskCount: source.restoredTaskCount as number } : {}),
   };
 }
 

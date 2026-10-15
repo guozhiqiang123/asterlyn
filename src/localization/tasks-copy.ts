@@ -32,6 +32,19 @@ export const EN_US_TASKS_COPY: TasksCopy = Object.freeze({
   quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" },
   quickActionModule: "Module",
   quickActionVariant: "Variant",
+  cacheValidating: "Verifying project configuration…",
+  cacheRestored: (count: number) => `${count} task${count === 1 ? "" : "s"} restored from cache`,
+  cacheStale: "Showing the last discovered task list; refresh to verify it.",
+  cacheStaleReasons: {
+    "fingerprint-mismatch": "Project configuration changed.",
+    "watcher-change": "A watched project file changed.",
+    "overflow-recovery": "File watching recovered incompletely.",
+    "cache-expired": "The cached task list has expired.",
+    "cache-corrupt": "The cached task list is invalid.",
+    "fingerprint-unavailable": "Project configuration could not be verified.",
+  },
+  refreshStale: "Refresh Gradle tasks",
+  retainedTasks: (count: number) => `Showing the previous ${count} task${count === 1 ? "" : "s"}.`,
   status: { idle: "Idle", queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled", crashed: "Crashed" },
 });
 
@@ -67,5 +80,18 @@ export const ZH_CN_TASKS_COPY: TasksCopy = Object.freeze({
   quickActionKinds: { assemble: "组装", bundle: "打包", install: "安装", uninstall: "卸载" },
   quickActionModule: "模块",
   quickActionVariant: "变体",
+  cacheValidating: "正在验证项目配置…",
+  cacheRestored: (count: number) => `已从缓存恢复 ${count} 个任务`,
+  cacheStale: "当前显示上次发现的任务列表；请刷新以验证。",
+  cacheStaleReasons: {
+    "fingerprint-mismatch": "项目配置已变化。",
+    "watcher-change": "受监视的项目文件已变化。",
+    "overflow-recovery": "文件监听恢复不完整。",
+    "cache-expired": "缓存任务列表已过期。",
+    "cache-corrupt": "缓存任务列表无效。",
+    "fingerprint-unavailable": "无法验证项目配置。",
+  },
+  refreshStale: "刷新 Gradle 任务",
+  retainedTasks: (count: number) => `正在显示之前的 ${count} 个任务。`,
   status: { idle: "空闲", queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", crashed: "崩溃" },
 });
