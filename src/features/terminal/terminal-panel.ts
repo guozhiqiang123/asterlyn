@@ -1,4 +1,5 @@
 import type { TerminalCopy } from "../../localization/catalog.ts";
+import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY, type TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
 import type { TerminalBridge } from "../../protocol/terminal.ts";
 import type { TerminalCommandAction } from "../../application/commands/terminal-command-ids.ts";
 import {
@@ -28,6 +29,7 @@ export class TerminalPanel {
   private readonly releaseState: () => void;
   private readonly releaseOutput: () => void;
   private copy: TerminalCopy;
+  private taskCopy: TaskExecutionCopy;
   private visible = false;
   private taskSession: TaskTerminalPresentation | null = null;
 
@@ -36,10 +38,12 @@ export class TerminalPanel {
     bridge: TerminalBridge,
     copy: TerminalCopy,
     feedback: TerminalPanelFeedback,
+    locale: "en-US" | "zh-CN" = "en-US",
   ) {
     this.root = root;
     this.feedback = feedback;
     this.copy = copy;
+    this.taskCopy = terminalTaskCopy(locale);
     this.controller = new TerminalController(bridge);
     this.releaseState = this.controller.subscribe((change) => {
       this.renderHeader();
@@ -93,8 +97,9 @@ export class TerminalPanel {
     this.visible = false;
   }
 
-  setCopy(copy: TerminalCopy): void {
+  setCopy(copy: TerminalCopy, locale: "en-US" | "zh-CN" = "en-US"): void {
     this.copy = copy;
+    this.taskCopy = terminalTaskCopy(locale);
     if (this.visible) this.renderHeader();
   }
 
@@ -109,7 +114,7 @@ export class TerminalPanel {
     this.view.write(new TextEncoder().encode(taskTerminalCommandLine(session)));
     void this.controller.close().catch((error) => this.feedback.error(error));
     this.renderHeader();
-    this.feedback.status(this.copy.taskStarting(session.label), "busy");
+    this.feedback.status(taskTerminalSummary(this.taskSession, this.taskCopy), "busy");
   }
 
   appendTask(sessionId: string, frame: TaskTerminalOutputFrame): void {
@@ -132,11 +137,11 @@ export class TerminalPanel {
     const becameTerminal = isTerminalTaskTerminalStatus(status) && !isTerminalTaskTerminalStatus(current.status);
     const becameTruncated = outputTruncated && !current.outputTruncated;
     this.taskSession = { ...current, status, error, outputTruncated };
-    if (becameTruncated) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(this.copy.taskOutputTruncated)}]\r\n`));
-    if (becameTerminal) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(taskTerminalSummary(this.taskSession, this.copy))}]\r\n`));
+    if (becameTruncated) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(this.taskCopy.outputTruncated)}]\r\n`));
+    if (becameTerminal) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(taskTerminalSummary(this.taskSession, this.taskCopy))}]\r\n`));
     this.renderHeader();
     const kind = status === "succeeded" ? "success" : isActiveTaskTerminalStatus(status) ? "busy" : status === "cancelled" ? "normal" : "warning";
-    this.feedback.status(taskTerminalSummary(this.taskSession, this.copy), kind);
+    this.feedback.status(taskTerminalSummary(this.taskSession, this.taskCopy), kind);
   }
 
   revealTask(sessionId: string): boolean {
@@ -195,7 +200,7 @@ export class TerminalPanel {
     if (!actions) return;
     actions.classList.toggle("hidden", !this.visible);
     actions.innerHTML = this.taskSession
-      ? renderTaskTerminalHeader(this.taskSession, this.copy)
+      ? renderTaskTerminalHeader(this.taskSession, this.copy, this.taskCopy)
       : renderTerminalHeader(this.controller.state, this.copy);
     this.feedback.presentationChanged?.();
   }
@@ -219,13 +224,7 @@ export function taskTerminalPort(panel: TerminalPanel): TaskTerminalSessionPort 
 
 export function renderTerminalHeader(state: TerminalState, copy: TerminalCopy): string {
   const summary = terminalSummary(state, copy);
-  const canClear = terminalActionAvailable(state, "clear");
-  const canClose = terminalActionAvailable(state, "close");
-  const canRestart = terminalActionAvailable(state, "restart");
-  return `<span class="terminal-session-status ${state.status === "error" ? "error" : ""}" title="${escapeAttribute(state.cwd ?? summary)}">${escapeHtml(summary)}</span>
-    <button class="compact-icon-button" type="button" data-terminal-action="restart" aria-label="${escapeAttribute(copy.newSession)}" title="${escapeAttribute(copy.newSession)}" ${canRestart ? "" : "disabled"}>${icon("refresh", 15)}</button>
-    <button class="compact-icon-button" type="button" data-terminal-action="clear" aria-label="${escapeAttribute(copy.clear)}" title="${escapeAttribute(copy.clear)}" ${canClear ? "" : "disabled"}>${icon("trash", 15)}</button>
-    <button class="compact-icon-button" type="button" data-terminal-action="close" aria-label="${escapeAttribute(copy.close)}" title="${escapeAttribute(copy.close)}" ${canClose ? "" : "disabled"}>${icon("stop", 14)}</button>`;
+  return renderTerminalActions(summary, state.cwd ?? summary, state.status === "error", copy.close, copy, (action) => terminalActionAvailable(state, action));
 }
 
 export function terminalActionAvailable(state: TerminalState, action: TerminalCommandAction): boolean {
@@ -234,16 +233,9 @@ export function terminalActionAvailable(state: TerminalState, action: TerminalCo
   return state.status === "idle" || state.status === "exited" || state.status === "error";
 }
 
-export function renderTaskTerminalHeader(state: TaskTerminalPresentation, copy: TerminalCopy): string {
-  const summary = taskTerminalSummary(state, copy);
-  const canRestart = taskTerminalActionAvailable(state.status, "restart");
-  const canClear = taskTerminalActionAvailable(state.status, "clear");
-  const canCancel = taskTerminalActionAvailable(state.status, "close");
-  const error = state.status === "failed" || state.status === "crashed" ? "error" : "";
-  return `<span class="terminal-session-status ${error}" title="${escapeAttribute(state.descriptor.taskKey)}">${escapeHtml(summary)}</span>
-    <button class="compact-icon-button" type="button" data-terminal-action="restart" aria-label="${escapeAttribute(copy.newSession)}" title="${escapeAttribute(copy.newSession)}" ${canRestart ? "" : "disabled"}>${icon("refresh", 15)}</button>
-    <button class="compact-icon-button" type="button" data-terminal-action="clear" aria-label="${escapeAttribute(copy.clear)}" title="${escapeAttribute(copy.clear)}" ${canClear ? "" : "disabled"}>${icon("trash", 15)}</button>
-    <button class="compact-icon-button" type="button" data-terminal-action="close" aria-label="${escapeAttribute(copy.cancelTask)}" title="${escapeAttribute(copy.cancelTask)}" ${canCancel ? "" : "disabled"}>${icon("stop", 14)}</button>`;
+export function renderTaskTerminalHeader(state: TaskTerminalPresentation, copy: TerminalCopy, taskCopy: TaskExecutionCopy = EN_US_TASK_EXECUTION_COPY): string {
+  const summary = taskTerminalSummary(state, taskCopy);
+  return renderTerminalActions(summary, state.descriptor.taskKey, state.status === "failed" || state.status === "crashed", taskCopy.cancel, copy, (action) => taskTerminalActionAvailable(state.status, action));
 }
 
 export function taskTerminalActionAvailable(status: TaskTerminalSessionStatus, action: TerminalCommandAction): boolean {
@@ -265,16 +257,29 @@ function terminalSummary(state: TerminalState, copy: TerminalCopy): string {
   return copy.notRunning;
 }
 
-function taskTerminalSummary(state: TaskTerminalPresentation, copy: TerminalCopy): string {
-  const label = state.descriptor.label;
-  if (state.status === "starting") return copy.taskStarting(label);
-  if (state.status === "queued") return copy.taskQueued(label);
-  if (state.status === "running") return copy.taskRunning(label);
-  if (state.status === "cancelling") return copy.taskCancelling(label);
-  if (state.status === "succeeded") return copy.taskSucceeded(label);
-  if (state.status === "failed") return state.error ? `${copy.taskFailed(label)} — ${sanitizeTerminalText(state.error)}` : copy.taskFailed(label);
-  if (state.status === "cancelled") return copy.taskCancelled(label);
-  return state.error ? `${copy.taskCrashed(label)} — ${sanitizeTerminalText(state.error)}` : copy.taskCrashed(label);
+function renderTerminalActions(
+  summary: string,
+  title: string,
+  error: boolean,
+  closeLabel: string,
+  copy: TerminalCopy,
+  available: (action: TerminalCommandAction) => boolean,
+): string {
+  const button = (action: TerminalCommandAction, label: string, glyph: "refresh" | "trash" | "stop", size: number) =>
+    `<button class="compact-icon-button" type="button" data-terminal-action="${action}" aria-label="${escapeAttribute(label)}" title="${escapeAttribute(label)}" ${available(action) ? "" : "disabled"}>${icon(glyph, size)}</button>`;
+  return `<span class="terminal-session-status ${error ? "error" : ""}" title="${escapeAttribute(title)}">${escapeHtml(summary)}</span>
+    ${button("restart", copy.newSession, "refresh", 15)}
+    ${button("clear", copy.clear, "trash", 15)}
+    ${button("close", closeLabel, "stop", 14)}`;
+}
+
+function taskTerminalSummary(state: TaskTerminalPresentation, copy: TaskExecutionCopy): string {
+  const summary = `${state.descriptor.label} — ${copy.status[state.status] ?? state.status}`;
+  return state.error ? `${summary} — ${sanitizeTerminalText(state.error)}` : summary;
+}
+
+function terminalTaskCopy(locale: "en-US" | "zh-CN"): TaskExecutionCopy {
+  return locale === "zh-CN" ? ZH_CN_TASK_EXECUTION_COPY : EN_US_TASK_EXECUTION_COPY;
 }
 
 function decodeBase64(value: string): Uint8Array {

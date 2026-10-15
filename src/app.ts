@@ -203,7 +203,7 @@ import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/w
 import { hideWorkspaceToolWindows } from "./shell/workspace-availability.ts";
 import { WindowSession } from "./application/window-session";
 import { approveProjectWindowClose } from "./application/window-close-gate.ts";
-import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts"; import { PluginTasksRuntime } from "./composition/plugin-tasks-runtime.ts"; import { reconcileAfterSuccessfulTask } from "./composition/post-task-reconciliation.ts"; import { openingTaskTerminalPort } from "./composition/task-terminal-session-adapter.ts";
+import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts"; import { PluginTasksRuntime } from "./composition/plugin-tasks-runtime.ts"; import { reconcileAfterSuccessfulTask } from "./composition/post-task-reconciliation.ts"; import { openingTaskTerminalPort } from "./features/terminal/task-terminal-session-adapter.ts";
 import { historyPathApplyShortcut } from "./composition/history-shortcut-presentation.ts";
 import type { SessionInvalidationSlice } from "./application/session-invalidation";
 import { renderRepositoryProjectionSlices } from "./application/repository-projection-renderer.ts";
@@ -631,8 +631,8 @@ export class AsterlynApp {
       status: (message, kind) => this.setStatus(message, kind),
       error: (error) => this.showError(error),
       keyboard: this.shortcuts.handleTerminalKeyEvent, presentationChanged: () => this.refreshShortcutPresentation(),
-    });
-    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, recentTaskStorage: window.localStorage, taskTerminal: openingTaskTerminalPort(this.terminalPanel, (workspaceRoot) => this.openTaskTerminal(workspaceRoot)), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
+    }, initialCatalog.locale);
+    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, recentTaskStorage: window.localStorage, taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
     this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.findResultsRuntime = new FindResultsRuntime(root, {
@@ -1823,7 +1823,7 @@ export class AsterlynApp {
       ) return;
       const previousCatalog = this.localization.catalog;
       this.localization = createLocalization(catalog);
-      this.terminalPanel.setCopy(catalog.terminal);
+      this.terminalPanel.setCopy(catalog.terminal, catalog.locale);
       this.editorSurface.setCopy(catalog.editor);
       this.filesEditorRuntime.files.setMessages(catalog.editor);
       this.filesEditorRuntime.editor.setMessages(catalog.editor);
@@ -3851,8 +3851,6 @@ export class AsterlynApp {
   }
 
   private hideLeftTool(): void { const tool = this.shellState.layout.leftTool; if (tool) this.toggleTool(tool); }
-
-  private openTaskTerminal(workspaceRoot: string): void { if (this.windowSession.workspace.state.root === workspaceRoot) { this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "terminal" }); this.applyWorkbenchLayout(true); this.renderActivityRail(); this.bottomToolRuntime.render(); } }
 
   private toggleTool(tool: ActivityTool): void {
     if (

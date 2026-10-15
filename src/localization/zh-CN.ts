@@ -62,7 +62,7 @@ export const ZH_CN = {
     clear: "清空终端回滚记录",
     cleared: "已清空终端回滚记录",
     close: "关闭当前终端会话",
-    closed: "终端会话已关闭", outputTruncated: (bytes) => `\r\n[Asterlyn 在显示繁忙时省略了 ${bytes} 字节终端输出。]\r\n`, taskStarting: (label) => `正在启动 ${label}…`, taskQueued: (label) => `${label} 正在排队`, taskRunning: (label) => `${label} 正在运行`, taskCancelling: (label) => `正在取消 ${label}…`, taskSucceeded: (label) => `${label} 已成功`, taskFailed: (label) => `${label} 执行失败`, taskCancelled: (label) => `${label} 已取消`, taskCrashed: (label) => `${label} 已崩溃`, cancelTask: "取消正在运行的任务", taskOutputTruncated: "任务输出已达到执行上限，部分内容被截断。",
+    closed: "终端会话已关闭", outputTruncated: (bytes) => `\r\n[Asterlyn 在显示繁忙时省略了 ${bytes} 字节终端输出。]\r\n`,
   }, tasks: ZH_CN_TASKS_COPY,
   settings: {
     planned: "计划中", available: "可用",

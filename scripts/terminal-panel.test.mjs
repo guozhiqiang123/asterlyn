@@ -61,14 +61,14 @@ test("task terminal header exposes cancel while active and new session after com
   };
   const active = { descriptor, status: "running", error: null, outputTruncated: false };
   const activeHeader = renderTaskTerminalHeader(active, EN_US.terminal);
-  assert.match(activeHeader, /assembleDebug running/u);
+  assert.match(activeHeader, /assembleDebug — Running/u);
   assert.doesNotMatch(activeHeader, /data-terminal-action="close"[^>]*disabled/u);
   assert.match(activeHeader, /data-terminal-action="restart"[^>]*disabled/u);
   assert.equal(taskTerminalActionAvailable("running", "close"), true);
   assert.equal(taskTerminalActionAvailable("running", "restart"), false);
 
   const finishedHeader = renderTaskTerminalHeader({ ...active, status: "succeeded" }, EN_US.terminal);
-  assert.match(finishedHeader, /assembleDebug succeeded/u);
+  assert.match(finishedHeader, /assembleDebug — Succeeded/u);
   assert.match(finishedHeader, /data-terminal-action="close"[^>]*disabled/u);
   assert.doesNotMatch(finishedHeader, /data-terminal-action="restart"[^>]*disabled/u);
 });
