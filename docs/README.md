@@ -35,6 +35,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0022-host-owned-hierarchical-collection-presentation.md`](architecture/decisions/0022-host-owned-hierarchical-collection-presentation.md) — one host-owned tree/flat, disclosure, filtering, focus, keyboard, and plugin collection presentation model.
 - [`architecture/decisions/0023-host-governed-public-plugin-foundation.md`](architecture/decisions/0023-host-governed-public-plugin-foundation.md) — canonical plugin package identity, plugin-owned localization, host-managed lifecycle, admission, compatibility, and future external-plugin security gates.
 - [`architecture/decisions/0024-host-presentation-contract-and-plugin-contract-governance.md`](architecture/decisions/0024-host-presentation-contract-and-plugin-contract-governance.md) — semantic host UI primitives, plugin presentation boundary, and independently versioned contract governance.
+- [`architecture/decisions/0025-plugin-scoped-task-authorization.md`](architecture/decisions/0025-plugin-scoped-task-authorization.md) — plugin-owned task authorization declarations, native workspace trust, exact remembered reviews, and fail-closed revocation.
 
 ## Delivery
 
@@ -64,6 +65,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/unified-diff-review-workflow-plan.md`](engineering/unified-diff-review-workflow-plan.md) — shared review blocks, controls, layout, folding, geometry, and workflow for two-pane Diff and three-pane conflict resolution.
 - [`engineering/unified-diff-review-acceptance.md`](engineering/unified-diff-review-acceptance.md) — phased automated and manual acceptance evidence for the unified Diff review workflow.
 - [`engineering/dialog-window-geometry-plan.md`](engineering/dialog-window-geometry-plan.md) — shared movement, resizing, persistence, and confirmation behavior for application-owned dialogs.
+- [`engineering/plugin-task-authorization-plan.md`](engineering/plugin-task-authorization-plan.md) — staged SDK, native authorization, plugin Settings, remembered task review, and local-delivery plan.
 - [`engineering/stash-tool-window-plan.md`](engineering/stash-tool-window-plan.md) — bottom two-column Stash manager, exact-object mutations, context actions, and read-only Diff delivery plan.
 - [`engineering/git-worktree-actions-plan.md`](engineering/git-worktree-actions-plan.md) — primary/linked/available branch checkout identity, reviewed removal, Android Studio-style creation, primary-window Open/Reveal actions, and acceptance gates.
 - [`engineering/keyboard-shortcut-management-plan.md`](engineering/keyboard-shortcut-management-plan.md) — unified command registry, customizable keybindings, conflict handling, Settings management, and editor/terminal integration plan.
