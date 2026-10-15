@@ -50,6 +50,7 @@ export function renderSettingsSection(
     assetSizeBytes: null, canInstall: false, error: null, openingRelease: false,
     dialog: null, installMessage: null,
   },
+  pluginManagementSection = "",
 ): string {
   const preferences = state.preferences;
   switch (state.section) {
@@ -73,6 +74,8 @@ export function renderSettingsSection(
       );
     case "keybindings":
       return "";
+    case "plugins":
+      return pluginManagementSection;
     case "version-control":
       return settingsGroup(
         copy.versionControlTitle,

@@ -182,10 +182,12 @@ import {
 } from "./features/files-editor/editor-session-controller";
 import {
   type SettingsChange,
-  type SettingsSection,
+  type SettingsRoute, type SettingsSection,
   type SettingsState,
 } from "./features/settings/settings-controller";
 import { renderSettingsNavigation, renderSettingsSection } from "./features/settings/settings-view";
+import { PluginManagementBinding } from "./features/settings/plugin-management-binding.ts";
+import { bindSettingsNavigation } from "./features/settings/settings-navigation-binding.ts";
 import { bindAppUpdateControls } from "./features/settings/app-update-binding.ts";
 import { AppUpdatePresentationRuntime } from "./features/settings/app-update-presentation-runtime.ts";
 import { bindKeybindingSettings } from "./features/keybindings/keybinding-settings-binding.ts";
@@ -450,7 +452,7 @@ export class AsterlynApp {
   private readonly projectFilesOperationRuntime: ProjectFilesOperationRuntime;
   private readonly gitOperationRuntime: GitOperationRuntime;
   private editorTabsMarkup = "";
-  private readonly settingsPresentationRuntime: SettingsPresentationRuntime;
+  private readonly settingsPresentationRuntime: SettingsPresentationRuntime; private readonly pluginManagementBinding: PluginManagementBinding;
   private readonly appUpdatePresentationRuntime: AppUpdatePresentationRuntime;
   private readonly shellController: ShellController;
   private readonly shortcuts: KeyboardShortcutRuntime;
@@ -626,6 +628,7 @@ export class AsterlynApp {
       if (this.shellState.page === "settings" && this.settingsState.section === "keybindings") this.renderSettingsPage();
     });
     this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, artifactBridge: bridge, recentTaskStorage: window.localStorage, reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
+    this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.terminalPanel = new TerminalPanel(root, bridge, initialCatalog.terminal, {
       status: (message, kind) => this.setStatus(message, kind),
@@ -2018,7 +2021,7 @@ export class AsterlynApp {
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
     this.appUpdatePresentationRuntime.dispose();
-    this.settingsPresentationRuntime.dispose(); this.pluginTasksRuntime.dispose();
+    this.settingsPresentationRuntime.dispose(); this.pluginManagementBinding.dispose(); this.pluginTasksRuntime.dispose();
     this.releaseKeybindings();
     this.shortcuts.dispose();
     this.shellController.dispose();
@@ -2031,8 +2034,13 @@ export class AsterlynApp {
     this.dialogRuntime.dispose();
   }
 
-  private openSettings(): void {
-    if (this.shellState.page === "settings") return;
+  private openSettings(route?: SettingsRoute): void {
+    if (route) this.settingsPresentationRuntime.settings.navigate(route);
+    if (route?.section === "plugins") this.pluginManagementBinding.enter(route); else if (this.settingsState.section === "plugins") this.pluginManagementBinding.enter();
+    if (this.shellState.page === "settings") {
+      this.renderSettingsPage();
+      return;
+    }
     this.contextMenuHost.close();
     this.captureMountedTextEditor();
     if (this.remoteState.dialog && !this.remoteState.operation) {
@@ -2046,7 +2054,7 @@ export class AsterlynApp {
     this.query("#settings-page").classList.remove("hidden");
     this.query("#settings-button").setAttribute("aria-pressed", "true");
     this.renderSettingsPage();
-    queueMicrotask(() => this.query<HTMLButtonElement>("#settings-back").focus());
+    if (route?.section !== "plugins" || !route.pluginId) queueMicrotask(() => this.query<HTMLButtonElement>("#settings-back").focus());
   }
 
   private closeSettings(): void {
@@ -2078,7 +2086,7 @@ export class AsterlynApp {
       )
       : renderSettingsSection(
         this.settingsState, this.editorFontStatus, this.localization.catalog.settings,
-        this.settingsPresentationRuntime.updates.state,
+        this.settingsPresentationRuntime.updates.state, this.pluginManagementBinding.render(this.localization.catalog.settings.plugins),
       );
     this.bindSettingsEvents();
     if (focusSelector) {
@@ -2095,20 +2103,10 @@ export class AsterlynApp {
 
   private bindSettingsEvents(): void {
     bindAppUpdateControls(this.root, this.settingsPresentationRuntime.updates, () => this.shellState.page === "settings" && this.renderSettingsPage());
-    this.root
-      .querySelectorAll<HTMLButtonElement>("[data-settings-section]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          const section = button.dataset.settingsSection as SettingsSection;
-          this.settingsPresentationRuntime.settings.selectSection(section);
-          this.renderSettingsPage();
-          queueMicrotask(() =>
-            this.root
-              .querySelector<HTMLButtonElement>(`[data-settings-section="${section}"]`)
-              ?.focus(),
-          );
-        });
-      });
+    bindSettingsNavigation(this.root, (section: SettingsSection) => {
+      this.settingsPresentationRuntime.settings.selectSection(section); if (section === "plugins") this.pluginManagementBinding.enter();
+      this.renderSettingsPage();
+    });
     if (this.settingsState.section === "keybindings") {
       bindKeybindingSettings(this.root, this.shortcuts.keybindings, {
         render: (focusSelector, selection) => this.renderSettingsPage(focusSelector, selection),
@@ -2123,6 +2121,7 @@ export class AsterlynApp {
         copy: this.localization.catalog.settings.keybindings,
       });
     }
+    if (this.settingsState.section === "plugins") this.pluginManagementBinding.bind();
     this.root
       .querySelector<HTMLSelectElement>("#setting-editor-font-family")
       ?.addEventListener("change", (event) => {

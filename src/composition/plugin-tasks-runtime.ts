@@ -1,5 +1,9 @@
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
-import type { PluginWorkspaceIdentity } from "../application/plugins/index.ts";
+import type {
+  PluginManagementSnapshot,
+  PluginSettingValue,
+  PluginWorkspaceIdentity,
+} from "../application/plugins/index.ts";
 import type { TasksCopy } from "../localization/catalog.ts";
 import type { ProjectFile } from "../models.ts";
 import type { TaskExecutionBridge } from "../protocol/task-execution.ts";
@@ -112,6 +116,26 @@ export class PluginTasksRuntime {
   render(): void {
     this.tasks.render();
     this.execution.render();
+  }
+
+  get pluginManagementSnapshot(): PluginManagementSnapshot {
+    return this.plugins.managementSnapshot;
+  }
+
+  loadPluginManagement(): Promise<PluginManagementSnapshot> {
+    return this.plugins.loadManagementCatalog();
+  }
+
+  subscribePluginManagement(listener: (snapshot: PluginManagementSnapshot) => void): () => void {
+    return this.plugins.subscribeManagement(listener);
+  }
+
+  setPluginEnabled(pluginId: string, enabled: boolean): boolean {
+    return this.plugins.setPluginEnabled(pluginId, enabled);
+  }
+
+  setPluginSetting(pluginId: string, settingId: string, value: PluginSettingValue): boolean {
+    return this.plugins.setPluginSetting(pluginId, settingId, value);
   }
 
   dispose(): void {

@@ -1,7 +1,7 @@
 import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_EN_US } from "./keybinding-en-US.ts";
 import { EN_US_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { EN_US_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { EN_US_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { EN_GIT_RESET_COPY, EN_REMOTE_MANAGEMENT_COPY, EN_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts"; import { EN_US_STASH_COPY } from "./stash-copy.ts";
-import { EN_US_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts"; import { EN_US_TASKS_COPY } from "./tasks-copy.ts";
+import { EN_US_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts"; import { EN_US_TASKS_COPY } from "./tasks-copy.ts"; import { EN_US_PLUGIN_MANAGEMENT_COPY } from "./plugin-management-copy.ts";
 export const EN_US: LocaleCatalog = {
   locale: "en-US",
   common: {
@@ -130,7 +130,7 @@ export const EN_US: LocaleCatalog = {
   settings: {
     planned: "Planned",
     available: "Available",
-    sections: { general: "General", appearance: "Appearance", editor: "Editor", keybindings: "Keyboard Shortcuts", "version-control": "Version Control", code: "Code", updates: "Updates" },
+    sections: { general: "General", appearance: "Appearance", editor: "Editor", keybindings: "Keyboard Shortcuts", "version-control": "Version Control", code: "Code", updates: "Updates", plugins: "Plugins" },
     keybindings: KEYBINDING_EN_US,
     generalTitle: "General", generalDescription: "Application-wide behavior and presentation language.",
     languageLabel: "Application language",
@@ -203,7 +203,7 @@ export const EN_US: LocaleCatalog = {
     updateIdle: "Ready to check GitHub Releases.", updateChecking: "Checking GitHub Releases…", updateFailed: "Could not check for updates.", updateInstalling: "Downloading and verifying the installer…", updateInstallFailed: "Could not install the update.", updateCurrent: (version) => `Asterlyn v${version.replace(/^v/i, "")} is up to date.`, updateAvailable: (version) => `Asterlyn ${version} is available.`,
     checkForUpdates: "Check for Updates", checkingForUpdates: "Checking…", installUpdate: "Install Update", installingUpdate: "Installing…", openReleasePage: "Release Page", openingReleasePage: "Opening…", updateAssetLabel: "Installer", updateSizeLabel: "Size", updateDialogTitle: "Asterlyn update available", updateInstallingTitle: "Installing Asterlyn update", updateInstallFailedTitle: "Update failed",
     updateConfirmDetail: "Asterlyn will download and verify the official package, exit, replace the installed application, and reopen.", updateInstallingDetail: "Keep the network connection available. Asterlyn will exit automatically after the installer is ready.", updateUnsignedNotice: "Windows packages are unsigned and macOS packages are ad-hoc signed and unnotarized; an operating-system security prompt may appear.",
-    updateLastChecked: (epochMs) => `Last checked ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochMs))}`,
+    updateLastChecked: (epochMs) => `Last checked ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochMs))}`, plugins: EN_US_PLUGIN_MANAGEMENT_COPY,
   },
   navigation: {
     navigationMode: "Navigation mode",

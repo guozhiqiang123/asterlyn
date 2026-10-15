@@ -3,6 +3,7 @@ import type { TaskProviderUnavailableReason } from "../application/tasks/task-ty
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
 import type { BranchMutationCopy } from "./branch-mutation-copy.ts"; import type { TagMutationCopy } from "./tag-mutation-copy.ts"; import type { StashCopy } from "./stash-copy.ts"; import type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 import type { KeybindingCopy } from "./keybinding-copy.ts"; export type { KeybindingCopy } from "./keybinding-copy.ts";
+import type { PluginManagementCopy } from "../features/settings/plugin-management-view.ts";
 import type { ErrorCopy } from "./error-copy.ts"; export type { ErrorCopy } from "./error-copy.ts";
 export type { BranchMutationCopy } from "./branch-mutation-copy.ts"; export type { WorktreeCreationCopy } from "./worktree-creation-copy.ts";
 export interface CommonCopy {
@@ -130,7 +131,7 @@ export interface TasksCopy { title: string; ariaLabel: string; refresh: string; 
 
 export interface SettingsCopy {
   planned: string; available: string;
-  sections: Record<"general" | "appearance" | "editor" | "keybindings" | "version-control" | "code" | "updates", string>; keybindings: KeybindingCopy;
+  sections: Record<"general" | "appearance" | "editor" | "keybindings" | "version-control" | "code" | "updates" | "plugins", string>; keybindings: KeybindingCopy; plugins: PluginManagementCopy;
   generalTitle: string; generalDescription: string;
   languageLabel: string; languageDescription: string;
   languageSystem: string; languageEnglish: string; languageChinese: string;

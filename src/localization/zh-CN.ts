@@ -2,7 +2,7 @@ import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_ZH_CN } f
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { ZH_CN_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
 import { ZH_CN_STASH_COPY } from "./stash-copy.ts";
-import { ZH_CN_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts"; import { ZH_CN_TASKS_COPY } from "./tasks-copy.ts";
+import { ZH_CN_REMOTE_PUSH_ERRORS } from "./remote-push-error-copy.ts"; import { ZH_CN_TASKS_COPY } from "./tasks-copy.ts"; import { ZH_CN_PLUGIN_MANAGEMENT_COPY } from "./plugin-management-copy.ts";
 
 export const ZH_CN = {
   locale: "zh-CN",
@@ -66,7 +66,7 @@ export const ZH_CN = {
   }, tasks: ZH_CN_TASKS_COPY,
   settings: {
     planned: "计划中", available: "可用",
-    sections: { general: "常规", appearance: "外观", editor: "编辑器", keybindings: "快捷键", "version-control": "版本控制", code: "代码", updates: "更新" },
+    sections: { general: "常规", appearance: "外观", editor: "编辑器", keybindings: "快捷键", "version-control": "版本控制", code: "代码", updates: "更新", plugins: "插件" },
     keybindings: KEYBINDING_ZH_CN,
     generalTitle: "常规", generalDescription: "应用范围的行为与界面语言。", languageLabel: "应用语言",
     languageDescription: "选择固定的界面语言，或跟随操作系统。", languageSystem: "跟随系统", languageEnglish: "English", languageChinese: "简体中文",
@@ -109,7 +109,7 @@ export const ZH_CN = {
     updateConfirmDetail: "Asterlyn 将下载并校验官方安装包，随后退出、覆盖当前安装并重新打开。",
     updateInstallingDetail: "请保持网络连接。安装包准备完成后，Asterlyn 会自动退出。",
     updateUnsignedNotice: "Windows 安装包未签名，macOS 应用使用 ad-hoc 签名且未经公证，系统可能显示安全确认。",
-    updateLastChecked: (epochMs) => `最近检查：${new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochMs))}`,
+    updateLastChecked: (epochMs) => `最近检查：${new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochMs))}`, plugins: ZH_CN_PLUGIN_MANAGEMENT_COPY,
   },
   navigation: {
     navigationMode: "导航模式",
