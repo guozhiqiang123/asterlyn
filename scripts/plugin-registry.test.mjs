@@ -61,6 +61,27 @@ test("rejects duplicate plugin IDs before activation", async () => {
   await assert.rejects(runtime.activate(identity, {}, [duplicate, duplicate]), /Duplicate plugin ID/);
 });
 
+test("rejects malformed or colliding task authorization declarations", async () => {
+  const runtime = new PluginRuntime();
+  const malformed = plugin("invalid-auth", () => undefined);
+  malformed.manifest.taskAuthorization = {
+    workspaceTrust: { id: "bad/id", labelKey: "authorization.workspaceTrust" },
+  };
+  await assert.rejects(runtime.activate(identity, {}, [malformed]), /Invalid plugin task authorization/u);
+
+  const collision = plugin("colliding-auth", () => undefined);
+  collision.manifest.settings = [{
+    id: "workspaceTrust",
+    kind: "boolean",
+    labelKey: "settings.workspaceTrust",
+    defaultValue: false,
+  }];
+  collision.manifest.taskAuthorization = {
+    workspaceTrust: { id: "workspaceTrust", labelKey: "authorization.workspaceTrust" },
+  };
+  await assert.rejects(runtime.activate(identity, {}, [collision]), /Invalid plugin task authorization/u);
+});
+
 test("isolates an activation failure and reports it", async () => {
   const diagnostics = [];
   const runtime = new PluginRuntime(undefined, (diagnostic) => diagnostics.push(diagnostic));

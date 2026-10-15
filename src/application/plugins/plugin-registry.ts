@@ -409,6 +409,19 @@ function validatePlugin(plugin: BundledPlugin): void {
       throw new Error(`Invalid plugin setting default: ${plugin.id}.${setting.id}`);
     }
   }
+  const authorization = plugin.manifest.taskAuthorization;
+  if (authorization !== undefined) {
+    const workspace = authorization.workspaceTrust;
+    const confirmation = authorization.taskConfirmation;
+    if (!workspace || !SETTING_IDENTIFIER.test(workspace.id) || settingIds.has(workspace.id) ||
+      !workspace.labelKey.trim() ||
+      (workspace.descriptionKey !== undefined && !workspace.descriptionKey.trim()) ||
+      (confirmation !== undefined &&
+        (!confirmation.rememberLabelKey.trim() ||
+          (confirmation.rememberDescriptionKey !== undefined && !confirmation.rememberDescriptionKey.trim())))) {
+      throw new Error(`Invalid plugin task authorization: ${plugin.id}`);
+    }
+  }
   if (typeof plugin.matches !== "function" || typeof plugin.activate !== "function" ||
     (plugin.evidenceKey !== undefined && typeof plugin.evidenceKey !== "function")) {
     throw new Error(`Invalid plugin descriptor: ${plugin.id}`);

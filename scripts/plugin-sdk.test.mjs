@@ -25,7 +25,7 @@ const manifest = {
 
 test("host adapter accepts the supported SDK major and preserves declarative metadata", () => {
   assert.equal(PLUGIN_SDK_MAJOR, 1);
-  assert.equal(PLUGIN_SDK_VERSION, "1.1.0");
+  assert.equal(PLUGIN_SDK_VERSION, "1.2.0");
   assert.equal(Object.isFrozen(SDK_PLUGIN_LOCALIZATION_LIMITS), true);
   assert.deepEqual(adaptPluginManifest(manifest), {
     id: "example.plugin",
@@ -41,6 +41,28 @@ test("host adapter accepts the supported SDK major and preserves declarative met
   const adapted = adaptPluginManifest(manifest);
   assert.equal(Object.isFrozen(adapted.localization), true);
   assert.equal(Object.isFrozen(adapted.localization.locales["en-US"]), true);
+});
+
+test("host adapter preserves and freezes declarative task authorization", () => {
+  const adapted = adaptPluginManifest({
+    ...manifest,
+    taskAuthorization: {
+      workspaceTrust: {
+        id: "workspaceTrust",
+        labelKey: "authorization.workspaceTrust.label",
+        descriptionKey: "authorization.workspaceTrust.description",
+      },
+      taskConfirmation: {
+        rememberLabelKey: "authorization.rememberTask.label",
+        rememberDescriptionKey: "authorization.rememberTask.description",
+      },
+    },
+  });
+  assert.equal(adapted.taskAuthorization.workspaceTrust.id, "workspaceTrust");
+  assert.equal(adapted.taskAuthorization.taskConfirmation.rememberLabelKey, "authorization.rememberTask.label");
+  assert.equal(Object.isFrozen(adapted.taskAuthorization), true);
+  assert.equal(Object.isFrozen(adapted.taskAuthorization.workspaceTrust), true);
+  assert.equal(Object.isFrozen(adapted.taskAuthorization.taskConfirmation), true);
 });
 
 test("unsupported SDK majors fail closed", () => {

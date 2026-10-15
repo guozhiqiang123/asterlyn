@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.1.0" as const;
+export const PLUGIN_SDK_VERSION = "1.2.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -36,6 +36,23 @@ export interface SdkSettingDescriptor {
   readonly options?: readonly SdkSettingOption[];
 }
 
+export interface SdkWorkspaceTrustDescriptor {
+  readonly id: string;
+  readonly labelKey: string;
+  readonly descriptionKey?: string;
+}
+
+export interface SdkTaskConfirmationDescriptor {
+  readonly rememberLabelKey: string;
+  readonly rememberDescriptionKey?: string;
+}
+
+/** Plugin-owned policy and copy for host-rendered, host-enforced task authorization. */
+export interface SdkTaskAuthorizationDescriptor {
+  readonly workspaceTrust: SdkWorkspaceTrustDescriptor;
+  readonly taskConfirmation?: SdkTaskConfirmationDescriptor;
+}
+
 /** Plain-text, plugin-scoped messages. Hosts validate and render these values. */
 export interface SdkPluginLocalization {
   readonly defaultLocale: string;
@@ -50,6 +67,7 @@ export interface SdkPluginManifest {
   readonly descriptionKey: string;
   readonly localization: SdkPluginLocalization;
   readonly settings: readonly SdkSettingDescriptor[];
+  readonly taskAuthorization?: SdkTaskAuthorizationDescriptor;
 }
 
 /** Static package metadata that can be inspected before executable plugin code is loaded. */

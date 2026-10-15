@@ -6,6 +6,7 @@ import type {
   SdkPluginModule,
   SdkSettingDescriptor,
   SdkSettingOption,
+  SdkTaskAuthorizationDescriptor,
   SdkWorkspaceIdentity,
 } from "../../../packages/plugin-sdk/index.ts";
 import { validateAndFreezePluginLocalization } from "./plugin-localization.ts";
@@ -43,6 +44,9 @@ export function adaptPluginManifest(manifest: SdkPluginManifest): BundledPluginM
     descriptionKey: manifest.descriptionKey,
     localization,
     settings: manifest.settings.map(adaptSetting),
+    ...(manifest.taskAuthorization === undefined
+      ? {}
+      : { taskAuthorization: adaptTaskAuthorization(manifest.taskAuthorization) }),
   };
 }
 
@@ -143,4 +147,26 @@ function adaptSetting(value: SdkSettingDescriptor): PluginSettingDescriptor {
 
 function adaptOption(value: SdkSettingOption): PluginSettingOption {
   return { value: value.value, labelKey: value.labelKey };
+}
+
+function adaptTaskAuthorization(value: SdkTaskAuthorizationDescriptor): SdkTaskAuthorizationDescriptor {
+  return Object.freeze({
+    workspaceTrust: Object.freeze({
+      id: value.workspaceTrust.id,
+      labelKey: value.workspaceTrust.labelKey,
+      ...(value.workspaceTrust.descriptionKey === undefined
+        ? {}
+        : { descriptionKey: value.workspaceTrust.descriptionKey }),
+    }),
+    ...(value.taskConfirmation === undefined
+      ? {}
+      : {
+          taskConfirmation: Object.freeze({
+            rememberLabelKey: value.taskConfirmation.rememberLabelKey,
+            ...(value.taskConfirmation.rememberDescriptionKey === undefined
+              ? {}
+              : { rememberDescriptionKey: value.taskConfirmation.rememberDescriptionKey }),
+          }),
+        }),
+  });
 }
