@@ -35,7 +35,7 @@ Every contract entry records:
 | `plugin.hierarchical-collection` | plugin supplies semantics; host renders/interacts | stable-first-party | Plugin SDK major `1` | `SdkHierarchicalCollection`, `SDK_COLLECTION_LIMITS`; ADR-0022 |
 | `plugin.tasks` | plugin supplies snapshots/plans; host discovers/reviews/executes | stable-first-party | Plugin SDK major `1` plus host task protocols | task SDK declarations; ADR-0019 through ADR-0023 |
 | `plugin.task-cache` | plugin requests; host fingerprints/stores/invalidates | stable-first-party | task-cache protocol `1` | task-cache SDK/protocol declarations; ADR-0020 |
-| `host.presentation` | host supplies; features consume | experimental-host | host-private contract `1` | ADR-0024 and host presentation primitives; not yet a public plugin capability |
+| `host.presentation` | host supplies; features consume | experimental-host | host-private contract `1` | ADR-0024; `src/presentation/host-presentation.ts`; `scripts/host-presentation.test.mjs`; [acceptance](../benchmarks/2026-10-15-host-presentation-system.md); not yet a public plugin capability |
 
 `stable-first-party` means the contract is exercised across the independent Android/Gradle
 repository boundary but is not authorization for dynamic third-party loading. External admission

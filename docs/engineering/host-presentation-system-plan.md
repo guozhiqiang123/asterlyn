@@ -87,6 +87,20 @@ discovery, tree interaction, settings deep link, execution review, or output rev
 
 Commit boundary: acceptance evidence after verified installation.
 
+## Implementation status
+
+HPS0 through HPS4 are complete on 2026-10-15:
+
+- HPS0: `ee6552c` records ADR-0024, the central registry, lifecycle rules, and this rollout plan.
+- HPS1: `0331144` adds the host presentation model, renderer, shared styles, and conformance tests.
+- HPS2: `4a5478e` migrates Tasks centered and retained-content state presentation.
+- HPS3: `ca89aea` migrates the host-owned execution dialog and clarifies trust-denial semantics.
+- Build gate: `ac57a2f` keeps the startup feature chunk below the existing 500 kB budget without
+  increasing the limit.
+- HPS4: full validation, signed native packaging, recoverable local replacement, FilesRecovery
+  visual verification, runtime observations, and remaining human checks are recorded in
+  [`Host presentation system acceptance`](../benchmarks/2026-10-15-host-presentation-system.md).
+
 ## Future contract admission
 
 After HPS1–HPS4 prove the host primitives, a later public SDK proposal may add a versioned bounded

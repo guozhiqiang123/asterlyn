@@ -93,6 +93,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-10-15-host-presentation-system.md`](benchmarks/2026-10-15-host-presentation-system.md) — governed semantic host UI primitives, Tasks and execution-dialog adoption, resource bounds, and recoverable local installation.
 - [`benchmarks/2026-10-15-hierarchical-collection-android-tasks.md`](benchmarks/2026-10-15-hierarchical-collection-android-tasks.md) — host-owned tree/flat presentation, Android plugin semantic collections, FilesRecovery evidence, and recoverable local installation.
 - [`benchmarks/2026-10-15-filesrecovery-plugin-task-cache.md`](benchmarks/2026-10-15-filesrecovery-plugin-task-cache.md) — managed bundled plugins, Android task-tree modes, verified persistent snapshots, and real FilesRecovery performance/package evidence.
 - [`benchmarks/2026-10-15-public-plugin-foundation.md`](benchmarks/2026-10-15-public-plugin-foundation.md) — plugin-owned localization, canonical package identity, host admission/management rules, FilesRecovery regression, and local package evidence.
