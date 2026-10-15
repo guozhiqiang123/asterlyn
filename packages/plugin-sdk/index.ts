@@ -46,6 +46,16 @@ export interface SdkCollectionNode {
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
+export const SDK_COLLECTION_LIMITS = Object.freeze({
+  maxNodes: 32_768,
+  maxDepth: 64,
+  maxIdLength: 512,
+  maxLabelLength: 4_096,
+  maxMetadataEntries: 16,
+  maxMetadataKeyLength: 128,
+  maxMetadataValueLength: 1_024,
+});
+
 export interface SdkHierarchicalCollection {
   readonly providerId: string;
   readonly nodes: readonly SdkCollectionNode[];
