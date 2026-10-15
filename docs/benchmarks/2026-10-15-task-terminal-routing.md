@@ -70,3 +70,38 @@ in the installed application for manual product acceptance.
 An additional failed-candidate bundle from the deliberately rejected first replacement is retained
 under `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261015-171651-task-terminal-routing/Failed-Asterlyn.app`
 for diagnosis and can be removed after manual acceptance.
+
+## Runtime regression acceptance
+
+The installed build was refreshed after manual testing exposed three runtime-only regressions:
+
+- Task output from native pipes now converts bare line feeds to terminal CRLF as one continuous
+  stream. A carriage return at the end of one frame is remembered so a following line feed is not
+  doubled; progress-style carriage returns remain intact.
+- The host owns the transient queued/running projection. The first output frame also promotes a
+  queued native session to running, so a plugin task row cannot remain queued while output is
+  already visible.
+- Android/Gradle plugin `0.1.5` excludes default Gradle/Android generated directories (`build`,
+  `.gradle`, and `out`) from configuration fingerprints. Running a build therefore cannot reactivate
+  the plugin merely because a generated `AndroidManifest.xml` appeared. A genuinely stale cache
+  retains the last successful task tree while execution stays disabled pending refresh.
+
+Regression evidence:
+
+- Host `npm run test:scripts`: 1,149 passed, 0 failed.
+- Plugin `npm run verify`: 42 passed, 0 failed; type-check and package build passed.
+- Host `npm run build`: passed; startup chunk 495,511 bytes, below the 500,000-byte limit.
+- Tauri Release application and DMG rebuilt successfully; the installed app passed deep strict
+  signature verification.
+- Plugin `0.1.5` artifact: 26,550 bytes, SHA-256
+  `ddb4bd247f2e72002703878895f114a2b38cb94909942a0e76db8a3d2e876e45`.
+- Installed executable SHA-256:
+  `391c436700545d4632f6d90abe963ab08cf37087aa2e346ce324bdbdc0320d47`.
+- Acceptance archive SHA-256:
+  `9437895b61f36c4dcd0d8ac3d8b9907e85b521379d1b65fa82b5bbcf09c5f5e2`.
+- Acceptance archive:
+  `/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn-0.1.8-local-20261015-174858-task-runtime-fixes.app.zip`.
+- Previous installed application:
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261015-174858-task-runtime-fixes/Asterlyn.app`.
+- The installed application was restarted with FilesRecovery; process ID at acceptance time was
+  `85216`.
