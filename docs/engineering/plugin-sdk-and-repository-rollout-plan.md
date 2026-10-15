@@ -137,5 +137,13 @@ also records standalone test results and the exact artifact consumed by the host
   builds and tests independently against the pinned SDK package.
 - SDK4 completed with Android/Gradle `0.1.0`; the host vendors the reviewed tarball by exact SHA-256
   and package-lock integrity, and no longer contains the plugin implementation or plugin-owned tests.
+- The host hierarchy presentation rollout completed in `c6d651f`, `fb45a14`, and `818ce9b`.
+  `DisclosureState` now owns the plugin Tasks tree expansion model, while the declarative shared
+  toolbar renders tree/flat, expand, and collapse commands for Changes, Files, Find, workspace
+  replacement, History, Stash, and Push without feature-specific markup rewriting.
 - SDK5 remains intentionally open until a second first-party plugin exists; host-internal tree
   surfaces can migrate to `HierarchicalCollection` without reopening the Android plugin boundary.
+
+Acceptance evidence for this rollout: the Android/Gradle repository passes 36 standalone tests,
+type checking, and its independent ESM build; the host passes 1,109 script tests, type checking, and
+the production frontend build while consuming the pinned `0.1.0` artifact.
