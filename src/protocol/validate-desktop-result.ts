@@ -7,6 +7,7 @@ import { assertCommitFilePreview } from "./validate-commit-file-preview.ts";
 import { assertCommitFileComparison } from "./validate-commit-file-comparison.ts";
 import { assertCommitFileRestorePreview, assertFileRestoreApplyResult, assertFileRestoreRecoveryList } from "./validate-file-restore.ts";
 import { parseTaskArtifactDiscovery } from "./task-artifacts.ts";
+import { validatePluginTaskCacheDesktopResult } from "./plugin-task-cache.ts";
 import {
   assertWorkspaceEntryInspection,
   assertNullableSystemFileClipboardEntry,
@@ -26,6 +27,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
   value: unknown,
 ): DesktopCommandMap[Command]["result"] {
   const validator = DESKTOP_RESULT_VALIDATORS[command];
+  if (validatePluginTaskCacheDesktopResult(validator, value)) return value as DesktopCommandMap[Command]["result"];
   switch (validator) {
     case "void":
       assert(value === null || value === undefined, command, "expected no response body");

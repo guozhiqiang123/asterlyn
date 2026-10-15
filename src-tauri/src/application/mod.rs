@@ -2,6 +2,7 @@ mod commit_file_restore;
 mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
+pub(crate) mod plugin_task_cache;
 mod search_session;
 mod task;
 mod task_artifacts;

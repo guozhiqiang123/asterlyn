@@ -1,5 +1,12 @@
 {
   "version": 1,
+  "typeImports": {
+    "WorkspaceFingerprint": "./plugin-task-cache",
+    "PluginTaskCacheDirtyReason": "./plugin-task-cache",
+    "PluginTaskCacheReadResult": "./plugin-task-cache",
+    "PluginTaskCacheMutationResult": "./plugin-task-cache",
+    "PluginTaskCacheCleanupResult": "./plugin-task-cache"
+  },
   "commands": [
     { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
     { "name": "install_app_update", "args": {}, "result": "AppUpdateInstallResult", "validator": "appUpdateInstallResult" },
@@ -24,6 +31,11 @@
     { "name": "start_task_execution", "args": { "workspaceRoot": "string", "reviewId": "string" }, "result": "TaskExecutionStarted", "validator": "taskExecutionStarted" },
     { "name": "cancel_task_execution", "args": { "runId": "string" }, "result": "void", "validator": "void" },
     { "name": "discover_task_artifacts", "args": { "repositoryRoot": "string", "hints": "array:string" }, "result": "TaskArtifactDiscovery", "validator": "taskArtifactDiscovery" },
+    { "name": "compute_workspace_fingerprint", "args": { "workspaceRoot": "string", "paths": "array:string" }, "result": "WorkspaceFingerprint", "validator": "workspaceFingerprint" },
+    { "name": "read_plugin_task_cache", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string" }, "result": "PluginTaskCacheReadResult", "validator": "pluginTaskCacheReadResult" },
+    { "name": "write_plugin_task_cache", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string", "fingerprint": "WorkspaceFingerprint", "payloadBase64": "string" }, "result": "PluginTaskCacheMutationResult", "validator": "pluginTaskCacheMutationResult" },
+    { "name": "mark_plugin_task_cache_dirty", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string", "reason": "PluginTaskCacheDirtyReason" }, "result": "PluginTaskCacheMutationResult", "validator": "pluginTaskCacheMutationResult" },
+    { "name": "cleanup_plugin_task_cache", "args": {}, "result": "PluginTaskCacheCleanupResult", "validator": "pluginTaskCacheCleanupResult" },
     { "name": "read_tracked_changes", "args": { "repositoryRoot": "string" }, "result": "TrackedChangeScan", "validator": "trackedChangeScan" },
     { "name": "open_repository_window", "args": { "path": "string" }, "result": "ProjectWindowOpenResult", "validator": "projectWindowOpenResult" },
     { "name": "read_history_page", "args": { "repositoryRoot": "string", "query": "HistoryQuery", "offset": "number", "limit": "number" }, "result": "HistoryPage", "validator": "historyPage" },
