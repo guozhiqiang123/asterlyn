@@ -146,4 +146,11 @@ also records standalone test results and the exact artifact consumed by the host
 
 Acceptance evidence for this rollout: the Android/Gradle repository passes 36 standalone tests,
 type checking, and its independent ESM build; the host passes 1,109 script tests, type checking, and
-the production frontend build while consuming the pinned `0.1.0` artifact.
+the production frontend build while consuming the pinned `0.1.0` artifact. The macOS arm64 app is
+ad-hoc signed with hardened runtime, passes strict deep signature verification, and renders its
+shell from both the build and installed executable. The accepted archive is
+`target/release/bundle/macos/Asterlyn-0.1.8-local-20261015-plugin-sdk-extraction.app.zip`
+(9,806,708 bytes, SHA-256 `0e4de33fab439d1af60b45baec0a8266dfbc041c3acada9f339d4893f47de687`).
+`/Applications/Asterlyn.app` matches the accepted executable SHA-256
+`aa7246d5b47d93b6b04b2a52c8d77440de97fe64c90ab9a15c060931a80bff95`; the previous installation
+is recoverable at `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261015-plugin-sdk-extraction/Asterlyn.app`.
