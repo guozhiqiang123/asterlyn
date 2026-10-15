@@ -38,6 +38,8 @@ Every contract entry records:
 | `plugin.task-cache` | plugin requests; host fingerprints/stores/invalidates | stable-first-party | task-cache protocol `1` | task-cache SDK/protocol declarations; ADR-0020 |
 | `host.presentation` | host supplies; features consume | experimental-host | host-private contract `1` | ADR-0024; `src/presentation/host-presentation.ts`; `scripts/host-presentation.test.mjs`; [acceptance](../benchmarks/2026-10-15-host-presentation-system.md); not yet a public plugin capability |
 | `host.task-terminal-session` | task execution supplies; Terminal and shell layout consume | experimental-host | host-private contract `1` | ADR-0026; ordered reviewed-task session projection; not a Plugin SDK capability and never an executable shell-string channel |
+| `host.notifications` | host features publish; host queue/presentation renders | experimental-host | host-private contract `1` | ADR-0027; typed severity, bounded queue, deduplication, deterministic dismissal, and window-scoped disposal |
+| `plugin.notifications` | plugin requests by localization key; host validates/resolves/publishes | experimental-first-party | additive Plugin SDK `1.3`; optional activation capability | ADR-0027; semantic severity and admitted localization key only; no DOM, styling, duration, actions, history, or observation authority |
 
 `stable-first-party` means the contract is exercised across the independent Android/Gradle
 repository boundary but is not authorization for dynamic third-party loading. External admission
@@ -82,6 +84,8 @@ The following versions solve different compatibility problems and must not be co
 ## Presentation-specific rules
 
 - Plugins provide localization keys and plain data, never rendered strings containing markup.
+- Plugin notifications provide a localization key and semantic severity only. The host owns source
+  attribution, resolution, queueing, visual treatment, timing, accessibility, and dismissal.
 - Action intent is semantic (`recommended`, `neutral`, `destructive`, or `quiet`), not a color or CSS
   class. The host permits at most one recommended action in a state or dialog action group.
 - Host security dialogs do not accept plugin-provided action layout, labels, callbacks, or styling.

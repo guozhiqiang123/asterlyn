@@ -97,6 +97,14 @@ kicker, or subtitle elements, so this hierarchy rule cannot silently regress in 
   name and state.
 - Informational and success notifications use polite live announcements. Blocking failures remain
   discoverable until dismissed or superseded by a newer explicit action.
+- Global notifications use the window-scoped host notification center. One item is visible at a
+  time; pending items, exact duplicates, timers, and disposal are bounded and deterministic.
+- A failed or crashed user-started plugin task produces one host-owned error notification after its
+  authoritative terminal result. Success remains in the task row and retained Terminal transcript;
+  cancellation is not presented as an error; background discovery does not impersonate a user-task
+  result.
+- Plugins may request notifications only through the admitted localization-key capability. They do
+  not control markup, layout, styling, duration, persistence, focus, or actions.
 - Busy state must not repeatedly flash enabled/disabled geometry. Completion replaces progress; it
   does not append contradictory messages.
 - Each named surface has exactly one visible title unless its accepted requirement documents why a
