@@ -1,32 +1,31 @@
 import type { TaskProviderSnapshot } from "../tasks/index.ts";
-import type { TaskExecutionRequest } from "../../models.ts";
 import type {
   PluginTaskCacheDirtyReason,
   PluginTaskCacheMutationResult,
   PluginTaskCacheReadResult,
   WorkspaceFingerprint,
 } from "../../protocol/plugin-task-cache.ts";
+import type {
+  SdkPluginManifest,
+  SdkSettingDescriptor,
+  SdkSettingOption,
+  SdkTaskExecutionRequest,
+  SdkTaskExecutionResult,
+  SdkTaskRefreshPlan,
+  SdkTaskRunPlan,
+  SdkWorkspaceInvalidation,
+  SdkWorkspaceIdentity,
+} from "../../../packages/plugin-sdk/index.ts";
 
-export interface PluginWorkspaceIdentity {
-  readonly root: string;
-  readonly generation: number;
-}
-
-export type PluginSettingValue = string | boolean;
-
-export interface PluginSettingOption {
-  readonly value: string;
-  readonly labelKey: string;
-}
-
-export interface PluginSettingDescriptor {
-  readonly id: string;
-  readonly kind: "enum" | "boolean";
-  readonly labelKey: string;
-  readonly descriptionKey?: string;
-  readonly defaultValue: PluginSettingValue;
-  readonly options?: readonly PluginSettingOption[];
-}
+export type PluginWorkspaceIdentity = SdkWorkspaceIdentity;
+export type PluginSettingValue = SdkSettingDescriptor["defaultValue"];
+export type PluginSettingOption = SdkSettingOption;
+export type PluginSettingDescriptor = SdkSettingDescriptor;
+export type PluginTaskExecutionResult = SdkTaskExecutionResult;
+export type PluginWorkspaceInvalidation = SdkWorkspaceInvalidation;
+export type PluginTaskRefreshPlan = SdkTaskRefreshPlan;
+export type PluginTaskRunPlan = SdkTaskRunPlan;
+export type PluginTaskExecutionRequest = SdkTaskExecutionRequest;
 
 /** A host-owned deep link into a plugin's settings. */
 export interface PluginSettingsTarget {
@@ -38,13 +37,7 @@ export interface PluginSettingsTarget {
 export type PluginSettingsTargetResolution = PluginSettingsTarget | readonly PluginSettingsTarget[] | null;
 
 /** Immutable, host-rendered metadata for a bundled integration. */
-export interface BundledPluginManifest {
-  readonly id: string;
-  readonly version: string;
-  readonly nameKey: string;
-  readonly descriptionKey: string;
-  readonly settings: readonly PluginSettingDescriptor[];
-}
+export type BundledPluginManifest = Omit<SdkPluginManifest, "sdkMajor">;
 
 export interface PluginEvidenceSnapshot {
   readonly [key: string]: unknown;
@@ -99,11 +92,6 @@ export interface PluginProviderContribution {
   readonly run?: (taskId: string) => PluginTaskRunPlan | null | Promise<PluginTaskRunPlan | null>;
 }
 
-export interface PluginWorkspaceInvalidation {
-  readonly paths: readonly string[];
-  readonly recovery: "none" | "pathsTruncated" | "rootAmbiguous" | "backendOverflow";
-}
-
 /** Cache access is bound by the host to one workspace and one plugin. */
 export interface PluginTaskCacheCapability {
   computeFingerprint(paths: readonly string[]): Promise<WorkspaceFingerprint>;
@@ -119,27 +107,11 @@ export interface PluginTaskCacheCapability {
   ): Promise<PluginTaskCacheMutationResult>;
 }
 
-export interface PluginTaskExecutionResult {
-  readonly status: "succeeded" | "failed" | "cancelled" | "crashed";
-  readonly outputs: readonly { readonly stream: "stdout" | "stderr"; readonly dataBase64: string }[];
-  readonly truncated: boolean;
-  readonly error: string | null;
-}
-
-export interface PluginTaskRefreshPlan {
-  readonly request: TaskExecutionRequest;
-  readonly apply: (result: PluginTaskExecutionResult) => void;
-}
-
 export interface PluginTaskArtifactSearch {
   readonly hints: readonly string[];
 }
 
 /** Execution plans are deliberately the only value a provider may return to the host. */
-export interface PluginTaskRunPlan extends PluginTaskRefreshPlan {
-  readonly artifactSearch?: PluginTaskArtifactSearch;
-}
-
 export type PluginContribution = PluginCommandContribution | PluginProviderContribution;
 
 export interface PluginActivationContext {
