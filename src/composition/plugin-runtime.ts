@@ -84,8 +84,9 @@ export class PluginCompositionRuntime {
         .then(() => this.reactivateCurrent(), () => this.reactivateCurrent())
         .catch(options.reportError);
     });
-    this.loadPlugins = options.loadPlugins ?? (async () =>
-      (await import("../plugins/bundled-plugins.ts")).BUNDLED_PLUGINS);
+    this.loadPlugins = options.loadPlugins ?? (async () => {
+      return (await import("../plugins/bundled-plugins.ts")).loadBundledPlugins(options.reportDiagnostic);
+    });
   }
 
   pluginSettingsTargets(): PluginSettingsTargetResolution {

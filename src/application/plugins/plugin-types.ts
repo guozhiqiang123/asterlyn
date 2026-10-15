@@ -7,6 +7,7 @@ import type {
 } from "../../protocol/plugin-task-cache.ts";
 import type {
   SdkPluginManifest,
+  SdkPluginLocalization,
   SdkHierarchicalCollection,
   SdkSettingDescriptor,
   SdkSettingOption,
@@ -38,8 +39,8 @@ export interface PluginSettingsTarget {
 export type PluginSettingsTargetResolution = PluginSettingsTarget | readonly PluginSettingsTarget[] | null;
 
 /** Immutable, host-rendered metadata for a bundled integration. */
-/** Host manifest shape during SDK adaptation; plugin localization is admitted separately. */
-export type BundledPluginManifest = Omit<SdkPluginManifest, "sdkMajor" | "localization">;
+export type PluginLocalization = SdkPluginLocalization;
+export type BundledPluginManifest = Omit<SdkPluginManifest, "sdkMajor">;
 
 export interface PluginEvidenceSnapshot {
   readonly [key: string]: unknown;
@@ -56,7 +57,7 @@ export interface PluginWorkspaceCatalogEvidence extends PluginEvidenceSnapshot {
   readonly truncated: boolean;
 }
 
-export type PluginDiagnosticKind = "activation-failed" | "invalid-contribution" | "duplicate-contribution";
+export type PluginDiagnosticKind = "activation-failed" | "invalid-manifest" | "invalid-contribution" | "duplicate-contribution";
 
 export interface PluginDiagnostic {
   readonly kind: PluginDiagnosticKind;
@@ -156,6 +157,7 @@ export interface PluginManagementEntry {
   readonly version: string;
   readonly nameKey: string;
   readonly descriptionKey: string;
+  readonly localization: PluginLocalization;
   readonly enabled: boolean;
   readonly matched: boolean;
   readonly active: boolean;

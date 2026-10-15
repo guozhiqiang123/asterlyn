@@ -57,8 +57,9 @@ function fixturePlugin(id, activate, evidenceKey) {
     manifest: {
       id,
       version: "1.0.0",
-      nameKey: `plugins.${id}.name`,
-      descriptionKey: `plugins.${id}.description`,
+      nameKey: "name",
+      descriptionKey: "description",
+      localization: { defaultLocale: "en-US", locales: { "en-US": { name: id, description: `${id} description` } } },
       settings: [],
     },
     matches: () => true,

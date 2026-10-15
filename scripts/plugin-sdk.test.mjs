@@ -8,7 +8,7 @@ import {
   SDK_PLUGIN_LOCALIZATION_LIMITS,
 } from "../packages/plugin-sdk/index.ts";
 import { representativePlugin } from "../packages/plugin-sdk/fixture.ts";
-import { adaptPluginManifest, assertCompatiblePluginSdk } from "../src/application/plugins/plugin-sdk-adapter.ts";
+import { adaptPluginManifest, adaptSdkPluginCatalog, assertCompatiblePluginSdk } from "../src/application/plugins/plugin-sdk-adapter.ts";
 
 const manifest = {
   sdkMajor: 1,
@@ -32,12 +32,36 @@ test("host adapter accepts the supported SDK major and preserves declarative met
     version: "1.2.3",
     nameKey: "name",
     descriptionKey: "description",
+    localization: {
+      defaultLocale: "en-US",
+      locales: { "en-US": { name: "Example plugin", description: "Example description" } },
+    },
     settings: [],
   });
+  const adapted = adaptPluginManifest(manifest);
+  assert.equal(Object.isFrozen(adapted.localization), true);
+  assert.equal(Object.isFrozen(adapted.localization.locales["en-US"]), true);
 });
 
 test("unsupported SDK majors fail closed", () => {
   assert.throws(() => assertCompatiblePluginSdk({ sdkMajor: 2 }), /Unsupported plugin SDK major/u);
+});
+
+test("SDK catalog adaptation isolates an invalid manifest from healthy plugins", () => {
+  const broken = {
+    ...representativePlugin,
+    id: "broken.plugin",
+    manifest: {
+      ...representativePlugin.manifest,
+      id: "broken.plugin",
+      localization: { defaultLocale: "fr-FR", locales: representativePlugin.manifest.localization.locales },
+    },
+  };
+  const catalog = adaptSdkPluginCatalog([broken, representativePlugin]);
+  assert.deepEqual(catalog.plugins.map((plugin) => plugin.id), ["example.plugin"]);
+  assert.equal(catalog.diagnostics.length, 1);
+  assert.equal(catalog.diagnostics[0].kind, "invalid-manifest");
+  assert.equal(catalog.diagnostics[0].pluginId, "broken.plugin");
 });
 
 test("SDK contract can express activation, cache, refresh, and run lifecycle", () => {

@@ -73,6 +73,7 @@ export class PluginManagementRuntime {
       version: plugin.version,
       nameKey: plugin.manifest.nameKey,
       descriptionKey: plugin.manifest.descriptionKey,
+      localization: plugin.manifest.localization,
       enabled: preferences.enabled[plugin.id] ?? true,
       matched: this.matched.has(plugin.id),
       active: this.active.has(plugin.id),

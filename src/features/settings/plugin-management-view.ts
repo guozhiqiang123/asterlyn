@@ -6,6 +6,7 @@ import type {
 } from "../../application/plugins/plugin-types.ts";
 
 export interface PluginManagementCopy {
+  readonly locale: string;
   readonly title: string;
   readonly description: string;
   readonly builtIn: string;
@@ -23,7 +24,6 @@ export interface PluginManagementCopy {
   readonly noPlugins: string;
   readonly loadingPlugins: string;
   readonly invalidSetting: string;
-  readonly resolve: (key: string) => string;
 }
 
 /** Renders host-owned plugin metadata; plugins contribute keys and values, never HTML. */
@@ -40,8 +40,8 @@ export function renderPluginManagementSection(
 }
 
 function renderPluginEntry(entry: PluginManagementEntry, copy: PluginManagementCopy): string {
-  const name = copy.resolve(entry.nameKey);
-  const description = copy.resolve(entry.descriptionKey);
+  const name = pluginMessage(entry, copy, entry.nameKey);
+  const description = pluginMessage(entry, copy, entry.descriptionKey);
   const state = [
     `<span class="plugin-management-status plugin-management-status-enabled" data-plugin-status="${entry.enabled ? "enabled" : "disabled"}" aria-label="${escapeAttribute(entry.enabled ? copy.enabled : copy.disabled)}">${escapeHtml(entry.enabled ? copy.enabled : copy.disabled)}</span>`,
     `<span class="plugin-management-status plugin-management-status-match" data-plugin-status="${entry.matched ? "matched" : "not-matched"}" aria-label="${escapeAttribute(entry.matched ? copy.matched : copy.notMatched)}">${escapeHtml(entry.matched ? copy.matched : copy.notMatched)}</span>`,
@@ -75,18 +75,20 @@ function renderSetting(
 ): string {
   const value = entry.settings[descriptor.id] ?? descriptor.defaultValue;
   const id = `plugin-setting-${entry.id}-${descriptor.id}`;
-  const label = copy.resolve(descriptor.labelKey);
-  const description = descriptor.descriptionKey ? copy.resolve(descriptor.descriptionKey) : "";
+  const label = pluginMessage(entry, copy, descriptor.labelKey);
+  const description = descriptor.descriptionKey
+    ? pluginMessage(entry, copy, descriptor.descriptionKey)
+    : "";
   const detail = description ? `<span>${escapeHtml(description)}</span>` : "";
   const control = descriptor.kind === "boolean"
     ? `<label class="plugin-setting-toggle"><input id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="${escapeAttribute(descriptor.id)}" type="checkbox" ${value === true ? "checked" : ""} aria-label="${escapeAttribute(label)}" /><span>${escapeHtml(label)}</span></label>`
-    : renderEnum(id, entry.id, descriptor, value, label, copy);
+    : renderEnum(id, entry, descriptor, value, label, copy);
   return `<div class="plugin-setting-row" data-plugin-setting-row="${escapeAttribute(descriptor.id)}"><div><strong>${escapeHtml(label)}</strong>${detail}</div><div class="plugin-setting-control">${control}</div></div>`;
 }
 
 function renderEnum(
   id: string,
-  pluginId: string,
+  entry: PluginManagementEntry,
   descriptor: PluginSettingDescriptor,
   value: PluginSettingValue,
   label: string,
@@ -94,7 +96,12 @@ function renderEnum(
 ): string {
   const options = descriptor.options ?? [];
   if (options.length === 0) return `<span class="plugin-management-invalid-setting" role="alert">${escapeHtml(copy.invalidSetting)}</span>`;
-  return `<select id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(pluginId)}" data-plugin-setting="${escapeAttribute(descriptor.id)}" aria-label="${escapeAttribute(label)}">${options.map((option) => `<option value="${escapeAttribute(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(copy.resolve(option.labelKey))}</option>`).join("")}</select>`;
+  return `<select id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="${escapeAttribute(descriptor.id)}" aria-label="${escapeAttribute(label)}">${options.map((option) => `<option value="${escapeAttribute(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(pluginMessage(entry, copy, option.labelKey))}</option>`).join("")}</select>`;
+}
+
+function pluginMessage(entry: PluginManagementEntry, copy: PluginManagementCopy, key: string): string {
+  const messages = entry.localization.locales;
+  return messages[copy.locale]?.[key] ?? messages[entry.localization.defaultLocale]?.[key] ?? key;
 }
 
 function escapeHtml(value: string): string {

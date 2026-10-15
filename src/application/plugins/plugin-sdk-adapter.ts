@@ -8,6 +8,7 @@ import type {
   SdkSettingOption,
   SdkWorkspaceIdentity,
 } from "../../../packages/plugin-sdk/index.ts";
+import { validateAndFreezePluginLocalization } from "./plugin-localization.ts";
 import type {
   BundledPluginManifest,
   PluginSettingDescriptor,
@@ -17,6 +18,7 @@ import type {
   PluginActivationContext,
   PluginMatchContext,
   PluginContribution,
+  PluginDiagnostic,
 } from "./plugin-types.ts";
 
 export const HOST_PLUGIN_SDK_MAJOR = 1 as const;
@@ -33,11 +35,13 @@ export function adaptPluginWorkspaceIdentity(identity: SdkWorkspaceIdentity): Pl
 
 export function adaptPluginManifest(manifest: SdkPluginManifest): BundledPluginManifest {
   assertCompatiblePluginSdk(manifest);
+  const localization = validateAndFreezePluginLocalization(manifest);
   return {
     id: manifest.id,
     version: manifest.version,
     nameKey: manifest.nameKey,
     descriptionKey: manifest.descriptionKey,
+    localization,
     settings: manifest.settings.map(adaptSetting),
   };
 }
@@ -69,6 +73,37 @@ export function adaptSdkPluginModule(module: SdkPluginModule): BundledPlugin {
     ...(module.evidenceKey ? { evidenceKey: (context) => module.evidenceKey?.(adaptMatchContext(context)) ?? "" } : {}),
     activate: (context) => module.activate(adaptContext(context)),
   };
+}
+
+export interface AdaptedSdkPluginCatalog {
+  readonly plugins: readonly BundledPlugin[];
+  readonly diagnostics: readonly PluginDiagnostic[];
+}
+
+/** Adapts modules independently so one invalid package cannot hide healthy plugins. */
+export function adaptSdkPluginCatalog(modules: readonly SdkPluginModule[]): AdaptedSdkPluginCatalog {
+  const plugins: BundledPlugin[] = [];
+  const diagnostics: PluginDiagnostic[] = [];
+  const ids = new Set<string>();
+  for (const module of modules) {
+    try {
+      const plugin = adaptSdkPluginModule(module);
+      if (ids.has(plugin.id)) throw new Error(`Duplicate plugin ID: ${plugin.id}`);
+      ids.add(plugin.id);
+      plugins.push(plugin);
+    } catch (error) {
+      diagnostics.push(Object.freeze({
+        kind: "invalid-manifest",
+        pluginId: typeof module?.id === "string" ? module.id : "unknown",
+        message: error instanceof Error ? error.message : String(error),
+        error,
+      }));
+    }
+  }
+  return Object.freeze({
+    plugins: Object.freeze(plugins),
+    diagnostics: Object.freeze(diagnostics),
+  });
 }
 
 function adaptEvidence(evidence: PluginMatchContext["evidence"]): SdkPluginMatchContext["evidence"] {

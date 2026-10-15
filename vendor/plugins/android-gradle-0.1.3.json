@@ -1,0 +1,10 @@
+{
+  "pluginId": "dev.asterlyn.android-gradle",
+  "pluginVersion": "0.1.3",
+  "sdkVersion": "1.1.0",
+  "sourceRevision": "5c96f46",
+  "artifact": "asterlyn-plugin-android-gradle-0.1.3.tgz",
+  "size": 25861,
+  "sha256": "f0455461267d3f74e7df67fc0a8ff1be220a615aa61b36844a937808957f1846",
+  "integrity": "sha512-BkENTs6Xd59PCZ9UtQGQoxjdUjkuNKQUofPyQ/WabBhBp0H2FS9bOU4SmwwBSTkrxqSjK60yPHmQsndisVJ5FA=="
+}

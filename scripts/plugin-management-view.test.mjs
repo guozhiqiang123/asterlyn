@@ -4,25 +4,22 @@ import test from "node:test";
 import { renderPluginManagementSection } from "../src/features/settings/plugin-management-view.ts";
 
 const copy = {
+  locale: "en-US",
   title: "Plugins", description: "Manage integrations.", builtIn: "Built-in", enablePlugin: "Enable plugin", enabled: "Enabled", disabled: "Disabled",
   matched: "Detected", notMatched: "Not detected", active: "Active", inactive: "Inactive", version: "Version",
   diagnostics: "Diagnostic", settings: "Plugin settings", noSettings: "No settings.", noPlugins: "No plugins.", loadingPlugins: "Loading plugins…", invalidSetting: "Unavailable.",
-  resolve: (key) => ({
-    "plugins.androidGradle.name": "Android / Gradle",
-    "plugins.androidGradle.description": "Gradle tooling.",
-    "plugins.androidGradle.taskPresentation.label": "Task presentation",
-    "plugins.androidGradle.taskPresentation.description": "Choose the task tree.",
-    "plugins.androidGradle.taskPresentation.allTasksTree": "All tasks tree",
-    "plugins.androidGradle.taskPresentation.quickActionsTree": "Quick actions tree",
-  }[key] ?? key),
 };
 
 const entry = {
-  id: "dev.asterlyn.android-gradle", version: "0.1.0", nameKey: "plugins.androidGradle.name",
-  descriptionKey: "plugins.androidGradle.description", enabled: true, matched: false, active: false,
-  settingDescriptors: [{ id: "taskPresentation", kind: "enum", labelKey: "plugins.androidGradle.taskPresentation.label", descriptionKey: "plugins.androidGradle.taskPresentation.description", defaultValue: "all-tasks-tree", options: [
-    { value: "all-tasks-tree", labelKey: "plugins.androidGradle.taskPresentation.allTasksTree" },
-    { value: "quick-actions-tree", labelKey: "plugins.androidGradle.taskPresentation.quickActionsTree" },
+  id: "dev.asterlyn.android-gradle", version: "0.1.0", nameKey: "name",
+  descriptionKey: "description", enabled: true, matched: false, active: false,
+  localization: { defaultLocale: "en-US", locales: {
+    "en-US": { name: "Android / Gradle", description: "Gradle tooling.", "settings.taskPresentation.label": "Task presentation", "settings.taskPresentation.description": "Choose the task tree.", "settings.taskPresentation.allTasksTree": "All tasks tree", "settings.taskPresentation.quickActionsTree": "Quick actions tree" },
+    "zh-CN": { name: "Android / Gradle", description: "Gradle 工具。", "settings.taskPresentation.label": "任务展示方式", "settings.taskPresentation.description": "选择任务树。", "settings.taskPresentation.allTasksTree": "完整任务树", "settings.taskPresentation.quickActionsTree": "快捷操作树" },
+  } },
+  settingDescriptors: [{ id: "taskPresentation", kind: "enum", labelKey: "settings.taskPresentation.label", descriptionKey: "settings.taskPresentation.description", defaultValue: "all-tasks-tree", options: [
+    { value: "all-tasks-tree", labelKey: "settings.taskPresentation.allTasksTree" },
+    { value: "quick-actions-tree", labelKey: "settings.taskPresentation.quickActionsTree" },
   ] }], settings: { taskPresentation: "quick-actions-tree" }, diagnostics: [],
 };
 
@@ -34,6 +31,16 @@ test("plugin management renders localized metadata and declarative settings with
   assert.match(html, /data-plugin-setting="taskPresentation"/);
   assert.match(html, /value="quick-actions-tree" selected/);
   assert.doesNotMatch(html, /<script|on[a-z]+=|<iframe/i);
+});
+
+test("plugin management resolves plugin-owned Chinese copy and escapes it as text", () => {
+  const html = renderPluginManagementSection(
+    { schemaVersion: 1, entries: [{ ...entry, localization: { ...entry.localization, locales: { ...entry.localization.locales, "zh-CN": { ...entry.localization.locales["zh-CN"], description: "<script>不是标记</script>" } } } }] },
+    { ...copy, locale: "zh-CN" },
+  );
+  assert.match(html, /任务展示方式/u);
+  assert.match(html, /&lt;script&gt;不是标记&lt;\/script&gt;/u);
+  assert.doesNotMatch(html, /<script>/u);
 });
 
 test("plugin management exposes bounded diagnostic and non-color status text", () => {
