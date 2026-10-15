@@ -36,12 +36,14 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0023-host-governed-public-plugin-foundation.md`](architecture/decisions/0023-host-governed-public-plugin-foundation.md) — canonical plugin package identity, plugin-owned localization, host-managed lifecycle, admission, compatibility, and future external-plugin security gates.
 - [`architecture/decisions/0024-host-presentation-contract-and-plugin-contract-governance.md`](architecture/decisions/0024-host-presentation-contract-and-plugin-contract-governance.md) — semantic host UI primitives, plugin presentation boundary, and independently versioned contract governance.
 - [`architecture/decisions/0025-plugin-scoped-task-authorization.md`](architecture/decisions/0025-plugin-scoped-task-authorization.md) — plugin-owned task authorization declarations, native workspace trust, exact remembered reviews, and fail-closed revocation.
+- [`architecture/decisions/0026-task-activation-and-terminal-routing.md`](architecture/decisions/0026-task-activation-and-terminal-routing.md) — selection-first task activation, exact native execution, and host-owned Terminal session projection.
 
 ## Delivery
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
 - [`engineering/architecture-refactoring.md`](engineering/architecture-refactoring.md) — current architecture audit, target boundaries, migration order, and refactoring gates.
+- [`engineering/task-terminal-routing-plan.md`](engineering/task-terminal-routing-plan.md) — staged implementation and acceptance gates for double-click task activation and reviewed output in the host Terminal.
 - [`engineering/empty-workspace-startup-plan.md`](engineering/empty-workspace-startup-plan.md) — first-launch cancellation, disabled project tools, and the actionable Welcome state.
 - [`engineering/foundation-hardening.md`](engineering/foundation-hardening.md) — post-CM4 feature freeze, executable boundary plan, migration sequence, and acceptance gates.
 - [`engineering/2026-09-29-audit-remediation-plan.md`](engineering/2026-09-29-audit-remediation-plan.md) — ordered credential, workspace-recovery, terminal-flow-control, lifecycle, and ownership hardening plan.

@@ -37,6 +37,7 @@ Every contract entry records:
 | `plugin.task-authorization` | plugin declares policy/copy; host persists/enforces/renders | stable-first-party | capability protocol `1`; additive Plugin SDK minor | ADR-0025; native authorization store and task-review fixtures; [acceptance](../benchmarks/2026-10-15-plugin-task-authorization.md) |
 | `plugin.task-cache` | plugin requests; host fingerprints/stores/invalidates | stable-first-party | task-cache protocol `1` | task-cache SDK/protocol declarations; ADR-0020 |
 | `host.presentation` | host supplies; features consume | experimental-host | host-private contract `1` | ADR-0024; `src/presentation/host-presentation.ts`; `scripts/host-presentation.test.mjs`; [acceptance](../benchmarks/2026-10-15-host-presentation-system.md); not yet a public plugin capability |
+| `host.task-terminal-session` | task execution supplies; Terminal and shell layout consume | experimental-host | host-private contract `1` | ADR-0026; ordered reviewed-task session projection; not a Plugin SDK capability and never an executable shell-string channel |
 
 `stable-first-party` means the contract is exercised across the independent Android/Gradle
 repository boundary but is not authorization for dynamic third-party loading. External admission
