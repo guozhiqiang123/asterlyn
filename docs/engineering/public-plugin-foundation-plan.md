@@ -50,23 +50,7 @@ invalid shapes are representable as untrusted inputs but cannot enter host state
 
 Commit boundary: SDK contract and fixtures only.
 
-### PPF2 — Host validation, projection, and resolution
-
-1. Validate plugin identity, localization bounds, default-catalog presence, message keys, locale
-   tags, and settings message references at the SDK adapter boundary.
-2. Clone/freeze validated catalogs before exposing them to management state.
-3. Carry plugin localization through `PluginManagementSnapshot`.
-4. Resolve plugin messages using exact application locale, plugin default locale, then visible key.
-5. Remove Android/Gradle strings and the generic plugin-key resolver from host localization files.
-6. Add focused tests for valid catalogs, each rejection class, fallback, escaping, missing keys,
-   isolation, and both supported application locales.
-
-Exit gate: Settings renders an unknown valid plugin from its own catalog, and malformed localization
-fails before the plugin enters the catalog or activation lifecycle.
-
-Commit boundary: host adapter, management projection, renderer, host copy cleanup, and tests.
-
-### PPF3 — Android/Gradle package migration and identity guard
+### PPF2 — Android/Gradle package migration and identity guard
 
 1. Move English and Simplified Chinese name, description, and task-presentation strings into the
    Android/Gradle plugin manifest using plugin-scoped keys.
@@ -82,6 +66,25 @@ release artifact with the currently observed 0.1.2/0.1.1 identity split.
 
 Commit boundary: plugin localization, version consistency guard, tests, then release artifact
 metadata as a separate build commit.
+
+### PPF3 — Host validation, projection, and resolution
+
+The plugin artifact is produced before host enforcement so every cross-repository commit stays
+buildable and follows the additive-SDK → plugin → host sequence from ADR-0021.
+
+1. Validate plugin identity, localization bounds, default-catalog presence, message keys, locale
+   tags, and settings message references at the SDK adapter boundary.
+2. Clone/freeze validated catalogs before exposing them to management state.
+3. Carry plugin localization through `PluginManagementSnapshot`.
+4. Resolve plugin messages using exact application locale, plugin default locale, then visible key.
+5. Remove Android/Gradle strings and the generic plugin-key resolver from host localization files.
+6. Add focused tests for valid catalogs, each rejection class, fallback, escaping, missing keys,
+   isolation, and both supported application locales.
+
+Exit gate: Settings renders an unknown valid plugin from its own catalog, and malformed localization
+fails before the plugin enters the catalog or activation lifecycle.
+
+Commit boundary: host adapter, management projection, renderer, host copy cleanup, and tests.
 
 ### PPF4 — Host pin, regression acceptance, and local delivery
 
