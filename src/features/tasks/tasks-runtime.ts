@@ -127,9 +127,20 @@ export class TasksRuntime {
         const taskKey = row.dataset.taskKey ?? "";
         this.controller.selectKey(taskKey);
         const taskAction = target.closest<HTMLElement>("[data-task-action]")?.dataset.taskAction;
-        if (taskAction === "run" || taskAction === "retry") void this.run(taskKey);
+        if (taskAction === "retry") void this.run(taskKey);
         else if (taskAction === "reveal-output") this.revealOutput(taskKey);
       }
+    }, { signal });
+    host.addEventListener("dblclick", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const primary = target.closest<HTMLElement>("[data-task-action=run]");
+      const row = primary?.closest<HTMLElement>("[data-task-key]");
+      if (!primary || !row || pointerTaskActivation("dblclick", primary.dataset.taskAction) !== "run") return;
+      event.preventDefault();
+      const taskKey = row.dataset.taskKey ?? "";
+      this.controller.selectKey(taskKey);
+      void this.run(taskKey);
     }, { signal });
     host.addEventListener("focusin", (event) => {
       const target = event.target;
@@ -266,6 +277,15 @@ export class TasksRuntime {
   private disclosure(): DisclosureState { return this.treeDisclosures[this.presentation]; }
 
   private host(): HTMLElement | null { return this.root.querySelector<HTMLElement>("#tasks-tool-host"); }
+}
+
+export function pointerTaskActivation(
+  eventType: "click" | "dblclick",
+  taskAction: string | undefined,
+): "select" | "run" | "retry" | "reveal-output" {
+  if (eventType === "dblclick") return taskAction === "run" ? "run" : "select";
+  if (taskAction === "retry" || taskAction === "reveal-output") return taskAction;
+  return "select";
 }
 
 function expandedDisclosure(keys: Iterable<string>): DisclosureState {

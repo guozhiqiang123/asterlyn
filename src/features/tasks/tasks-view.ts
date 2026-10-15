@@ -88,7 +88,7 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   busy: "Another task is already running for this workspace.",
   noResults: "No matching tasks.",
   queryPlaceholder: "Filter tasks",
-  run: "Run task",
+  run: "Double-click to run task",
   retry: "Retry task",
   revealOutput: "Reveal output",
   notRunnable: "This task is not runnable.",

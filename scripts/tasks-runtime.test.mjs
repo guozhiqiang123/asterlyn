@@ -4,11 +4,20 @@ import test from "node:test";
 import {
   captureTasksFocus,
   captureTasksViewport,
+  pointerTaskActivation,
   restoreTasksFocus,
   restoreTasksViewport,
   syncTasksHeaderRefresh,
   syncTasksSelection,
 } from "../src/features/tasks/tasks-runtime.ts";
+
+test("Tasks runtime separates pointer selection from task activation", () => {
+  assert.equal(pointerTaskActivation("click", "run"), "select");
+  assert.equal(pointerTaskActivation("dblclick", "run"), "run");
+  assert.equal(pointerTaskActivation("click", "retry"), "retry");
+  assert.equal(pointerTaskActivation("click", "reveal-output"), "reveal-output");
+  assert.equal(pointerTaskActivation("dblclick", "retry"), "select");
+});
 
 test("Tasks runtime keeps the shared title-bar refresh action in sync", () => {
   const attributes = new Map();
