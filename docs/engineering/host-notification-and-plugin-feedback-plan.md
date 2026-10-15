@@ -2,7 +2,7 @@
 
 Date: 2026-10-15
 
-Status: planned
+Status: implemented
 
 Governing decision: [ADR-0027](../architecture/decisions/0027-host-notification-center-and-plugin-notifications.md)
 
