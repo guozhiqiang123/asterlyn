@@ -109,7 +109,12 @@ Commit boundary: trust and task runner capability before any Gradle invocation.
    host-owned plain-console/non-interactive flags.
 4. Parse bounded task output into task path, group, description, and project identity while retaining
    an explicit unsupported-output state.
-5. Cache only an activation-qualified disposable projection; never treat it as workspace truth.
+5. Keep the activation-local snapshot disposable and never treat it as workspace truth. A later
+   host-owned persistent acceleration cache is permitted only under the fingerprint, stale-state,
+   and execution-revalidation contract in
+   [`ADR-0020`](../architecture/decisions/0020-managed-bundled-plugins-and-task-snapshot-cache.md)
+   and the
+   [plugin management and task cache plan](plugin-management-and-task-cache-plan.md).
 6. Expose Refresh Gradle Tasks through the Tasks UI and command palette.
 
 Exit gate: fixtures cover Groovy/Kotlin settings, multi-module task paths, wrapper absence,

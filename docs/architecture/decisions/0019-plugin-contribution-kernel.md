@@ -72,6 +72,11 @@ untrusted native code into the Tauri host. The internal contribution interfaces 
 change until at least the Android/Gradle integration has exercised activation, commands, discovery,
 execution, cancellation, project switching, errors, settings, and upgrade compatibility.
 
+Host-managed plugin settings and a verified persistent task-snapshot acceleration cache are defined
+later by
+[`ADR-0020`](0020-managed-bundled-plugins-and-task-snapshot-cache.md). Cached descriptors never
+replace ADR-0019's activation, trust, or current-snapshot execution checks.
+
 ## Consequences
 
 - Android/Gradle behavior stays out of the shell, workspace, Git, terminal, and task-runner cores.
@@ -92,4 +97,3 @@ Revisit this decision when all of the following are true:
 3. Workspace trust, task supervision, cancellation, output bounds, and lifecycle cleanup have
    cross-platform evidence.
 4. A written external-plugin threat model and signing/distribution policy is ready for review.
-
