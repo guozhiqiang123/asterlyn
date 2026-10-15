@@ -239,8 +239,30 @@ function normalizeTask(candidate: TaskDescriptor): TaskDescriptor | null {
     description: boundedString(candidate.description),
     disabledReason: boundedString(candidate.disabledReason),
     runState: isTaskRunState(candidate.runState) ? candidate.runState : undefined,
-    androidQuickAction: normalizeAndroidQuickAction(candidate.androidQuickAction, id),
+    metadata: normalizeMetadata(candidate.metadata),
+    androidQuickAction: normalizeAndroidQuickAction(
+      candidate.androidQuickAction ?? quickActionFromMetadata(candidate.metadata),
+      id,
+    ),
   };
+}
+
+function normalizeMetadata(value: TaskDescriptor["metadata"]): TaskDescriptor["metadata"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value).slice(0, 16).flatMap(([key, item]) => {
+    const normalizedKey = boundedString(key);
+    const normalizedValue = boundedString(item);
+    return normalizedKey && normalizedValue ? [[normalizedKey, normalizedValue] as const] : [];
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function quickActionFromMetadata(value: TaskDescriptor["metadata"]): TaskDescriptor["androidQuickAction"] {
+  if (!value) return undefined;
+  const kind = value["android.quickAction.kind"];
+  const module = value["android.quickAction.module"];
+  const variant = value["android.quickAction.variant"];
+  return kind && module && variant ? { kind: kind as AndroidTaskQuickActionKind, module, variant } : undefined;
 }
 
 function boundedProjectPath(value: unknown): string | undefined {

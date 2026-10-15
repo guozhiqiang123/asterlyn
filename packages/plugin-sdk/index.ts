@@ -181,11 +181,13 @@ export interface SdkTaskProviderContribution {
 
 export interface SdkWorkspaceEvidence {
   readonly kind: string;
-  readonly values: Readonly<Record<string, string | boolean | number>>;
+  readonly values: Readonly<Record<string, string | boolean | number | readonly string[]>>;
 }
 
 export interface SdkPluginModule {
   readonly sdkMajor: typeof PLUGIN_SDK_MAJOR;
+  readonly id: string;
+  readonly version: string;
   readonly manifest: SdkPluginManifest;
   readonly matches: (context: SdkPluginMatchContext) => boolean;
   readonly evidenceKey?: (context: SdkPluginMatchContext) => string;

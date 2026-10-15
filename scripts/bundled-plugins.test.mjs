@@ -34,7 +34,11 @@ test("the bundled Android plugin activates from bounded catalog evidence with a 
   plan.apply({ status: "succeeded", outputs: [{ stream: "stdout", dataBase64: Buffer.from("Tasks runnable from root project 'root'\nBuild tasks\n-----------\nassembleDebug - Assemble debug\ninstallDebug - Install debug\n").toString("base64") }], truncated: false, error: null });
   await settle();
   assert.equal(provider.snapshot().status, "ready");
-  assert.deepEqual(provider.snapshot().tasks.find((task) => task.id === ":assembleDebug").androidQuickAction, { kind: "assemble", module: ":", variant: "Debug" });
+  assert.deepEqual(provider.snapshot().tasks.find((task) => task.id === ":assembleDebug").metadata, {
+    "android.quickAction.kind": "assemble",
+    "android.quickAction.module": ":",
+    "android.quickAction.variant": "Debug",
+  });
   assert.deepEqual((await provider.run(":assembleDebug")).artifactSearch, { hints: ["build/outputs/apk"] });
   assert.equal((await provider.run(":installDebug")).artifactSearch, undefined);
   provider.refresh().apply({ status: "cancelled", outputs: [], truncated: false, error: null });

@@ -1,8 +1,9 @@
-import type { AndroidTaskQuickActionKind, TaskProviderSnapshot } from "../../application/tasks/task-types.ts";
+import type { TaskProviderSnapshot, AndroidGradleQuickActionKind } from "./sdk-compat.ts";
+import { readQuickAction } from "./sdk-compat.ts";
+
+
 
 /** The small set of Gradle actions that can safely be inferred from task names. */
-export type AndroidGradleQuickActionKind = AndroidTaskQuickActionKind;
-
 export const ANDROID_GRADLE_QUICK_ACTION_LIMITS = Object.freeze({
   maxActions: 512,
   maxActionsPerKind: 128,
@@ -51,7 +52,7 @@ export function deriveGradleQuickActions(snapshot: TaskProviderSnapshot): Androi
   const kindCounts = new Map<AndroidGradleQuickActionKind, number>();
   for (const task of snapshot.tasks) {
     if (!task.runnable || !task.id || task.id.includes("\0")) continue;
-    const parsed = parseTaskId(task.id);
+    const parsed = readQuickAction(task) ?? parseTaskId(task.id);
     if (!parsed || !QUICK_ACTION_KINDS.includes(parsed.kind)) continue;
     const id = `${parsed.kind}:${task.id}`;
     if (actions.has(id) || actions.size >= ANDROID_GRADLE_QUICK_ACTION_LIMITS.maxActions ||
@@ -125,3 +126,4 @@ function compareActions(left: AndroidGradleQuickAction, right: AndroidGradleQuic
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
+export type { AndroidGradleQuickActionKind } from "./sdk-compat.ts";

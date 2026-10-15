@@ -2,6 +2,8 @@ import type { SdkPluginModule } from "./index.ts";
 
 export const representativePlugin: SdkPluginModule = {
   sdkMajor: 1,
+  id: "example.plugin",
+  version: "1.2.3",
   manifest: {
     sdkMajor: 1,
     id: "example.plugin",

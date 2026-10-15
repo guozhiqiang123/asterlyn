@@ -11,10 +11,12 @@ import {
 const task = { id: ":app:assembleDebug", label: ":app:assembleDebug", group: "Build tasks", projectPath: ":app", description: "assemble", runnable: true, runState: "succeeded" };
 
 test("cache codec round-trips declarative tasks and strips run state", () => {
-  const quickTask = { ...task, androidQuickAction: { kind: "assemble", module: ":app", variant: "Debug" } };
+  const quickTask = { ...task, metadata: { "android.quickAction.kind": "assemble", "android.quickAction.module": ":app", "android.quickAction.variant": "Debug" } };
   const encoded = encodeAndroidGradleCachePayload([quickTask], "dev.asterlyn.android-gradle", "0.1.0", "gradle-tasks");
   const decoded = decodeAndroidGradleCachePayload(encoded, "dev.asterlyn.android-gradle", "0.1.0", "gradle-tasks");
-  assert.deepEqual(decoded, [{ id: task.id, label: task.label, group: task.group, projectPath: task.projectPath, description: task.description, runnable: false, androidQuickAction: quickTask.androidQuickAction }]);
+  assert.deepEqual(decoded, [{ id: task.id, label: task.label, group: task.group, projectPath: task.projectPath, description: task.description, runnable: false, metadata: {
+    "android.quickAction.kind": "assemble", "android.quickAction.module": ":app", "android.quickAction.variant": "Debug",
+  } }]);
   assert.equal(decodeAndroidGradleCachePayload(encoded, "other", "0.1.0", "gradle-tasks"), null);
 });
 

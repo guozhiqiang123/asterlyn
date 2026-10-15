@@ -1,4 +1,5 @@
-import type { TaskDescriptor } from "../../application/tasks/task-types.ts";
+import type { TaskDescriptor } from "./sdk-compat.ts";
+import { readQuickAction, withoutRunState } from "./sdk-compat.ts";
 
 export const ANDROID_GRADLE_CACHE_SCHEMA_VERSION = 1;
 export const ANDROID_GRADLE_PARSER_VERSION = 1;
@@ -25,7 +26,7 @@ export function encodeAndroidGradleCachePayload(
   const payload: AndroidGradleCachePayload = {
     schemaVersion: 1, pluginId, pluginVersion, providerId, parserVersion: 1,
     discoveryProtocolVersion: 1,
-    tasks: tasks.map(({ runState: _runState, disabledReason: _disabledReason, ...task }) => ({ ...task, runnable: false })),
+    tasks: tasks.map(withoutRunState),
   };
   const text = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(text);
@@ -68,13 +69,17 @@ export function decodeAndroidGradleCachePayload(
       if (task.description !== undefined && (typeof task.description !== "string" || task.description.length > 256 || task.description.includes("\0"))) return null;
       if (taskIds.has(task.id) || projectPathForTask(task.id) !== task.projectPath) return null;
       taskIds.add(task.id);
-      if (task.androidQuickAction !== undefined) {
-        if (!task.androidQuickAction || typeof task.androidQuickAction !== "object" || Array.isArray(task.androidQuickAction)) return null;
-        if (!isConsistentQuickAction(task.id, task.androidQuickAction as Record<string, unknown>)) return null;
-      }
+      const metadata = task.metadata;
+      if (metadata !== undefined && (!metadata || typeof metadata !== "object" || Array.isArray(metadata))) return null;
+      const quick = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+        ? readQuickAction({ id: task.id, label: task.label, group: task.group, projectPath: task.projectPath, runnable: false, metadata: metadata as Record<string, string> })
+        : null;
+      if (metadata !== undefined && Object.keys(metadata as object).length > 16) return null;
+      if (metadata !== undefined && Object.entries(metadata as Record<string, unknown>).some(([key, value]) => key.length > 128 || typeof value !== "string" || value.length > 1024)) return null;
+      if (quick && !isConsistentQuickAction(task.id, quick)) return null;
       tasks.push({ id: task.id, label: task.label, group: task.group, projectPath: task.projectPath,
         ...(task.description === undefined ? {} : { description: task.description }), runnable: false,
-        ...(task.androidQuickAction === undefined ? {} : { androidQuickAction: task.androidQuickAction as TaskDescriptor["androidQuickAction"] }) });
+        ...(metadata === undefined ? {} : { metadata: metadata as Record<string, string> }) });
     }
     return tasks;
   } catch {
@@ -110,7 +115,7 @@ export function intersectsFingerprintPaths(candidates: readonly string[], change
   return changed.some((path) => { const normalized = normalizePath(path, platform); return normalized !== null && (set.has(normalized) || isFingerprintCandidate(normalized)); });
 }
 
-function isConsistentQuickAction(taskId: string, value: Record<string, unknown>): boolean {
+function isConsistentQuickAction(taskId: string, value: { readonly kind: string; readonly module: string; readonly variant: string }): boolean {
   const kind = value.kind;
   const module = value.module;
   const variant = value.variant;

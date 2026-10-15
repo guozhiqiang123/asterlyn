@@ -1,16 +1,11 @@
 import type {
-  BundledPlugin,
-  PluginActivationContext,
-  PluginMatchContext,
-  PluginWorkspaceCatalogEvidence,
-  PluginTaskExecutionResult,
-  PluginTaskRefreshPlan,
-  PluginTaskRunPlan,
-  PluginTaskCacheCapability,
-} from "../../application/plugins/index.ts";
-import type { TaskDescriptor } from "../../application/tasks/task-types.ts";
+  SdkPluginModule,
+  SdkPluginActivationContext,
+  SdkPluginMatchContext,
+  SdkPluginTaskCacheCapability,
+  SdkWorkspaceEvidence,
+} from "../../../packages/plugin-sdk/index.ts";
 import {
-  ANDROID_GRADLE_DETECTOR_LIMITS,
   detectAndroidGradleEvidence,
   type AndroidGradleEvidenceSnapshot,
 } from "./detector.ts";
@@ -18,8 +13,6 @@ import {
   ANDROID_GRADLE_DISCOVERY_LIMITS,
   buildGradleWrapperRequest,
   parseGradleTasksOutput,
-  type GradleTaskDiscoveryResult,
-  type GradleTaskDescriptor,
 } from "./discovery.ts";
 import { applyGradleTaskResult, buildGradleTaskRunPlan, runnableGradleSnapshot, setGradleTaskRunState } from "./execution.ts";
 import { deriveGradleQuickActions, gradleTaskArtifactHints } from "./quick-actions.ts";
@@ -29,7 +22,9 @@ import {
   fingerprintPaths,
   intersectsFingerprintPaths,
 } from "./task-cache.ts";
-import type { TaskProviderCacheMetadata } from "../../application/tasks/task-types.ts";
+import type { TaskDescriptor, GradleTaskDescriptor, GradleTaskDiscoveryResult, PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "./sdk-compat.ts";
+import { withQuickAction } from "./sdk-compat.ts";
+import type { SdkTaskProviderCacheMetadata } from "../../../packages/plugin-sdk/index.ts";
 
 export const ANDROID_GRADLE_PLUGIN_ID = "dev.asterlyn.android-gradle";
 
@@ -51,10 +46,12 @@ interface AndroidProviderContribution {
  * Activation starts no process. Explicit refresh returns a typed discovery plan;
  * only the host can review, authorize, execute, cancel, and return its bounded result.
  */
-export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
+export const ANDROID_GRADLE_PLUGIN: SdkPluginModule = Object.freeze({
+  sdkMajor: 1,
   id: ANDROID_GRADLE_PLUGIN_ID,
   version: "0.1.0",
   manifest: Object.freeze({
+    sdkMajor: 1,
     id: ANDROID_GRADLE_PLUGIN_ID,
     version: "0.1.0",
     nameKey: "plugins.androidGradle.name",
@@ -71,10 +68,10 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
       ]),
     }] as const),
   }),
-  matches: (context: PluginMatchContext) => detectAndroidGradlePluginEvidence(context)?.android === true,
-  evidenceKey: (context: PluginMatchContext) => {
+  matches: (context: SdkPluginMatchContext) => detectAndroidGradlePluginEvidence(context)?.android === true,
+  evidenceKey: (context: SdkPluginMatchContext) => {
     const evidence = detectAndroidGradlePluginEvidence(context);
-    const catalog = isWorkspaceCatalogEvidence(context.evidence) ? context.evidence : null;
+    const catalog = catalogEvidence(context.evidence);
     return evidence ? JSON.stringify([
       evidence.platform,
       evidence.bounded,
@@ -86,20 +83,20 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
       catalog ? fingerprintPaths(catalog.files, catalog.platform) : [],
     ]) : "unsupported";
   },
-  activate: (context: PluginActivationContext) => {
+  activate: (context: SdkPluginActivationContext) => {
     const detected = detectAndroidGradlePluginEvidence(context);
     if (!detected || !detected.android) return;
     const detection = detected;
-    const cache: PluginTaskCacheCapability = context.taskCache;
-    const catalog = isWorkspaceCatalogEvidence(context.evidence) ? context.evidence.files : [];
+    const cache: SdkPluginTaskCacheCapability = context.taskCache;
+    const catalog = catalogEvidence(context.evidence)?.files ?? [];
     const cachePaths = fingerprintPaths(catalog, detection.platform);
     const listeners = new Set<() => void>();
     let disposed = false;
     let revision = 0;
     let currentFingerprint: { readonly digest: string | null } | null = null;
-    const cacheMissReason: TaskProviderCacheMetadata["staleReason"] = "cache-miss";
+    const cacheMissReason: SdkTaskProviderCacheMetadata["staleReason"] = "cache-miss";
     const publish = () => { if (disposed) return; for (const listener of listeners) listener(); };
-    const metadata = (status: TaskProviderCacheMetadata["status"], staleReason?: TaskProviderCacheMetadata["staleReason"], restoredTaskCount?: number): TaskProviderCacheMetadata => ({
+    const metadata = (status: SdkTaskProviderCacheMetadata["status"], staleReason?: SdkTaskProviderCacheMetadata["staleReason"], restoredTaskCount?: number): SdkTaskProviderCacheMetadata => ({
       status, ...(staleReason ? { staleReason } : {}), ...(restoredTaskCount === undefined ? {} : { restoredTaskCount }),
     });
     let snapshot: GradleTaskDiscoveryResult = {
@@ -224,7 +221,7 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
       try {
         const read = await cache!.read("gradle-tasks");
         if (disposed || revision !== restoreRevision) return;
-        const tasks = decodeAndroidGradleCachePayload(read.payloadBase64, ANDROID_GRADLE_PLUGIN_ID, ANDROID_GRADLE_PLUGIN.version, "gradle-tasks");
+        const tasks = decodeAndroidGradleCachePayload(read.payloadBase64, ANDROID_GRADLE_PLUGIN_ID, ANDROID_GRADLE_PLUGIN.manifest.version, "gradle-tasks");
         if (!tasks) {
           snapshot = { status: "ready", tasks: [], cache: metadata("stale", read.status === "unavailable" ? "fingerprint-unavailable" : read.status === "miss" ? cacheMissReason : "cache-corrupt") };
           publish();
@@ -270,7 +267,7 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
           publish();
           return;
         }
-        const payload = encodeAndroidGradleCachePayload(tasks, ANDROID_GRADLE_PLUGIN_ID, ANDROID_GRADLE_PLUGIN.version, "gradle-tasks");
+        const payload = encodeAndroidGradleCachePayload(tasks, ANDROID_GRADLE_PLUGIN_ID, ANDROID_GRADLE_PLUGIN.manifest.version, "gradle-tasks");
         const stored = await cache!.write("gradle-tasks", fingerprint, payload);
         if (disposed || revision !== refreshRevision) return;
         if (stored.status !== "stored") {
@@ -312,31 +309,35 @@ function withGradleQuickActions(snapshot: GradleTaskDiscoveryResult): GradleTask
     ...snapshot,
     tasks: snapshot.tasks.map((task) => {
       const quick = quickActions.get(task.id);
-      return quick ? { ...task, androidQuickAction: { kind: quick.kind, module: quick.module, variant: quick.variant } } : task;
+      return quick ? withQuickAction(task, { kind: quick.kind, module: quick.module, variant: quick.variant }) : task;
     }),
   };
 }
 
 export function detectAndroidGradlePluginEvidence(
-  context: PluginMatchContext,
+  context: SdkPluginMatchContext,
 ): AndroidGradleEvidenceSnapshot | null {
-  if (!isWorkspaceCatalogEvidence(context.evidence)) return null;
+  const catalog = catalogEvidence(context.evidence);
+  if (!catalog) return null;
   return detectAndroidGradleEvidence({
     workspaceRoot: context.identity.root,
     generation: context.identity.generation,
-    platform: context.evidence.platform,
-    files: context.evidence.files,
-    catalogTruncated: context.evidence.truncated,
+    platform: catalog.platform,
+    files: catalog.files,
+    catalogTruncated: catalog.truncated,
   });
 }
 
-function isWorkspaceCatalogEvidence(
-  evidence: { readonly [key: string]: unknown },
-): evidence is PluginWorkspaceCatalogEvidence {
-  if (evidence.kind !== "workspace-catalog" ||
-    (evidence.platform !== "posix" && evidence.platform !== "windows") ||
-    typeof evidence.truncated !== "boolean" || !Array.isArray(evidence.files)) return false;
-  if (evidence.files.length > ANDROID_GRADLE_DETECTOR_LIMITS.maxPaths) return true;
-  return evidence.files.every((file) => typeof file === "object" && file !== null &&
-    typeof (file as { readonly workspacePath?: unknown }).workspacePath === "string");
+function catalogEvidence(evidence: unknown): { readonly platform: "posix" | "windows"; readonly truncated: boolean; readonly files: readonly { readonly workspacePath: string }[] } | null {
+  const value = Array.isArray(evidence)
+    ? evidence.find((candidate): candidate is SdkWorkspaceEvidence => Boolean(candidate && typeof candidate === "object" && (candidate as SdkWorkspaceEvidence).kind === "workspace-catalog"))?.values
+    : evidence && typeof evidence === "object" && (evidence as { kind?: unknown }).kind === "workspace-catalog" ? evidence as Record<string, unknown> : null;
+  if (!value) return null;
+  const platform = value.platform;
+  const truncated = value.truncated;
+  const files = value.files;
+  if ((platform !== "posix" && platform !== "windows") || typeof truncated !== "boolean" || !Array.isArray(files)) return null;
+  const paths = files.map((file) => typeof file === "string" ? file : file && typeof file === "object" && typeof (file as { workspacePath?: unknown }).workspacePath === "string" ? (file as { workspacePath: string }).workspacePath : null);
+  if (paths.some((file) => file === null)) return null;
+  return { platform, truncated, files: paths.map((workspacePath) => ({ workspacePath: workspacePath as string })) };
 }

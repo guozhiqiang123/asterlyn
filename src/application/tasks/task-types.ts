@@ -48,6 +48,7 @@ export interface TaskDescriptor {
   readonly runnable: boolean;
   readonly disabledReason?: string;
   readonly runState?: TaskRunState;
+  readonly metadata?: Readonly<Record<string, string>>;
   readonly androidQuickAction?: AndroidTaskQuickActionMetadata;
 }
 

@@ -1,6 +1,5 @@
-import type { TaskExecutionRequest } from "../../models.ts";
-import type { TaskDescriptor, TaskProviderSnapshot } from "../../application/tasks/task-types.ts";
 import type { AndroidGradleEvidenceSnapshot } from "./detector.ts";
+import type { TaskExecutionRequest, TaskDescriptor, TaskProviderSnapshot } from "./sdk-compat.ts";
 
 export const ANDROID_GRADLE_DISCOVERY_LIMITS = Object.freeze({
   maxOutputBytes: 2 * 1024 * 1024,
@@ -15,9 +14,7 @@ export const ANDROID_GRADLE_TASK_ARGS = Object.freeze([
   "tasks", "--all", ...ANDROID_GRADLE_EXECUTION_FLAGS,
 ]);
 
-export interface GradleTaskDescriptor extends TaskDescriptor {
-  readonly projectPath: string;
-}
+export type GradleTaskDescriptor = TaskDescriptor;
 
 export interface GradleTaskDiscoveryResult extends TaskProviderSnapshot {
   readonly tasks: readonly GradleTaskDescriptor[];

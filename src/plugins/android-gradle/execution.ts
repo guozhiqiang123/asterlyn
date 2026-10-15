@@ -1,6 +1,5 @@
-import type { TaskExecutionRequest } from "../../models.ts";
-import type { PluginTaskExecutionResult } from "../../application/plugins/plugin-types.ts";
 import type { AndroidGradleEvidenceSnapshot } from "./detector.ts";
+import type { TaskExecutionRequest, PluginTaskExecutionResult } from "./sdk-compat.ts";
 import {
   ANDROID_GRADLE_EXECUTION_FLAGS,
   type GradleTaskDescriptor,
