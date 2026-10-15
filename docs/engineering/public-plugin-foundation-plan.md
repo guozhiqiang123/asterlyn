@@ -107,6 +107,22 @@ plugin artifacts remain recoverable.
 
 Commit boundary: host artifact pin/integration first; acceptance evidence after verification.
 
+## Implementation status
+
+- PPF0 completed in `19a6ee7`, with the dependency-order correction in `54ab939`.
+- PPF1 completed in host commit `6a03660`; Plugin SDK `1.1.0` defines bounded plugin-owned locale
+  catalogs and static package-manifest parity fields.
+- PPF2 completed in Android/Gradle source commit `5c96f46` and release-record commit `b6d3c19`;
+  version `0.1.3` owns its static identity, Settings schema, English/Chinese copy, and consistency
+  tests.
+- PPF3 and the host integration portion of PPF4 completed in `a8f55a9`; the host validates, freezes,
+  isolates, resolves, renders, and integrity-pins the plugin package without Android-specific copy.
+- PPF4 acceptance is recorded in
+  [`2026-10-15-public-plugin-foundation.md`](../benchmarks/2026-10-15-public-plugin-foundation.md),
+  including FilesRecovery, startup, native package, installation, rollback, memory, accessibility,
+  and known-limit evidence.
+- PPF5–PPF8 remain intentionally open and continue to block arbitrary third-party runtime loading.
+
 ## Deferred public-plugin phases
 
 These are required before third-party runtime installation, but are intentionally not hidden inside

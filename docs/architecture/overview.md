@@ -74,13 +74,16 @@ macOS and Windows use native recursive workspace registrations. Content edits ta
 and working-tree state, membership changes additionally target the catalog, and selected Git
 metadata targets only its owning repository slices.
 
-Project tooling evolves through the bundled contribution kernel in
+Project tooling evolves through the contribution kernel in
 [`ADR-0019`](decisions/0019-plugin-contribution-kernel.md). Window-scoped plugins may contribute
 detectors, commands, and declarative task providers, but task execution remains a host-owned,
-workspace-authorized, no-shell application capability. The first Android/Gradle integration is a
-bundled contract-validation consumer, not a stable external ABI. Downloaded or project-local
-plugins, ambient process/filesystem access, and external plugin installation remain behind the
-later isolated-host and threat-model gate.
+workspace-authorized, no-shell application capability. Android/Gradle remains build-time pinned
+today, while [`ADR-0023`](decisions/0023-host-governed-public-plugin-foundation.md) establishes the
+public direction: a plugin owns its static identity, localized copy, settings schema, detection, and
+bounded contributions; the host owns admission, compatibility, permissions, lifecycle, rendering,
+execution, diagnostics, update, and rollback. Downloaded or project-local plugins, ambient
+process/filesystem access, and external plugin installation remain behind the later signed-package,
+isolation, and threat-model gates.
 
 The next extraction is governed by [`ADR-0021`](decisions/0021-first-party-plugin-sdk-and-repository-boundary.md)
 and its [rollout plan](../engineering/plugin-sdk-and-repository-rollout-plan.md): stabilize a small
