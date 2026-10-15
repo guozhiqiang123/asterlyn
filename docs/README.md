@@ -34,6 +34,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0021-first-party-plugin-sdk-and-repository-boundary.md`](architecture/decisions/0021-first-party-plugin-sdk-and-repository-boundary.md) — versioned first-party SDK, build-time binding, independent plugin repository, and no runtime third-party loading.
 - [`architecture/decisions/0022-host-owned-hierarchical-collection-presentation.md`](architecture/decisions/0022-host-owned-hierarchical-collection-presentation.md) — one host-owned tree/flat, disclosure, filtering, focus, keyboard, and plugin collection presentation model.
 - [`architecture/decisions/0023-host-governed-public-plugin-foundation.md`](architecture/decisions/0023-host-governed-public-plugin-foundation.md) — canonical plugin package identity, plugin-owned localization, host-managed lifecycle, admission, compatibility, and future external-plugin security gates.
+- [`architecture/decisions/0024-host-presentation-contract-and-plugin-contract-governance.md`](architecture/decisions/0024-host-presentation-contract-and-plugin-contract-governance.md) — semantic host UI primitives, plugin presentation boundary, and independently versioned contract governance.
 
 ## Delivery
 
@@ -74,9 +75,11 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/plugin-sdk-and-repository-rollout-plan.md`](engineering/plugin-sdk-and-repository-rollout-plan.md) — staged SDK extraction, minimal HierarchicalCollection/Tasks contract, repository split, artifact consumption, and remaining-tree migration.
 - [`engineering/hierarchical-collection-and-android-tasks-plan.md`](engineering/hierarchical-collection-and-android-tasks-plan.md) — phased shared tree abstraction, plugin collection wiring, Android/Gradle rollout, and FilesRecovery acceptance.
 - [`engineering/public-plugin-foundation-plan.md`](engineering/public-plugin-foundation-plan.md) — staged SDK, host, and Android/Gradle migration for self-contained localization, package identity guards, acceptance, and the deferred public-plugin lifecycle.
+- [`engineering/host-presentation-system-plan.md`](engineering/host-presentation-system-plan.md) — phased shared presentation primitives, Tasks state and execution-dialog migration, plugin UI boundary, and local acceptance.
 - [`engineering/unpushed-head-commit-actions-plan.md`](engineering/unpushed-head-commit-actions-plan.md) — reviewed Undo/Drop actions for an unpublished latest commit, with exact native revalidation and no changelist-context emulation.
 - [`engineering/non-current-branch-sync-plan.md`](engineering/non-current-branch-sync-plan.md) — per-local-branch upstream divergence plus reviewed Update and Push without checking out the target branch.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
+- [`governance/plugin-contracts.md`](governance/plugin-contracts.md) — central plugin contract registry, version axes, stability lifecycle, compatibility rules, and review checklist.
 
 ## Design and references
 

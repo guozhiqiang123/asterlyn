@@ -53,6 +53,16 @@ A 3–5 year product will outlive individual library versions and many early ass
 - A direct shell `git push` is not the standard publication path for this repository. Force-with-lease and tags remain separately authorized choices, and uncertain outcomes are reconciled rather than retried.
 - Local rollback commits may remain unpublished until the owning phase or task gate passes; publication authority does not waive tests, package evidence, or manual acceptance requirements.
 
+## Plugin contract lifecycle
+
+- Every plugin-facing contract is registered in the
+  [`plugin contract registry`](plugin-contracts.md) with an owner, stability state, independent
+  version axis, authoritative declaration, bounds, fallback, and conformance evidence.
+- Plugin SDK, package-manifest, capability protocol, persisted-data, and host presentation versions
+  remain separate; compatibility changes cannot be hidden behind an unrelated global version bump.
+- A reusable host helper is not a public plugin API until an ADR and adapter define its authority,
+  validation, failure isolation, and oldest-supported-host behavior.
+
 ## Brand lifecycle
 
 `Asterlyn` is the working formal brand selected after a preliminary collision search. It is not a legal trademark clearance. Product-visible naming is centralized so legal or market validation can change the brand without renaming domain protocols, repository schemas, or every internal symbol.
