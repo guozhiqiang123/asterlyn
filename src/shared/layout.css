@@ -554,6 +554,18 @@
   background: var(--bg-elevated);
 }
 
+.host-action-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.host-action-quiet:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--surface-translucent);
+  color: var(--text);
+}
+
 /* One destructive surface for every dialog, so a dangerous confirm never falls back to the browser's
    own button styling inside a dialog that does not scope its own variant. */
 .danger-button {
