@@ -33,6 +33,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0020-managed-bundled-plugins-and-task-snapshot-cache.md`](architecture/decisions/0020-managed-bundled-plugins-and-task-snapshot-cache.md) — host-managed bundled plugins, typed Settings navigation, and verified persistent task snapshots.
 - [`architecture/decisions/0021-first-party-plugin-sdk-and-repository-boundary.md`](architecture/decisions/0021-first-party-plugin-sdk-and-repository-boundary.md) — versioned first-party SDK, build-time binding, independent plugin repository, and no runtime third-party loading.
 - [`architecture/decisions/0022-host-owned-hierarchical-collection-presentation.md`](architecture/decisions/0022-host-owned-hierarchical-collection-presentation.md) — one host-owned tree/flat, disclosure, filtering, focus, keyboard, and plugin collection presentation model.
+- [`architecture/decisions/0023-host-governed-public-plugin-foundation.md`](architecture/decisions/0023-host-governed-public-plugin-foundation.md) — canonical plugin package identity, plugin-owned localization, host-managed lifecycle, admission, compatibility, and future external-plugin security gates.
 
 ## Delivery
 
@@ -72,6 +73,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/plugin-management-and-task-cache-plan.md`](engineering/plugin-management-and-task-cache-plan.md) — phased plugin management, Android task-tree modes, tool Settings entry, verified task cache, and FilesRecovery acceptance.
 - [`engineering/plugin-sdk-and-repository-rollout-plan.md`](engineering/plugin-sdk-and-repository-rollout-plan.md) — staged SDK extraction, minimal HierarchicalCollection/Tasks contract, repository split, artifact consumption, and remaining-tree migration.
 - [`engineering/hierarchical-collection-and-android-tasks-plan.md`](engineering/hierarchical-collection-and-android-tasks-plan.md) — phased shared tree abstraction, plugin collection wiring, Android/Gradle rollout, and FilesRecovery acceptance.
+- [`engineering/public-plugin-foundation-plan.md`](engineering/public-plugin-foundation-plan.md) — staged SDK, host, and Android/Gradle migration for self-contained localization, package identity guards, acceptance, and the deferred public-plugin lifecycle.
 - [`engineering/unpushed-head-commit-actions-plan.md`](engineering/unpushed-head-commit-actions-plan.md) — reviewed Undo/Drop actions for an unpublished latest commit, with exact native revalidation and no changelist-context emulation.
 - [`engineering/non-current-branch-sync-plan.md`](engineering/non-current-branch-sync-plan.md) — per-local-branch upstream divergence plus reviewed Update and Push without checking out the target branch.
 - [`governance/lifecycle.md`](governance/lifecycle.md) — how a multi-year codebase changes without fossilizing early choices.
