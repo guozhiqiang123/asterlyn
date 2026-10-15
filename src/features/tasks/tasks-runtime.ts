@@ -1,5 +1,5 @@
 import type { TasksController } from "./tasks-controller.ts";
-import type { TasksState, TasksWorkspaceIdentity } from "./tasks-model.ts";
+import type { TaskPresentation, TasksState, TasksWorkspaceIdentity } from "./tasks-model.ts";
 import {
   buildTaskTree,
   TASK_TREE_ROOT_KEY,
@@ -27,6 +27,7 @@ export class TasksRuntime {
   private visibleLimit = TASKS_RENDER_BATCH_SIZE;
   private expandedTreeNodes = new Set<string>([TASK_TREE_ROOT_KEY]);
   private treeExpansionTouched = false;
+  private presentation: TaskPresentation = "all-tasks-tree";
 
   constructor(
     root: HTMLElement,
@@ -63,10 +64,17 @@ export class TasksRuntime {
     if (!host) return;
     const focus = captureTasksFocus(host);
     const copy = this.options.copy?.();
-    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.expandedTreeNodes);
+    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.expandedTreeNodes, this.presentation);
     syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
+  }
+
+  setPresentation(presentation: TaskPresentation): boolean {
+    if (this.presentation === presentation) return false;
+    this.presentation = presentation;
+    this.render();
+    return true;
   }
 
   dispose(): void {
@@ -283,7 +291,8 @@ export function restoreTasksFocus(host: HTMLElement, snapshot: TasksFocusSnapsho
   if (snapshot.kind === "task") {
     const rows = Array.from(host.querySelectorAll<HTMLElement>("[data-task-key]"));
     const row = rows.find((candidate) => candidate.dataset.taskKey === snapshot.key);
-    (row?.querySelector<HTMLElement>(`[data-task-action="${snapshot.action}"]`) ?? row?.querySelector<HTMLElement>("[data-task-action]"))?.focus({ preventScroll: true });
+    const target = row?.querySelector<HTMLElement>(`[data-task-action="${snapshot.action}"]`) ?? row?.querySelector<HTMLElement>("[data-task-action]") ?? host.querySelector<HTMLElement>("[role=tree]");
+    target?.focus({ preventScroll: true });
     return;
   }
   if (snapshot.kind === "tree-node") {

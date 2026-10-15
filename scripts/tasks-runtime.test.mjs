@@ -91,3 +91,34 @@ test("Tasks runtime focus helpers preserve an expanded tree branch across rerend
     globalThis.HTMLInputElement = previous.HTMLInputElement;
   }
 });
+
+test("Tasks runtime focus falls back to the tree when a mode hides the previous task", () => {
+  const previous = { HTMLElement: globalThis.HTMLElement, HTMLInputElement: globalThis.HTMLInputElement };
+  class FakeElement {
+    constructor(key = null) { this.key = key; this.ownerDocument = { activeElement: null }; this.focused = false; }
+    contains(value) { return value === this.ownerDocument.activeElement; }
+    matches() { return false; }
+    closest(selector) { return selector === "[data-task-key]" && this.key ? this : null; }
+    querySelector() { return null; }
+    querySelectorAll() { return []; }
+    focus() { this.focused = true; }
+    get dataset() { return this.key ? { taskKey: this.key, taskAction: "run" } : {}; }
+  }
+  globalThis.HTMLElement = FakeElement;
+  globalThis.HTMLInputElement = class extends FakeElement {};
+  try {
+    const oldTask = new FakeElement("gradle::app:check");
+    const oldHost = new FakeElement();
+    oldHost.ownerDocument.activeElement = oldTask;
+    const snapshot = captureTasksFocus(oldHost);
+    const tree = new FakeElement();
+    const newHost = new FakeElement();
+    newHost.querySelector = (selector) => selector === "[role=tree]" ? tree : null;
+    restoreTasksFocus(newHost, snapshot);
+    assert.deepEqual(snapshot, { kind: "task", key: "gradle::app:check", action: "run" });
+    assert.equal(tree.focused, true);
+  } finally {
+    globalThis.HTMLElement = previous.HTMLElement;
+    globalThis.HTMLInputElement = previous.HTMLInputElement;
+  }
+});

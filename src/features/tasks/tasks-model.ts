@@ -12,12 +12,14 @@ export interface TaskProviderProjection {
 }
 
 export type TasksStatus = "empty" | "unavailable" | "loading" | "error" | "ready";
+export type TaskPresentation = "all-tasks-tree" | "quick-actions-tree";
 
 export interface TasksEntry {
   readonly key: string;
   readonly providerId: string;
   readonly providerLabel: string;
   readonly task: TaskDescriptor;
+  readonly displayLabel?: string;
 }
 
 export interface TasksState {

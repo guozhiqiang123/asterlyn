@@ -13,75 +13,11 @@
   background: var(--bg-panel);
 }
 
-.tasks-tool-with-quick-actions {
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
-}
-
 .tasks-query-label {
   display: block;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
 }
-
-.tasks-quick-actions {
-  min-width: 0;
-  max-height: 188px;
-  overflow: auto;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.tasks-quick-actions h3 {
-  margin: 2px 10px 4px;
-  color: var(--text-faint);
-  font-size: 10px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
-.tasks-quick-action-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 2px;
-  padding: 0 8px;
-}
-
-.tasks-quick-action button {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  gap: 1px;
-  padding: 5px 7px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--text-soft);
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-}
-
-.tasks-quick-action button:hover,
-.tasks-quick-action button:focus-visible {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--text);
-  outline: none;
-}
-
-.tasks-quick-action button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.tasks-quick-action strong,
-.tasks-quick-action small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tasks-quick-action strong { font-size: 11px; font-weight: 600; }
-.tasks-quick-action small { color: var(--text-muted); font-size: 9px; }
 
 .tasks-query-label input {
   box-sizing: border-box;

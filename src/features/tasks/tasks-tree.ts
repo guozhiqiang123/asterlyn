@@ -159,7 +159,7 @@ function tasksBranch(bucket: ProjectBucket, parentKey: string, label: string): T
           type: "task" as const,
           key: `${groupKey}:task:${encode(entry.key)}`,
           parentKey: groupKey,
-          label: taskName(entry.task.id, entry.task.label),
+          label: entry.displayLabel ?? taskName(entry.task.id, entry.task.label),
           entry,
         })),
       };

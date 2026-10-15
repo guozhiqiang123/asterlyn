@@ -15,6 +15,7 @@ import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPla
 import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY } from "../localization/task-execution-copy.ts";
 import { TasksController } from "../features/tasks/tasks-controller.ts";
 import { TasksRuntime } from "../features/tasks/tasks-runtime.ts";
+import type { TaskPresentation } from "../features/tasks/tasks-model.ts";
 import { PluginCompositionRuntime } from "./plugin-runtime.ts";
 import { PluginTaskBusyError } from "./plugin-contribution-runtime.ts";
 import { RecentTaskStore, type RecentTaskStorage } from "../application/tasks/recent-task-store.ts";
@@ -124,11 +125,17 @@ export class PluginTasksRuntime {
   }
 
   loadPluginManagement(): Promise<PluginManagementSnapshot> {
-    return this.plugins.loadManagementCatalog();
+    return this.plugins.loadManagementCatalog().then((snapshot) => {
+      this.applyTaskPresentation(snapshot);
+      return snapshot;
+    });
   }
 
   subscribePluginManagement(listener: (snapshot: PluginManagementSnapshot) => void): () => void {
-    return this.plugins.subscribeManagement(listener);
+    return this.plugins.subscribeManagement((snapshot) => {
+      this.applyTaskPresentation(snapshot);
+      listener(snapshot);
+    });
   }
 
   setPluginEnabled(pluginId: string, enabled: boolean): boolean {
@@ -136,7 +143,11 @@ export class PluginTasksRuntime {
   }
 
   setPluginSetting(pluginId: string, settingId: string, value: PluginSettingValue): boolean {
-    return this.plugins.setPluginSetting(pluginId, settingId, value);
+    const changed = this.plugins.setPluginSetting(pluginId, settingId, value);
+    if (changed && pluginId === "dev.asterlyn.android-gradle" && settingId === "taskPresentation" && isTaskPresentation(value)) {
+      this.tasks.setPresentation(value);
+    }
+    return changed;
   }
 
   /** Settings owners are null, one target, or many targets; many intentionally deep-link nowhere. */
@@ -199,6 +210,11 @@ export class PluginTasksRuntime {
     return this.identity?.root === identity.root && this.identity.generation === identity.generation;
   }
 
+  private applyTaskPresentation(snapshot: PluginManagementSnapshot): void {
+    const setting = snapshot.entries.find((entry) => entry.id === "dev.asterlyn.android-gradle")?.settings.taskPresentation;
+    if (setting !== undefined && isTaskPresentation(setting)) this.tasks.setPresentation(setting);
+  }
+
   private async executeTask(
     identity: PluginWorkspaceIdentity,
     plan: PluginTaskRefreshPlan,
@@ -244,4 +260,8 @@ export class PluginTasksRuntime {
 
 function browserPathPlatform(): "posix" | "windows" {
   return /Windows/i.test(globalThis.navigator?.userAgent ?? "") ? "windows" : "posix";
+}
+
+function isTaskPresentation(value: PluginSettingValue): value is TaskPresentation {
+  return value === "all-tasks-tree" || value === "quick-actions-tree";
 }

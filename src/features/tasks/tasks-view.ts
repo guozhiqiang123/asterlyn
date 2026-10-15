@@ -1,6 +1,6 @@
 import type { AndroidTaskQuickActionKind, TaskProviderUnavailableReason } from "../../application/tasks/task-types.ts";
 import { icon } from "../../icons.ts";
-import type { TasksState } from "./tasks-model.ts";
+import type { TaskPresentation, TasksState } from "./tasks-model.ts";
 import {
   buildTaskTree,
   taskTreeDefaultExpandedKeys,
@@ -81,21 +81,35 @@ export function renderTasksView(
   copy: TasksCopy = DEFAULT_TASKS_COPY,
   visibleLimit = TASKS_RENDER_BATCH_SIZE,
   expandedTreeNodes?: ReadonlySet<string>,
+  presentation: TaskPresentation = "all-tasks-tree",
 ): string {
-  const status = renderStatus(state, copy);
+  const entries = presentationEntries(state, presentation, copy);
+  const projectedState = entries === state.visibleEntries ? state : { ...state, entries, visibleEntries: entries };
+  const status = renderStatus(projectedState, copy);
   const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
-  const quickActions = renderAndroidQuickActions(state, copy);
-  const tree = buildTaskTree(state.visibleEntries, state.identity?.root ?? "", copy.title);
+  const tree = buildTaskTree(entries, state.identity?.root ?? "", presentation === "quick-actions-tree" ? copy.androidQuickActions : copy.title);
   const expanded = expandedTreeNodes ?? taskTreeDefaultExpandedKeys(tree);
-  const forceExpanded = state.query.trim().length > 0;
+  const forceExpanded = presentation === "quick-actions-tree" || state.query.trim().length > 0;
   const projection = taskTreeRows(tree, expanded, visibleLimit, forceExpanded);
-  const list = state.visibleEntries.length > 0
+  const list = entries.length > 0
     ? `<div class="tasks-list tasks-tree" role="tree" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${projection.rows.map((row) => renderTaskTreeRow(row, expanded, forceExpanded, state, copy)).join("")}</div>`
     : "";
   const more = projection.truncated
     ? `<footer class="tasks-list-more" role="status"><span>${escapeHtml(copy.showing(projection.renderedTasks, projection.visibleTasks))}</span><button type="button" data-tasks-action="show-more">${escapeHtml(copy.showMore)}</button></footer>`
     : "";
-  return `<section class="tasks-tool${quickActions ? " tasks-tool-with-quick-actions" : ""}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${quickActions}${query}${status}${list}${more}</section>`;
+  return `<section class="tasks-tool" data-tasks-presentation="${presentation}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${query}${status}${list}${more}</section>`;
+}
+
+function presentationEntries(state: TasksState, presentation: TaskPresentation, copy: TasksCopy): readonly TasksState["visibleEntries"][number][] {
+  if (presentation === "all-tasks-tree") return state.visibleEntries;
+  return state.visibleEntries.filter((entry) => entry.task.runnable && entry.task.androidQuickAction).map((entry) => {
+    const action = entry.task.androidQuickAction;
+    return action ? {
+      ...entry,
+      displayLabel: action.variant,
+      task: { ...entry.task, group: copy.quickActionKinds[action.kind] },
+    } : entry;
+  });
 }
 
 function renderTaskTreeRow(
@@ -121,27 +135,6 @@ function taskBranchRow(
   const detail = node.detail ? `<small>${escapeHtml(node.detail)}</small>` : "";
   const parent = node.parentKey ? ` data-task-tree-parent="${escapeAttribute(node.parentKey)}"` : "";
   return `<div class="tasks-tree-row tasks-tree-branch ${node.kind}" role="treeitem" tabindex="-1" data-task-tree-row data-task-tree-key="${escapeAttribute(node.key)}"${parent} style="--tree-depth:${row.depth}" aria-expanded="${expanded}" aria-selected="false" aria-level="${row.depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}"><button type="button" data-task-tree-toggle="${escapeAttribute(node.key)}" aria-label="${escapeAttribute(expanded ? copy.collapse(node.label) : copy.expand(node.label))}" ${forceExpanded ? "disabled" : ""}><span class="tasks-tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 11)}</span>${icon(glyph, 14)}<span class="tasks-tree-label"><strong>${escapeHtml(node.label)}</strong>${detail}</span></button></div>`;
-}
-
-function renderAndroidQuickActions(state: TasksState, copy: TasksCopy): string {
-  const byKind = new Map<AndroidTaskQuickActionKind, { entry: TasksState["entries"][number]; action: NonNullable<TasksState["entries"][number]["task"]["androidQuickAction"]> }[]>();
-  for (const entry of state.entries) {
-    const action = entry.task.androidQuickAction;
-    if (!action || !entry.task.runnable) continue;
-    const entries = byKind.get(action.kind) ?? [];
-    if (entries.length < 32) entries.push({ entry, action });
-    byKind.set(action.kind, entries);
-  }
-  const actions = (["assemble", "bundle", "install", "uninstall"] as const)
-    .flatMap((kind) => byKind.get(kind) ?? []);
-  if (actions.length === 0) return "";
-  return `<section class="tasks-quick-actions" aria-labelledby="tasks-quick-actions-title"><h3 id="tasks-quick-actions-title">${escapeHtml(copy.androidQuickActions)}</h3><div class="tasks-quick-action-list" role="list">${actions.map(({ entry, action }) => {
-    const kind = copy.quickActionKinds[action.kind];
-    const label = `${kind} ${action.variant}`;
-    const accessible = `${label}, ${copy.quickActionModule}: ${action.module}, ${copy.quickActionVariant}: ${action.variant}`;
-    const active = state.status === "loading" || entry.task.runState === "queued" || entry.task.runState === "running";
-    return `<div class="tasks-quick-action" role="listitem" data-task-key="${escapeAttribute(entry.key)}"><button type="button" data-task-action="run" aria-label="${escapeAttribute(accessible)}" title="${escapeAttribute(entry.task.id)}" ${active ? "disabled" : ""}><strong>${escapeHtml(label)}</strong><small>${escapeHtml(copy.quickActionModule)}: ${escapeHtml(action.module)}</small><small>${escapeHtml(copy.quickActionVariant)}: ${escapeHtml(action.variant)}</small></button></div>`;
-  }).join("")}</div></section>`;
 }
 
 function renderStatus(state: TasksState, copy: TasksCopy): string {
