@@ -4,6 +4,7 @@ import type {
   PluginSettingDescriptor,
   PluginSettingValue,
 } from "../../application/plugins/plugin-types.ts";
+import { renderSelectControl } from "../../shared/select-control.ts";
 
 export interface PluginManagementCopy {
   readonly locale: string;
@@ -68,7 +69,8 @@ function renderWorkspaceTrust(entry: PluginManagementEntry, copy: PluginManageme
   const state = entry.workspaceTrust ?? "unavailable";
   const disabled = state === "unavailable" || state === "loading" || state === "error";
   const id = `plugin-authorization-${entry.id}-${descriptor.id}`;
-  return `<div class="plugin-setting-row" data-plugin-authorization-row="${escapeAttribute(descriptor.id)}"><div><strong>${escapeHtml(label)}</strong>${description ? `<span>${escapeHtml(description)}</span>` : ""}</div><div class="plugin-setting-control"><label class="plugin-setting-toggle"><input id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-workspace-trust="${escapeAttribute(descriptor.id)}" type="checkbox" role="switch" ${state === "trusted" ? "checked" : ""} ${disabled ? "disabled" : ""} ${state === "loading" ? 'aria-busy="true"' : ""} aria-label="${escapeAttribute(label)}" /><span>${escapeHtml(label)}</span></label></div></div>`;
+  const control = renderToggle(`<input id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-workspace-trust="${escapeAttribute(descriptor.id)}" type="checkbox" role="switch" ${state === "trusted" ? "checked" : ""} ${disabled ? "disabled" : ""} ${state === "loading" ? 'aria-busy="true"' : ""} aria-label="${escapeAttribute(label)}" />`);
+  return `<div class="plugin-setting-row" data-plugin-authorization-row="${escapeAttribute(descriptor.id)}"><div><strong>${escapeHtml(label)}</strong>${description ? `<span>${escapeHtml(description)}</span>` : ""}</div><div class="plugin-setting-control">${control}</div></div>`;
 }
 
 const MAX_DIAGNOSTICS = 4;
@@ -93,7 +95,7 @@ function renderSetting(
     : "";
   const detail = description ? `<span>${escapeHtml(description)}</span>` : "";
   const control = descriptor.kind === "boolean"
-    ? `<label class="plugin-setting-toggle"><input id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="${escapeAttribute(descriptor.id)}" type="checkbox" role="switch" ${value === true ? "checked" : ""} aria-label="${escapeAttribute(label)}" /><span>${escapeHtml(label)}</span></label>`
+    ? renderToggle(`<input id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="${escapeAttribute(descriptor.id)}" type="checkbox" role="switch" ${value === true ? "checked" : ""} aria-label="${escapeAttribute(label)}" />`)
     : renderEnum(id, entry, descriptor, value, label, copy);
   return `<div class="plugin-setting-row" data-plugin-setting-row="${escapeAttribute(descriptor.id)}"><div><strong>${escapeHtml(label)}</strong>${detail}</div><div class="plugin-setting-control">${control}</div></div>`;
 }
@@ -108,7 +110,11 @@ function renderEnum(
 ): string {
   const options = descriptor.options ?? [];
   if (options.length === 0) return `<span class="plugin-management-invalid-setting" role="alert">${escapeHtml(copy.invalidSetting)}</span>`;
-  return `<select id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="${escapeAttribute(descriptor.id)}" aria-label="${escapeAttribute(label)}">${options.map((option) => `<option value="${escapeAttribute(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(pluginMessage(entry, copy, option.labelKey))}</option>`).join("")}</select>`;
+  return renderSelectControl(`<select id="${escapeAttribute(id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="${escapeAttribute(descriptor.id)}" aria-label="${escapeAttribute(label)}">${options.map((option) => `<option value="${escapeAttribute(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(pluginMessage(entry, copy, option.labelKey))}</option>`).join("")}</select>`);
+}
+
+function renderToggle(input: string): string {
+  return `<label class="plugin-setting-toggle">${input}<span class="plugin-setting-switch-track" aria-hidden="true"></span></label>`;
 }
 
 function pluginMessage(entry: PluginManagementEntry, copy: PluginManagementCopy, key: string): string {

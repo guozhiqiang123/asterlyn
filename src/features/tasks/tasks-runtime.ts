@@ -41,13 +41,18 @@ export class TasksRuntime {
     this.controller = controller;
     this.options = options;
     this.release = controller.subscribe((change) => {
+      if (change.reason === "selection") {
+        const host = this.host();
+        if (host) syncTasksSelection(host, change.state);
+        return;
+      }
       if (change.reason === "workspace") {
         this.treeDisclosures = initialDisclosures();
         this.treeExpansionTouched = initialTouched();
       }
       if (change.reason === "providers") this.reconcileExpandedTree(change.state);
       if (change.reason === "workspace" || change.reason === "providers" || change.reason === "query") this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
-      this.render();
+      this.render(change.reason === "providers");
     });
   }
 
@@ -62,15 +67,17 @@ export class TasksRuntime {
     this.render();
   }
 
-  render(): void {
+  render(preserveViewport = true): void {
     const host = this.host();
     if (!host) return;
     const focus = captureTasksFocus(host);
+    const viewport = preserveViewport ? captureTasksViewport(host) : null;
     const copy = this.options.copy?.();
     host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.disclosure().snapshot.exceptions, this.presentation, this.viewMode);
     syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
+    restoreTasksViewport(host, viewport);
   }
 
   setPresentation(presentation: TaskPresentation): boolean {
@@ -287,6 +294,33 @@ export function syncTasksHeaderRefresh(root: ParentNode, state: TasksState, copy
   if (!copy) return;
   headerRefresh.setAttribute("aria-label", copy.refresh);
   headerRefresh.title = copy.refresh;
+}
+
+export interface TasksViewportSnapshot {
+  readonly left: number;
+  readonly top: number;
+}
+
+/** Preserve the user's place when provider/run-state updates replace the rendered task tree. */
+export function captureTasksViewport(host: ParentNode): TasksViewportSnapshot | null {
+  const list = host.querySelector<HTMLElement>(".tasks-list");
+  return list ? { left: list.scrollLeft, top: list.scrollTop } : null;
+}
+
+export function restoreTasksViewport(host: ParentNode, snapshot: TasksViewportSnapshot | null): void {
+  if (!snapshot) return;
+  const list = host.querySelector<HTMLElement>(".tasks-list");
+  if (!list) return;
+  list.scrollLeft = snapshot.left;
+  list.scrollTop = snapshot.top;
+}
+
+/** Selection is presentational state; update rows in place so a click never resets the scroll container. */
+export function syncTasksSelection(host: ParentNode, state: Pick<TasksState, "visibleEntries" | "selectedIndex">): void {
+  const selectedKey = state.visibleEntries[state.selectedIndex]?.key;
+  host.querySelectorAll<HTMLElement>("[data-task-key]").forEach((row) => {
+    row.setAttribute("aria-selected", String(row.dataset.taskKey === selectedKey));
+  });
 }
 
 export type TasksFocusSnapshot =

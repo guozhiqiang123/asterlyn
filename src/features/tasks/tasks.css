@@ -178,17 +178,19 @@
 .task-execution-remember {
   align-items: flex-start;
   display: flex;
-  gap: var(--space-2);
-  margin: var(--space-3) 0;
+  gap: 12px;
+  margin: 12px 0;
 }
 
 .task-execution-remember input {
-  margin-top: 0.2rem;
+  flex: 0 0 auto;
+  margin: 3px 0 0;
 }
 
-.task-execution-remember span {
+.task-execution-remember > span {
   display: grid;
-  gap: var(--space-1);
+  min-width: 0;
+  gap: 4px;
 }
 
 .task-execution-remember small {

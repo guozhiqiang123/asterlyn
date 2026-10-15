@@ -35,8 +35,10 @@ test("plugin management renders localized metadata and declarative settings with
   assert.match(html, /data-plugin-setting="enabled"/);
   assert.match(html, /data-plugin-setting="taskPresentation"/);
   assert.match(html, /value="quick-actions-tree" selected/);
+  assert.match(html, /class="select-control"/u);
   assert.match(html, /data-plugin-workspace-trust="workspaceTrust"/u);
   assert.match(html, /role="switch"[^>]*checked/u);
+  assert.match(html, /class="plugin-setting-switch-track" aria-hidden="true"/u);
   assert.match(html, /Trust this workspace/u);
   assert.doesNotMatch(html, /<script|on[a-z]+=|<iframe/i);
 });

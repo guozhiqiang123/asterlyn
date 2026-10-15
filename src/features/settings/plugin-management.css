@@ -45,8 +45,7 @@
   line-height: 1.5;
 }
 
-.plugin-management-enabled,
-.plugin-setting-toggle {
+.plugin-management-enabled {
   display: inline-flex;
   align-items: center;
   flex: none;
@@ -56,25 +55,42 @@
   font-weight: 620;
 }
 
-.plugin-management-enabled input,
-.plugin-setting-toggle input {
+.plugin-management-enabled input {
   accent-color: var(--focus-ring);
 }
 
-.plugin-setting-toggle input {
+.plugin-setting-toggle {
   position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  cursor: pointer;
+}
+
+.plugin-setting-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  opacity: 0;
+}
+
+.plugin-setting-switch-track {
+  position: relative;
+  display: block;
   width: 34px;
   height: 19px;
-  margin: 0;
-  appearance: none;
+  box-sizing: border-box;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface-inset);
-  cursor: pointer;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.plugin-setting-toggle input::after {
+.plugin-setting-switch-track::after {
   position: absolute;
   top: 2px;
   left: 2px;
@@ -86,18 +102,21 @@
   transition: transform 120ms ease, background-color 120ms ease;
 }
 
-.plugin-setting-toggle input:checked {
+.plugin-setting-toggle input:checked + .plugin-setting-switch-track {
   border-color: var(--focus-ring);
   background: var(--focus-ring);
 }
 
-.plugin-setting-toggle input:checked::after {
+.plugin-setting-toggle input:checked + .plugin-setting-switch-track::after {
   background: white;
   transform: translateX(15px);
 }
 
-.plugin-setting-toggle input:disabled {
+.plugin-setting-toggle:has(input:disabled) {
   cursor: default;
+}
+
+.plugin-setting-toggle input:disabled + .plugin-setting-switch-track {
   opacity: 0.55;
 }
 
@@ -204,19 +223,13 @@
   justify-content: flex-end;
 }
 
-.plugin-setting-control select {
+.plugin-setting-control .select-control {
   min-width: 190px;
-  min-height: 32px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--bg-deep);
-  color: var(--text);
-  font: inherit;
+  height: 32px;
 }
 
-.plugin-setting-control select:focus,
 .plugin-management-enabled input:focus-visible,
-.plugin-setting-toggle input:focus-visible {
+.plugin-setting-toggle input:focus-visible + .plugin-setting-switch-track {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

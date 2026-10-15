@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { captureTasksFocus, restoreTasksFocus, syncTasksHeaderRefresh } from "../src/features/tasks/tasks-runtime.ts";
+import {
+  captureTasksFocus,
+  captureTasksViewport,
+  restoreTasksFocus,
+  restoreTasksViewport,
+  syncTasksHeaderRefresh,
+  syncTasksSelection,
+} from "../src/features/tasks/tasks-runtime.ts";
 
 test("Tasks runtime keeps the shared title-bar refresh action in sync", () => {
   const attributes = new Map();
@@ -19,6 +26,30 @@ test("Tasks runtime keeps the shared title-bar refresh action in sync", () => {
 
   syncTasksHeaderRefresh(root, { status: "ready" });
   assert.equal(button.disabled, false);
+});
+
+test("Tasks runtime updates selection without replacing rows or changing the viewport", () => {
+  const rows = [
+    { dataset: { taskKey: "gradle::app:a" }, attributes: new Map(), setAttribute(name, value) { this.attributes.set(name, value); } },
+    { dataset: { taskKey: "gradle::app:b" }, attributes: new Map(), setAttribute(name, value) { this.attributes.set(name, value); } },
+  ];
+  const host = { querySelectorAll: () => rows };
+  syncTasksSelection(host, {
+    visibleEntries: [{ key: "gradle::app:a" }, { key: "gradle::app:b" }],
+    selectedIndex: 1,
+  });
+  assert.equal(rows[0].attributes.get("aria-selected"), "false");
+  assert.equal(rows[1].attributes.get("aria-selected"), "true");
+});
+
+test("Tasks runtime restores the task-list scroll position after provider updates", () => {
+  const previousList = { scrollLeft: 7, scrollTop: 1260 };
+  const nextList = { scrollLeft: 0, scrollTop: 0 };
+  const snapshot = captureTasksViewport({ querySelector: () => previousList });
+  restoreTasksViewport({ querySelector: () => nextList }, snapshot);
+  assert.deepEqual(snapshot, { left: 7, top: 1260 });
+  assert.equal(nextList.scrollLeft, 7);
+  assert.equal(nextList.scrollTop, 1260);
 });
 
 test("Tasks runtime focus helpers preserve query selection range across rerender", () => {

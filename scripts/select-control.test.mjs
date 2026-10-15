@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import { renderSelectControl } from "../src/shared/select-control.ts";
@@ -63,17 +63,14 @@ test("theme-owned popup keyboard navigation skips disabled choices", () => {
 });
 
 test("every application select is installed through the shared visual control", async () => {
-  const paths = [
-    "src/shell/shell-view.ts",
-    "src/features/settings/settings-view.ts",
-    "src/features/files-editor/workspace-navigation-view.ts",
-    "src/features/git-operations/git-operation-view.ts",
-    "src/features/remote-push/remote-push-view.ts",
-  ];
+  const sourceRoot = new URL("../src/", import.meta.url);
+  const paths = (await readdir(sourceRoot, { recursive: true }))
+    .filter((path) => path.endsWith(".ts"));
 
   for (const path of paths) {
-    const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
+    const source = await readFile(new URL(path, sourceRoot), "utf8");
     const selects = source.match(/<select\b/g)?.length ?? 0;
+    if (selects === 0) continue;
     const controls = source.match(/renderSelectControl\(`/g)?.length ?? 0;
     assert.equal(controls, selects, `${path} contains an unwrapped select`);
   }
