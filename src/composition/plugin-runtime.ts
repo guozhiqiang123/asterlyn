@@ -12,6 +12,7 @@ import {
   type PluginWorkspaceIdentity,
   type PluginManagementSnapshot,
   type PluginSettingValue,
+  type PluginSettingsTargetResolution,
 } from "../application/plugins/index.ts";
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
@@ -73,6 +74,10 @@ export class PluginCompositionRuntime {
     });
     this.loadPlugins = options.loadPlugins ?? (async () =>
       (await import("../plugins/bundled-plugins.ts")).BUNDLED_PLUGINS);
+  }
+
+  pluginSettingsTargets(): PluginSettingsTargetResolution {
+    return this.contributions.pluginSettingsTargets();
   }
 
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {

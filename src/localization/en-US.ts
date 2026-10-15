@@ -44,7 +44,7 @@ export const EN_US: LocaleCatalog = {
     pushBranch: "Push current branch",
     cancelRemote: "Cancel remote operation",
     refreshProject: "Refresh project",
-    openSettings: "Open settings",
+    openSettings: "Open settings", pluginSettings: "Open plugin settings",
     settings: "Settings",
     windowControls: "Window controls",
     minimizeWindow: "Minimize window",

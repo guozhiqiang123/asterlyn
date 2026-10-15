@@ -218,11 +218,15 @@
   margin-left: auto;
 }
 
-.terminal-header-actions:not(.hidden) + .git-operation-open.hidden + .tasks-header-refresh.hidden + .bottom-tool-hide {
+.terminal-header-actions:not(.hidden) + .git-operation-open.hidden + .tasks-header-refresh.hidden + .plugin-settings-open.hidden + .bottom-tool-hide {
   margin-left: 0;
 }
 
-.tasks-header-refresh:not(.hidden) + .bottom-tool-hide {
+.tasks-header-refresh:not(.hidden) {
+  margin-left: auto;
+}
+
+.plugin-settings-open:not(.hidden) + .bottom-tool-hide {
   margin-left: 0;
 }
 

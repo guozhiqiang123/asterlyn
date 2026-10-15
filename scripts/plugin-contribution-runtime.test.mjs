@@ -40,6 +40,28 @@ test("plugin commands and providers are projected and removed with activation", 
   adapter.dispose();
 });
 
+test("provider settings owners are host-qualified and resolve null, one, or many", async () => {
+  const runtime = new PluginRuntime();
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined, replaceProviders: () => undefined, reportError: (error) => { throw error; },
+  });
+  adapter.activateWorkspace(identity);
+  assert.equal(adapter.pluginSettingsTargets(), null);
+  await runtime.activate(identity, {}, [plugin("android", (context) => {
+    context.contribute({ kind: "provider", id: "tasks", label: "Gradle", settingsFocus: "taskPresentation", snapshot: () => ({ status: "ready", tasks: [] }) });
+    context.contribute({ kind: "provider", id: "quick-actions", label: "Quick actions", settingsFocus: "taskPresentation", snapshot: () => ({ status: "ready", tasks: [] }) });
+  })]);
+  assert.deepEqual(adapter.pluginSettingsTargets(), { pluginId: "android", focus: "taskPresentation" });
+  await runtime.activate(identity, {}, [
+    plugin("android", (context) => context.contribute({ kind: "provider", id: "tasks", label: "Gradle", settingsFocus: "taskPresentation", snapshot: () => ({ status: "ready", tasks: [] }) })),
+    plugin("other", (context) => context.contribute({ kind: "provider", id: "tasks", label: "Other", settingsFocus: "general", snapshot: () => ({ status: "ready", tasks: [] }) })),
+  ]);
+  assert.deepEqual(adapter.pluginSettingsTargets(), [
+    { pluginId: "android", focus: "taskPresentation" }, { pluginId: "other", focus: "general" },
+  ]);
+  adapter.dispose();
+});
+
 test("provider snapshot failures are isolated as error projections", async () => {
   const runtime = new PluginRuntime();
   const errors = [];

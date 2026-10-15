@@ -43,7 +43,7 @@ export interface ShellCopy {
   pushBranch: string;
   cancelRemote: string;
   refreshProject: string;
-  openSettings: string;
+  openSettings: string; pluginSettings: string;
   settings: string;
   windowControls: string;
   minimizeWindow: string;

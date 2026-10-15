@@ -2,6 +2,7 @@ import type { CommandDescriptor } from "../application/commands/command-service.
 import type {
   PluginManagementSnapshot,
   PluginSettingValue,
+  PluginSettingsTargetResolution,
   PluginWorkspaceIdentity,
 } from "../application/plugins/index.ts";
 import type { TasksCopy } from "../localization/catalog.ts";
@@ -136,6 +137,11 @@ export class PluginTasksRuntime {
 
   setPluginSetting(pluginId: string, settingId: string, value: PluginSettingValue): boolean {
     return this.plugins.setPluginSetting(pluginId, settingId, value);
+  }
+
+  /** Settings owners are null, one target, or many targets; many intentionally deep-link nowhere. */
+  pluginSettingsTargets(): PluginSettingsTargetResolution {
+    return this.plugins.pluginSettingsTargets();
   }
 
   dispose(): void {

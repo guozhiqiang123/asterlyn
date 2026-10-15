@@ -73,6 +73,7 @@ export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
       kind: "provider",
       id: "gradle-tasks",
       label: "Gradle",
+      settingsFocus: "taskPresentation",
       snapshot: () => snapshot,
       refresh: () => {
         const retainedTasks = snapshot.tasks;

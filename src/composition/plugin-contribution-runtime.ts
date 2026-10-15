@@ -10,6 +10,8 @@ import type {
   PluginTaskRefreshPlan,
   PluginTaskRunPlan,
   PluginWorkspaceIdentity,
+  PluginSettingsTarget,
+  PluginSettingsTargetResolution,
   RegisteredPluginContribution,
 } from "../application/plugins/index.ts";
 import type { TaskProviderSnapshot } from "../application/tasks/index.ts";
@@ -59,6 +61,21 @@ export class PluginContributionRuntime {
     this.registry = registry;
     this.options = options;
     this.releaseRegistry = registry.subscribe(() => this.reconcile());
+  }
+
+  /** Resolves settings owners from currently active provider contributions. */
+  pluginSettingsTargets(): PluginSettingsTargetResolution {
+    const targets = [...new Map([...this.providers.values()]
+      .map(({ contribution }): PluginSettingsTarget | null => contribution.settingsFocus === undefined ? null : {
+        pluginId: contribution.pluginId,
+        focus: contribution.settingsFocus,
+      })
+      .filter((target): target is PluginSettingsTarget => target !== null)
+      .map((target) => [`${target.pluginId}.${target.focus ?? ""}`, target] as const)).values()]
+      .sort((left, right) => `${left.pluginId}.${left.focus ?? ""}`.localeCompare(`${right.pluginId}.${right.focus ?? ""}`));
+    if (targets.length === 0) return null;
+    if (targets.length === 1) return targets[0] ?? null;
+    return targets;
   }
 
   activateWorkspace(identity: PluginWorkspaceIdentity): void {

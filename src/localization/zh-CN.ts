@@ -25,7 +25,7 @@ export const ZH_CN = {
     browserDemo: "浏览器演示", search: "搜索", searchFilesAndCommands: "搜索文件和命令",
     remoteActions: "当前分支远程操作", remoteForActions: "当前分支操作使用的远程仓库", noRemote: "无远程仓库",
     updateBranch: "更新当前分支", pushBranch: "推送当前分支", cancelRemote: "取消远程操作",
-    refreshProject: "刷新项目", openSettings: "打开设置", settings: "设置",
+    refreshProject: "刷新项目", openSettings: "打开设置", pluginSettings: "打开插件设置", settings: "设置",
     windowControls: "窗口控制", minimizeWindow: "最小化窗口", minimize: "最小化", maximizeWindow: "最大化窗口", maximize: "最大化",
     restoreWindow: "还原窗口", restore: "还原", closeWindow: "关闭窗口", closeLastProjectWindowTitle: "关闭 Asterlyn？", closeLastProjectWindowMessage: "这是最后一个项目窗口。关闭后将退出 Asterlyn。", toolWindows: "工具窗口",
     version: (name, version) => `${name} 版本 ${version}`, files: "文件", branches: "分支", changes: "更改", stash: "贮藏", tasks: "任务", terminal: "终端",

@@ -22,6 +22,15 @@ export interface PluginSettingDescriptor {
   readonly options?: readonly PluginSettingOption[];
 }
 
+/** A host-owned deep link into a plugin's settings. */
+export interface PluginSettingsTarget {
+  readonly pluginId: string;
+  readonly focus?: string;
+}
+
+/** Provider-owned settings targets resolved by the host registry. */
+export type PluginSettingsTargetResolution = PluginSettingsTarget | readonly PluginSettingsTarget[] | null;
+
 /** Immutable, host-rendered metadata for a bundled integration. */
 export interface BundledPluginManifest {
   readonly id: string;
@@ -74,6 +83,8 @@ export interface PluginProviderContribution {
   readonly kind: "provider";
   readonly id: string;
   readonly label: string;
+  /** Stable settings entry ID; pluginId is always supplied by the host. */
+  readonly settingsFocus?: string;
   readonly snapshot: () => TaskProviderSnapshot;
   readonly subscribe?: (listener: () => void) => Disposable;
   readonly refresh?: () => PluginTaskRefreshPlan | null | Promise<PluginTaskRefreshPlan | null>;

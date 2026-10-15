@@ -422,7 +422,7 @@ export class AsterlynApp {
   private commandSurfaceResultsFrame: number | null = null;
   private readonly workspaceSearchDebouncer = new WorkspaceSearchDebouncer();
   private readonly findResultsRuntime: FindResultsRuntime; private readonly replacementPresentationRuntime: WorkspaceReplacementPresentationRuntime;
-  private readonly bottomToolRuntime: BottomToolRuntime; private readonly pluginTasksRuntime: PluginTasksRuntime;
+  private readonly bottomToolRuntime: BottomToolRuntime; private readonly pluginTasksRuntime: PluginTasksRuntime; private settingsReturnFocus: string | null = null;
   private repositoryChooserOpen = false;
   private repositoryTargetPath: string | null = null;
   private recentRepositoryValidationGeneration = 0;
@@ -670,7 +670,7 @@ export class AsterlynApp {
         this.renderGitDetailPane(snapshot);
       },
       renderStash: () => this.stashRuntime.render(),
-      renderFind: () => this.findResultsRuntime.render(), renderReplace: () => this.replacementPresentationRuntime.renderTool(), renderTasks: () => this.pluginTasksRuntime.render(),
+      renderFind: () => this.findResultsRuntime.render(), renderReplace: () => this.replacementPresentationRuntime.renderTool(), renderTasks: () => this.pluginTasksRuntime.render(), pluginSettingsTargets: () => this.pluginTasksRuntime.pluginSettingsTargets(), openPluginSettings: (target) => { const route = target && "pluginId" in target ? { section: "plugins" as const, pluginId: target.pluginId, focus: target.focus } : { section: "plugins" as const }; this.settingsReturnFocus = "#plugin-settings-open"; this.openSettings(route); },
     });
     this.historyReadRuntime = new GitHistoryReadRuntime(
       {
@@ -2067,7 +2067,7 @@ export class AsterlynApp {
     this.applyWorkbenchLayout(false);
     window.requestAnimationFrame(() => {
       this.editorSurface.requestMeasure();
-      this.query<HTMLButtonElement>("#settings-button").focus();
+      const origin = this.settingsReturnFocus ? this.root.querySelector<HTMLButtonElement>(this.settingsReturnFocus) : null; (origin && !origin.classList.contains("hidden") ? origin : this.query<HTMLButtonElement>("#settings-button")).focus(); this.settingsReturnFocus = null;
     });
   }
 

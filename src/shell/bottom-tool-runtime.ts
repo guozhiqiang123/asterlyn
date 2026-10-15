@@ -1,6 +1,7 @@
 import type { NavigationCopy, ReplacementCopy, ShellCopy, TasksCopy } from "../localization/catalog.ts";
 import type { BottomTool } from "./layout-state.ts";
 import { bottomToolPresentation } from "./bottom-tool-presentation.ts";
+import type { PluginSettingsTargetResolution } from "../application/plugins/plugin-types.ts";
 
 export interface BottomToolRuntimeOptions {
   readonly tool: () => BottomTool;
@@ -17,13 +18,23 @@ export interface BottomToolRuntimeOptions {
   readonly renderFind: () => void;
   readonly renderReplace: () => void;
   readonly renderTasks: () => void;
+  readonly pluginSettingsTargets?: () => PluginSettingsTargetResolution;
+  readonly openPluginSettings?: (target: PluginSettingsTargetResolution) => void;
 }
 
 export class BottomToolRuntime {
+  private readonly root: HTMLElement;
+  private readonly options: BottomToolRuntimeOptions;
+
   constructor(
-    private readonly root: HTMLElement,
-    private readonly options: BottomToolRuntimeOptions,
-  ) {}
+    root: HTMLElement,
+    options: BottomToolRuntimeOptions,
+  ) {
+    this.root = root;
+    this.options = options;
+  }
+
+  private settingsButtonBound = false;
 
   render(): void {
     const tool = this.options.tool();
@@ -40,6 +51,20 @@ export class BottomToolRuntime {
     tasksRefresh.classList.toggle("hidden", !presentation.showTasks);
     tasksRefresh.setAttribute("aria-label", this.options.tasksCopy().refresh);
     tasksRefresh.title = this.options.tasksCopy().refresh;
+    const pluginSettings = this.query<HTMLButtonElement>("#plugin-settings-open");
+    const target = presentation.showTasks ? (this.options.pluginSettingsTargets?.() ?? null) : null;
+    const hasOwner = target !== null && (!Array.isArray(target) || target.length > 0);
+    pluginSettings.classList.toggle("hidden", !presentation.showTasks || !hasOwner || !this.options.openPluginSettings);
+    const settingsLabel = this.options.shellCopy().pluginSettings;
+    pluginSettings.setAttribute("aria-label", settingsLabel);
+    pluginSettings.title = settingsLabel;
+    if (!this.settingsButtonBound) {
+      this.settingsButtonBound = true;
+      pluginSettings.addEventListener("click", () => {
+        const current = this.options.pluginSettingsTargets?.() ?? null;
+        if (current !== null && (!Array.isArray(current) || current.length > 0)) this.options.openPluginSettings?.(current);
+      });
+    }
     this.query("#terminal-header-actions").classList.toggle("hidden", !presentation.showTerminal);
     this.query("#git-tool-grid").classList.toggle("hidden", !presentation.showGit);
     this.query("#stash-tool-grid").classList.toggle("hidden", !presentation.showStash);

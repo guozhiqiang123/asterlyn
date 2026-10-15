@@ -411,6 +411,7 @@ function validateContribution(contribution: PluginContribution): void {
     }
     if (contribution.kind === "provider" &&
       (!contribution.label.trim() || typeof contribution.snapshot !== "function" ||
+        (contribution.settingsFocus !== undefined && !SETTING_IDENTIFIER.test(contribution.settingsFocus)) ||
         (contribution.subscribe !== undefined && typeof contribution.subscribe !== "function") ||
         (contribution.refresh !== undefined && typeof contribution.refresh !== "function") ||
         (contribution.run !== undefined && typeof contribution.run !== "function"))) {
