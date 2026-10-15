@@ -7,7 +7,7 @@ import {
   createSilentPluginPreferenceSync,
 } from "../src/application/plugins/index.ts";
 import { PluginCompositionRuntime } from "../src/composition/plugin-runtime.ts";
-import { ANDROID_GRADLE_PLUGIN } from "../src/plugins/android-gradle/plugin.ts";
+import { ANDROID_GRADLE_PLUGIN } from "@asterlyn/plugin-android-gradle";
 
 class MemoryStorage {
   value = null;

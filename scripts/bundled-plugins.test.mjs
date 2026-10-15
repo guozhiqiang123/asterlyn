@@ -5,7 +5,6 @@ import { PluginRuntime } from "../src/application/plugins/index.ts";
 import {
   ANDROID_GRADLE_PLUGIN_ID,
   BUNDLED_PLUGINS,
-  detectAndroidGradlePluginEvidence,
 } from "../src/plugins/index.ts";
 
 const identity = { root: "/workspace/android", generation: 3 };
@@ -47,22 +46,6 @@ test("the bundled Android plugin activates from bounded catalog evidence with a 
   provider.refresh().apply({ status: "succeeded", outputs: [], truncated: true, error: null });
   assert.match(provider.snapshot().error, /truncated/u);
   assert.deepEqual(provider.snapshot().tasks.map((task) => task.id), [":assembleDebug", ":installDebug"]);
-  assert.deepEqual(detectAndroidGradlePluginEvidence({ identity, evidence }), {
-    kind: "android-gradle-evidence",
-    workspaceRoot: "/workspace/android",
-    generation: 3,
-    platform: "posix",
-    bounded: true,
-    catalogTruncated: false,
-    gradle: true,
-    android: true,
-    wrapper: "gradlew",
-    evidence: [
-      "app/src/main/AndroidManifest.xml",
-      "gradlew",
-      "settings.gradle.kts",
-    ],
-  });
 });
 
 test("the bundled Android plugin stays inactive for plain and malformed catalogs", async () => {

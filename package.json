@@ -18,6 +18,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@asterlyn/plugin-android-gradle": "file:vendor/plugins/asterlyn-plugin-android-gradle-0.1.0.tgz",
+    "@asterlyn/plugin-sdk": "file:packages/plugin-sdk",
     "@codemirror/commands": "^6.11.0",
     "@codemirror/language": "^6.12.4",
     "@codemirror/language-data": "^6.5.2",

@@ -127,3 +127,15 @@ Each phase records focused SDK/adapter tests, frontend type checking, host Rust 
 contracts change, dependency-boundary checks, clean-checkout reproducibility, startup/lazy-load
 measurements, plugin failure containment, and rollback evidence. The first independent repository
 also records standalone test results and the exact artifact consumed by the host.
+
+## Implementation status
+
+- SDK0 completed in `eaf73a6`; the versioned contract and fail-closed host adapter landed.
+- SDK1 completed in `7a4c9ba`; bounded hierarchical collections gained deterministic validation.
+- SDK2 completed in `0f65f28`; Android/Gradle lost every deep import into host implementation.
+- SDK3 completed in sibling repository `asterlyn-plugin-android-gradle`; source commit `27ff403`
+  builds and tests independently against the pinned SDK package.
+- SDK4 completed with Android/Gradle `0.1.0`; the host vendors the reviewed tarball by exact SHA-256
+  and package-lock integrity, and no longer contains the plugin implementation or plugin-owned tests.
+- SDK5 remains intentionally open until a second first-party plugin exists; host-internal tree
+  surfaces can migrate to `HierarchicalCollection` without reopening the Android plugin boundary.
