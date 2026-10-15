@@ -113,7 +113,7 @@ test("controller preserves only bounded known task run states", () => {
   assert.equal(controller.state.entries[1].task.runState, undefined);
 });
 
-test("controller normalizes cache metadata and disables stale cached tasks", () => {
+test("controller normalizes cache metadata, retains stale tasks, and disables execution", () => {
   const controller = new TasksController();
   controller.activate(identity);
   controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: {
@@ -121,6 +121,7 @@ test("controller normalizes cache metadata and disables stale cached tasks", () 
     tasks: [task("assemble", "assembleDebug")],
   } }]);
   assert.deepEqual(controller.state.providers[0].snapshot.cache, { status: "stale", staleReason: "fingerprint-mismatch", restoredTaskCount: 1 });
+  assert.deepEqual(controller.state.entries.map((entry) => entry.task.id), ["assemble"]);
   assert.equal(controller.state.entries[0].task.runnable, false);
   controller.acceptProviders(identity, [{ id: "gradle", label: "Gradle", snapshot: {
     status: "ready", cache: { status: "stale", staleReason: "invented", restoredTaskCount: 999999 },
