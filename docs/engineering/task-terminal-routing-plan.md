@@ -2,7 +2,7 @@
 
 Date: 2026-10-15
 
-Status: accepted for implementation
+Status: implemented
 
 Governing decision: [ADR-0026](../architecture/decisions/0026-task-activation-and-terminal-routing.md)
 

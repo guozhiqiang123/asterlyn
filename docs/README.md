@@ -97,6 +97,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-10-15-task-terminal-routing.md`](benchmarks/2026-10-15-task-terminal-routing.md) — selection-first task activation, native reviewed execution in the host Terminal, FilesRecovery evidence, resource gates, and recoverable local installation.
 - [`benchmarks/2026-10-15-plugin-task-authorization.md`](benchmarks/2026-10-15-plugin-task-authorization.md) — plugin-scoped durable workspace trust, exact remembered Gradle task reviews, revocation, bounds, and recoverable local installation.
 - [`benchmarks/2026-10-15-host-presentation-system.md`](benchmarks/2026-10-15-host-presentation-system.md) — governed semantic host UI primitives, Tasks and execution-dialog adoption, resource bounds, and recoverable local installation.
 - [`benchmarks/2026-10-15-hierarchical-collection-android-tasks.md`](benchmarks/2026-10-15-hierarchical-collection-android-tasks.md) — host-owned tree/flat presentation, Android plugin semantic collections, FilesRecovery evidence, and recoverable local installation.
