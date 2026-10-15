@@ -20,7 +20,7 @@ test("composition lazily loads plugins, deduplicates evidence, and rejects stale
     reportError: (error) => { throw error; },
     loadPlugins: async () => {
       loads += 1;
-      return [{ id: "fixture", version: "1.0.0", matches: () => true, activate: () => { activations += 1; } }];
+      return [fixturePlugin("fixture", () => { activations += 1; })];
     },
   });
   await runtime.activateWorkspace(identity);
@@ -41,11 +41,7 @@ test("plugin-scoped evidence keys preserve activation across unrelated generated
     replaceProviders: () => undefined,
     reportDiagnostic: () => undefined,
     reportError: (error) => { throw error; },
-    loadPlugins: async () => [{
-      id: "fixture", version: "1.0.0", matches: () => true,
-      evidenceKey: ({ evidence: snapshot }) => JSON.stringify(snapshot.files.filter((file) => file.workspacePath === "settings.gradle")),
-      activate: () => { activations += 1; },
-    }],
+    loadPlugins: async () => [fixturePlugin("fixture", () => { activations += 1; }, ({ evidence: snapshot }) => JSON.stringify(snapshot.files.filter((file) => file.workspacePath === "settings.gradle")))],
   });
   await runtime.activateWorkspace(identity);
   await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
@@ -53,3 +49,20 @@ test("plugin-scoped evidence keys preserve activation across unrelated generated
   assert.equal(activations, 1);
   runtime.dispose();
 });
+
+function fixturePlugin(id, activate, evidenceKey) {
+  return {
+    id,
+    version: "1.0.0",
+    manifest: {
+      id,
+      version: "1.0.0",
+      nameKey: `plugins.${id}.name`,
+      descriptionKey: `plugins.${id}.description`,
+      settings: [],
+    },
+    matches: () => true,
+    ...(evidenceKey ? { evidenceKey } : {}),
+    activate,
+  };
+}

@@ -6,6 +6,31 @@ export interface PluginWorkspaceIdentity {
   readonly generation: number;
 }
 
+export type PluginSettingValue = string | boolean;
+
+export interface PluginSettingOption {
+  readonly value: string;
+  readonly labelKey: string;
+}
+
+export interface PluginSettingDescriptor {
+  readonly id: string;
+  readonly kind: "enum" | "boolean";
+  readonly labelKey: string;
+  readonly descriptionKey?: string;
+  readonly defaultValue: PluginSettingValue;
+  readonly options?: readonly PluginSettingOption[];
+}
+
+/** Immutable, host-rendered metadata for a bundled integration. */
+export interface BundledPluginManifest {
+  readonly id: string;
+  readonly version: string;
+  readonly nameKey: string;
+  readonly descriptionKey: string;
+  readonly settings: readonly PluginSettingDescriptor[];
+}
+
 export interface PluginEvidenceSnapshot {
   readonly [key: string]: unknown;
 }
@@ -93,6 +118,7 @@ export interface PluginMatchContext {
 export interface BundledPlugin {
   readonly id: string;
   readonly version: string;
+  readonly manifest: BundledPluginManifest;
   readonly matches: (context: PluginMatchContext) => boolean;
   readonly evidenceKey?: (context: PluginMatchContext) => string;
   readonly activate: (context: PluginActivationContext) => void | Disposable | Promise<void | Disposable>;
@@ -109,4 +135,22 @@ export interface PluginActivationReport {
   readonly activated: readonly string[];
   readonly skipped: readonly string[];
   readonly diagnostics: readonly PluginDiagnostic[];
+}
+
+export interface PluginManagementEntry {
+  readonly id: string;
+  readonly version: string;
+  readonly nameKey: string;
+  readonly descriptionKey: string;
+  readonly enabled: boolean;
+  readonly matched: boolean;
+  readonly active: boolean;
+  readonly settingDescriptors: readonly PluginSettingDescriptor[];
+  readonly settings: Readonly<Record<string, PluginSettingValue>>;
+  readonly diagnostics: readonly PluginDiagnostic[];
+}
+
+export interface PluginManagementSnapshot {
+  readonly schemaVersion: 1;
+  readonly entries: readonly PluginManagementEntry[];
 }

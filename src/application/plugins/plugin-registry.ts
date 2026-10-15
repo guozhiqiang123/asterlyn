@@ -11,6 +11,7 @@ import type {
 } from "./plugin-types.ts";
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+const SETTING_IDENTIFIER = /^[a-z][a-zA-Z0-9]*(?:[.-][a-zA-Z0-9]+)*$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export function validatePluginId(id: string): void {
@@ -368,6 +369,29 @@ class CompositeActivation implements Disposable {
 function validatePlugin(plugin: BundledPlugin): void {
   validatePluginId(plugin.id);
   validatePluginVersion(plugin.version);
+  if (plugin.manifest.id !== plugin.id || plugin.manifest.version !== plugin.version ||
+    !plugin.manifest.nameKey.trim() || !plugin.manifest.descriptionKey.trim() ||
+    !Array.isArray(plugin.manifest.settings)) {
+    throw new Error(`Invalid plugin manifest: ${plugin.id}`);
+  }
+  const settingIds = new Set<string>();
+  for (const setting of plugin.manifest.settings) {
+    if (!SETTING_IDENTIFIER.test(setting.id) || settingIds.has(setting.id) ||
+      !setting.labelKey.trim() || (setting.descriptionKey !== undefined && !setting.descriptionKey.trim()) ||
+      (setting.kind !== "enum" && setting.kind !== "boolean")) {
+      throw new Error(`Invalid plugin setting: ${plugin.id}.${setting.id}`);
+    }
+    settingIds.add(setting.id);
+    if (setting.kind === "enum" &&
+      (!Array.isArray(setting.options) || setting.options.length === 0 ||
+        typeof setting.defaultValue !== "string" ||
+        !setting.options.some((option: { readonly value: string }) => option.value === setting.defaultValue))) {
+      throw new Error(`Invalid plugin setting options: ${plugin.id}.${setting.id}`);
+    }
+    if (setting.kind === "boolean" && typeof setting.defaultValue !== "boolean") {
+      throw new Error(`Invalid plugin setting default: ${plugin.id}.${setting.id}`);
+    }
+  }
   if (typeof plugin.matches !== "function" || typeof plugin.activate !== "function" ||
     (plugin.evidenceKey !== undefined && typeof plugin.evidenceKey !== "function")) {
     throw new Error(`Invalid plugin descriptor: ${plugin.id}`);

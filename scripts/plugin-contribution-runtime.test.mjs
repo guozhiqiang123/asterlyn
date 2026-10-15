@@ -367,5 +367,17 @@ test("workspace replacement aborts an active task and drops its stale terminal r
 });
 
 function plugin(id, activate) {
-  return { id, version: "1.0.0", matches: () => true, activate };
+  return {
+    id,
+    version: "1.0.0",
+    manifest: {
+      id,
+      version: "1.0.0",
+      nameKey: `plugins.${id}.name`,
+      descriptionKey: `plugins.${id}.description`,
+      settings: [],
+    },
+    matches: () => true,
+    activate,
+  };
 }

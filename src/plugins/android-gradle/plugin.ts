@@ -31,6 +31,23 @@ export const ANDROID_GRADLE_PLUGIN_ID = "dev.asterlyn.android-gradle";
 export const ANDROID_GRADLE_PLUGIN: BundledPlugin = Object.freeze({
   id: ANDROID_GRADLE_PLUGIN_ID,
   version: "0.1.0",
+  manifest: Object.freeze({
+    id: ANDROID_GRADLE_PLUGIN_ID,
+    version: "0.1.0",
+    nameKey: "plugins.androidGradle.name",
+    descriptionKey: "plugins.androidGradle.description",
+    settings: Object.freeze([{
+      id: "taskPresentation",
+      kind: "enum",
+      labelKey: "plugins.androidGradle.taskPresentation.label",
+      descriptionKey: "plugins.androidGradle.taskPresentation.description",
+      defaultValue: "all-tasks-tree",
+      options: Object.freeze([
+        { value: "all-tasks-tree", labelKey: "plugins.androidGradle.taskPresentation.allTasksTree" },
+        { value: "quick-actions-tree", labelKey: "plugins.androidGradle.taskPresentation.quickActionsTree" },
+      ]),
+    }] as const),
+  }),
   matches: (context: PluginMatchContext) => detectAndroidGradlePluginEvidence(context)?.android === true,
   evidenceKey: (context: PluginMatchContext) => {
     const evidence = detectAndroidGradlePluginEvidence(context);

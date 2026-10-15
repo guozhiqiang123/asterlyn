@@ -194,5 +194,17 @@ test("no-match activation leaves the registry empty", async () => {
 });
 
 function plugin(id, activate) {
-  return { id, version: "1.0.0", matches: () => true, activate };
+  return {
+    id,
+    version: "1.0.0",
+    manifest: {
+      id,
+      version: "1.0.0",
+      nameKey: `plugins.${id}.name`,
+      descriptionKey: `plugins.${id}.description`,
+      settings: [],
+    },
+    matches: () => true,
+    activate,
+  };
 }

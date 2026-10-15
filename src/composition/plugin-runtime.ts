@@ -1,9 +1,17 @@
 import {
   PluginRuntime,
+  PluginManagementRuntime,
+  PluginPreferenceStore,
+  createBrowserPluginPreferenceStorage,
+  createBrowserPluginPreferenceSync,
+  createSilentPluginPreferenceSync,
+  type PluginPreferenceStorage,
   type BundledPlugin,
   type PluginDiagnostic,
   type PluginWorkspaceCatalogEvidence,
   type PluginWorkspaceIdentity,
+  type PluginManagementSnapshot,
+  type PluginSettingValue,
 } from "../application/plugins/index.ts";
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
@@ -30,6 +38,7 @@ export interface PluginCompositionRuntimeOptions {
   ) => Promise<PluginTaskExecutionResult>;
   readonly providerRefreshTitle?: (providerLabel: string) => string;
   readonly loadPlugins?: () => Promise<readonly BundledPlugin[]>;
+  readonly preferenceStore?: PluginPreferenceStore;
 }
 
 /** Window-scoped orchestration. Bundled plugin code stays behind a lazy project-evidence gate. */
@@ -37,14 +46,31 @@ export class PluginCompositionRuntime {
   private readonly runtime: PluginRuntime;
   private readonly contributions: PluginContributionRuntime;
   private readonly loadPlugins: () => Promise<readonly BundledPlugin[]>;
+  readonly preferences: PluginPreferenceStore;
+  readonly management: PluginManagementRuntime;
   private identity: PluginWorkspaceIdentity | null = null;
+  private evidence: PluginWorkspaceCatalogEvidence | null = null;
   private evidenceKey: string | null = null;
   private pluginsPromise: Promise<readonly BundledPlugin[]> | null = null;
+  private preferenceTransition: Promise<void> = Promise.resolve();
+  private readonly releasePreferences: () => void;
   private disposed = false;
 
   constructor(options: PluginCompositionRuntimeOptions) {
     this.runtime = new PluginRuntime(undefined, options.reportDiagnostic);
     this.contributions = new PluginContributionRuntime(this.runtime.contributions, options);
+    this.preferences = options.preferenceStore ?? new PluginPreferenceStore(
+      defaultPluginPreferenceStorage(),
+      [],
+      defaultPluginPreferenceSync(),
+    );
+    this.management = new PluginManagementRuntime(this.preferences);
+    this.releasePreferences = this.preferences.subscribe((change) => {
+      if (sameEnabledPreferences(change.previous.enabled, change.preferences.enabled)) return;
+      this.preferenceTransition = this.preferenceTransition
+        .then(() => this.reactivateCurrent(), () => this.reactivateCurrent())
+        .catch(options.reportError);
+    });
     this.loadPlugins = options.loadPlugins ?? (async () =>
       (await import("../plugins/bundled-plugins.ts")).BUNDLED_PLUGINS);
   }
@@ -52,8 +78,11 @@ export class PluginCompositionRuntime {
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {
     if (this.disposed) return;
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
+    this.evidence = null;
     this.evidenceKey = null;
     this.contributions.activateWorkspace(this.identity);
+    this.management.setMatched([]);
+    this.management.setActivation(null);
     await this.runtime.deactivate();
   }
 
@@ -64,10 +93,39 @@ export class PluginCompositionRuntime {
     if (!this.matches(identity) || this.disposed) return;
     const plugins = await this.bundledPlugins();
     if (!this.matches(identity) || this.disposed) return;
+    this.preferences.setManifests(plugins.map((plugin) => plugin.manifest), false);
+    this.management.setCatalog(plugins);
+    this.evidence = evidence;
     const evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
     if (evidenceKey === this.evidenceKey) return;
-    await this.runtime.activate(identity, evidence, plugins);
+    this.management.setMatched(matchingPluginIds(identity, evidence, plugins));
+    const enabled = plugins.filter((plugin) => this.preferences.isEnabled(plugin.id));
+    const report = await this.runtime.activate(identity, evidence, enabled);
+    this.management.setActivation(report);
     if (this.matches(identity) && !this.disposed) this.evidenceKey = evidenceKey;
+  }
+
+  async loadManagementCatalog(): Promise<PluginManagementSnapshot> {
+    if (this.disposed) return this.management.snapshot;
+    const plugins = await this.bundledPlugins();
+    if (this.disposed) return this.management.snapshot;
+    this.preferences.setManifests(plugins.map((plugin) => plugin.manifest), false);
+    this.management.setCatalog(plugins);
+    return this.management.snapshot;
+  }
+
+  get managementSnapshot(): PluginManagementSnapshot { return this.management.snapshot; }
+
+  subscribeManagement(listener: (snapshot: PluginManagementSnapshot) => void): () => void {
+    return this.management.subscribe(listener);
+  }
+
+  setPluginEnabled(pluginId: string, enabled: boolean): boolean {
+    return this.preferences.setEnabled(pluginId, enabled);
+  }
+
+  setPluginSetting(pluginId: string, settingId: string, value: PluginSettingValue): boolean {
+    return this.preferences.setSetting(pluginId, settingId, value);
   }
 
   refreshProviders(identity: PluginWorkspaceIdentity): Promise<void> {
@@ -87,7 +145,11 @@ export class PluginCompositionRuntime {
     if (this.disposed) return;
     this.disposed = true;
     this.identity = null;
+    this.evidence = null;
     this.evidenceKey = null;
+    this.releasePreferences();
+    this.management.dispose();
+    this.preferences.dispose();
     this.contributions.dispose();
     void this.runtime.dispose();
   }
@@ -100,6 +162,61 @@ export class PluginCompositionRuntime {
     this.pluginsPromise ??= this.loadPlugins();
     return this.pluginsPromise;
   }
+
+  private async reactivateCurrent(): Promise<void> {
+    const identity = this.identity;
+    const evidence = this.evidence;
+    if (!identity || !evidence || this.disposed) return;
+    const plugins = await this.bundledPlugins();
+    if (!this.matches(identity) || this.disposed) return;
+    this.management.setCatalog(plugins);
+    this.management.setMatched(matchingPluginIds(identity, evidence, plugins));
+    const report = await this.runtime.activate(
+      identity,
+      evidence,
+      plugins.filter((plugin) => this.preferences.isEnabled(plugin.id)),
+    );
+    if (this.matches(identity) && !this.disposed) {
+      this.evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
+      this.management.setActivation(report);
+    }
+  }
+}
+
+function matchingPluginIds(
+  identity: PluginWorkspaceIdentity,
+  evidence: PluginWorkspaceCatalogEvidence,
+  plugins: readonly BundledPlugin[],
+): readonly string[] {
+  return plugins.flatMap((plugin) => {
+    try { return plugin.matches({ identity, evidence }) ? [plugin.id] : []; }
+    catch { return []; }
+  });
+}
+
+function sameEnabledPreferences(
+  previous: Readonly<Record<string, boolean>>,
+  next: Readonly<Record<string, boolean>>,
+): boolean {
+  const previousIds = Object.keys(previous);
+  const nextIds = Object.keys(next);
+  if (previousIds.length !== nextIds.length) return false;
+  return previousIds.every((id) => previous[id] === next[id]);
+}
+
+function defaultPluginPreferenceStorage(): PluginPreferenceStorage {
+  if (typeof window !== "undefined") {
+    try { return createBrowserPluginPreferenceStorage(window); } catch { /* use memory */ }
+  }
+  let value: string | null = null;
+  return { getItem: () => value, setItem: (_key, next) => { value = next; } };
+}
+
+function defaultPluginPreferenceSync() {
+  if (typeof window !== "undefined") {
+    try { return createBrowserPluginPreferenceSync(window); } catch { /* use silent sync */ }
+  }
+  return createSilentPluginPreferenceSync();
 }
 
 function catalogEvidenceKey(evidence: PluginWorkspaceCatalogEvidence): string {
