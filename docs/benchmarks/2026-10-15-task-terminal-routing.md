@@ -105,3 +105,48 @@ Regression evidence:
   `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261015-174858-task-runtime-fixes/Asterlyn.app`.
 - The installed application was restarted with FilesRecovery; process ID at acceptance time was
   `85216`.
+
+## Device authorization and completed-session follow-up
+
+A real `install*` failure initially reported the attached Samsung device as ADB `UNAUTHORIZED` and
+therefore produced `No online devices found`. Physical USB presence alone is not an authorized ADB
+transport, and a Gradle invocation that has already failed cannot resume after the authorization
+prompt is accepted. After the same device reported the online `device` state, the exact task from
+the failed Terminal transcript completed without changing its executable or arguments:
+
+```text
+./gradlew :app:installPr051826BillingremovedFsiremovedLauncherDebug --console=plain --no-daemon --no-scan
+Installing APK 'app-pr051826-billingremoved-fsiremoved-launcher-debug.apk' on 'SM-G9730 - 10'
+Installed on 1 device.
+BUILD SUCCESSFUL in 26s
+```
+
+Together with the failed host transcript, this isolates the gap to device authorization: the host
+run reached the exact Gradle task and ADB transport, while the same reviewed executable and arguments
+succeeded after ADB reported the device online. It validates the environment and command shape; the
+freshly installed application remains open on FilesRecovery for the final integrated UI retry. A
+device that becomes authorized after an earlier failure still requires an explicit retry; the
+retained transcript and host failure notification remain the diagnostic output for that failed run.
+
+Terminal task presentation now has three explicit modes: interactive shell, read-only running task,
+and read-only completed task. Success, failure, cancellation, and crash disable xterm stdin, stop
+cursor blinking, remove the live cursor layer, disable cancellation, and enable New Session while
+retaining the transcript in the open bottom panel. Switching workspace, replacing the task, or
+starting a new interactive shell clears that presentation state without leaving stale input state.
+
+Follow-up verification:
+
+- Terminal-focused tests: 38 passed, including completed-session input and cursor state.
+- Frontend script suite: 1,161 passed, 0 failed.
+- `npm run check` and `npm run build`: passed; startup chunk 499,890 bytes, below the 500,000-byte
+  architecture limit.
+- `asterlyn-git` Rust tests: 149 passed, 0 failed.
+- Installed executable SHA-256:
+  `ba178692987f8377302379cd1b64df1062defbc38ac1da1abea677d25e3c09ad`.
+- Acceptance archive: `/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn-0.1.8-local-20261015-194723-task-session-end.app.zip`,
+  9,864,634 bytes, SHA-256
+  `32ada260a9761d27a63ce49a3e214c825617800ce4bc6bb8dd941ccd0f3ba1ff`.
+- Previous installed application:
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261015-194723-task-session-end/Asterlyn.app`.
+- The installed and backup bundles passed strict deep signature verification. The installed app was
+  restarted with FilesRecovery as process `20336`.

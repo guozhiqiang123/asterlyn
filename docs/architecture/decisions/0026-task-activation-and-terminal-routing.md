@@ -52,7 +52,9 @@ Terminal.
 3. The Terminal shows a safely formatted, display-only command summary and streams stdout/stderr in
    native event order. Display quoting is never reused for execution.
 4. The session remains visible after success, failure, cancellation, or crash so its transcript and
-   terminal status can be inspected. “Reveal output” reopens that same task session.
+   terminal status can be inspected. The terminal transition immediately disables stdin, stops the
+   live cursor, and presents the retained transcript as completed; it does not leave an interactive
+   terminal session running. “Reveal output” reopens that same completed task presentation.
 5. While a task is active, the Terminal stop action delegates to the existing native cancellation
    path. Starting an interactive shell explicitly ends the retained task presentation.
 

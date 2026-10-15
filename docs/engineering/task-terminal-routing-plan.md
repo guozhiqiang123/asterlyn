@@ -78,7 +78,7 @@ files.
 | Arguments contain spaces/metacharacters | Native argument vector is unchanged; display quoting is inert |
 | stdout/stderr arrive early | Bounded transcript replays after lazy Terminal mount without loss/duplication |
 | Cancel from Terminal | Existing native task is cancelled; no shell or second task is spawned |
-| Task finishes/fails/crashes | Transcript and terminal status remain revealable |
+| Task finishes/fails/crashes | Transcript and terminal status remain revealable, stdin is disabled, the live cursor is removed, and no task session remains active |
 | Start a new interactive session | Retained task presentation is cleared and one supervised shell starts |
 | Rapid task/session replacement | Stale frames cannot mutate the current Terminal session |
 | Tree/flat, filter, load more | Selection and scroll remain stable through activation lifecycle |
