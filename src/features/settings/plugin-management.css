@@ -1,0 +1,243 @@
+.plugin-management {
+  width: min(980px, 100%);
+}
+
+.plugin-management-list {
+  display: grid;
+  gap: 12px;
+}
+
+.plugin-management-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-chrome);
+}
+
+.plugin-management-card:focus-within,
+.plugin-management-card:focus-visible,
+.plugin-management-card.settings-route-target {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+  outline: none;
+}
+
+.plugin-management-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.plugin-management-card-header h3 {
+  margin: 0 0 5px;
+  font-size: calc(var(--ui-font-size, 13px) + 3px);
+}
+
+.plugin-management-card-header p,
+.plugin-management-no-settings,
+.plugin-management-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+  line-height: 1.5;
+}
+
+.plugin-management-enabled,
+.plugin-setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 7px;
+  color: var(--text-soft);
+  font-size: var(--ui-font-size, 13px);
+  font-weight: 620;
+}
+
+.plugin-management-enabled input,
+.plugin-setting-toggle input {
+  accent-color: var(--focus-ring);
+}
+
+.plugin-setting-toggle input {
+  position: relative;
+  width: 34px;
+  height: 19px;
+  margin: 0;
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-inset);
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.plugin-setting-toggle input::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.plugin-setting-toggle input:checked {
+  border-color: var(--focus-ring);
+  background: var(--focus-ring);
+}
+
+.plugin-setting-toggle input:checked::after {
+  background: white;
+  transform: translateX(15px);
+}
+
+.plugin-setting-toggle input:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.plugin-management-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+}
+
+.plugin-management-meta > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.plugin-management-meta code {
+  margin-left: 4px;
+  color: var(--text-soft);
+  font-family: var(--editor-font-family);
+}
+
+.plugin-management-status-enabled[data-plugin-status="enabled"],
+.plugin-management-status-active[data-plugin-status="active"] {
+  color: var(--success-text);
+}
+
+.plugin-management-status-enabled[data-plugin-status="disabled"],
+.plugin-management-status-active[data-plugin-status="inactive"] {
+  color: var(--text-muted);
+}
+
+.plugin-management-status-match[data-plugin-status="matched"] {
+  color: var(--info-text);
+}
+
+.plugin-management-diagnostics {
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger-text);
+  background: var(--surface-inset);
+  color: var(--danger-text);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+}
+
+.plugin-management-diagnostics strong {
+  font-weight: 650;
+}
+
+.plugin-management-diagnostics ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.plugin-management-settings {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.plugin-management-settings h4 {
+  margin: 14px 0 0;
+  color: var(--text-soft);
+  font-size: var(--ui-font-size, 13px);
+}
+
+.plugin-setting-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, auto);
+  align-items: center;
+  gap: 24px;
+  min-height: 62px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.plugin-setting-row:last-child {
+  border-bottom: 0;
+}
+
+.plugin-setting-row > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin-setting-row strong {
+  font-size: var(--ui-font-size, 13px);
+}
+
+.plugin-setting-row > div:first-child > span {
+  color: var(--text-muted);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+  line-height: 1.45;
+}
+
+.plugin-setting-control {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.plugin-setting-control select {
+  min-width: 190px;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-deep);
+  color: var(--text);
+  font: inherit;
+}
+
+.plugin-setting-control select:focus,
+.plugin-management-enabled input:focus-visible,
+.plugin-setting-toggle input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.plugin-management-invalid-setting {
+  color: var(--danger-text);
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+}
+
+@media (max-width: 700px) {
+  .plugin-management-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .plugin-setting-row {
+    grid-template-columns: 1fr;
+  }
+
+  .plugin-management-enabled,
+  .plugin-setting-control {
+    justify-content: flex-start;
+  }
+}

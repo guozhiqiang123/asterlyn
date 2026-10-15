@@ -9,6 +9,7 @@ import "./shared/overlays.css";
 import "./shared/context-menu/context-menu.css";
 import "./shell/shell.css";
 import "./features/settings/settings.css";
+import "./features/settings/plugin-management.css";
 import "./features/changes-commit/changes-commit.css";
 import "./features/files-editor/project-files.css";
 import "./features/files-editor/welcome.css";
