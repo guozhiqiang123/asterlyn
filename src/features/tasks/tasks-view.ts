@@ -1,6 +1,7 @@
 import type { AndroidTaskQuickActionKind, TaskProviderStaleReason, TaskProviderUnavailableReason } from "../../application/tasks/task-types.ts";
 import type { TaskProviderCacheMetadata } from "../../application/tasks/task-types.ts";
 import { icon } from "../../icons.ts";
+import { renderHostInlineNotice, renderHostPanelState, type HostAction } from "../../presentation/host-presentation.ts";
 import type { CollectionViewMode } from "../../presentation/hierarchical-collection.ts";
 import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 import {
@@ -97,7 +98,7 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   quickActionVariant: "Variant",
   cacheValidating: "Verifying project configuration…",
   cacheRestored: (count: number) => `${count} task${count === 1 ? "" : "s"} restored from cache`,
-  cacheStale: "Showing the last discovered task list; refresh to verify it.",
+  cacheStale: "The saved task list may be out of date.",
   cacheStaleReasons: {
     "fingerprint-mismatch": "Project configuration changed.", "watcher-change": "A watched project file changed.",
     "overflow-recovery": "File watching recovered incompletely.", "cache-miss": "No cached task list is available yet.", "cache-expired": "The cached task list has expired.",
@@ -201,45 +202,63 @@ function taskBranchRow(
 }
 
 function renderStatus(state: TasksState, copy: TasksCopy): string {
-  if (state.status === "empty") return message(copy.empty);
+  const hasVisibleContent = state.visibleEntries.length > 0;
+  if (state.status === "empty") return renderHostPanelState({ kind: "empty", title: copy.empty });
   if (state.status === "unavailable") {
     const reason = state.unavailableReason as TaskProviderUnavailableReason | null;
-    return message(reason && reason in copy.unavailableReasons
-      ? copy.unavailableReasons[reason]
-      : copy.unavailable);
+    return renderHostPanelState({
+      kind: reason === "workspace-untrusted" ? "permission-required" : "empty",
+      title: reason && reason in copy.unavailableReasons ? copy.unavailableReasons[reason] : copy.unavailable,
+    });
   }
-  if (state.status === "loading") return renderLoading(state, copy);
-  if (state.status === "error") return renderError(state, copy);
+  if (state.status === "loading") return renderLoading(state, copy, hasVisibleContent);
+  if (state.status === "error") return renderError(state, copy, hasVisibleContent);
   const cache = cacheMetadata(state);
   if (cache?.status === "validating") {
-    return `<div class="tasks-cache-state" data-tasks-cache-state="validating" role="status" aria-live="polite"><strong>${escapeHtml(copy.cacheValidating)}</strong></div>`;
+    return hasVisibleContent
+      ? renderHostInlineNotice({ kind: "info", title: copy.cacheValidating, loading: true, attributes: { "data-tasks-cache-state": "validating" } })
+      : renderHostPanelState({ kind: "loading", title: copy.cacheValidating, attributes: { "data-tasks-cache-state": "validating" } });
   }
   if (cache?.status === "stale") {
     const reason = cache.staleReason ? (copy.cacheStaleReasons[cache.staleReason] ?? copy.cacheStale) : copy.cacheStale;
-    return `<div class="tasks-cache-state" data-tasks-cache-state="stale" role="status"><strong>${escapeHtml(copy.cacheStale)}</strong><small>${escapeHtml(reason)}</small><button type="button" data-tasks-action="refresh">${escapeHtml(copy.refreshStale)}</button></div>`;
+    const action = taskHostAction("refresh", copy.refreshStale, "recommended");
+    return hasVisibleContent
+      ? renderHostInlineNotice({ kind: "warning", title: copy.cacheStale, detail: reason, actions: [action], attributes: { "data-tasks-cache-state": "stale" } })
+      : renderHostPanelState({ kind: "stale", title: copy.cacheStale, detail: reason, actions: [action], attributes: { "data-tasks-cache-state": "stale" } });
   }
   if (cache?.status === "ready" && cache.restoredTaskCount !== undefined) {
-    return `<p class="tasks-discovery-count" data-tasks-cache-state="ready" role="status">${escapeHtml(copy.cacheRestored(cache.restoredTaskCount))}</p>${state.visibleEntries.length === 0 ? message(copy.noResults) : ""}`;
+    return hasVisibleContent
+      ? `<p class="tasks-discovery-count" data-tasks-cache-state="ready" role="status">${escapeHtml(copy.cacheRestored(cache.restoredTaskCount))}</p>`
+      : renderHostPanelState({ kind: "empty", title: copy.noResults, detail: copy.cacheRestored(cache.restoredTaskCount), attributes: { "data-tasks-cache-state": "ready" } });
   }
-  if (state.status === "ready") return `<p class="tasks-discovery-count" role="status">${escapeHtml(copy.discovered(state.entries.length))}</p>${state.visibleEntries.length === 0 ? message(copy.noResults) : ""}`;
-  if (state.visibleEntries.length === 0) return message(copy.noResults);
+  if (state.status === "ready") return hasVisibleContent
+    ? `<p class="tasks-discovery-count" role="status">${escapeHtml(copy.discovered(state.entries.length))}</p>`
+    : renderHostPanelState({ kind: "empty", title: copy.noResults });
+  if (!hasVisibleContent) return renderHostPanelState({ kind: "empty", title: copy.noResults });
   return "";
 }
 
-function renderLoading(state: TasksState, copy: TasksCopy): string {
+function renderLoading(state: TasksState, copy: TasksCopy, hasVisibleContent: boolean): string {
   const providers = state.providers
     .filter((provider) => provider.snapshot.status === "loading")
     .map((provider) => provider.label);
-  const detail = providers.length > 0
-    ? providers.map((provider) => `<small>${escapeHtml(copy.providerLoading(provider))}</small>`).join("")
-    : `<small>${escapeHtml(copy.loading)}</small>`;
-  return `<div class="tasks-discovery-state tasks-discovery-loading" data-tasks-discovery-state="loading" role="status" aria-live="polite"><span class="tasks-spinner" aria-hidden="true"></span><span class="tasks-discovery-copy"><strong>${escapeHtml(copy.loading)}</strong>${detail}</span><button type="button" data-tasks-action="cancel">${escapeHtml(copy.cancelDiscovery)}</button></div>`;
+  const detail = providers.length > 0 ? providers.map(copy.providerLoading).join(" ") : undefined;
+  const action = taskHostAction("cancel", copy.cancelDiscovery, "neutral");
+  return hasVisibleContent
+    ? renderHostInlineNotice({ kind: "info", title: copy.loading, detail, loading: true, actions: [action], attributes: { "data-tasks-discovery-state": "loading" } })
+    : renderHostPanelState({ kind: "loading", title: copy.loading, detail, actions: [action], attributes: { "data-tasks-discovery-state": "loading" } });
 }
 
-function renderError(state: TasksState, copy: TasksCopy): string {
-  const detail = state.error ? `<small>${escapeHtml(state.error)}</small>` : "";
-  const retained = state.entries.length > 0 ? `<small>${escapeHtml(copy.retainedTasks(state.entries.length))}</small>` : "";
-  return `<div class="tasks-discovery-state tasks-discovery-error" data-tasks-discovery-state="error" role="alert"><span class="tasks-discovery-copy"><strong>${escapeHtml(copy.error)}</strong>${detail}${retained}</span><button type="button" data-tasks-action="refresh">${escapeHtml(copy.retryDiscovery)}</button></div>`;
+function renderError(state: TasksState, copy: TasksCopy, hasVisibleContent: boolean): string {
+  const detail = [state.error, hasVisibleContent ? copy.retainedTasks(state.visibleEntries.length) : null].filter(Boolean).join(" ") || undefined;
+  const action = taskHostAction("refresh", copy.retryDiscovery, "recommended");
+  return hasVisibleContent
+    ? renderHostInlineNotice({ kind: "error", title: copy.error, detail, actions: [action], attributes: { "data-tasks-discovery-state": "error" } })
+    : renderHostPanelState({ kind: "error", title: copy.error, detail, actions: [action], attributes: { "data-tasks-discovery-state": "error" } });
+}
+
+function taskHostAction(id: string, label: string, intent: HostAction["intent"]): HostAction {
+  return { id, label, intent, attributes: { "data-tasks-action": id } };
 }
 
 function cacheMetadata(state: TasksState): TaskProviderCacheMetadata | null {
@@ -285,6 +304,5 @@ function taskRow(
   };
 }
 
-function message(text: string): string { return `<p class="tasks-message" role="status">${escapeHtml(text)}</p>`; }
 function escapeHtml(value: string): string { return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character); }
 function escapeAttribute(value: string): string { return escapeHtml(value).replaceAll("`", "&#96;"); }

@@ -13,6 +13,11 @@
   background: var(--bg-panel);
 }
 
+.tasks-tool > .host-panel-state {
+  min-height: 0;
+  grid-row: 2 / -1;
+}
+
 .tasks-query-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -344,67 +349,8 @@
   color: var(--text);
 }
 
-.tasks-message {
-  margin: 22px 14px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.tasks-discovery-state {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 10px;
-  padding: 9px 10px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface-inset);
-}
-
-.tasks-discovery-copy {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  gap: 2px;
-}
-
-.tasks-discovery-copy strong,
-.tasks-discovery-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tasks-discovery-copy strong { color: var(--text); font-size: 11px; }
-.tasks-discovery-copy small { color: var(--text-muted); font-size: 10px; }
-.tasks-discovery-error { border-color: var(--danger, var(--border-strong)); }
-.tasks-discovery-state button {
-  flex: 0 0 auto;
-  padding: 4px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  color: var(--text);
-  background: var(--bg-elevated);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10px;
-}
-.tasks-discovery-state button:hover,
-.tasks-discovery-state button:focus-visible { border-color: var(--accent); }
 .tasks-discovery-count {
   margin: 8px 10px 2px;
   color: var(--text-muted);
   font-size: 10px;
 }
-.tasks-spinner {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: tasks-spin 0.8s linear infinite;
-}
-@keyframes tasks-spin { to { transform: rotate(360deg); } }

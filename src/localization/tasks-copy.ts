@@ -39,7 +39,7 @@ export const EN_US_TASKS_COPY: TasksCopy = Object.freeze({
   quickActionVariant: "Variant",
   cacheValidating: "Verifying project configuration…",
   cacheRestored: (count: number) => `${count} task${count === 1 ? "" : "s"} restored from cache`,
-  cacheStale: "Showing the last discovered task list; refresh to verify it.",
+  cacheStale: "The saved task list may be out of date.",
   cacheStaleReasons: {
     "fingerprint-mismatch": "Project configuration changed.",
     "watcher-change": "A watched project file changed.",
@@ -94,7 +94,7 @@ export const ZH_CN_TASKS_COPY: TasksCopy = Object.freeze({
   quickActionVariant: "变体",
   cacheValidating: "正在验证项目配置…",
   cacheRestored: (count: number) => `已从缓存恢复 ${count} 个任务`,
-  cacheStale: "当前显示上次发现的任务列表；请刷新以验证。",
+  cacheStale: "已保存的任务列表可能已过期。",
   cacheStaleReasons: {
     "fingerprint-mismatch": "项目配置已变化。",
     "watcher-change": "受监视的项目文件已变化。",

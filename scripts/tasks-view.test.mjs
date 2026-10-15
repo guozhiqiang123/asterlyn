@@ -71,7 +71,8 @@ test("loading discovery renders provider progress and a cancel action", () => {
   assert.match(html, /data-tasks-discovery-state="loading"/);
   assert.match(html, /Discovering Gradle/);
   assert.match(html, /data-tasks-action="cancel"/);
-  assert.match(html, /tasks-spinner/);
+  assert.match(html, /host-state-spinner/);
+  assert.match(html, /host-panel-state-loading/);
   assert.match(html, /aria-busy="true"/);
   assert.doesNotMatch(html, /class="tasks-header"/);
 });
@@ -142,7 +143,22 @@ test("cache validation and stale states retain the tree but never enable Run", (
   const stale = renderTasksView({ ...base, providers: [{ ...base.providers[0], snapshot: { ...base.providers[0].snapshot, cache: { status: "stale", staleReason: "fingerprint-mismatch" } } }] }, copy, 250, expanded([entry]));
   assert.match(stale, /Configuration changed/u);
   assert.match(stale, /data-tasks-action="refresh"/u);
+  assert.match(stale, /host-inline-notice-warning/u);
+  assert.match(stale, /class="primary-button"/u);
   assert.match(stale, /data-task-key="p:cached"/u);
+});
+
+test("stale cache without visible tasks renders a centered primary refresh state", () => {
+  const html = renderTasksView({
+    identity: { root: "/project", generation: 1 }, status: "ready",
+    providers: [{ id: "p", label: "P", snapshot: { status: "ready", tasks: [], cache: { status: "stale", staleReason: "cache-miss" } } }],
+    entries: [], visibleEntries: [], query: "", selectedIndex: 0, error: null, unavailableReason: null,
+  }, copy);
+  assert.match(html, /host-panel-state-stale/u);
+  assert.match(html, /host-panel-state-actions/u);
+  assert.match(html, /class="primary-button"/u);
+  assert.match(html, /data-tasks-action="refresh"/u);
+  assert.doesNotMatch(html, /data-task-key=/u);
 });
 
 test("failed refresh explains that the previous task tree is retained", () => {
@@ -150,5 +166,6 @@ test("failed refresh explains that the previous task tree is retained", () => {
   const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "error", providers: [{ id: "p", label: "P", snapshot: { status: "error", tasks: [entry.task], error: "Gradle failed" } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: "Gradle failed", unavailableReason: null }, copy, 250, expanded([entry]));
   assert.match(html, /Gradle failed/u);
   assert.match(html, /Previous 1/u);
+  assert.match(html, /host-inline-notice-error/u);
   assert.match(html, /data-task-key="p:cached"/u);
 });
