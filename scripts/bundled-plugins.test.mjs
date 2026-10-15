@@ -11,7 +11,7 @@ import {
 const identity = { root: "/workspace/android", generation: 3 };
 
 test("the bundled Android plugin activates from bounded catalog evidence with a host-reviewed refresh", async () => {
-  const runtime = new PluginRuntime();
+  const runtime = runtimeWithCache();
   const evidence = {
     kind: "workspace-catalog",
     platform: "posix",
@@ -27,18 +27,16 @@ test("the bundled Android plugin activates from bounded catalog evidence with a 
   const contributions = runtime.contributions.list();
   const provider = contributions.find((contribution) => contribution.qualifiedId === `${ANDROID_GRADLE_PLUGIN_ID}.gradle-tasks`);
   assert.ok(provider);
-  assert.deepEqual(provider.snapshot(), {
-    status: "unavailable",
-    tasks: [],
-    unavailableReason: "discovery-not-supported",
-  });
+  await settle();
+  assert.equal(provider.snapshot().cache.staleReason, "cache-miss");
   const plan = provider.refresh();
   assert.equal(plan.request.executablePath, "gradlew");
   plan.apply({ status: "succeeded", outputs: [{ stream: "stdout", dataBase64: Buffer.from("Tasks runnable from root project 'root'\nBuild tasks\n-----------\nassembleDebug - Assemble debug\ninstallDebug - Install debug\n").toString("base64") }], truncated: false, error: null });
+  await settle();
   assert.equal(provider.snapshot().status, "ready");
   assert.deepEqual(provider.snapshot().tasks.find((task) => task.id === ":assembleDebug").androidQuickAction, { kind: "assemble", module: ":", variant: "Debug" });
-  assert.deepEqual(provider.run(":assembleDebug").artifactSearch, { hints: ["build/outputs/apk"] });
-  assert.equal(provider.run(":installDebug").artifactSearch, undefined);
+  assert.deepEqual((await provider.run(":assembleDebug")).artifactSearch, { hints: ["build/outputs/apk"] });
+  assert.equal((await provider.run(":installDebug")).artifactSearch, undefined);
   provider.refresh().apply({ status: "cancelled", outputs: [], truncated: false, error: null });
   assert.match(provider.snapshot().error, /cancelled/u);
   assert.deepEqual(provider.snapshot().tasks.map((task) => task.id), [":assembleDebug", ":installDebug"]);
@@ -82,7 +80,7 @@ test("the bundled Android plugin stays inactive for plain and malformed catalogs
 });
 
 test("the bundled Android plugin accepts a multi-chunk 16000-task catalog", async () => {
-  const runtime = new PluginRuntime();
+  const runtime = runtimeWithCache();
   await runtime.activate(identity, {
     kind: "workspace-catalog",
     platform: "posix",
@@ -109,7 +107,24 @@ test("the bundled Android plugin accepts a multi-chunk 16000-task catalog", asyn
     outputs.push({ stream: "stdout", dataBase64: bytes.subarray(offset, offset + 16 * 1024).toString("base64") });
   }
   provider.refresh().apply({ status: "succeeded", outputs, truncated: false, error: null });
+  await settle();
   assert.equal(provider.snapshot().status, "ready");
   assert.equal(provider.snapshot().tasks.length, 16_000);
   assert.equal(provider.snapshot().tasks.at(-1).id, ":task15999");
 });
+
+function runtimeWithCache() {
+  const fingerprint = { status: "ready", digest: "a".repeat(64) };
+  return new PluginRuntime(undefined, undefined, () => ({
+    computeFingerprint: async () => fingerprint,
+    read: async (providerId) => ({ status: "miss", pluginId: ANDROID_GRADLE_PLUGIN_ID, providerId, fingerprint: null, payloadBase64: null, updatedAtEpochMs: null, lastAccessEpochMs: null, staleReason: null, dirtyReason: null }),
+    write: async (providerId) => ({ status: "stored", pluginId: ANDROID_GRADLE_PLUGIN_ID, providerId, fingerprint, updatedAtEpochMs: Date.now(), lastAccessEpochMs: Date.now(), dirtyReason: null }),
+    markDirty: async (providerId, dirtyReason) => ({ status: "dirty", pluginId: ANDROID_GRADLE_PLUGIN_ID, providerId, fingerprint: null, updatedAtEpochMs: null, lastAccessEpochMs: null, dirtyReason }),
+  }));
+}
+
+async function settle() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}

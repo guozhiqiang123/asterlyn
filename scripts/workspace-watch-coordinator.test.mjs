@@ -50,6 +50,37 @@ test("watch hints reconcile only their typed slices", async () => {
   coordinator.dispose();
 });
 
+test("watch reconciliation invalidates plugin providers before refreshing the catalog", async () => {
+  const session = activeSession();
+  const watch = fakeWatchBridge();
+  const events = [];
+  const coordinator = createCoordinator(
+    watch,
+    session,
+    { async refresh() { events.push("catalog"); return true; } },
+    editorFixture(),
+    {
+      reconcileRepository() { return true; },
+      workspaceInvalidated(identity, invalidation) { events.push({ identity, invalidation }); },
+      workspaceCatalogRefreshed(identity) { events.push({ refreshed: identity }); },
+      refreshRemoteAfterFocus() {},
+      reportWarning() {},
+    },
+    null,
+  );
+  coordinator.activate();
+  await settle();
+  watch.emit(event(session, ["workspaceCatalog"], ["app/build.gradle.kts"]));
+  await settle(10);
+  assert.deepEqual(events[0], {
+    identity: { root: "/repo", generation: session.workspace.state.generation },
+    invalidation: { paths: ["app/build.gradle.kts"], recovery: "none" },
+  });
+  assert.equal(events[1], "catalog");
+  assert.deepEqual(events[2], { refreshed: { root: "/repo", generation: session.workspace.state.generation } });
+  coordinator.dispose();
+});
+
 test("catalog and repository metadata are reconciled without accepting stale roots", async () => {
   let projectReads = 0;
   const session = activeSession({

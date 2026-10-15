@@ -198,7 +198,7 @@ function normalizeProvider(candidate: TaskProviderProjection): TaskProviderProje
 
 const CACHE_STATUSES = new Set<TaskProviderCacheStatus>(["validating", "ready", "stale"]);
 const STALE_REASONS = new Set<TaskProviderStaleReason>([
-  "fingerprint-mismatch", "watcher-change", "overflow-recovery", "cache-expired", "cache-corrupt", "fingerprint-unavailable",
+  "fingerprint-mismatch", "watcher-change", "overflow-recovery", "cache-miss", "cache-expired", "cache-corrupt", "refresh-failed", "fingerprint-unavailable",
 ]);
 
 function normalizeCacheMetadata(value: unknown): TaskProviderCacheMetadata | undefined {

@@ -83,8 +83,9 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   cacheStale: "Showing the last discovered task list; refresh to verify it.",
   cacheStaleReasons: {
     "fingerprint-mismatch": "Project configuration changed.", "watcher-change": "A watched project file changed.",
-    "overflow-recovery": "File watching recovered incompletely.", "cache-expired": "The cached task list has expired.",
+    "overflow-recovery": "File watching recovered incompletely.", "cache-miss": "No cached task list is available yet.", "cache-expired": "The cached task list has expired.",
     "cache-corrupt": "The cached task list is invalid.", "fingerprint-unavailable": "Project configuration could not be verified.",
+    "refresh-failed": "The latest task refresh did not complete.",
   },
   refreshStale: "Refresh Gradle tasks",
   retainedTasks: (count: number) => `Showing the previous ${count} task${count === 1 ? "" : "s"}.`,

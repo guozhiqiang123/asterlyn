@@ -10,6 +10,7 @@ import {
   type PluginDiagnostic,
   type PluginWorkspaceCatalogEvidence,
   type PluginWorkspaceIdentity,
+  type PluginWorkspaceInvalidation,
   type PluginManagementSnapshot,
   type PluginSettingValue,
   type PluginSettingsTargetResolution,
@@ -18,6 +19,8 @@ import type { CommandDescriptor } from "../application/commands/command-service.
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
 import { PluginContributionRuntime } from "./plugin-contribution-runtime.ts";
+import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
+import { createPluginTaskCacheCapability } from "./plugin-task-cache-capability.ts";
 
 export interface PluginCompositionRuntimeOptions {
   readonly registerCommand: (descriptor: CommandDescriptor) => () => void;
@@ -40,6 +43,7 @@ export interface PluginCompositionRuntimeOptions {
   readonly providerRefreshTitle?: (providerLabel: string) => string;
   readonly loadPlugins?: () => Promise<readonly BundledPlugin[]>;
   readonly preferenceStore?: PluginPreferenceStore;
+  readonly taskCacheBridge?: PluginTaskCacheBridge;
 }
 
 /** Window-scoped orchestration. Bundled plugin code stays behind a lazy project-evidence gate. */
@@ -58,7 +62,15 @@ export class PluginCompositionRuntime {
   private disposed = false;
 
   constructor(options: PluginCompositionRuntimeOptions) {
-    this.runtime = new PluginRuntime(undefined, options.reportDiagnostic);
+    this.runtime = new PluginRuntime(
+      undefined,
+      options.reportDiagnostic,
+      (pluginId, identity) => createPluginTaskCacheCapability(
+        options.taskCacheBridge,
+        identity,
+        pluginId,
+      ),
+    );
     this.contributions = new PluginContributionRuntime(this.runtime.contributions, options);
     this.preferences = options.preferenceStore ?? new PluginPreferenceStore(
       defaultPluginPreferenceStorage(),
@@ -143,6 +155,13 @@ export class PluginCompositionRuntime {
 
   cancelTask(identity: PluginWorkspaceIdentity): void {
     this.contributions.cancelTask(identity);
+  }
+
+  invalidateWorkspace(
+    identity: PluginWorkspaceIdentity,
+    invalidation: PluginWorkspaceInvalidation,
+  ): Promise<void> {
+    return this.contributions.invalidateWorkspace(identity, invalidation);
   }
 
 

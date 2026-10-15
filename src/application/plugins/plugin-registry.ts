@@ -6,6 +6,7 @@ import type {
   PluginEvidenceSnapshot,
   PluginActivationContext,
   PluginActivationReport,
+  PluginTaskCacheCapability,
   PluginWorkspaceIdentity,
   RegisteredPluginContribution,
 } from "./plugin-types.ts";
@@ -115,13 +116,22 @@ export class PluginRuntime {
   private transition: Promise<void> = Promise.resolve();
   private sequence = 0;
   private disposed = false;
+  private readonly taskCacheFor: (
+    pluginId: string,
+    identity: PluginWorkspaceIdentity,
+  ) => PluginTaskCacheCapability;
 
   constructor(
     contributions = new PluginContributionRegistry(),
     reportDiagnostic: (diagnostic: PluginDiagnostic) => void = () => undefined,
+    taskCacheFor: (
+      pluginId: string,
+      identity: PluginWorkspaceIdentity,
+    ) => PluginTaskCacheCapability = unavailableTaskCache,
   ) {
     this.contributions = contributions;
     this.reportDiagnostic = reportDiagnostic;
+    this.taskCacheFor = taskCacheFor;
   }
 
   async activate(
@@ -184,7 +194,12 @@ export class PluginRuntime {
         skipped.push(plugin.id);
         continue;
       }
-      const scope = new ActivationScope(batch, plugin, { identity, evidence: snapshot });
+      const scope = new ActivationScope(
+        batch,
+        plugin,
+        { identity, evidence: snapshot },
+        this.taskCacheFor(plugin.id, identity),
+      );
       try {
         const returned = await plugin.activate(scope.context);
         if (token !== this.sequence || this.disposed) {
@@ -312,6 +327,7 @@ class ActivationScope {
     batch: ActivationBatch,
     plugin: BundledPlugin,
     source: { readonly identity: PluginWorkspaceIdentity; readonly evidence: PluginEvidenceSnapshot },
+    taskCache: PluginTaskCacheCapability,
   ) {
     this.batch = batch;
     this.plugin = plugin;
@@ -319,6 +335,7 @@ class ActivationScope {
     this.context = {
       identity: source.identity,
       evidence: source.evidence,
+      taskCache,
       contribute: (contribution) => {
         const staged = this.batch.stage(this.plugin, contribution, this);
         return {
@@ -414,6 +431,7 @@ function validateContribution(contribution: PluginContribution): void {
         (contribution.settingsFocus !== undefined && !SETTING_IDENTIFIER.test(contribution.settingsFocus)) ||
         (contribution.subscribe !== undefined && typeof contribution.subscribe !== "function") ||
         (contribution.refresh !== undefined && typeof contribution.refresh !== "function") ||
+        (contribution.invalidate !== undefined && typeof contribution.invalidate !== "function") ||
         (contribution.run !== undefined && typeof contribution.run !== "function"))) {
       throw new Error(`Invalid provider contribution: ${contribution.id}`);
     }
@@ -421,6 +439,52 @@ function validateContribution(contribution: PluginContribution): void {
     if (error instanceof PluginContributionError) throw error;
     throw new PluginContributionError("invalid-contribution", error instanceof Error ? error.message : String(error));
   }
+}
+
+function unavailableTaskCache(
+  pluginId: string,
+  identity: PluginWorkspaceIdentity,
+): PluginTaskCacheCapability {
+  const unavailableFingerprint = () => Promise.resolve({
+    protocolVersion: 1 as const,
+    status: "unavailable" as const,
+    workspaceRoot: identity.root,
+    algorithm: "sha256" as const,
+    digest: null,
+    files: [],
+    truncated: false,
+    reason: "Plugin task caching is unavailable.",
+    os: "unknown",
+    arch: "unknown",
+    javaHomeDigest: null,
+  });
+  const unavailableMutation = (providerId: string) => Promise.resolve({
+    protocolVersion: 1 as const,
+    status: "unavailable" as const,
+    pluginId,
+    providerId,
+    fingerprint: null,
+    updatedAtEpochMs: null,
+    lastAccessEpochMs: null,
+    dirtyReason: null,
+  });
+  return Object.freeze({
+    computeFingerprint: unavailableFingerprint,
+    read: (providerId: string) => Promise.resolve({
+      protocolVersion: 1 as const,
+      status: "unavailable" as const,
+      pluginId,
+      providerId,
+      fingerprint: null,
+      payloadBase64: null,
+      updatedAtEpochMs: null,
+      lastAccessEpochMs: null,
+      staleReason: null,
+      dirtyReason: null,
+    }),
+    write: (providerId: string) => unavailableMutation(providerId),
+    markDirty: (providerId: string) => unavailableMutation(providerId),
+  });
 }
 
 function diagnosticFor(pluginId: string, kind: PluginDiagnostic["kind"], error: unknown): PluginDiagnostic {

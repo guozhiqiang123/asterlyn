@@ -3,6 +3,7 @@ import type {
   PluginManagementSnapshot,
   PluginSettingValue,
   PluginSettingsTargetResolution,
+  PluginWorkspaceInvalidation,
   PluginWorkspaceIdentity,
 } from "../application/plugins/index.ts";
 import type { TasksCopy } from "../localization/catalog.ts";
@@ -19,6 +20,7 @@ import type { TaskPresentation } from "../features/tasks/tasks-model.ts";
 import { PluginCompositionRuntime } from "./plugin-runtime.ts";
 import { PluginTaskBusyError } from "./plugin-contribution-runtime.ts";
 import { RecentTaskStore, type RecentTaskStorage } from "../application/tasks/recent-task-store.ts";
+import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -28,6 +30,7 @@ export interface PluginTasksRuntimeOptions {
   readonly locale?: () => "en-US" | "zh-CN";
   readonly executionBridge: TaskExecutionBridge;
   readonly artifactBridge: TaskArtifactBridge;
+  readonly taskCacheBridge: PluginTaskCacheBridge;
   readonly recentTaskStorage?: RecentTaskStorage;
   readonly reconcileAfterTask?: (identity: PluginWorkspaceIdentity) => void | Promise<void>;
 }
@@ -79,6 +82,7 @@ export class PluginTasksRuntime {
       executeTaskRefresh: (identity, plan, signal) => this.executeTaskRefresh(identity, plan, signal),
       executeTaskRun: (identity, plan, signal) => this.executeTaskRun(identity, plan, signal),
       providerRefreshTitle: (providerLabel) => `${options.copy().refresh}: ${providerLabel}`,
+      taskCacheBridge: options.taskCacheBridge,
     });
     this.tasks = new TasksRuntime(root, controller, {
       copy: options.copy,
@@ -153,6 +157,17 @@ export class PluginTasksRuntime {
   /** Settings owners are null, one target, or many targets; many intentionally deep-link nowhere. */
   pluginSettingsTargets(): PluginSettingsTargetResolution {
     return this.plugins.pluginSettingsTargets();
+  }
+
+  async invalidateWorkspace(
+    identity: PluginWorkspaceIdentity,
+    invalidation: PluginWorkspaceInvalidation,
+  ): Promise<void> {
+    try {
+      await this.plugins.invalidateWorkspace(identity, invalidation);
+    } catch (error) {
+      this.reportError(error);
+    }
   }
 
   dispose(): void {

@@ -388,6 +388,31 @@ test("workspace replacement aborts an active task and drops its stale terminal r
   await runtime.dispose();
 });
 
+test("workspace invalidation is delivered only to current providers and republishes snapshots", async () => {
+  const runtime = new PluginRuntime();
+  const snapshots = [];
+  const invalidations = [];
+  let stale = false;
+  const adapter = new PluginContributionRuntime(runtime.contributions, {
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, providers) => snapshots.push(providers),
+    reportError: (error) => { throw error; },
+  });
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity, {}, [plugin("android", (context) => context.contribute({
+    kind: "provider", id: "tasks", label: "Gradle",
+    snapshot: () => ({ status: "ready", tasks: [], ...(stale ? { cache: { status: "stale", staleReason: "watcher-change" } } : {}) }),
+    invalidate: async (value) => { invalidations.push(value); stale = true; },
+  }))]);
+  await adapter.invalidateWorkspace(identity, { paths: ["app/build.gradle.kts"], recovery: "none" });
+  await adapter.invalidateWorkspace({ root: "/stale", generation: 3 }, { paths: ["settings.gradle"], recovery: "none" });
+  assert.deepEqual(invalidations, [{ paths: ["app/build.gradle.kts"], recovery: "none" }]);
+  assert.equal(Object.isFrozen(invalidations[0]), true);
+  assert.equal(snapshots.at(-1)[0].snapshot.cache.status, "stale");
+  adapter.dispose();
+  await runtime.dispose();
+});
+
 function plugin(id, activate) {
   return {
     id,

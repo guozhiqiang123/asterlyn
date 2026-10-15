@@ -5,8 +5,10 @@ export type TaskProviderStaleReason =
   | "fingerprint-mismatch"
   | "watcher-change"
   | "overflow-recovery"
+  | "cache-miss"
   | "cache-expired"
   | "cache-corrupt"
+  | "refresh-failed"
   | "fingerprint-unavailable";
 
 export interface TaskProviderCacheMetadata {

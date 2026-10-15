@@ -14,6 +14,7 @@ import {
 import type { WindowSession } from "./window-session.ts";
 import type { RepositoryReadLease } from "./repository-session.ts";
 import type { RuntimeScheduler, ScheduledTask } from "./runtime-scheduler.ts";
+import type { PluginWorkspaceIdentity, PluginWorkspaceInvalidation } from "./plugins/index.ts";
 
 const FOCUS_RECOVERY_AFTER_MS = 30_000;
 const FOCUS_RECOVERY_COOLDOWN_MS = 30_000;
@@ -39,6 +40,11 @@ export interface WorkspaceWatchCoordinatorActions {
   ): boolean;
   refreshRemoteAfterFocus(): Promise<boolean> | boolean;
   reportWarning(message: string): void;
+  workspaceInvalidated?(
+    identity: PluginWorkspaceIdentity,
+    invalidation: PluginWorkspaceInvalidation,
+  ): void | Promise<void>;
+  workspaceCatalogRefreshed?(identity: PluginWorkspaceIdentity): void | Promise<void>;
   messages?(): WorkspaceWatchMessages;
 }
 
@@ -397,6 +403,11 @@ export class WorkspaceWatchCoordinator {
     const identity = { root: invalidation.root, generation: invalidation.generation };
     if (!this.session.workspace.matches(identity)) return;
     if (!(await this.session.whenReconciliationIdle(identity))) return;
+    await this.actions.workspaceInvalidated?.(identity, {
+      paths: invalidation.paths,
+      recovery: invalidation.recovery,
+    });
+    if (!this.session.workspace.matches(identity)) return;
     const cause = reconciliationCause(invalidation);
     if (invalidates(invalidation, "openDocuments")) {
       await this.editor.reconcileExternalPaths(invalidation.paths);
@@ -404,6 +415,9 @@ export class WorkspaceWatchCoordinator {
     if (!this.session.workspace.matches(identity)) return;
     if (invalidates(invalidation, "workspaceCatalog")) {
       const refreshed = await this.files.refresh();
+      if (refreshed && this.session.workspace.matches(identity)) {
+        await this.actions.workspaceCatalogRefreshed?.(identity);
+      }
       const repositoryActivationFollows = invalidation.slices.some((slice) =>
         isRepositorySlice(slice) && slice !== "workingTree"
       );

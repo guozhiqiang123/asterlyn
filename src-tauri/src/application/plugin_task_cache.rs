@@ -225,6 +225,8 @@ pub(crate) fn compute_fingerprint(root: &Path, paths: &[String]) -> FingerprintR
     }
     let mut aggregate = Sha256::new();
     aggregate.update(b"asterlyn.workspace-fingerprint.v1\0");
+    aggregate.update(canonical_root.to_string_lossy().as_bytes());
+    aggregate.update([0]);
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     let java_home_digest = std::env::var("JAVA_HOME")

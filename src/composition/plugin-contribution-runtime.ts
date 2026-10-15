@@ -9,6 +9,7 @@ import type {
   PluginTaskExecutionResult,
   PluginTaskRefreshPlan,
   PluginTaskRunPlan,
+  PluginWorkspaceInvalidation,
   PluginWorkspaceIdentity,
   PluginSettingsTarget,
   PluginSettingsTargetResolution,
@@ -124,6 +125,30 @@ export class PluginContributionRuntime {
   cancelTask(identity: PluginWorkspaceIdentity): void {
     if (!this.matches(identity)) return;
     this.refreshAbort?.abort();
+  }
+
+  async invalidateWorkspace(
+    identity: PluginWorkspaceIdentity,
+    invalidation: PluginWorkspaceInvalidation,
+  ): Promise<void> {
+    if (!this.matches(identity) || this.disposed) return;
+    const value = Object.freeze({
+      paths: Object.freeze([...invalidation.paths]),
+      recovery: invalidation.recovery,
+    });
+    const pending: Promise<void>[] = [];
+    for (const { contribution } of this.providers.values()) {
+      if (!contribution.invalidate) continue;
+      try {
+        const result = contribution.invalidate(value);
+        if (result) pending.push(Promise.resolve(result).catch(this.options.reportError));
+      } catch (error) {
+        this.options.reportError(error);
+      }
+    }
+    this.publishProviders();
+    await Promise.all(pending);
+    if (this.matches(identity)) this.publishProviders();
   }
 
   private async runTaskSerialized(identity: PluginWorkspaceIdentity, contribution: RegisteredProvider, taskId: string): Promise<void> {

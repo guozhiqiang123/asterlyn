@@ -1,5 +1,11 @@
 import type { TaskProviderSnapshot } from "../tasks/index.ts";
 import type { TaskExecutionRequest } from "../../models.ts";
+import type {
+  PluginTaskCacheDirtyReason,
+  PluginTaskCacheMutationResult,
+  PluginTaskCacheReadResult,
+  WorkspaceFingerprint,
+} from "../../protocol/plugin-task-cache.ts";
 
 export interface PluginWorkspaceIdentity {
   readonly root: string;
@@ -88,8 +94,29 @@ export interface PluginProviderContribution {
   readonly snapshot: () => TaskProviderSnapshot;
   readonly subscribe?: (listener: () => void) => Disposable;
   readonly refresh?: () => PluginTaskRefreshPlan | null | Promise<PluginTaskRefreshPlan | null>;
+  readonly invalidate?: (invalidation: PluginWorkspaceInvalidation) => void | Promise<void>;
   /** Returns a host-reviewed execution plan for a task. Plugins never receive the bridge. */
   readonly run?: (taskId: string) => PluginTaskRunPlan | null | Promise<PluginTaskRunPlan | null>;
+}
+
+export interface PluginWorkspaceInvalidation {
+  readonly paths: readonly string[];
+  readonly recovery: "none" | "pathsTruncated" | "rootAmbiguous" | "backendOverflow";
+}
+
+/** Cache access is bound by the host to one workspace and one plugin. */
+export interface PluginTaskCacheCapability {
+  computeFingerprint(paths: readonly string[]): Promise<WorkspaceFingerprint>;
+  read(providerId: string): Promise<PluginTaskCacheReadResult>;
+  write(
+    providerId: string,
+    fingerprint: WorkspaceFingerprint,
+    payloadBase64: string,
+  ): Promise<PluginTaskCacheMutationResult>;
+  markDirty(
+    providerId: string,
+    reason: PluginTaskCacheDirtyReason,
+  ): Promise<PluginTaskCacheMutationResult>;
 }
 
 export interface PluginTaskExecutionResult {
@@ -118,6 +145,7 @@ export type PluginContribution = PluginCommandContribution | PluginProviderContr
 export interface PluginActivationContext {
   readonly identity: PluginWorkspaceIdentity;
   readonly evidence: PluginEvidenceSnapshot;
+  readonly taskCache: PluginTaskCacheCapability;
   contribute(contribution: PluginContribution): Disposable;
 }
 
