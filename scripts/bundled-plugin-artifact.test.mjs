@@ -7,19 +7,28 @@ import {
   ANDROID_GRADLE_PLUGIN_MANIFEST,
 } from "@asterlyn/plugin-android-gradle";
 
-const metadataUrl = new URL("../vendor/plugins/android-gradle-0.1.3.json", import.meta.url);
+const metadataUrl = new URL("../vendor/plugins/android-gradle-0.1.4.json", import.meta.url);
 
 test("bundled Android plugin artifact matches the reviewed release identity", async () => {
   const metadata = JSON.parse(await readFile(metadataUrl, "utf8"));
   const artifact = await readFile(new URL(`../vendor/plugins/${metadata.artifact}`, import.meta.url));
   assert.equal(createHash("sha256").update(artifact).digest("hex"), metadata.sha256);
   assert.equal(metadata.pluginId, "dev.asterlyn.android-gradle");
-  assert.equal(metadata.pluginVersion, "0.1.3");
-  assert.equal(metadata.sdkVersion, "1.1.0");
+  assert.equal(metadata.pluginVersion, "0.1.4");
+  assert.equal(metadata.sdkVersion, "1.2.0");
   assert.equal(metadata.size, artifact.byteLength);
   assert.equal(ANDROID_GRADLE_PLUGIN.id, metadata.pluginId);
   assert.equal(ANDROID_GRADLE_PLUGIN.version, metadata.pluginVersion);
   assert.equal(ANDROID_GRADLE_PLUGIN.manifest, ANDROID_GRADLE_PLUGIN_MANIFEST);
   assert.equal(ANDROID_GRADLE_PLUGIN.manifest.localization.defaultLocale, "en-US");
+  assert.equal(ANDROID_GRADLE_PLUGIN.manifest.taskAuthorization.workspaceTrust.id, "workspaceTrust");
+  assert.equal(
+    ANDROID_GRADLE_PLUGIN.manifest.taskAuthorization.taskConfirmation.rememberLabelKey,
+    "authorization.rememberTask.label",
+  );
+  assert.equal(
+    ANDROID_GRADLE_PLUGIN.manifest.localization.locales["zh-CN"]["authorization.workspaceTrust.label"],
+    "信任此工作区中的 Gradle 任务",
+  );
   await assert.rejects(access(new URL("../src/plugins/android-gradle/", import.meta.url)));
 });
