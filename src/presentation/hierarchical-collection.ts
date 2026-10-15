@@ -38,6 +38,8 @@ export interface HierarchicalCollectionProjectionOptions<T extends HierarchicalC
   readonly disclosure?: DisclosureState;
   readonly forceExpanded?: boolean;
   readonly leafLimit?: number;
+  /** Project this branch's children as top-level rows without rendering the synthetic branch. */
+  readonly contentRootId?: string;
   /** Matching nodes, their ancestors, and a matching branch's descendants remain in the projection. */
   readonly filter?: (node: T) => boolean;
 }
@@ -165,12 +167,23 @@ export class HierarchicalCollection<T extends HierarchicalCollectionNode> {
     const mode = options.mode ?? "tree";
     const disclosure = options.disclosure ?? new DisclosureState();
     const forceExpanded = options.forceExpanded ?? false;
+    let contentRoot: T | null = null;
+    if (options.contentRootId !== undefined) {
+      const candidate = this.byId.get(options.contentRootId);
+      if (!candidate || candidate.role !== "branch") {
+        throw new Error(`Invalid collection content root: ${options.contentRootId}`);
+      }
+      contentRoot = candidate;
+    }
+    const contentIds = contentRoot === null
+      ? null
+      : new Set(this.descendantsOf(contentRoot.id).map((node) => node.id));
     const limit = options.leafLimit === undefined
       ? Number.MAX_SAFE_INTEGER
       : Math.max(0, Math.floor(options.leafLimit));
     const included = options.filter ? this.filteredIds(options.filter) : null;
     const activeChildren = (parentId: string | null): readonly T[] => (this.children.get(parentId) ?? [])
-      .filter((node) => included === null || included.has(node.id));
+      .filter((node) => (contentIds === null || contentIds.has(node.id)) && (included === null || included.has(node.id)));
     const rows: HierarchicalCollectionRow<T>[] = [];
     let visibleLeaves = 0;
     let renderedLeaves = 0;
@@ -190,7 +203,10 @@ export class HierarchicalCollection<T extends HierarchicalCollectionNode> {
       });
     };
     if (mode === "flat") {
-      const leaves = this.orderedNodes.filter((node) => node.role === "leaf" && (included === null || included.has(node.id)));
+      const leaves = this.orderedNodes.filter((node) =>
+        node.role === "leaf" &&
+        (contentIds === null || contentIds.has(node.id)) &&
+        (included === null || included.has(node.id)));
       leaves.forEach((node, index) => append(node, 0, index + 1, leaves.length, false));
       return { rows, visibleLeaves, renderedLeaves, truncated: renderedLeaves < visibleLeaves };
     }
@@ -202,7 +218,7 @@ export class HierarchicalCollection<T extends HierarchicalCollectionNode> {
         if (children.length > 0 && expanded) visit(children, depth + 1);
       });
     };
-    visit(activeChildren(null), 0);
+    visit(activeChildren(contentRoot?.id ?? null), 0);
     return { rows, visibleLeaves, renderedLeaves, truncated: renderedLeaves < visibleLeaves };
   }
 
@@ -259,7 +275,9 @@ export function hierarchicalCollectionNavigation(
   }
   if (key === "ArrowLeft") {
     if (row.node.role === "branch" && row.expanded) return { handled: true, toggleId: row.node.id };
-    return row.node.parentId ? { handled: true, focusId: row.node.parentId } : { handled: true };
+    return row.node.parentId && rows.some((candidate) => candidate.node.id === row.node.parentId)
+      ? { handled: true, focusId: row.node.parentId }
+      : { handled: true };
   }
   return { handled: false };
 }

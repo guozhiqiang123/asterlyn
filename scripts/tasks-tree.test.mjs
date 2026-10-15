@@ -24,7 +24,7 @@ test("default expansion reveals each project Tasks folder but keeps task groups 
   const defaults = taskTreeDefaultExpandedKeys(tree);
   const rows = taskTreeRows(tree, defaults, 250);
   assert.deepEqual(rows.rows.map((row) => row.node.label), [
-    "FilesRecovery", "Tasks", "help", "app", "Tasks", "install",
+    "Tasks", "help", "app", "Tasks", "install",
   ]);
   assert.equal(rows.visibleTasks, 0);
   assert.equal([...defaults].some((key) => key.includes(":group:")), false);
@@ -46,7 +46,7 @@ test("builds workspace, root tasks, module tasks, groups, and exact task leaves"
   ]);
   const app = tree.children[1];
   assert.deepEqual(app.children[0].children.map((group) => group.label), ["build", "install"]);
-  assert.equal(app.children[0].children[0].children[0].label, "assembleDebug");
+  assert.equal(app.children[0].children[0].children[0].label, ":app:assembleDebug");
   assert.equal(app.children[0].children[0].children[0].entry.task.id, ":app:assembleDebug");
 });
 
@@ -54,7 +54,7 @@ test("flattening respects expansion, bounds task leaves, and keeps stable branch
   const entries = Array.from({ length: 600 }, (_, index) => entry("gradle", `:app:task${index}`, "Other tasks", ":app"));
   const tree = buildTaskTree(entries, "/repo/FilesRecovery", "Tasks");
   const collapsed = taskTreeRows(tree, new Set([TASK_TREE_ROOT_KEY]), 250);
-  assert.deepEqual(collapsed.rows.map((row) => row.node.label), ["FilesRecovery", "app"]);
+  assert.deepEqual(collapsed.rows.map((row) => row.node.label), ["app"]);
   assert.equal(collapsed.visibleTasks, 0);
 
   const expanded = taskTreeBranchKeys(tree);
@@ -71,7 +71,7 @@ test("force-expanded search projections show every matching ancestor without cha
   const tree = buildTaskTree([match], "C:\\work\\FilesRecovery", "Tasks");
   const expanded = new Set([TASK_TREE_ROOT_KEY]);
   const rows = taskTreeRows(tree, expanded, 250, true);
-  assert.deepEqual(rows.rows.map((row) => row.node.label), ["FilesRecovery", "app", "Tasks", "install", "installDebug"]);
+  assert.deepEqual(rows.rows.map((row) => row.node.label), ["app", "Tasks", "install", ":app:installDebug"]);
   assert.deepEqual([...expanded], [TASK_TREE_ROOT_KEY]);
 });
 
@@ -105,5 +105,6 @@ test("uses a contributed provider hierarchy and joins leaves to exact task entri
   assert.deepEqual(tree.children.map((node) => [node.kind, node.label]), [["module", "app"]]);
   const leaf = tree.children[0].children[0].children[0].children[0];
   assert.equal(leaf.key, "android.gradle-tasks:collection:assemble");
+  assert.equal(leaf.label, ":app:assembleDebug");
   assert.equal(leaf.entry, entries[0]);
 });

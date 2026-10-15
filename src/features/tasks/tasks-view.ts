@@ -122,7 +122,7 @@ export function renderTasksView(
   const entries = taskPresentationEntries(state, presentation, copy);
   const projectedState = entries === state.visibleEntries ? state : { ...state, entries, visibleEntries: entries };
   const status = renderStatus(projectedState, copy);
-  const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
+  const query = `<label class="tasks-query-label"><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
   const collectionToolbar = renderHierarchicalCollectionToolbar({
     mode: viewMode,
     ariaLabel: copy.collectionControls,
@@ -163,7 +163,7 @@ export function taskPresentationEntries(
     const action = entry.task.androidQuickAction;
     return action ? {
       ...entry,
-      displayLabel: action.variant,
+      displayLabel: entry.task.id,
       task: { ...entry.task, group: copy.quickActionKinds[action.kind] },
     } : entry;
   });

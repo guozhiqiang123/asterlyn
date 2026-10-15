@@ -90,6 +90,7 @@ test("ready discovery reports the task count while retaining the filter and list
   const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [{ id: "p", label: "P", snapshot: { status: "ready", tasks: [entry.task] } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy, 250, expanded([entry]));
   assert.match(html, /1 discovered/);
   assert.match(html, /data-tasks-query/);
+  assert.doesNotMatch(html, /<span class="sr-only">Filter<\/span>/u);
   assert.match(html, /data-task-key="p:one"/);
   assert.doesNotMatch(html, /class="tasks-header"/);
   assert.match(html, /data-collection-command="toggle-view"/u);
@@ -104,6 +105,7 @@ test("flat task mode renders only task leaves through the shared collection cont
   assert.match(html, /role="list"/u);
   assert.match(html, /data-collection-mode="flat"/u);
   assert.match(html, /data-task-key="p:one"/u);
+  assert.match(html, />:app:one<\/strong>/u);
   assert.doesNotMatch(html, /tasks-tree-branch/u);
   assert.match(html, /data-collection-command="expand-all"[^>]*disabled/u);
 });

@@ -71,7 +71,13 @@ export function taskTreeRows(
   mode: CollectionViewMode = "tree",
 ): TaskTreeRowsResult {
   const disclosure = new DisclosureState({ defaultExpanded: false, exceptions: expanded });
-  const projection = taskTreeCollection(root).project({ mode, disclosure, forceExpanded, leafLimit: taskLimit });
+  const projection = taskTreeCollection(root).project({
+    mode,
+    disclosure,
+    forceExpanded,
+    leafLimit: taskLimit,
+    contentRootId: root.id,
+  });
   return {
     ...projection,
     renderedTasks: projection.renderedLeaves,
@@ -107,7 +113,7 @@ function contributedNodes(
   const visit = (node: typeof collection.nodes[number], parentKey: string): TaskTreeNode | null => {
     if (node.kind === "task") {
       const entry = node.taskId ? entriesByTaskId.get(node.taskId) : undefined;
-      return entry ? task(node.id, parentKey, node.label, node.order, entry) : null;
+      return entry ? task(node.id, parentKey, taskDisplayLabel(entry), node.order, entry) : null;
     }
     const nested = (children.get(node.id) ?? []).map((child) => visit(child, node.id)).filter(isTaskTreeNode);
     if (nested.length === 0) return null;
@@ -160,7 +166,7 @@ function tasksBranch(bucket: ProjectBucket, parentKey: string, label: string, or
     const groupKey = `${key}:group:${encode(group)}`;
     return branch("group", groupKey, key, groupLabel(group), groupOrder,
       [...entries].sort((left, right) => compareText(left.task.id, right.task.id)).map((entry, taskOrder) =>
-        task(`${groupKey}:task:${encode(entry.key)}`, groupKey, entry.displayLabel ?? taskName(entry.task.id, entry.task.label), taskOrder, entry)),
+        task(`${groupKey}:task:${encode(entry.key)}`, groupKey, taskDisplayLabel(entry), taskOrder, entry)),
       false);
   }), true, bucket.projectPath === ":" ? bucket.providerLabel : undefined);
 }
@@ -207,10 +213,9 @@ function projectKey(bucket: Pick<ProjectBucket, "providerId" | "projectPath">): 
   return `tasks-tree:provider:${encode(bucket.providerId)}:project:${encode(bucket.projectPath)}`;
 }
 
-function taskName(id: string, fallback: string): string {
-  const separator = id.lastIndexOf(":");
-  const name = separator >= 0 ? id.slice(separator + 1) : id;
-  return name || fallback;
+function taskDisplayLabel(entry: TasksEntry): string {
+  if (entry.displayLabel) return entry.displayLabel;
+  return entry.task.id.startsWith(":") ? entry.task.id : entry.task.label;
 }
 
 function groupLabel(group: string): string {

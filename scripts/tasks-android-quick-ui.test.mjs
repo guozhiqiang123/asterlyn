@@ -35,7 +35,8 @@ test("renders every module candidate with exact task keys and accessible labels"
   assert.match(html, /data-task-key="gradle::app:installDebug"/u);
   assert.match(html, /data-task-key="gradle::demo:installDebug"/u);
   assert.match(html, />install</u);
-  assert.match(html, />Debug</u);
+  assert.match(html, />:app:installDebug<\/strong>/u);
+  assert.match(html, />:demo:installDebug<\/strong>/u);
   assert.match(html, /role="tree"/u);
 });
 
@@ -74,4 +75,17 @@ test("all-task and quick-action tree projections are mutually exclusive", () => 
   assert.match(quick, /data-tasks-presentation="quick-actions-tree"/u);
   assert.match(quick, /data-task-key="gradle::app:assembleDebug"/u);
   assert.doesNotMatch(quick, /data-task-key="gradle::app:check"/u);
+});
+
+test("flat quick actions retain complete Gradle task identities", () => {
+  const entries = [
+    { key: "gradle::app:assembleDebug", providerId: "gradle", providerLabel: "Gradle", task: task(":app:assembleDebug", { kind: "assemble", module: ":app", variant: "Debug" }) },
+    { key: "gradle::demo:assembleDebug", providerId: "gradle", providerLabel: "Gradle", task: task(":demo:assembleDebug", { kind: "assemble", module: ":demo", variant: "Debug" }) },
+  ];
+  const html = renderTasksView({ identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null,
+    providers: [], entries, visibleEntries: entries,
+  }, undefined, 250, undefined, "quick-actions-tree", "flat");
+  assert.match(html, />:app:assembleDebug<\/strong>/u);
+  assert.match(html, />:demo:assembleDebug<\/strong>/u);
+  assert.doesNotMatch(html, /tasks-tree-branch/u);
 });

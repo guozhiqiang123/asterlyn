@@ -79,6 +79,22 @@ test("indexed hierarchy projects tree and flat rows with ARIA sibling metadata a
   assert.deepEqual(collection.defaultExpandedIds(), new Set(["root"]));
 });
 
+test("a synthetic content root projects its children as top-level rows in tree and flat modes", () => {
+  const collection = new HierarchicalCollection(hierarchyNodes);
+  const disclosure = new DisclosureState({ defaultExpanded: false, exceptions: new Set(["group", "help"]) });
+  const tree = collection.project({ contentRootId: "root", disclosure });
+  assert.deepEqual(tree.rows.map(({ node, depth, positionInSet, setSize }) => [node.id, depth, positionInSet, setSize]), [
+    ["group", 0, 1, 2],
+    ["assemble", 1, 1, 2],
+    ["install", 1, 2, 2],
+    ["help", 0, 2, 2],
+    ["tasks", 1, 1, 1],
+  ]);
+  assert.deepEqual(collection.project({ contentRootId: "root", mode: "flat" }).rows.map((row) => row.node.id), ["assemble", "install", "tasks"]);
+  assert.throws(() => collection.project({ contentRootId: "assemble" }), /Invalid collection content root/u);
+  assert.throws(() => collection.project({ contentRootId: "missing" }), /Invalid collection content root/u);
+});
+
 test("filter retains ancestors and expands matching paths without mutating disclosure", () => {
   const collection = new HierarchicalCollection(hierarchyNodes);
   const disclosure = new DisclosureState();
@@ -108,6 +124,11 @@ test("keyboard navigation returns generic focus and disclosure decisions", () =>
   assert.deepEqual(hierarchicalCollectionNavigation(collapsed, "root", "ArrowRight"), { handled: true, toggleId: "root" });
   assert.deepEqual(hierarchicalCollectionNavigation(rows, "root", "ArrowLeft"), { handled: true, toggleId: "root" });
   assert.deepEqual(hierarchicalCollectionNavigation(rows, "assemble", "End"), { handled: true, focusId: "tasks" });
+  const contentRows = collection.project({ contentRootId: "root", forceExpanded: true }).rows;
+  assert.deepEqual(hierarchicalCollectionNavigation(contentRows, "group", "ArrowLeft"), { handled: true, toggleId: "group" });
+  assert.deepEqual(hierarchicalCollectionNavigation(contentRows, "help", "ArrowLeft"), { handled: true, toggleId: "help" });
+  const collapsedContentRows = collection.project({ contentRootId: "root" }).rows;
+  assert.deepEqual(hierarchicalCollectionNavigation(collapsedContentRows, "group", "ArrowLeft"), { handled: true });
 });
 
 test("shared renderer owns collection roles, row metadata, and escaped host attributes", () => {
