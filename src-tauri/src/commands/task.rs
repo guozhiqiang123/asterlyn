@@ -2,7 +2,7 @@ use crate::application::trust;
 use crate::application::{
     ActiveWorkspaces, TaskArtifactDiscovery, TaskManager, scan_task_artifacts,
 };
-use asterlyn_task::{PreparedTask, TaskRequest, TaskSessionEvent, TaskStarted};
+use asterlyn_task::{PROTOCOL_VERSION, PreparedTask, TaskRequest, TaskSessionEvent, TaskStarted};
 use tauri::{Emitter, Manager, State};
 
 const EVENT: &str = "task-session-event";
@@ -71,7 +71,7 @@ pub(crate) fn start_task_execution(
     });
     let run_id = tasks.start(window.label(), &root, token, &review_id, state, sink)?;
     Ok(TaskStarted {
-        protocol_version: 1,
+        protocol_version: PROTOCOL_VERSION,
         run_id,
         review_id,
         workspace_root: root.to_string_lossy().into_owned(),

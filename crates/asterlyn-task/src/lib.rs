@@ -56,7 +56,11 @@ pub struct TaskStarted {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", tag = "kind")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
 pub enum TaskSessionEvent {
     #[serde(rename = "output")]
     Output {
@@ -145,6 +149,56 @@ pub fn validate_request(request: &TaskRequest) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn task_session_events_use_the_frontend_camel_case_contract() {
+        let status = TaskSessionEvent::Status {
+            protocol_version: PROTOCOL_VERSION,
+            run_id: "run-1".into(),
+            workspace_root: "/repo".into(),
+            sequence: 1,
+            status: TaskStatus::Running,
+            message: None,
+            exit_code: None,
+        };
+        let output = TaskSessionEvent::Output {
+            protocol_version: PROTOCOL_VERSION,
+            run_id: "run-1".into(),
+            workspace_root: "/repo".into(),
+            stream: OutputStream::Stdout,
+            data_base64: "b2s=".into(),
+            sequence: 2,
+        };
+        let truncated = TaskSessionEvent::Truncated {
+            protocol_version: PROTOCOL_VERSION,
+            run_id: "run-1".into(),
+            workspace_root: "/repo".into(),
+            stream: OutputStream::Stderr,
+            omitted_bytes: 64,
+            sequence: 3,
+        };
+
+        let status = serde_json::to_value(status).expect("serialize task status event");
+        let output = serde_json::to_value(output).expect("serialize task output event");
+        let truncated = serde_json::to_value(truncated).expect("serialize task truncation event");
+        assert_eq!(status["kind"], "status");
+        assert_eq!(status["protocolVersion"], PROTOCOL_VERSION);
+        assert_eq!(status["runId"], "run-1");
+        assert_eq!(status["workspaceRoot"], "/repo");
+        assert_eq!(status["exitCode"], serde_json::Value::Null);
+        assert_eq!(output["kind"], "output");
+        assert_eq!(output["dataBase64"], "b2s=");
+        assert_eq!(truncated["kind"], "truncated");
+        assert_eq!(truncated["omittedBytes"], 64);
+        for value in [&status, &output, &truncated] {
+            assert!(value.get("protocol_version").is_none());
+            assert!(value.get("run_id").is_none());
+            assert!(value.get("workspace_root").is_none());
+        }
+        assert!(output.get("data_base64").is_none());
+        assert!(truncated.get("omitted_bytes").is_none());
+    }
+
     #[test]
     fn rejects_escape_and_absolute_executables() {
         let mut r = TaskRequest {
