@@ -38,7 +38,8 @@ export interface PluginSettingsTarget {
 export type PluginSettingsTargetResolution = PluginSettingsTarget | readonly PluginSettingsTarget[] | null;
 
 /** Immutable, host-rendered metadata for a bundled integration. */
-export type BundledPluginManifest = Omit<SdkPluginManifest, "sdkMajor">;
+/** Host manifest shape during SDK adaptation; plugin localization is admitted separately. */
+export type BundledPluginManifest = Omit<SdkPluginManifest, "sdkMajor" | "localization">;
 
 export interface PluginEvidenceSnapshot {
   readonly [key: string]: unknown;

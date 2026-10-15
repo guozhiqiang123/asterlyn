@@ -3,8 +3,17 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.0.0" as const;
+export const PLUGIN_SDK_VERSION = "1.1.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
+
+export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
+  maxLocales: 16,
+  maxLocaleLength: 35,
+  maxMessagesPerLocale: 512,
+  maxKeyLength: 128,
+  maxValueLength: 4_096,
+  maxTotalCharacters: 262_144,
+});
 
 export interface SdkWorkspaceIdentity {
   readonly root: string;
@@ -27,13 +36,26 @@ export interface SdkSettingDescriptor {
   readonly options?: readonly SdkSettingOption[];
 }
 
+/** Plain-text, plugin-scoped messages. Hosts validate and render these values. */
+export interface SdkPluginLocalization {
+  readonly defaultLocale: string;
+  readonly locales: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
+
 export interface SdkPluginManifest {
   readonly sdkMajor: typeof PLUGIN_SDK_MAJOR;
   readonly id: string;
   readonly version: string;
   readonly nameKey: string;
   readonly descriptionKey: string;
+  readonly localization: SdkPluginLocalization;
   readonly settings: readonly SdkSettingDescriptor[];
+}
+
+/** Static package metadata that can be inspected before executable plugin code is loaded. */
+export interface SdkPluginPackageManifest extends SdkPluginManifest {
+  readonly schemaVersion: 1;
+  readonly capabilities: readonly string[];
 }
 
 export interface SdkCollectionNode {

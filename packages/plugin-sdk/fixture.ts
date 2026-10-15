@@ -8,8 +8,17 @@ export const representativePlugin: SdkPluginModule = {
     sdkMajor: 1,
     id: "example.plugin",
     version: "1.2.3",
-    nameKey: "plugin.example.name",
-    descriptionKey: "plugin.example.description",
+    nameKey: "name",
+    descriptionKey: "description",
+    localization: {
+      defaultLocale: "en-US",
+      locales: {
+        "en-US": {
+          name: "Example plugin",
+          description: "Provides example tasks.",
+        },
+      },
+    },
     settings: [],
   },
   matches: ({ identity }) => identity.generation >= 0,
