@@ -79,6 +79,9 @@ export class PluginManagementRuntime {
       active: this.active.has(plugin.id),
       settingDescriptors: plugin.manifest.settings,
       settings: Object.freeze({ ...(preferences.settings[plugin.id] ?? {}) }),
+      ...(plugin.manifest.taskAuthorization === undefined
+        ? {}
+        : { taskAuthorization: plugin.manifest.taskAuthorization }),
       diagnostics: Object.freeze([...(this.diagnostics.get(plugin.id) ?? [])]),
     }));
     this.value = Object.freeze({ schemaVersion: 1, entries: Object.freeze(entries) });

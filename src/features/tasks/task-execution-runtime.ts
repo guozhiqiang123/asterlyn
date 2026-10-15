@@ -7,7 +7,7 @@ import type { TaskExecutionRequest } from "../../models.ts";
 import type { PluginTaskExecutionResult } from "../../application/plugins/plugin-types.ts";
 import type { TaskArtifact, TaskArtifactDiscovery } from "../../models.ts";
 import { EN_US_TASK_EXECUTION_COPY, type TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
-import { renderTaskExecutionReview, type TaskArtifactViewState } from "./task-execution-view.ts";
+import { renderTaskExecutionReview, type TaskArtifactViewState, type TaskConfirmationPresentation } from "./task-execution-view.ts";
 
 export interface TaskExecutionRuntimeOptions {
   readonly retry?: (identity: TaskWorkspaceIdentity, taskKey: string) => void;
@@ -16,6 +16,7 @@ export interface TaskExecutionRuntimeOptions {
   readonly visibilityChanged?: () => void;
   readonly backgroundAfterStart?: (request: TaskExecutionRequest) => boolean;
   readonly executionTimeoutMs?: (request: TaskExecutionRequest) => number | null;
+  readonly taskConfirmation?: (request: TaskExecutionRequest) => TaskConfirmationPresentation | null;
 }
 
 export interface TaskArtifactAttachmentTarget {
@@ -59,6 +60,7 @@ export class TaskExecutionRuntime {
   private backgroundOnStart = false;
   private executionTimeoutMs: number | null = null;
   private executionTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private taskConfirmation: TaskConfirmationPresentation | null = null;
 
   constructor(
     root: HTMLElement,
@@ -79,7 +81,10 @@ export class TaskExecutionRuntime {
       const target = (event.target as HTMLElement).closest<HTMLElement>("[data-task-execution-action]");
       if (!target || !this.identity) return;
       const action = target.dataset.taskExecutionAction;
-      if (action === "confirm") void controller.confirm(this.identity).catch((error) => this.fail(error));
+      if (action === "confirm") {
+        const remember = this.host()?.querySelector<HTMLInputElement>("[data-task-execution-remember]")?.checked === true;
+        void controller.confirm(this.identity, remember).catch((error) => this.fail(error));
+      }
       else if (action === "cancel") void controller.cancel(this.identity).catch((error) => this.fail(error));
       else if (action === "trust") void controller.setWorkspaceTrust(this.identity, "trusted").catch((error) => this.fail(error));
       else if (action === "deny") void controller.setWorkspaceTrust(this.identity, "denied").catch((error) => this.fail(error));
@@ -113,6 +118,7 @@ export class TaskExecutionRuntime {
     this.backgroundOnStart = false;
     this.clearExecutionTimer();
     this.executionTimeoutMs = null;
+    this.taskConfirmation = null;
     this.terminalState = null;
     this.invalidateArtifacts();
     this.controller.activateWorkspace(identity);
@@ -129,12 +135,17 @@ export class TaskExecutionRuntime {
     this.finished = finished;
     this.backgroundOnStart = this.options.backgroundAfterStart?.(request) === true;
     this.executionTimeoutMs = this.options.executionTimeoutMs?.(request) ?? null;
+    this.taskConfirmation = this.options.taskConfirmation?.(request) ?? null;
     this.terminalState = null;
     this.invalidateArtifacts();
-    this.open();
     try {
-      await this.controller.prepare(identity, request);
+      const review = await this.controller.prepare(identity, request, this.taskConfirmation !== null);
+      if (review.trust === "trusted" && this.controller.state.confirmationMemory === "remembered") {
+        await this.controller.confirm(identity, false);
+        return;
+      }
     } catch (error) {
+      if (this.controller.state.status === "starting") this.fail(error);
       if (this.finished === finished) this.finished = null;
       this.visible = false;
       this.backgroundOnStart = false;
@@ -142,7 +153,10 @@ export class TaskExecutionRuntime {
       this.options.visibilityChanged?.();
       throw error;
     }
-    if (this.finished === finished) this.render();
+    if (this.finished === finished) {
+      this.open();
+      this.render();
+    }
   }
 
   reveal(taskKey: string, identity: TaskWorkspaceIdentity): boolean {
@@ -164,7 +178,7 @@ export class TaskExecutionRuntime {
     const focusedAction = host.contains(document.activeElement)
       ? (document.activeElement as HTMLElement).dataset.taskExecutionAction ?? null
       : null;
-    host.innerHTML = renderTaskExecutionReview(state, this.copy(), this.artifactState);
+    host.innerHTML = renderTaskExecutionReview(state, this.copy(), this.artifactState, this.taskConfirmation);
     queueMicrotask(() => {
       const preferred = focusedAction
         ? host.querySelector<HTMLElement>(`[data-task-execution-action="${focusedAction}"]`)
@@ -326,8 +340,9 @@ export class TaskExecutionRuntime {
   }
 
   private backgroundStartedExecution(state: TaskExecutionState): void {
-    if (!this.visible || !this.backgroundOnStart || state.status !== "starting") return;
+    if (!this.backgroundOnStart || state.status !== "starting") return;
     this.startExecutionTimer();
+    if (!this.visible) return;
     this.visible = false;
     this.options.visibilityChanged?.();
     const fallback = this.root.querySelector<HTMLElement>('[data-tasks-action="cancel"], [data-tasks-action="refresh"]');

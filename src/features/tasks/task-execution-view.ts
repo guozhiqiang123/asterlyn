@@ -8,7 +8,17 @@ export type TaskArtifactViewState =
   | { readonly status: "ready"; readonly discovery: TaskArtifactDiscovery }
   | { readonly status: "unavailable" };
 
-export function renderTaskExecutionReview(state: TaskExecutionState, copy: TaskExecutionCopy, artifactState: TaskArtifactViewState | null = null): string {
+export interface TaskConfirmationPresentation {
+  readonly label: string;
+  readonly description?: string;
+}
+
+export function renderTaskExecutionReview(
+  state: TaskExecutionState,
+  copy: TaskExecutionCopy,
+  artifactState: TaskArtifactViewState | null = null,
+  confirmation: TaskConfirmationPresentation | null = null,
+): string {
   const review = state.review;
   if (!review) return "";
   const args = review.args.length ? review.args.map((arg) => `<code>${escapeHtml(arg)}</code>`).join(" ") : "<em>∅</em>";
@@ -16,9 +26,20 @@ export function renderTaskExecutionReview(state: TaskExecutionState, copy: TaskE
   const active = state.status === "queued" || state.status === "running" || state.status === "cancelling";
   const output = renderOutput(state);
   const artifacts = terminal && state.status === "succeeded" ? renderArtifacts(artifactState, copy) : "";
+  const remember = review.trust === "trusted" && state.status === "review" &&
+    state.confirmationMemory === "available" && confirmation
+    ? renderRememberConfirmation(confirmation)
+    : "";
   const actions = taskExecutionActions(state, copy, terminal, active);
-  const bodyHtml = `<dl><dt>${escapeHtml(copy.provenance)}</dt><dd>${escapeHtml(review.pluginId)} / ${escapeHtml(review.providerId)} / ${escapeHtml(review.taskId)} — ${escapeHtml(review.label)}</dd><dt>${escapeHtml(copy.executable)}</dt><dd><code>${escapeHtml(review.canonicalExecutablePath)}</code><small> (${escapeHtml(review.executablePath)})</small></dd><dt>${escapeHtml(copy.arguments)}</dt><dd>${args}</dd><dt>${escapeHtml(copy.cwd)}</dt><dd><code>${escapeHtml(review.cwd)}</code></dd><dt>${escapeHtml(copy.trust)}</dt><dd>${escapeHtml(review.trust)}</dd></dl>${review.trust !== "trusted" ? `<p role="alert">${escapeHtml(copy.trustRequired)}</p>` : ""}<p role="status" aria-live="polite">${escapeHtml((copy.status[state.status] ?? state.status))}</p>${state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : ""}${output ? `<pre class="task-execution-output">${output}</pre>` : ""}${state.outputTruncated ? `<p role="alert">${escapeHtml(copy.outputTruncated)}</p>` : ""}${artifacts}`;
+  const bodyHtml = `<dl><dt>${escapeHtml(copy.provenance)}</dt><dd>${escapeHtml(review.pluginId)} / ${escapeHtml(review.providerId)} / ${escapeHtml(review.taskId)} — ${escapeHtml(review.label)}</dd><dt>${escapeHtml(copy.executable)}</dt><dd><code>${escapeHtml(review.canonicalExecutablePath)}</code><small> (${escapeHtml(review.executablePath)})</small></dd><dt>${escapeHtml(copy.arguments)}</dt><dd>${args}</dd><dt>${escapeHtml(copy.cwd)}</dt><dd><code>${escapeHtml(review.cwd)}</code></dd><dt>${escapeHtml(copy.trust)}</dt><dd>${escapeHtml(review.trust)}</dd></dl>${review.trust !== "trusted" ? `<p role="alert">${escapeHtml(copy.trustRequired)}</p>` : ""}${remember}<p role="status" aria-live="polite">${escapeHtml((copy.status[state.status] ?? state.status))}</p>${state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : ""}${output ? `<pre class="task-execution-output">${output}</pre>` : ""}${state.outputTruncated ? `<p role="alert">${escapeHtml(copy.outputTruncated)}</p>` : ""}${artifacts}`;
   return renderHostDialog({ id: "task-execution", title: copy.title, className: "task-execution-review", bodyHtml, actions });
+}
+
+function renderRememberConfirmation(confirmation: TaskConfirmationPresentation): string {
+  const description = confirmation.description
+    ? `<small>${escapeHtml(confirmation.description)}</small>`
+    : "";
+  return `<label class="task-execution-remember"><input type="checkbox" data-task-execution-remember /><span><strong>${escapeHtml(confirmation.label)}</strong>${description}</span></label>`;
 }
 
 function taskExecutionActions(

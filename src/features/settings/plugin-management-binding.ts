@@ -11,6 +11,7 @@ export interface PluginManagementHost {
   subscribePluginManagement(listener: (snapshot: PluginManagementSnapshot) => void): () => void;
   setPluginEnabled(pluginId: string, enabled: boolean): boolean;
   setPluginSetting(pluginId: string, settingId: string, value: PluginSettingValue): boolean;
+  setPluginWorkspaceTrust(pluginId: string, trusted: boolean): Promise<boolean>;
 }
 
 export interface PluginManagementBindingOptions {
@@ -60,6 +61,19 @@ export class PluginManagementBinding {
         }
       }));
     this.root
+      .querySelectorAll<HTMLInputElement>("input[data-plugin-workspace-trust]")
+      .forEach((input) => input.addEventListener("change", () => {
+        const pluginId = input.dataset.pluginId;
+        if (!pluginId) return;
+        input.disabled = true;
+        void this.host.setPluginWorkspaceTrust(pluginId, input.checked).then(() => {
+          this.options.render(`#${CSS.escape(input.id)}`);
+        }).catch((error) => {
+          this.options.reportError(error);
+          this.options.render(`#${CSS.escape(input.id)}`);
+        });
+      }));
+    this.root
       .querySelectorAll<HTMLSelectElement>("select[data-plugin-setting]")
       .forEach((select) => select.addEventListener("change", () => {
         const pluginId = select.dataset.pluginId;
@@ -107,8 +121,11 @@ export class PluginManagementBinding {
         if (this.loaded) this.pendingFocus = null;
         return;
       }
-      const control = target.focus
-        ? card.querySelector<HTMLElement>(`[data-plugin-setting="${CSS.escape(target.focus)}"]`)
+      const escapedFocus = target.focus ? CSS.escape(target.focus) : null;
+      const control = escapedFocus
+        ? card.querySelector<HTMLElement>(
+            `[data-plugin-setting="${escapedFocus}"], [data-plugin-workspace-trust="${escapedFocus}"]`,
+          )
         : null;
       card.classList.add("settings-route-target");
       (control ?? card).focus();

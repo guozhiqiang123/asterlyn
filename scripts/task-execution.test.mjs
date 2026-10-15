@@ -259,6 +259,62 @@ test("confirmed execution moves to the Tasks panel while retaining terminal outp
   }
 });
 
+test("a remembered exact task starts in the background without reopening the review", async () => {
+  const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
+  class FakeElement { isConnected = true; focus() {} }
+  const host = {
+    innerHTML: "",
+    contains: () => false,
+    querySelector(selector) { return selector === ".task-execution-review" && this.innerHTML.includes("task-execution-review") ? {} : null; },
+    replaceChildren() { this.innerHTML = ""; },
+  };
+  const root = {
+    addEventListener: () => undefined,
+    matches: () => false,
+    querySelector: (selector) => selector === "#task-execution-host" ? host : null,
+  };
+  globalThis.HTMLElement = FakeElement;
+  globalThis.document = { activeElement: null };
+  try {
+    const listeners = [];
+    const starts = [];
+    const bridge = {
+      native: false,
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+      setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
+      prepareTaskExecution: async () => review,
+      readTaskConfirmation: async () => ({ protocolVersion: 1, reviewId: "review-1", remembered: true }),
+      startTaskExecution: async (rootValue, reviewId, rememberConfirmation) => {
+        starts.push({ rootValue, reviewId, rememberConfirmation });
+        return { protocolVersion: 1, runId: "run-auto", reviewId, workspaceRoot: rootValue };
+      },
+      cancelTaskExecution: async () => {},
+      subscribeTaskSession: async (listener) => { listeners.push(listener); return () => {}; },
+    };
+    const controller = new TaskExecutionController(bridge);
+    let finish;
+    const completion = new Promise((resolve) => { finish = resolve; });
+    const runtime = new TaskExecutionRuntime(root, controller, () => EN_US_TASK_EXECUTION_COPY, {
+      backgroundAfterStart: () => true,
+      taskConfirmation: () => ({ label: "Do not ask again" }),
+    });
+    runtime.activate(identity);
+    await runtime.prepare(identity, {
+      pluginId: "android", providerId: "gradle", taskId: "assembleDebug",
+      label: "assembleDebug", executablePath: "gradlew", args: ["assembleDebug"],
+    }, finish);
+    assert.equal(runtime.active, false);
+    assert.equal(host.innerHTML, "");
+    assert.deepEqual(starts, [{ rootValue: "/repo", reviewId: "review-1", rememberConfirmation: false }]);
+    listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-auto", workspaceRoot: "/repo", sequence: 1, status: "succeeded", message: null, exitCode: 0 });
+    assert.equal((await completion).status, "succeeded");
+    runtime.dispose();
+  } finally {
+    globalThis.document = previous.document;
+    globalThis.HTMLElement = previous.HTMLElement;
+  }
+});
+
 test("background discovery watchdog resolves instead of leaving the provider loading forever", async () => {
   const previous = { document: globalThis.document, HTMLElement: globalThis.HTMLElement };
   class FakeElement { isConnected = true; focus() {} }
@@ -531,6 +587,20 @@ test("review UI shows canonical executable, trust actions, ARIA, and merged UTF-
   assert.match(html, /&lt;script&gt;/u);
   assert.match(html, /Output was truncated/);
   assert.doesNotMatch(html, /<script>/u);
+});
+
+test("task confirmation memory is an explicit unchecked plugin-localized choice", () => {
+  const html = renderTaskExecutionReview({
+    status: "review", identity, review, confirmationMemory: "available", runId: null,
+    outputs: [], outputBytes: 0, outputTruncated: false, error: null, lastSequence: 0,
+  }, EN_US_TASK_EXECUTION_COPY, null, {
+    label: "Remember <this> exact task",
+    description: "The command fingerprint must still match.",
+  });
+  assert.match(html, /data-task-execution-remember/u);
+  assert.doesNotMatch(html, /data-task-execution-remember[^>]*checked/u);
+  assert.match(html, /Remember &lt;this&gt; exact task/u);
+  assert.match(html, /The command fingerprint must still match\./u);
 });
 
 test("terminal execution UI keeps errors and exposes retry and close output", () => {

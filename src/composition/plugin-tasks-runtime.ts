@@ -1,6 +1,7 @@
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type {
   PluginManagementSnapshot,
+  PluginManagementEntry,
   PluginSettingValue,
   PluginSettingsTargetResolution,
   PluginWorkspaceInvalidation,
@@ -12,6 +13,7 @@ import type { TaskExecutionBridge } from "../protocol/task-execution.ts";
 import { parseTaskArtifactDiscovery, type TaskArtifactBridge } from "../protocol/task-artifacts.ts";
 import { TaskExecutionController } from "../application/tasks/task-execution-controller.ts";
 import { TaskExecutionRuntime } from "../features/tasks/task-execution-runtime.ts";
+import type { TaskConfirmationPresentation } from "../features/tasks/task-execution-view.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
 import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY } from "../localization/task-execution-copy.ts";
 import { TasksController } from "../features/tasks/tasks-controller.ts";
@@ -50,12 +52,19 @@ export class PluginTasksRuntime {
   private readonly recentTasks: RecentTaskStore | null;
   private readonly artifactBridge: TaskArtifactBridge;
   private readonly reconcileAfterTask: ((identity: PluginWorkspaceIdentity) => void | Promise<void>) | undefined;
+  private readonly executionBridge: TaskExecutionBridge;
+  private readonly locale: () => "en-US" | "zh-CN";
+  private readonly managementListeners = new Set<(snapshot: PluginManagementSnapshot) => void>();
+  private readonly releaseManagement: () => void;
+  private readonly workspaceTrust = new Map<string, "loading" | "unknown" | "trusted" | "denied" | "error">();
   private identity: PluginWorkspaceIdentity | null = null;
 
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
     this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
     this.artifactBridge = options.artifactBridge;
     this.reconcileAfterTask = options.reconcileAfterTask;
+    this.executionBridge = options.executionBridge;
+    this.locale = options.locale ?? (() => "en-US");
     const controller = new TasksController();
     const executionController = new TaskExecutionController(options.executionBridge);
     this.execution = new TaskExecutionRuntime(
@@ -72,6 +81,7 @@ export class PluginTasksRuntime {
         visibilityChanged: () => this.render(),
         backgroundAfterStart: () => true,
         executionTimeoutMs: (request) => request.pluginId === "dev.asterlyn.android-gradle" && request.providerId === "gradle-tasks" && request.taskId === "discover" ? 120_000 : null,
+        taskConfirmation: (request) => this.taskConfirmationPresentation(request.pluginId),
       },
     );
     this.plugins = new PluginCompositionRuntime({
@@ -83,6 +93,10 @@ export class PluginTasksRuntime {
       executeTaskRun: (identity, plan, signal) => this.executeTaskRun(identity, plan, signal),
       providerRefreshTitle: (providerLabel) => `${options.copy().refresh}: ${providerLabel}`,
       taskCacheBridge: options.taskCacheBridge,
+    });
+    this.releaseManagement = this.plugins.subscribeManagement((snapshot) => {
+      this.applyTaskPresentation(snapshot);
+      this.publishManagement();
     });
     this.tasks = new TasksRuntime(root, controller, {
       copy: options.copy,
@@ -98,9 +112,16 @@ export class PluginTasksRuntime {
 
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
+    this.workspaceTrust.clear();
     this.tasks.activate(identity);
     this.execution.activate(identity);
     await this.plugins.activateWorkspace(identity);
+    const snapshot = this.plugins.managementSnapshot;
+    if (snapshot.entries.some((entry) => entry.taskAuthorization !== undefined)) {
+      await this.loadWorkspaceTrust(snapshot);
+    } else {
+      this.publishManagement();
+    }
   }
 
   async updateWorkspaceEvidence(
@@ -125,21 +146,19 @@ export class PluginTasksRuntime {
   }
 
   get pluginManagementSnapshot(): PluginManagementSnapshot {
-    return this.plugins.managementSnapshot;
+    return this.managementSnapshot(this.plugins.managementSnapshot);
   }
 
-  loadPluginManagement(): Promise<PluginManagementSnapshot> {
-    return this.plugins.loadManagementCatalog().then((snapshot) => {
-      this.applyTaskPresentation(snapshot);
-      return snapshot;
-    });
+  async loadPluginManagement(): Promise<PluginManagementSnapshot> {
+    const snapshot = await this.plugins.loadManagementCatalog();
+    this.applyTaskPresentation(snapshot);
+    await this.loadWorkspaceTrust(snapshot);
+    return this.pluginManagementSnapshot;
   }
 
   subscribePluginManagement(listener: (snapshot: PluginManagementSnapshot) => void): () => void {
-    return this.plugins.subscribeManagement((snapshot) => {
-      this.applyTaskPresentation(snapshot);
-      listener(snapshot);
-    });
+    this.managementListeners.add(listener);
+    return () => this.managementListeners.delete(listener);
   }
 
   setPluginEnabled(pluginId: string, enabled: boolean): boolean {
@@ -152,6 +171,33 @@ export class PluginTasksRuntime {
       this.tasks.setPresentation(value);
     }
     return changed;
+  }
+
+  async setPluginWorkspaceTrust(pluginId: string, trusted: boolean): Promise<boolean> {
+    const identity = this.identity;
+    const entry = this.plugins.managementSnapshot.entries.find((candidate) => candidate.id === pluginId);
+    if (!identity || !entry?.taskAuthorization) return false;
+    const current = this.workspaceTrust.get(pluginId);
+    const requested = trusted ? "trusted" : "denied";
+    if (current === requested) return false;
+    this.workspaceTrust.set(pluginId, "loading");
+    this.publishManagement();
+    try {
+      const result = await this.executionBridge.setWorkspaceTrust(identity.root, pluginId, requested);
+      if (!this.matches(identity) || result.workspaceRoot !== identity.root ||
+        result.pluginId !== pluginId || result.state !== requested) {
+        throw new Error("Plugin workspace trust response is stale.");
+      }
+      this.workspaceTrust.set(pluginId, result.state);
+      this.publishManagement();
+      return true;
+    } catch (error) {
+      if (this.matches(identity)) {
+        this.workspaceTrust.set(pluginId, "error");
+        this.publishManagement();
+      }
+      throw error;
+    }
   }
 
   /** Settings owners are null, one target, or many targets; many intentionally deep-link nowhere. */
@@ -172,6 +218,8 @@ export class PluginTasksRuntime {
 
   dispose(): void {
     this.identity = null;
+    this.releaseManagement();
+    this.managementListeners.clear();
     this.plugins.dispose();
     this.execution.dispose();
     this.tasks.dispose();
@@ -230,6 +278,62 @@ export class PluginTasksRuntime {
     if (setting !== undefined && isTaskPresentation(setting)) this.tasks.setPresentation(setting);
   }
 
+  private taskConfirmationPresentation(pluginId: string): TaskConfirmationPresentation | null {
+    const entry = this.plugins.managementSnapshot.entries.find((candidate) => candidate.id === pluginId);
+    const descriptor = entry?.taskAuthorization?.taskConfirmation;
+    if (!entry || !descriptor) return null;
+    return {
+      label: pluginMessage(entry, this.locale(), descriptor.rememberLabelKey),
+      ...(descriptor.rememberDescriptionKey === undefined
+        ? {}
+        : { description: pluginMessage(entry, this.locale(), descriptor.rememberDescriptionKey) }),
+    };
+  }
+
+  private async loadWorkspaceTrust(snapshot: PluginManagementSnapshot): Promise<void> {
+    const identity = this.identity;
+    if (!identity) {
+      this.workspaceTrust.clear();
+      this.publishManagement();
+      return;
+    }
+    const pluginIds = snapshot.entries
+      .filter((entry) => entry.taskAuthorization !== undefined)
+      .map((entry) => entry.id);
+    for (const pluginId of pluginIds) this.workspaceTrust.set(pluginId, "loading");
+    this.publishManagement();
+    await Promise.all(pluginIds.map(async (pluginId) => {
+      try {
+        const result = await this.executionBridge.readWorkspaceTrust(identity.root, pluginId);
+        if (!this.matches(identity) || result.workspaceRoot !== identity.root || result.pluginId !== pluginId) return;
+        this.workspaceTrust.set(pluginId, result.state);
+      } catch (error) {
+        if (this.matches(identity)) this.workspaceTrust.set(pluginId, "error");
+        this.reportError(error);
+      }
+    }));
+    if (this.matches(identity)) this.publishManagement();
+  }
+
+  private managementSnapshot(snapshot: PluginManagementSnapshot): PluginManagementSnapshot {
+    return Object.freeze({
+      schemaVersion: 1,
+      entries: Object.freeze(snapshot.entries.map((entry) => entry.taskAuthorization === undefined
+        ? entry
+        : Object.freeze({
+            ...entry,
+            workspaceTrust: this.identity
+              ? (this.workspaceTrust.get(entry.id) ?? "loading")
+              : "unavailable",
+          }))),
+    });
+  }
+
+  private publishManagement(): void {
+    const snapshot = this.pluginManagementSnapshot;
+    for (const listener of this.managementListeners) listener(snapshot);
+  }
+
   private async executeTask(
     identity: PluginWorkspaceIdentity,
     plan: PluginTaskRefreshPlan,
@@ -271,6 +375,11 @@ export class PluginTasksRuntime {
       }));
     });
   }
+}
+
+function pluginMessage(entry: PluginManagementEntry, locale: string, key: string): string {
+  return entry.localization.locales[locale]?.[key] ??
+    entry.localization.locales[entry.localization.defaultLocale]?.[key] ?? key;
 }
 
 function browserPathPlatform(): "posix" | "windows" {

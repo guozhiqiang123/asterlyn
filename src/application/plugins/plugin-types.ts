@@ -13,6 +13,7 @@ import type {
   SdkSettingOption,
   SdkTaskExecutionRequest,
   SdkTaskExecutionResult,
+  SdkTaskAuthorizationDescriptor,
   SdkTaskRefreshPlan,
   SdkTaskRunPlan,
   SdkWorkspaceInvalidation,
@@ -28,6 +29,8 @@ export type PluginWorkspaceInvalidation = SdkWorkspaceInvalidation;
 export type PluginTaskRefreshPlan = SdkTaskRefreshPlan;
 export type PluginTaskRunPlan = SdkTaskRunPlan;
 export type PluginTaskExecutionRequest = SdkTaskExecutionRequest;
+export type PluginTaskAuthorizationDescriptor = SdkTaskAuthorizationDescriptor;
+export type PluginWorkspaceTrustPresentation = "unavailable" | "loading" | "unknown" | "trusted" | "denied" | "error";
 
 /** A host-owned deep link into a plugin's settings. */
 export interface PluginSettingsTarget {
@@ -163,6 +166,8 @@ export interface PluginManagementEntry {
   readonly active: boolean;
   readonly settingDescriptors: readonly PluginSettingDescriptor[];
   readonly settings: Readonly<Record<string, PluginSettingValue>>;
+  readonly taskAuthorization?: PluginTaskAuthorizationDescriptor;
+  readonly workspaceTrust?: PluginWorkspaceTrustPresentation;
   readonly diagnostics: readonly PluginDiagnostic[];
 }
 

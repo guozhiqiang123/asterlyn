@@ -14,9 +14,14 @@ const entry = {
   id: "dev.asterlyn.android-gradle", version: "0.1.0", nameKey: "name",
   descriptionKey: "description", enabled: true, matched: false, active: false,
   localization: { defaultLocale: "en-US", locales: {
-    "en-US": { name: "Android / Gradle", description: "Gradle tooling.", "settings.taskPresentation.label": "Task presentation", "settings.taskPresentation.description": "Choose the task tree.", "settings.taskPresentation.allTasksTree": "All tasks tree", "settings.taskPresentation.quickActionsTree": "Quick actions tree" },
-    "zh-CN": { name: "Android / Gradle", description: "Gradle 工具。", "settings.taskPresentation.label": "任务展示方式", "settings.taskPresentation.description": "选择任务树。", "settings.taskPresentation.allTasksTree": "完整任务树", "settings.taskPresentation.quickActionsTree": "快捷操作树" },
+    "en-US": { name: "Android / Gradle", description: "Gradle tooling.", "settings.taskPresentation.label": "Task presentation", "settings.taskPresentation.description": "Choose the task tree.", "settings.taskPresentation.allTasksTree": "All tasks tree", "settings.taskPresentation.quickActionsTree": "Quick actions tree", "authorization.workspaceTrust.label": "Trust this workspace", "authorization.workspaceTrust.description": "Allow this plugin to run reviewed Gradle tasks." },
+    "zh-CN": { name: "Android / Gradle", description: "Gradle 工具。", "settings.taskPresentation.label": "任务展示方式", "settings.taskPresentation.description": "选择任务树。", "settings.taskPresentation.allTasksTree": "完整任务树", "settings.taskPresentation.quickActionsTree": "快捷操作树", "authorization.workspaceTrust.label": "信任此工作区", "authorization.workspaceTrust.description": "允许插件运行已审查的 Gradle 任务。" },
   } },
+  taskAuthorization: {
+    workspaceTrust: { id: "workspaceTrust", labelKey: "authorization.workspaceTrust.label", descriptionKey: "authorization.workspaceTrust.description" },
+    taskConfirmation: { rememberLabelKey: "authorization.rememberTask.label" },
+  },
+  workspaceTrust: "trusted",
   settingDescriptors: [{ id: "taskPresentation", kind: "enum", labelKey: "settings.taskPresentation.label", descriptionKey: "settings.taskPresentation.description", defaultValue: "all-tasks-tree", options: [
     { value: "all-tasks-tree", labelKey: "settings.taskPresentation.allTasksTree" },
     { value: "quick-actions-tree", labelKey: "settings.taskPresentation.quickActionsTree" },
@@ -30,7 +35,19 @@ test("plugin management renders localized metadata and declarative settings with
   assert.match(html, /data-plugin-setting="enabled"/);
   assert.match(html, /data-plugin-setting="taskPresentation"/);
   assert.match(html, /value="quick-actions-tree" selected/);
+  assert.match(html, /data-plugin-workspace-trust="workspaceTrust"/u);
+  assert.match(html, /role="switch"[^>]*checked/u);
+  assert.match(html, /Trust this workspace/u);
   assert.doesNotMatch(html, /<script|on[a-z]+=|<iframe/i);
+});
+
+test("workspace trust switch fails closed while host authorization state is unavailable", () => {
+  const html = renderPluginManagementSection(
+    { schemaVersion: 1, entries: [{ ...entry, workspaceTrust: "error" }] },
+    copy,
+  );
+  assert.match(html, /data-plugin-workspace-trust="workspaceTrust"[^>]*disabled/u);
+  assert.doesNotMatch(html, /data-plugin-workspace-trust="workspaceTrust"[^>]*checked/u);
 });
 
 test("plugin management resolves plugin-owned Chinese copy and escapes it as text", () => {
