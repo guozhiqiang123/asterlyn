@@ -7,6 +7,7 @@ import { renderTasksView } from "../src/features/tasks/tasks-view.ts";
 const copy = {
   title: "Tasks", refresh: "Refresh", empty: "Empty", unavailable: "Unavailable", loading: "Loading", cancelDiscovery: "Cancel discovery", retryDiscovery: "Retry discovery", discovered: (count) => `${count} discovered`, providerLoading: (provider) => `Discovering ${provider}`, showing: (count, total) => `Showing ${count} of ${total}`, showMore: "Show more",
   expand: (label) => `Expand ${label}`, collapse: (label) => `Collapse ${label}`,
+  collectionControls: "Task controls", showAsTree: "Tree", showAsFlat: "Flat", expandAll: "Expand all", collapseAll: "Collapse all",
   unavailableReasons: {
     "discovery-not-supported": "Not supported",
     "evidence-incomplete": "Incomplete evidence",
@@ -50,7 +51,7 @@ test("Tasks view renders all non-ready states without task rows", () => {
       unavailableReason: status === "unavailable" ? "evidence-incomplete" : null,
     }, copy);
     assert.match(html, status === "error" ? /role="alert"/ : /role="status"/);
-    assert.doesNotMatch(html, /class="tasks-row"/);
+    assert.doesNotMatch(html, /data-task-key=/);
   }
 });
 
@@ -91,12 +92,26 @@ test("ready discovery reports the task count while retaining the filter and list
   assert.match(html, /data-tasks-query/);
   assert.match(html, /data-task-key="p:one"/);
   assert.doesNotMatch(html, /class="tasks-header"/);
+  assert.match(html, /data-collection-command="toggle-view"/u);
+  assert.match(html, /data-collection-command="expand-all"/u);
+  assert.match(html, /data-collection-command="collapse-all"/u);
+});
+
+test("flat task mode renders only task leaves through the shared collection contract", () => {
+  const entry = { key: "p:one", providerId: "p", providerLabel: "P", task: { id: ":app:one", label: "one", group: "Build", projectPath: ":app", runnable: true } };
+  const state = { identity: { root: "/project", generation: 1 }, status: "ready", providers: [], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null };
+  const html = renderTasksView(state, copy, 250, undefined, "all-tasks-tree", "flat");
+  assert.match(html, /role="list"/u);
+  assert.match(html, /data-collection-mode="flat"/u);
+  assert.match(html, /data-task-key="p:one"/u);
+  assert.doesNotMatch(html, /tasks-tree-branch/u);
+  assert.match(html, /data-collection-command="expand-all"[^>]*disabled/u);
 });
 
 test("large task sets render in bounded batches while retaining the full match count", () => {
   const entries = Array.from({ length: 600 }, (_, index) => ({ key: `p:${index}`, providerId: "p", providerLabel: "P", task: { id: `${index}`, label: `task${index}`, group: "Build", runnable: true } }));
   const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [], entries, visibleEntries: entries, query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy, 250, expanded(entries));
-  assert.equal((html.match(/class="tasks-row"/gu) ?? []).length, 250);
+  assert.equal((html.match(/data-task-key=/gu) ?? []).length, 250);
   assert.match(html, /Showing 250 of 600/);
   assert.match(html, /data-tasks-action="show-more"/);
 });

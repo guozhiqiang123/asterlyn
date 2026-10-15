@@ -1,9 +1,16 @@
 import type { AndroidTaskQuickActionKind, TaskProviderStaleReason, TaskProviderUnavailableReason } from "../../application/tasks/task-types.ts";
 import type { TaskProviderCacheMetadata } from "../../application/tasks/task-types.ts";
 import { icon } from "../../icons.ts";
+import type { CollectionViewMode } from "../../presentation/hierarchical-collection.ts";
+import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
+import {
+  renderHierarchicalCollection,
+  type HierarchicalCollectionRenderedRow,
+} from "../../presentation/hierarchical-collection-view.ts";
 import type { TaskPresentation, TasksState } from "./tasks-model.ts";
 import {
   buildTaskTree,
+  taskTreeBranchKeys,
   taskTreeDefaultExpandedKeys,
   taskTreeRows,
   type TaskTreeBranch,
@@ -27,6 +34,11 @@ export interface TasksCopy {
   readonly showMore: string;
   readonly expand: (label: string) => string;
   readonly collapse: (label: string) => string;
+  readonly collectionControls: string;
+  readonly showAsTree: string;
+  readonly showAsFlat: string;
+  readonly expandAll: string;
+  readonly collapseAll: string;
   readonly busy: string;
   readonly noResults: string;
   readonly queryPlaceholder: string;
@@ -67,6 +79,11 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   showMore: "Load more tasks",
   expand: (label: string) => `Expand ${label}`,
   collapse: (label: string) => `Collapse ${label}`,
+  collectionControls: "Task list controls",
+  showAsTree: "Show tasks as a tree",
+  showAsFlat: "Show tasks as a flat list",
+  expandAll: "Expand all task groups",
+  collapseAll: "Collapse all task groups",
   busy: "Another task is already running for this workspace.",
   noResults: "No matching tasks.",
   queryPlaceholder: "Filter tasks",
@@ -100,25 +117,47 @@ export function renderTasksView(
   visibleLimit = TASKS_RENDER_BATCH_SIZE,
   expandedTreeNodes?: ReadonlySet<string>,
   presentation: TaskPresentation = "all-tasks-tree",
+  viewMode: CollectionViewMode = "tree",
 ): string {
-  const entries = presentationEntries(state, presentation, copy);
+  const entries = taskPresentationEntries(state, presentation, copy);
   const projectedState = entries === state.visibleEntries ? state : { ...state, entries, visibleEntries: entries };
   const status = renderStatus(projectedState, copy);
   const query = `<label class="tasks-query-label"><span class="sr-only">${escapeHtml(copy.queryPlaceholder)}</span><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
-  const tree = buildTaskTree(entries, state.identity?.root ?? "", presentation === "quick-actions-tree" ? copy.androidQuickActions : copy.title);
-  const expanded = expandedTreeNodes ?? taskTreeDefaultExpandedKeys(tree);
-  const forceExpanded = presentation === "quick-actions-tree" || state.query.trim().length > 0;
-  const projection = taskTreeRows(tree, expanded, visibleLimit, forceExpanded);
+  const collectionToolbar = renderHierarchicalCollectionToolbar({
+    mode: viewMode,
+    ariaLabel: copy.collectionControls,
+    className: "tasks-collection-toolbar",
+    commands: [
+      { id: "toggle-view", label: viewMode === "tree" ? copy.showAsFlat : copy.showAsTree, icon: "eye", pressed: viewMode === "tree", disabled: entries.length === 0 },
+      { id: "expand-all", label: copy.expandAll, icon: "expand", disabled: viewMode === "flat" || entries.length === 0 || state.query.trim().length > 0 },
+      { id: "collapse-all", label: copy.collapseAll, icon: "collapse", disabled: viewMode === "flat" || entries.length === 0 || state.query.trim().length > 0 },
+    ],
+  });
+  const queryRow = `<div class="tasks-query-row">${query}${collectionToolbar}</div>`;
+  const tree = buildTaskTree(entries, state.identity?.root ?? "", presentation === "quick-actions-tree" ? copy.androidQuickActions : copy.title, presentation === "all-tasks-tree" ? state.providers : []);
+  const expanded = expandedTreeNodes ?? (presentation === "quick-actions-tree" ? taskTreeBranchKeys(tree) : taskTreeDefaultExpandedKeys(tree));
+  const forceExpanded = viewMode === "tree" && state.query.trim().length > 0;
+  const projection = taskTreeRows(tree, expanded, visibleLimit, forceExpanded, viewMode);
   const list = entries.length > 0
-    ? `<div class="tasks-list tasks-tree" role="tree" aria-label="${escapeAttribute(copy.title)}" tabindex="0">${projection.rows.map((row) => renderTaskTreeRow(row, expanded, forceExpanded, state, copy)).join("")}</div>`
+    ? renderHierarchicalCollection({
+      projection,
+      mode: viewMode,
+      ariaLabel: copy.title,
+      className: "tasks-list tasks-tree",
+      renderRow: (row) => renderTaskTreeRow(row, forceExpanded, state, copy),
+    })
     : "";
   const more = projection.truncated
     ? `<footer class="tasks-list-more" role="status"><span>${escapeHtml(copy.showing(projection.renderedTasks, projection.visibleTasks))}</span><button type="button" data-tasks-action="show-more">${escapeHtml(copy.showMore)}</button></footer>`
     : "";
-  return `<section class="tasks-tool" data-tasks-presentation="${presentation}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${query}${status}${list}${more}</section>`;
+  return `<section class="tasks-tool" data-tasks-presentation="${presentation}" data-tasks-status="${state.status}" role="region" aria-label="${escapeAttribute(copy.title)}" aria-busy="${state.status === "loading"}">${queryRow}${status}${list}${more}</section>`;
 }
 
-function presentationEntries(state: TasksState, presentation: TaskPresentation, copy: TasksCopy): readonly TasksState["visibleEntries"][number][] {
+export function taskPresentationEntries(
+  state: TasksState,
+  presentation: TaskPresentation,
+  copy: Pick<TasksCopy, "quickActionKinds">,
+): readonly TasksState["visibleEntries"][number][] {
   if (presentation === "all-tasks-tree") return state.visibleEntries;
   return state.visibleEntries.filter((entry) => entry.task.runnable && entry.task.androidQuickAction).map((entry) => {
     const action = entry.task.androidQuickAction;
@@ -132,27 +171,33 @@ function presentationEntries(state: TasksState, presentation: TaskPresentation, 
 
 function renderTaskTreeRow(
   row: TaskTreeRow,
-  expandedTreeNodes: ReadonlySet<string>,
   forceExpanded: boolean,
   state: TasksState,
   copy: TasksCopy,
-): string {
+): HierarchicalCollectionRenderedRow {
   if (row.node.type === "task") return taskRow(row as TaskTreeRow & { readonly node: TaskTreeTask }, state, copy);
-  return taskBranchRow(row as TaskTreeRow & { readonly node: TaskTreeBranch }, expandedTreeNodes, forceExpanded, copy);
+  return taskBranchRow(row as TaskTreeRow & { readonly node: TaskTreeBranch }, forceExpanded, copy);
 }
 
 function taskBranchRow(
   row: TaskTreeRow & { readonly node: TaskTreeBranch },
-  expandedTreeNodes: ReadonlySet<string>,
   forceExpanded: boolean,
   copy: TasksCopy,
-): string {
+): HierarchicalCollectionRenderedRow {
   const { node } = row;
-  const expanded = forceExpanded || expandedTreeNodes.has(node.key);
+  const expanded = row.expanded;
   const glyph = node.kind === "tasks" ? "list" : "folder";
   const detail = node.detail ? `<small>${escapeHtml(node.detail)}</small>` : "";
-  const parent = node.parentKey ? ` data-task-tree-parent="${escapeAttribute(node.parentKey)}"` : "";
-  return `<div class="tasks-tree-row tasks-tree-branch ${node.kind}" role="treeitem" tabindex="-1" data-task-tree-row data-task-tree-key="${escapeAttribute(node.key)}"${parent} style="--tree-depth:${row.depth}" aria-expanded="${expanded}" aria-selected="false" aria-level="${row.depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}"><button type="button" data-task-tree-toggle="${escapeAttribute(node.key)}" aria-label="${escapeAttribute(expanded ? copy.collapse(node.label) : copy.expand(node.label))}" ${forceExpanded ? "disabled" : ""}><span class="tasks-tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 11)}</span>${icon(glyph, 14)}<span class="tasks-tree-label"><strong>${escapeHtml(node.label)}</strong>${detail}</span></button></div>`;
+  return {
+    className: `tasks-tree-row tasks-tree-branch ${node.kind}`,
+    selected: false,
+    attributes: {
+      "data-task-tree-row": true,
+      "data-task-tree-key": node.key,
+      "data-task-tree-parent": node.parentKey,
+    },
+    content: `<button type="button" data-task-tree-toggle="${escapeAttribute(node.key)}" aria-label="${escapeAttribute(expanded ? copy.collapse(node.label) : copy.expand(node.label))}" ${forceExpanded ? "disabled" : ""}><span class="tasks-tree-chevron ${expanded ? "expanded" : ""}">${icon("chevron", 11)}</span>${icon(glyph, 14)}<span class="tasks-tree-label"><strong>${escapeHtml(node.label)}</strong>${detail}</span></button>`,
+  };
 }
 
 function renderStatus(state: TasksState, copy: TasksCopy): string {
@@ -209,7 +254,7 @@ function taskRow(
   row: TaskTreeRow & { readonly node: TaskTreeTask },
   state: TasksState,
   copy: TasksCopy,
-): string {
+): HierarchicalCollectionRenderedRow {
   const { entry, label } = row.node;
   const { runnable, disabledReason, runState, description } = entry.task;
   const discoveryLoading = state.status === "loading";
@@ -226,7 +271,18 @@ function taskRow(
     ? `<span class="tasks-row-actions"><button type="button" data-task-action="retry" title="${escapeAttribute(copy.retry)}" ${discoveryLoading ? "disabled" : ""}>${escapeHtml(copy.retry)}</button><button type="button" data-task-action="reveal-output" title="${escapeAttribute(copy.revealOutput)}">${escapeHtml(copy.revealOutput)}</button></span>`
     : "";
   const tooltip = [entry.task.id, description, title].filter(Boolean).join(" · ");
-  return `<div role="treeitem" tabindex="-1" class="tasks-row" data-task-tree-row data-task-tree-key="${escapeAttribute(row.node.key)}" data-task-tree-parent="${escapeAttribute(row.node.parentKey)}" data-task-key="${escapeAttribute(entry.key)}" style="--tree-depth:${row.depth}" aria-level="${row.depth + 1}" aria-posinset="${row.positionInSet}" aria-setsize="${row.setSize}" aria-selected="${selected}" aria-label="${escapeAttribute(label)}"><button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(tooltip)}" ${runnable && !cacheLocked && !active && !discoveryLoading ? "" : "disabled"}><span class="tasks-tree-leaf-spacer"></span>${icon("file", 13)}<span class="tasks-row-copy"><strong>${escapeHtml(label)}</strong>${status}</span></button>${actions}</div>`;
+  return {
+    className: "tasks-row",
+    selected,
+    attributes: {
+      "data-task-tree-row": true,
+      "data-task-tree-key": row.node.key,
+      "data-task-tree-parent": row.node.parentKey,
+      "data-task-key": entry.key,
+      "aria-label": label,
+    },
+    content: `<button type="button" class="tasks-row-primary" data-task-action="run" title="${escapeAttribute(tooltip)}" ${runnable && !cacheLocked && !active && !discoveryLoading ? "" : "disabled"}><span class="tasks-tree-leaf-spacer"></span>${icon("file", 13)}<span class="tasks-row-copy"><strong>${escapeHtml(label)}</strong>${status}</span></button>${actions}`,
+  };
 }
 
 function message(text: string): string { return `<p class="tasks-message" role="status">${escapeHtml(text)}</p>`; }

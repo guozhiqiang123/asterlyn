@@ -86,3 +86,24 @@ test("provider identity keeps same-name module and task nodes distinct", () => {
   const keys = modules.map((module) => module.children[0].children[0].children[0].key);
   assert.notEqual(keys[0], keys[1]);
 });
+
+test("uses a contributed provider hierarchy and joins leaves to exact task entries", () => {
+  const entries = [entry("android.gradle-tasks", ":app:assembleDebug", "Build tasks", ":app")];
+  const providers = [{
+    id: "android.gradle-tasks", label: "Gradle", snapshot: { status: "ready", tasks: [entries[0].task] },
+    collection: {
+      providerId: "android.gradle-tasks", source: "contributed", truncated: false,
+      nodes: [
+        { id: "android.gradle-tasks:collection:app", parentId: null, label: "app", kind: "group", order: 0, depth: 0, metadata: { "android.gradle.nodeKind": "module" } },
+        { id: "android.gradle-tasks:collection:tasks", parentId: "android.gradle-tasks:collection:app", label: "Tasks", kind: "group", order: 0, depth: 1, metadata: { "android.gradle.nodeKind": "tasks" } },
+        { id: "android.gradle-tasks:collection:build", parentId: "android.gradle-tasks:collection:tasks", label: "build", kind: "group", order: 0, depth: 2, metadata: { "android.gradle.nodeKind": "group" } },
+        { id: "android.gradle-tasks:collection:assemble", parentId: "android.gradle-tasks:collection:build", label: "assembleDebug", kind: "task", order: 0, depth: 3, taskId: ":app:assembleDebug" },
+      ],
+    },
+  }];
+  const tree = buildTaskTree(entries, "/repo/FilesRecovery", "Tasks", providers);
+  assert.deepEqual(tree.children.map((node) => [node.kind, node.label]), [["module", "app"]]);
+  const leaf = tree.children[0].children[0].children[0].children[0];
+  assert.equal(leaf.key, "android.gradle-tasks:collection:assemble");
+  assert.equal(leaf.entry, entries[0]);
+});

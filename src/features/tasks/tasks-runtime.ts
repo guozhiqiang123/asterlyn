@@ -6,8 +6,9 @@ import {
   taskTreeBranchKeys,
   taskTreeDefaultExpandedKeys,
 } from "./tasks-tree.ts";
-import { DisclosureState } from "../../presentation/hierarchical-collection.ts";
-import { renderTasksView, TASKS_RENDER_BATCH_SIZE, type TasksCopy } from "./tasks-view.ts";
+import { DisclosureState, type CollectionViewMode, type HierarchicalCollectionNavigationKey } from "../../presentation/hierarchical-collection.ts";
+import { hierarchicalCollectionDomNavigation, hierarchicalCollectionRowElement } from "../../presentation/hierarchical-collection-dom.ts";
+import { renderTasksView, taskPresentationEntries, TASKS_RENDER_BATCH_SIZE, type TasksCopy } from "./tasks-view.ts";
 
 export interface TasksRuntimeOptions {
   readonly copy?: () => TasksCopy;
@@ -26,9 +27,10 @@ export class TasksRuntime {
   private readonly controller: TasksController;
   private readonly options: TasksRuntimeOptions;
   private visibleLimit = TASKS_RENDER_BATCH_SIZE;
-  private treeDisclosure = expandedDisclosure([TASK_TREE_ROOT_KEY]);
-  private treeExpansionTouched = false;
+  private treeDisclosures: Record<TaskPresentation, DisclosureState> = initialDisclosures();
+  private treeExpansionTouched: Record<TaskPresentation, boolean> = initialTouched();
   private presentation: TaskPresentation = "all-tasks-tree";
+  private viewMode: CollectionViewMode = "tree";
 
   constructor(
     root: HTMLElement,
@@ -40,8 +42,8 @@ export class TasksRuntime {
     this.options = options;
     this.release = controller.subscribe((change) => {
       if (change.reason === "workspace") {
-        this.treeDisclosure = expandedDisclosure([TASK_TREE_ROOT_KEY]);
-        this.treeExpansionTouched = false;
+        this.treeDisclosures = initialDisclosures();
+        this.treeExpansionTouched = initialTouched();
       }
       if (change.reason === "providers") this.reconcileExpandedTree(change.state);
       if (change.reason === "workspace" || change.reason === "providers" || change.reason === "query") this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
@@ -65,7 +67,7 @@ export class TasksRuntime {
     if (!host) return;
     const focus = captureTasksFocus(host);
     const copy = this.options.copy?.();
-    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.treeDisclosure.snapshot.exceptions, this.presentation);
+    host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.disclosure().snapshot.exceptions, this.presentation, this.viewMode);
     syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
@@ -107,6 +109,10 @@ export class TasksRuntime {
       if (action === "refresh") void this.refresh();
       else if (action === "cancel") void this.cancel();
       else if (action === "show-more") this.showMore();
+      const collectionCommand = target.closest<HTMLElement>("[data-collection-command]")?.dataset.collectionCommand;
+      if (collectionCommand === "toggle-view") this.toggleViewMode();
+      else if (collectionCommand === "expand-all") this.expandAll();
+      else if (collectionCommand === "collapse-all") this.collapseAll();
       const treeToggle = target.closest<HTMLElement>("[data-task-tree-toggle]")?.dataset.taskTreeToggle;
       if (treeToggle) this.toggleTreeNode(treeToggle);
       const row = target.closest<HTMLElement>("[data-task-key]");
@@ -128,17 +134,8 @@ export class TasksRuntime {
       const keyboard = event as KeyboardEvent;
       const target = event.target;
       if (target instanceof Element) {
-        const treeRow = target.closest<HTMLElement>("[data-task-tree-row]");
-        if (treeRow && this.handleTreeNavigation(host, treeRow, keyboard)) return;
-        if (target.matches("[role=tree]") && ["ArrowDown", "ArrowUp", "Home", "End"].includes(keyboard.key)) {
-          const rows = Array.from(host.querySelectorAll<HTMLElement>("[data-task-tree-row]"));
-          const first = keyboard.key === "ArrowUp" || keyboard.key === "End" ? rows.at(-1) : rows[0];
-          if (first) {
-            keyboard.preventDefault();
-            this.focusTreeRow(first);
-            return;
-          }
-        }
+        const collectionRow = target.closest<HTMLElement>("[data-collection-row]");
+        if ((collectionRow || target.matches("[data-collection-root]")) && this.handleCollectionNavigation(host, collectionRow, keyboard)) return;
       }
       if (keyboard.key === "ArrowDown") {
         if (this.controller.state.selectedIndex + 1 >= this.visibleLimit && this.visibleLimit < this.controller.state.visibleEntries.length) {
@@ -181,55 +178,68 @@ export class TasksRuntime {
   }
 
   private toggleTreeNode(key: string): void {
-    if (this.controller.state.query.trim()) return;
-    this.treeExpansionTouched = true;
-    this.treeDisclosure.toggle(key);
+    if (this.viewMode !== "tree" || this.controller.state.query.trim()) return;
+    this.treeExpansionTouched[this.presentation] = true;
+    this.disclosure().toggle(key);
     this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
     this.render();
   }
 
   private reconcileExpandedTree(state: TasksState): void {
-    const tree = buildTaskTree(state.entries, state.identity?.root ?? "", this.options.copy?.().title ?? "Tasks");
-    const available = taskTreeBranchKeys(tree);
-    const expanded = this.treeExpansionTouched
-      ? new Set([...available].filter((key) => this.treeDisclosure.isExpanded(key)))
-      : taskTreeDefaultExpandedKeys(tree);
-    expanded.add(TASK_TREE_ROOT_KEY);
-    this.treeDisclosure = expandedDisclosure(expanded);
+    const copy = this.options.copy?.();
+    for (const presentation of ["all-tasks-tree", "quick-actions-tree"] as const) {
+      const entries = taskPresentationEntries(state, presentation, copy ?? renderCopyFallback);
+      const tree = buildTaskTree(
+        entries,
+        state.identity?.root ?? "",
+        presentation === "quick-actions-tree" ? copy?.androidQuickActions ?? "Android quick actions" : copy?.title ?? "Tasks",
+        presentation === "all-tasks-tree" ? state.providers : [],
+      );
+      const available = taskTreeBranchKeys(tree);
+      const current = this.treeDisclosures[presentation];
+      const expanded = this.treeExpansionTouched[presentation]
+        ? new Set([...available].filter((key) => current.isExpanded(key)))
+        : presentation === "quick-actions-tree" ? available : taskTreeDefaultExpandedKeys(tree);
+      expanded.add(TASK_TREE_ROOT_KEY);
+      this.treeDisclosures[presentation] = expandedDisclosure(expanded);
+    }
   }
 
-  private handleTreeNavigation(host: HTMLElement, row: HTMLElement, event: KeyboardEvent): boolean {
-    const rows = Array.from(host.querySelectorAll<HTMLElement>("[data-task-tree-row]"));
-    const index = rows.indexOf(row);
-    if (index < 0) return false;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
-      const next = event.key === "Home" ? 0
-        : event.key === "End" ? rows.length - 1
-          : Math.max(0, Math.min(rows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)));
-      event.preventDefault();
-      this.focusTreeRow(rows[next] ?? row);
-      return true;
+  private handleCollectionNavigation(host: HTMLElement, row: HTMLElement | null, event: KeyboardEvent): boolean {
+    const directional = ["ArrowDown", "ArrowUp", "Home", "End"];
+    const treeOnly = ["ArrowRight", "ArrowLeft"];
+    if (!directional.includes(event.key) && (this.viewMode !== "tree" || !treeOnly.includes(event.key))) return false;
+    const decision = hierarchicalCollectionDomNavigation(host, row, event.key as HierarchicalCollectionNavigationKey);
+    if (!decision.handled) return false;
+    event.preventDefault();
+    if (decision.toggleId) this.toggleTreeNode(decision.toggleId);
+    else if (decision.focusId) {
+      const target = hierarchicalCollectionRowElement(host, decision.focusId);
+      if (target) this.focusTreeRow(target);
     }
-    const branchKey = row.dataset.taskTreeKey;
-    const branch = row.hasAttribute("aria-expanded") && branchKey;
-    if (event.key === "ArrowRight" && branch) {
-      event.preventDefault();
-      if (row.getAttribute("aria-expanded") === "false") this.toggleTreeNode(branchKey);
-      else this.focusTreeRow(rows[index + 1] ?? row);
-      return true;
-    }
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      if (branch && row.getAttribute("aria-expanded") === "true" && !this.controller.state.query.trim()) {
-        this.toggleTreeNode(branchKey);
-      } else {
-        const parentKey = row.dataset.taskTreeParent;
-        const parent = parentKey ? rows.find((candidate) => candidate.dataset.taskTreeKey === parentKey) : undefined;
-        if (parent) this.focusTreeRow(parent);
-      }
-      return true;
-    }
-    return false;
+    return true;
+  }
+
+  private toggleViewMode(): void {
+    this.viewMode = this.viewMode === "tree" ? "flat" : "tree";
+    this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
+    this.render();
+  }
+
+  private expandAll(): void {
+    if (this.viewMode !== "tree" || this.controller.state.query.trim()) return;
+    this.treeExpansionTouched[this.presentation] = true;
+    this.disclosure().expandAll();
+    this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
+    this.render();
+  }
+
+  private collapseAll(): void {
+    if (this.viewMode !== "tree" || this.controller.state.query.trim()) return;
+    this.treeExpansionTouched[this.presentation] = true;
+    this.disclosure().collapseAll();
+    this.visibleLimit = TASKS_RENDER_BATCH_SIZE;
+    this.render();
   }
 
   private focusTreeRow(row: HTMLElement): void {
@@ -246,12 +256,29 @@ export class TasksRuntime {
     if (identity) this.options.revealOutput?.(taskKey, identity);
   }
 
+  private disclosure(): DisclosureState { return this.treeDisclosures[this.presentation]; }
+
   private host(): HTMLElement | null { return this.root.querySelector<HTMLElement>("#tasks-tool-host"); }
 }
 
 function expandedDisclosure(keys: Iterable<string>): DisclosureState {
   return new DisclosureState({ defaultExpanded: false, exceptions: new Set(keys) });
 }
+
+function initialDisclosures(): Record<TaskPresentation, DisclosureState> {
+  return {
+    "all-tasks-tree": expandedDisclosure([TASK_TREE_ROOT_KEY]),
+    "quick-actions-tree": new DisclosureState({ defaultExpanded: true }),
+  };
+}
+
+function initialTouched(): Record<TaskPresentation, boolean> {
+  return { "all-tasks-tree": false, "quick-actions-tree": false };
+}
+
+const renderCopyFallback = Object.freeze({
+  quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" },
+});
 
 export function syncTasksHeaderRefresh(root: ParentNode, state: TasksState, copy?: TasksCopy): void {
   const headerRefresh = root.querySelector<HTMLButtonElement>("#tasks-header-refresh");
@@ -279,8 +306,8 @@ export function captureTasksFocus(host: HTMLElement): TasksFocusSnapshot {
   if (active.matches("[role=tree], [role=listbox]")) return { kind: "list" };
   const row = active.closest<HTMLElement>("[data-task-key]");
   if (row) return { kind: "task", key: row.dataset.taskKey ?? "", action: active.dataset.taskAction ?? "run" };
-  const treeNode = active.closest<HTMLElement>("[data-task-tree-key]");
-  if (treeNode) return { kind: "tree-node", key: treeNode.dataset.taskTreeKey ?? "" };
+  const treeNode = active.closest<HTMLElement>("[data-collection-node-id]") ?? active.closest<HTMLElement>("[data-task-tree-key]");
+  if (treeNode) return { kind: "tree-node", key: treeNode.dataset.collectionNodeId ?? treeNode.dataset.taskTreeKey ?? "" };
   return null;
 }
 
@@ -301,8 +328,11 @@ export function restoreTasksFocus(host: HTMLElement, snapshot: TasksFocusSnapsho
     return;
   }
   if (snapshot.kind === "tree-node") {
-    const nodes = Array.from(host.querySelectorAll<HTMLElement>("[data-task-tree-key]"));
-    const node = nodes.find((candidate) => candidate.dataset.taskTreeKey === snapshot.key);
+    const standardNodes = Array.from(host.querySelectorAll<HTMLElement>("[data-collection-node-id]"))
+      .filter((candidate) => candidate.dataset.collectionNodeId !== undefined);
+    const legacyNodes = Array.from(host.querySelectorAll<HTMLElement>("[data-task-tree-key]"));
+    const nodes = [...standardNodes, ...legacyNodes.filter((candidate) => !standardNodes.includes(candidate))];
+    const node = nodes.find((candidate) => (candidate.dataset.collectionNodeId ?? candidate.dataset.taskTreeKey) === snapshot.key);
     (node?.querySelector<HTMLElement>("[data-task-tree-toggle], [data-task-action=run]") ?? node)?.focus({ preventScroll: true });
     return;
   }

@@ -10,6 +10,7 @@ import {
   projectVisibleRows,
 } from "../src/presentation/hierarchical-collection.ts";
 import { renderHierarchicalCollectionToolbar } from "../src/presentation/hierarchical-collection-toolbar.ts";
+import { renderHierarchicalCollection } from "../src/presentation/hierarchical-collection-view.ts";
 
 const nodes = [
   { id: "root", parentId: null, label: "Root", order: 0 },
@@ -107,4 +108,27 @@ test("keyboard navigation returns generic focus and disclosure decisions", () =>
   assert.deepEqual(hierarchicalCollectionNavigation(collapsed, "root", "ArrowRight"), { handled: true, toggleId: "root" });
   assert.deepEqual(hierarchicalCollectionNavigation(rows, "root", "ArrowLeft"), { handled: true, toggleId: "root" });
   assert.deepEqual(hierarchicalCollectionNavigation(rows, "assemble", "End"), { handled: true, focusId: "tasks" });
+});
+
+test("shared renderer owns collection roles, row metadata, and escaped host attributes", () => {
+  const collection = new HierarchicalCollection(hierarchyNodes);
+  const projection = collection.project({ forceExpanded: true });
+  const html = renderHierarchicalCollection({
+    projection,
+    mode: "tree",
+    ariaLabel: "Tasks <tree>",
+    className: "task-tree",
+    renderRow: (row) => ({
+      className: row.node.role,
+      selected: row.node.id === "assemble",
+      attributes: { "data-feature-key": `${row.node.id}\"` },
+      content: `<span>${row.node.label}</span>`,
+    }),
+  });
+  assert.match(html, /role="tree"/u);
+  assert.match(html, /aria-label="Tasks &lt;tree&gt;"/u);
+  assert.match(html, /data-collection-node-id="assemble"/u);
+  assert.match(html, /aria-level="3"/u);
+  assert.match(html, /aria-selected="true"/u);
+  assert.match(html, /data-feature-key="assemble&quot;"/u);
 });

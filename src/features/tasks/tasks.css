@@ -13,11 +13,18 @@
   background: var(--bg-panel);
 }
 
-.tasks-query-label {
-  display: block;
+.tasks-query-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
 }
+
+.tasks-query-label { display: block; }
+
+.tasks-collection-toolbar { justify-self: end; }
 
 .tasks-query-label input {
   box-sizing: border-box;
@@ -288,6 +295,12 @@
 }
 
 .tasks-tree-leaf-spacer { width: 12px; }
+
+.tasks-list[data-collection-mode="flat"] .tasks-row-primary {
+  grid-template-columns: 15px minmax(0, 1fr);
+}
+
+.tasks-list[data-collection-mode="flat"] .tasks-tree-leaf-spacer { display: none; }
 
 .tasks-row-copy {
   display: flex;

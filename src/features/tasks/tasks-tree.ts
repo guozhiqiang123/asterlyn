@@ -1,41 +1,41 @@
-import type { TasksEntry } from "./tasks-model.ts";
+import {
+  DisclosureState,
+  HierarchicalCollection,
+  type CollectionViewMode,
+  type HierarchicalCollectionNode,
+  type HierarchicalCollectionProjection,
+  type HierarchicalCollectionRow,
+} from "../../presentation/hierarchical-collection.ts";
+import type { TaskProviderProjection, TasksEntry } from "./tasks-model.ts";
 
 export const TASK_TREE_ROOT_KEY = "tasks-tree:workspace";
 
 export type TaskTreeBranchKind = "workspace" | "module" | "tasks" | "group";
 
-export interface TaskTreeBranch {
+export interface TaskTreeBranch extends HierarchicalCollectionNode {
   readonly type: "branch";
+  readonly role: "branch";
   readonly kind: TaskTreeBranchKind;
   readonly key: string;
   readonly parentKey: string | null;
-  readonly label: string;
   readonly detail?: string;
   readonly children: readonly TaskTreeNode[];
 }
 
-export interface TaskTreeTask {
+export interface TaskTreeTask extends HierarchicalCollectionNode {
   readonly type: "task";
+  readonly role: "leaf";
   readonly key: string;
   readonly parentKey: string;
-  readonly label: string;
   readonly entry: TasksEntry;
 }
 
 export type TaskTreeNode = TaskTreeBranch | TaskTreeTask;
+export type TaskTreeRow = HierarchicalCollectionRow<TaskTreeNode>;
 
-export interface TaskTreeRow {
-  readonly node: TaskTreeNode;
-  readonly depth: number;
-  readonly positionInSet: number;
-  readonly setSize: number;
-}
-
-export interface TaskTreeRowsResult {
-  readonly rows: readonly TaskTreeRow[];
+export interface TaskTreeRowsResult extends HierarchicalCollectionProjection<TaskTreeNode> {
   readonly renderedTasks: number;
   readonly visibleTasks: number;
-  readonly truncated: boolean;
 }
 
 interface ProjectBucket {
@@ -49,7 +49,84 @@ export function buildTaskTree(
   entries: readonly TasksEntry[],
   workspaceRoot: string,
   tasksLabel = "Tasks",
+  providers: readonly TaskProviderProjection[] = [],
 ): TaskTreeBranch {
+  const contributedProviderIds = new Set(providers.filter((provider) => provider.collection).map((provider) => provider.id));
+  const contributed = providers
+    .filter((provider) => provider.collection)
+    .sort((left, right) => compareText(left.id, right.id))
+    .flatMap((provider) => contributedNodes(provider, entries, tasksLabel));
+  const fallback = fallbackNodes(entries.filter((entry) => !contributedProviderIds.has(entry.providerId)), tasksLabel);
+  const children = [...contributed, ...fallback]
+    .sort(compareRootNodes)
+    .map((node, order) => ({ ...node, order }));
+  return branch("workspace", TASK_TREE_ROOT_KEY, null, workspaceName(workspaceRoot), 0, children, true);
+}
+
+export function taskTreeRows(
+  root: TaskTreeBranch,
+  expanded: ReadonlySet<string>,
+  taskLimit: number,
+  forceExpanded = false,
+  mode: CollectionViewMode = "tree",
+): TaskTreeRowsResult {
+  const disclosure = new DisclosureState({ defaultExpanded: false, exceptions: expanded });
+  const projection = taskTreeCollection(root).project({ mode, disclosure, forceExpanded, leafLimit: taskLimit });
+  return {
+    ...projection,
+    renderedTasks: projection.renderedLeaves,
+    visibleTasks: projection.visibleLeaves,
+  };
+}
+
+export function taskTreeBranchKeys(root: TaskTreeBranch): Set<string> {
+  return new Set(taskTreeCollection(root).branchIds());
+}
+
+export function taskTreeDefaultExpandedKeys(root: TaskTreeBranch): Set<string> {
+  return new Set(taskTreeCollection(root).defaultExpandedIds());
+}
+
+function contributedNodes(
+  provider: TaskProviderProjection,
+  entries: readonly TasksEntry[],
+  tasksLabel: string,
+): readonly TaskTreeNode[] {
+  const collection = provider.collection;
+  if (!collection) return [];
+  const entriesByTaskId = new Map(entries
+    .filter((entry) => entry.providerId === provider.id)
+    .map((entry) => [entry.task.id, entry] as const));
+  const children = new Map<string | null, typeof collection.nodes[number][]>();
+  for (const node of collection.nodes) {
+    const siblings = children.get(node.parentId) ?? [];
+    siblings.push(node);
+    children.set(node.parentId, siblings);
+  }
+  for (const siblings of children.values()) siblings.sort((left, right) => left.order - right.order || compareText(left.id, right.id));
+  const visit = (node: typeof collection.nodes[number], parentKey: string): TaskTreeNode | null => {
+    if (node.kind === "task") {
+      const entry = node.taskId ? entriesByTaskId.get(node.taskId) : undefined;
+      return entry ? task(node.id, parentKey, node.label, node.order, entry) : null;
+    }
+    const nested = (children.get(node.id) ?? []).map((child) => visit(child, node.id)).filter(isTaskTreeNode);
+    if (nested.length === 0) return null;
+    const kind = contributedBranchKind(node.metadata?.["android.gradle.nodeKind"]);
+    return branch(
+      kind,
+      node.id,
+      parentKey,
+      kind === "tasks" ? tasksLabel : node.label,
+      node.order,
+      nested,
+      kind !== "group",
+      kind === "tasks" && node.parentId === null ? provider.label : undefined,
+    );
+  };
+  return (children.get(null) ?? []).map((node) => visit(node, TASK_TREE_ROOT_KEY)).filter(isTaskTreeNode);
+}
+
+function fallbackNodes(entries: readonly TasksEntry[], tasksLabel: string): readonly TaskTreeNode[] {
   const buckets = new Map<string, ProjectBucket>();
   for (const entry of entries) {
     const projectPath = taskProjectPath(entry);
@@ -60,111 +137,62 @@ export function buildTaskTree(
       buckets.set(bucketKey, bucket);
     }
     const group = entry.task.group || "Other";
-    const tasks = bucket.groups.get(group) ?? [];
-    tasks.push(entry);
-    bucket.groups.set(group, tasks);
+    bucket.groups.set(group, [...(bucket.groups.get(group) ?? []), entry]);
   }
-
   const children: TaskTreeNode[] = [];
   const sorted = [...buckets.values()].sort(compareProjects);
   for (const bucket of sorted.filter(({ projectPath }) => projectPath === ":")) {
-    children.push(tasksBranch(bucket, TASK_TREE_ROOT_KEY, tasksLabel));
+    children.push(tasksBranch(bucket, TASK_TREE_ROOT_KEY, tasksLabel, children.length));
   }
   for (const bucket of sorted.filter(({ projectPath }) => projectPath !== ":")) {
     const key = projectKey(bucket);
-    children.push({
-      type: "branch",
-      kind: "module",
-      key,
-      parentKey: TASK_TREE_ROOT_KEY,
-      label: bucket.projectPath.slice(1) || bucket.projectPath,
-      detail: bucket.providerLabel,
-      children: [tasksBranch(bucket, key, tasksLabel)],
-    });
+    children.push(branch("module", key, TASK_TREE_ROOT_KEY, bucket.projectPath.slice(1) || bucket.projectPath, children.length, [
+      tasksBranch(bucket, key, tasksLabel, 0),
+    ], true, bucket.providerLabel));
   }
-  return {
-    type: "branch",
-    kind: "workspace",
-    key: TASK_TREE_ROOT_KEY,
-    parentKey: null,
-    label: workspaceName(workspaceRoot),
-    children,
-  };
+  return children;
 }
 
-export function taskTreeRows(
-  root: TaskTreeBranch,
-  expanded: ReadonlySet<string>,
-  taskLimit: number,
-  forceExpanded = false,
-): TaskTreeRowsResult {
-  const rows: TaskTreeRow[] = [{ node: root, depth: 0, positionInSet: 1, setSize: 1 }];
-  let renderedTasks = 0;
-  let visibleTasks = 0;
-  let truncated = false;
-  const visit = (nodes: readonly TaskTreeNode[], depth: number): void => {
-    nodes.forEach((node, index) => {
-      if (node.type === "task") {
-        visibleTasks += 1;
-        if (renderedTasks >= Math.max(1, taskLimit)) { truncated = true; return; }
-        renderedTasks += 1;
-      }
-      rows.push({ node, depth, positionInSet: index + 1, setSize: nodes.length });
-      if (node.type === "branch" && (forceExpanded || expanded.has(node.key))) visit(node.children, depth + 1);
-    });
-  };
-  if (forceExpanded || expanded.has(root.key)) visit(root.children, 1);
-  return { rows, renderedTasks, visibleTasks, truncated };
-}
-
-export function taskTreeBranchKeys(root: TaskTreeBranch): Set<string> {
-  const keys = new Set<string>();
-  const visit = (branch: TaskTreeBranch): void => {
-    keys.add(branch.key);
-    for (const child of branch.children) if (child.type === "branch") visit(child);
-  };
-  visit(root);
-  return keys;
-}
-
-export function taskTreeDefaultExpandedKeys(root: TaskTreeBranch): Set<string> {
-  const keys = new Set<string>();
-  const visit = (branch: TaskTreeBranch): void => {
-    if (branch.kind !== "group") keys.add(branch.key);
-    for (const child of branch.children) if (child.type === "branch") visit(child);
-  };
-  visit(root);
-  return keys;
-}
-
-function tasksBranch(bucket: ProjectBucket, parentKey: string, label: string): TaskTreeBranch {
+function tasksBranch(bucket: ProjectBucket, parentKey: string, label: string, order: number): TaskTreeBranch {
   const key = `${projectKey(bucket)}:tasks`;
   const groups = [...bucket.groups.entries()].sort(([left], [right]) => compareText(left, right));
+  return branch("tasks", key, parentKey, label, order, groups.map(([group, entries], groupOrder) => {
+    const groupKey = `${key}:group:${encode(group)}`;
+    return branch("group", groupKey, key, groupLabel(group), groupOrder,
+      [...entries].sort((left, right) => compareText(left.task.id, right.task.id)).map((entry, taskOrder) =>
+        task(`${groupKey}:task:${encode(entry.key)}`, groupKey, entry.displayLabel ?? taskName(entry.task.id, entry.task.label), taskOrder, entry)),
+      false);
+  }), true, bucket.projectPath === ":" ? bucket.providerLabel : undefined);
+}
+
+function branch(
+  kind: TaskTreeBranchKind,
+  key: string,
+  parentKey: string | null,
+  label: string,
+  order: number,
+  children: readonly TaskTreeNode[],
+  defaultExpanded: boolean,
+  detail?: string,
+): TaskTreeBranch {
   return {
-    type: "branch",
-    kind: "tasks",
-    key,
-    parentKey,
-    label,
-    detail: bucket.projectPath === ":" ? bucket.providerLabel : undefined,
-    children: groups.map(([group, entries]) => {
-      const groupKey = `${key}:group:${encode(group)}`;
-      return {
-        type: "branch" as const,
-        kind: "group" as const,
-        key: groupKey,
-        parentKey: key,
-        label: groupLabel(group),
-        children: [...entries].sort((left, right) => compareText(left.task.id, right.task.id)).map((entry) => ({
-          type: "task" as const,
-          key: `${groupKey}:task:${encode(entry.key)}`,
-          parentKey: groupKey,
-          label: entry.displayLabel ?? taskName(entry.task.id, entry.task.label),
-          entry,
-        })),
-      };
-    }),
+    type: "branch", role: "branch", kind, key, id: key, parentKey, parentId: parentKey,
+    label, order, children, defaultExpanded, ...(detail ? { detail } : {}),
   };
+}
+
+function task(key: string, parentKey: string, label: string, order: number, entry: TasksEntry): TaskTreeTask {
+  return { type: "task", role: "leaf", key, id: key, parentKey, parentId: parentKey, label, order, entry };
+}
+
+function taskTreeCollection(root: TaskTreeBranch): HierarchicalCollection<TaskTreeNode> {
+  const nodes: TaskTreeNode[] = [];
+  const visit = (node: TaskTreeNode): void => {
+    nodes.push(node);
+    if (node.type === "branch") for (const child of node.children) visit(child);
+  };
+  visit(root);
+  return new HierarchicalCollection(nodes);
 }
 
 function taskProjectPath(entry: TasksEntry): string {
@@ -195,6 +223,15 @@ function workspaceName(root: string): string {
   return segments.at(-1) ?? (root || "Workspace");
 }
 
+function contributedBranchKind(value: string | undefined): TaskTreeBranchKind {
+  return value === "module" || value === "tasks" || value === "group" ? value : "group";
+}
+
+function compareRootNodes(left: TaskTreeNode, right: TaskTreeNode): number {
+  const rank = (node: TaskTreeNode): number => node.type === "branch" && node.kind === "tasks" ? 0 : 1;
+  return rank(left) - rank(right) || left.order - right.order || compareText(left.key, right.key);
+}
+
 function compareProjects(left: ProjectBucket, right: ProjectBucket): number {
   if (left.projectPath === ":" && right.projectPath !== ":") return -1;
   if (right.projectPath === ":" && left.projectPath !== ":") return 1;
@@ -205,4 +242,5 @@ function compareText(left: string, right: string): number {
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
 }
 
+function isTaskTreeNode(node: TaskTreeNode | null): node is TaskTreeNode { return node !== null; }
 function encode(value: string): string { return encodeURIComponent(value); }

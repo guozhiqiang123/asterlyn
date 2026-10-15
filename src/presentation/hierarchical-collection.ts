@@ -226,9 +226,14 @@ export interface HierarchicalCollectionNavigation {
   readonly toggleId?: string;
 }
 
+export interface HierarchicalCollectionNavigationRow {
+  readonly node: Pick<HierarchicalCollectionNode, "id" | "parentId" | "role">;
+  readonly expanded: boolean;
+}
+
 /** Convert a tree key press into a feature-independent focus or disclosure decision. */
-export function hierarchicalCollectionNavigation<T extends HierarchicalCollectionNode>(
-  rows: readonly HierarchicalCollectionRow<T>[],
+export function hierarchicalCollectionNavigation(
+  rows: readonly HierarchicalCollectionNavigationRow[],
   currentId: string | null,
   key: HierarchicalCollectionNavigationKey,
 ): HierarchicalCollectionNavigation {
