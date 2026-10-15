@@ -126,6 +126,11 @@ export const EN_US: LocaleCatalog = {
     cleared: "Terminal scrollback cleared",
     close: "Close the current terminal session",
     closed: "Terminal session closed", outputTruncated: (bytes) => `\r\n[Asterlyn omitted ${bytes} terminal output bytes while the display was busy.]\r\n`,
+    taskStarting: (label) => `Starting ${label}…`, taskQueued: (label) => `${label} queued`,
+    taskRunning: (label) => `${label} running`, taskCancelling: (label) => `Cancelling ${label}…`,
+    taskSucceeded: (label) => `${label} succeeded`, taskFailed: (label) => `${label} failed`,
+    taskCancelled: (label) => `${label} cancelled`, taskCrashed: (label) => `${label} crashed`,
+    cancelTask: "Cancel the running task", taskOutputTruncated: "Task output was truncated by the execution limit.",
   }, tasks: EN_US_TASKS_COPY,
   settings: {
     planned: "Planned",

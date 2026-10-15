@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderTerminalHeader, terminalActionAvailable } from "../src/features/terminal/terminal-panel.ts";
+import {
+  renderTaskTerminalHeader,
+  renderTerminalHeader,
+  taskTerminalActionAvailable,
+  taskTerminalCommandLine,
+  terminalActionAvailable,
+} from "../src/features/terminal/terminal-panel.ts";
+import { TerminalWriteBuffer } from "../src/features/terminal/terminal-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 
 const idle = {
@@ -44,4 +51,45 @@ test("terminal shortcut availability exactly follows header lifecycle policy", (
   assert.equal(terminalActionAvailable(starting, "restart"), false);
   assert.equal(terminalActionAvailable(starting, "clear"), false);
   assert.equal(terminalActionAvailable(starting, "close"), false);
+});
+
+test("task terminal header exposes cancel while active and new session after completion", () => {
+  const descriptor = {
+    sessionId: "review-1", workspaceRoot: "/repo", taskKey: "android.gradle:assembleDebug",
+    label: "assembleDebug", executablePath: "/repo/gradlew", args: ["assembleDebug"],
+    workingDirectory: "/repo", cancel() {},
+  };
+  const active = { descriptor, status: "running", error: null, outputTruncated: false };
+  const activeHeader = renderTaskTerminalHeader(active, EN_US.terminal);
+  assert.match(activeHeader, /assembleDebug running/u);
+  assert.doesNotMatch(activeHeader, /data-terminal-action="close"[^>]*disabled/u);
+  assert.match(activeHeader, /data-terminal-action="restart"[^>]*disabled/u);
+  assert.equal(taskTerminalActionAvailable("running", "close"), true);
+  assert.equal(taskTerminalActionAvailable("running", "restart"), false);
+
+  const finishedHeader = renderTaskTerminalHeader({ ...active, status: "succeeded" }, EN_US.terminal);
+  assert.match(finishedHeader, /assembleDebug succeeded/u);
+  assert.match(finishedHeader, /data-terminal-action="close"[^>]*disabled/u);
+  assert.doesNotMatch(finishedHeader, /data-terminal-action="restart"[^>]*disabled/u);
+});
+
+test("reviewed task command summary is display-only and escapes terminal controls", () => {
+  const line = taskTerminalCommandLine({
+    sessionId: "review-1", workspaceRoot: "/repo", taskKey: "task", label: "Build\u001b[2J",
+    executablePath: "/repo/grad lew", args: ["hello world", "$(touch nope)", "\u001b[31mred"],
+    workingDirectory: "/repo", cancel() {},
+  });
+  assert.match(line, /# Build \[2J\r\n/u);
+  assert.match(line, /"\/repo\/grad lew" "hello world" "\$\(touch nope\)" "\\u001b\[31mred"/u);
+  assert.equal(line.includes("\u001b[2J"), false);
+});
+
+test("terminal pre-mount output buffer is bounded and reports omitted bytes", () => {
+  const buffer = new TerminalWriteBuffer(5);
+  buffer.push(Uint8Array.from([1, 2, 3]));
+  buffer.push(Uint8Array.from([4, 5, 6, 7]));
+  const drained = buffer.drain();
+  assert.equal(drained.omittedBytes, 3);
+  assert.deepEqual([...drained.chunks[0]], [4, 5, 6, 7]);
+  assert.deepEqual(buffer.drain(), { chunks: [], omittedBytes: 0 });
 });

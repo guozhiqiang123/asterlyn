@@ -1,6 +1,14 @@
 import type { TerminalCopy } from "../../localization/catalog.ts";
 import type { TerminalBridge } from "../../protocol/terminal.ts";
 import type { TerminalCommandAction } from "../../application/commands/terminal-command-ids.ts";
+import {
+  isActiveTaskTerminalStatus,
+  isTerminalTaskTerminalStatus,
+  type TaskTerminalOutputFrame,
+  type TaskTerminalSessionDescriptor,
+  type TaskTerminalSessionPort,
+  type TaskTerminalSessionStatus,
+} from "../../application/tasks/task-terminal-session.ts";
 import { icon } from "../../icons.ts";
 import { TerminalController, type TerminalState } from "./terminal-controller.ts";
 import { TerminalView } from "./terminal-view.ts";
@@ -21,6 +29,7 @@ export class TerminalPanel {
   private readonly releaseOutput: () => void;
   private copy: TerminalCopy;
   private visible = false;
+  private taskSession: TaskTerminalPresentation | null = null;
 
   constructor(
     root: HTMLElement,
@@ -46,6 +55,7 @@ export class TerminalPanel {
       }
     });
     this.releaseOutput = this.controller.subscribeOutput((frame) => {
+      if (this.taskSession) return;
       if (frame.kind === "output") this.view.write(frame.bytes);
       else this.view.write(new TextEncoder().encode(this.copy.outputTruncated(frame.omittedBytes)));
     });
@@ -53,6 +63,7 @@ export class TerminalPanel {
 
   installWorkspace(root: string): void {
     const changed = this.controller.state.root !== root;
+    if (changed && this.taskSession?.descriptor.workspaceRoot !== root) this.taskSession = null;
     this.controller.installWorkspace(root);
     if (changed) this.view.reset();
   }
@@ -65,14 +76,14 @@ export class TerminalPanel {
     this.bindHeader();
     this.renderHeader();
     this.view.mount(host, {
-      ready: (cols, rows) => void this.controller.start(cols, rows),
-      input: (data) => this.controller.sendInput(data),
-      resize: (cols, rows) => this.controller.resize(cols, rows),
+      ready: (cols, rows) => { if (!this.taskSession) void this.controller.start(cols, rows); },
+      input: (data) => { if (!this.taskSession) this.controller.sendInput(data); },
+      resize: (cols, rows) => { if (!this.taskSession) this.controller.resize(cols, rows); },
       failure: (error) => this.controller.reportViewFailure(error),
       keyboard: this.feedback.keyboard,
     });
     const dimensions = this.view.dimensions();
-    if (dimensions && this.controller.state.status === "idle") {
+    if (dimensions && !this.taskSession && this.controller.state.status === "idle") {
       void this.controller.start(dimensions.cols, dimensions.rows);
     }
     this.view.reveal();
@@ -91,20 +102,70 @@ export class TerminalPanel {
     this.view.refreshAppearance();
   }
 
+  beginTask(session: TaskTerminalSessionDescriptor): void {
+    this.installWorkspace(session.workspaceRoot);
+    this.taskSession = { descriptor: session, status: "starting", error: null, outputTruncated: false };
+    this.view.reset();
+    this.view.write(new TextEncoder().encode(taskTerminalCommandLine(session)));
+    void this.controller.close().catch((error) => this.feedback.error(error));
+    this.renderHeader();
+    this.feedback.status(this.copy.taskStarting(session.label), "busy");
+  }
+
+  appendTask(sessionId: string, frame: TaskTerminalOutputFrame): void {
+    if (this.taskSession?.descriptor.sessionId !== sessionId) return;
+    try {
+      this.view.write(decodeBase64(frame.dataBase64));
+    } catch (error) {
+      this.feedback.error(error);
+    }
+  }
+
+  updateTask(
+    sessionId: string,
+    status: TaskTerminalSessionStatus,
+    error: string | null,
+    outputTruncated: boolean,
+  ): void {
+    const current = this.taskSession;
+    if (!current || current.descriptor.sessionId !== sessionId) return;
+    const becameTerminal = isTerminalTaskTerminalStatus(status) && !isTerminalTaskTerminalStatus(current.status);
+    const becameTruncated = outputTruncated && !current.outputTruncated;
+    this.taskSession = { ...current, status, error, outputTruncated };
+    if (becameTruncated) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(this.copy.taskOutputTruncated)}]\r\n`));
+    if (becameTerminal) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(taskTerminalSummary(this.taskSession, this.copy))}]\r\n`));
+    this.renderHeader();
+    const kind = status === "succeeded" ? "success" : isActiveTaskTerminalStatus(status) ? "busy" : status === "cancelled" ? "normal" : "warning";
+    this.feedback.status(taskTerminalSummary(this.taskSession, this.copy), kind);
+  }
+
+  revealTask(sessionId: string): boolean {
+    if (this.taskSession?.descriptor.sessionId !== sessionId) return false;
+    this.view.reveal();
+    return true;
+  }
+
   commandAvailable(action: TerminalCommandAction): boolean {
-    return this.visible && terminalActionAvailable(this.controller.state, action);
+    return this.visible && (this.taskSession
+      ? taskTerminalActionAvailable(this.taskSession.status, action)
+      : terminalActionAvailable(this.controller.state, action));
   }
 
   async executeCommand(action: TerminalCommandAction): Promise<void> {
     if (!this.commandAvailable(action)) return;
     const dimensions = this.view.dimensions() ?? { cols: 80, rows: 24 };
     if (action === "restart") {
+      this.taskSession = null;
       this.view.reset();
       await this.controller.restart(dimensions.cols, dimensions.rows);
     } else if (action === "clear") {
       this.view.clear();
       this.feedback.status(this.copy.cleared, "success");
     } else {
+      if (this.taskSession && isActiveTaskTerminalStatus(this.taskSession.status)) {
+        await this.taskSession.descriptor.cancel();
+        return;
+      }
       await this.controller.close();
       this.feedback.status(this.copy.closed, "success");
     }
@@ -133,9 +194,27 @@ export class TerminalPanel {
     const actions = this.root.querySelector<HTMLElement>("#terminal-header-actions");
     if (!actions) return;
     actions.classList.toggle("hidden", !this.visible);
-    actions.innerHTML = renderTerminalHeader(this.controller.state, this.copy);
+    actions.innerHTML = this.taskSession
+      ? renderTaskTerminalHeader(this.taskSession, this.copy)
+      : renderTerminalHeader(this.controller.state, this.copy);
     this.feedback.presentationChanged?.();
   }
+}
+
+interface TaskTerminalPresentation {
+  readonly descriptor: TaskTerminalSessionDescriptor;
+  readonly status: TaskTerminalSessionStatus;
+  readonly error: string | null;
+  readonly outputTruncated: boolean;
+}
+
+export function taskTerminalPort(panel: TerminalPanel): TaskTerminalSessionPort {
+  return {
+    begin: (session) => panel.beginTask(session),
+    append: (sessionId, frame) => panel.appendTask(sessionId, frame),
+    update: (sessionId, status, error, outputTruncated) => panel.updateTask(sessionId, status, error, outputTruncated),
+    reveal: (sessionId) => panel.revealTask(sessionId),
+  };
 }
 
 export function renderTerminalHeader(state: TerminalState, copy: TerminalCopy): string {
@@ -155,12 +234,56 @@ export function terminalActionAvailable(state: TerminalState, action: TerminalCo
   return state.status === "idle" || state.status === "exited" || state.status === "error";
 }
 
+export function renderTaskTerminalHeader(state: TaskTerminalPresentation, copy: TerminalCopy): string {
+  const summary = taskTerminalSummary(state, copy);
+  const canRestart = taskTerminalActionAvailable(state.status, "restart");
+  const canClear = taskTerminalActionAvailable(state.status, "clear");
+  const canCancel = taskTerminalActionAvailable(state.status, "close");
+  const error = state.status === "failed" || state.status === "crashed" ? "error" : "";
+  return `<span class="terminal-session-status ${error}" title="${escapeAttribute(state.descriptor.taskKey)}">${escapeHtml(summary)}</span>
+    <button class="compact-icon-button" type="button" data-terminal-action="restart" aria-label="${escapeAttribute(copy.newSession)}" title="${escapeAttribute(copy.newSession)}" ${canRestart ? "" : "disabled"}>${icon("refresh", 15)}</button>
+    <button class="compact-icon-button" type="button" data-terminal-action="clear" aria-label="${escapeAttribute(copy.clear)}" title="${escapeAttribute(copy.clear)}" ${canClear ? "" : "disabled"}>${icon("trash", 15)}</button>
+    <button class="compact-icon-button" type="button" data-terminal-action="close" aria-label="${escapeAttribute(copy.cancelTask)}" title="${escapeAttribute(copy.cancelTask)}" ${canCancel ? "" : "disabled"}>${icon("stop", 14)}</button>`;
+}
+
+export function taskTerminalActionAvailable(status: TaskTerminalSessionStatus, action: TerminalCommandAction): boolean {
+  if (action === "clear") return true;
+  if (action === "close") return isActiveTaskTerminalStatus(status);
+  return isTerminalTaskTerminalStatus(status);
+}
+
+export function taskTerminalCommandLine(session: TaskTerminalSessionDescriptor): string {
+  const parts = [session.executablePath, ...session.args].map((value) => JSON.stringify(value));
+  return `\x1b[90m# ${sanitizeTerminalText(session.label)}\r\n> ${parts.join(" ")}\x1b[0m\r\n\r\n`;
+}
+
 function terminalSummary(state: TerminalState, copy: TerminalCopy): string {
   if (state.status === "starting") return copy.starting;
   if (state.status === "running") return state.shell ?? copy.running;
   if (state.status === "exited" && state.exitCode !== null) return copy.exited(state.exitCode);
   if (state.status === "error") return copy.failed;
   return copy.notRunning;
+}
+
+function taskTerminalSummary(state: TaskTerminalPresentation, copy: TerminalCopy): string {
+  const label = state.descriptor.label;
+  if (state.status === "starting") return copy.taskStarting(label);
+  if (state.status === "queued") return copy.taskQueued(label);
+  if (state.status === "running") return copy.taskRunning(label);
+  if (state.status === "cancelling") return copy.taskCancelling(label);
+  if (state.status === "succeeded") return copy.taskSucceeded(label);
+  if (state.status === "failed") return state.error ? `${copy.taskFailed(label)} — ${sanitizeTerminalText(state.error)}` : copy.taskFailed(label);
+  if (state.status === "cancelled") return copy.taskCancelled(label);
+  return state.error ? `${copy.taskCrashed(label)} — ${sanitizeTerminalText(state.error)}` : copy.taskCrashed(label);
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function sanitizeTerminalText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ").trim();
 }
 
 function escapeHtml(value: string): string {

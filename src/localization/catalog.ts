@@ -125,6 +125,16 @@ export interface TerminalCopy {
   cleared: string;
   close: string;
   closed: string; outputTruncated(bytes: number): string;
+  taskStarting(label: string): string;
+  taskQueued(label: string): string;
+  taskRunning(label: string): string;
+  taskCancelling(label: string): string;
+  taskSucceeded(label: string): string;
+  taskFailed(label: string): string;
+  taskCancelled(label: string): string;
+  taskCrashed(label: string): string;
+  cancelTask: string;
+  taskOutputTruncated: string;
 }
 
 export interface TasksCopy { title: string; ariaLabel: string; refresh: string; empty: string; unavailable: string; unavailableReasons: Readonly<Record<TaskProviderUnavailableReason, string>>; loading: string; cancelDiscovery: string; error: string; retryDiscovery: string; discovered(count: number): string; providerLoading(provider: string): string; showing(count: number, total: number): string; showMore: string; expand(label: string): string; collapse(label: string): string; collectionControls: string; showAsTree: string; showAsFlat: string; expandAll: string; collapseAll: string; busy: string; noResults: string; queryPlaceholder: string; run: string; retry: string; revealOutput: string; notRunnable: string; androidQuickActions: string; quickActionKinds: Readonly<Record<"assemble" | "bundle" | "install" | "uninstall", string>>; quickActionModule: string; quickActionVariant: string; cacheValidating: string; cacheRestored(count: number): string; cacheStale: string; cacheStaleReasons: Readonly<Record<TaskProviderStaleReason, string>>; refreshStale: string; retainedTasks(count: number): string; status: Readonly<Record<string, string>>; }

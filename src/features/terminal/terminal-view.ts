@@ -1,6 +1,44 @@
 import type { IDisposable, ITheme, Terminal as XtermTerminal } from "@xterm/xterm";
 import type { FitAddon as XtermFitAddon } from "@xterm/addon-fit";
 
+export const MAX_PENDING_TERMINAL_WRITE_BYTES = 512 * 1024;
+
+export class TerminalWriteBuffer {
+  private chunks: Uint8Array[] = [];
+  private bytes = 0;
+  private omitted = 0;
+  private readonly byteLimit: number;
+
+  constructor(byteLimit = MAX_PENDING_TERMINAL_WRITE_BYTES) { this.byteLimit = byteLimit; }
+
+  push(bytes: Uint8Array): void {
+    if (bytes.byteLength === 0) return;
+    const copy = bytes.slice();
+    this.chunks.push(copy);
+    this.bytes += copy.byteLength;
+    while (this.bytes > this.byteLimit && this.chunks.length > 0) {
+      const removed = this.chunks.shift();
+      if (!removed) break;
+      this.bytes -= removed.byteLength;
+      this.omitted += removed.byteLength;
+    }
+  }
+
+  drain(): { readonly chunks: readonly Uint8Array[]; readonly omittedBytes: number } {
+    const result = { chunks: this.chunks, omittedBytes: this.omitted };
+    this.chunks = [];
+    this.bytes = 0;
+    this.omitted = 0;
+    return result;
+  }
+
+  clear(): void {
+    this.chunks = [];
+    this.bytes = 0;
+    this.omitted = 0;
+  }
+}
+
 export interface TerminalViewActions {
   readonly ready: (cols: number, rows: number) => void;
   readonly input: (data: string) => void;
@@ -20,6 +58,7 @@ export class TerminalView {
   private generation = 0;
   private ready = false;
   private actions: TerminalViewActions | null = null;
+  private readonly pendingWrites = new TerminalWriteBuffer();
 
   mount(parent: HTMLElement, actions: TerminalViewActions): void {
     this.actions = actions;
@@ -61,6 +100,7 @@ export class TerminalView {
         parent.removeAttribute("aria-busy");
         this.terminal = terminal;
         this.fitAddon = fitAddon;
+        this.flushPendingWrites();
         this.inputDisposable = terminal.onData((data) => this.actions?.input(data));
         if (typeof ResizeObserver === "function") {
           this.observer = new ResizeObserver(() => this.requestFit());
@@ -90,14 +130,17 @@ export class TerminalView {
   }
 
   write(bytes: Uint8Array): void {
-    this.terminal?.write(bytes);
+    if (this.terminal) this.terminal.write(bytes);
+    else this.pendingWrites.push(bytes);
   }
 
   clear(): void {
+    this.pendingWrites.clear();
     this.terminal?.clear();
   }
 
   reset(): void {
+    this.pendingWrites.clear();
     this.terminal?.reset();
     this.terminal?.clear();
     this.ready = false;
@@ -139,6 +182,16 @@ export class TerminalView {
         this.actions?.failure(error);
       }
     });
+  }
+
+  private flushPendingWrites(): void {
+    const terminal = this.terminal;
+    if (!terminal) return;
+    const pending = this.pendingWrites.drain();
+    if (pending.omittedBytes > 0) {
+      terminal.write(new TextEncoder().encode(`\r\n[Asterlyn omitted ${pending.omittedBytes} buffered output bytes.]\r\n`));
+    }
+    for (const bytes of pending.chunks) terminal.write(bytes);
   }
 
   private disposeRuntime(): void {
