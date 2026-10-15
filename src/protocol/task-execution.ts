@@ -2,6 +2,7 @@ import type {
   TaskExecutionRequest,
   TaskExecutionReview,
   TaskExecutionStarted,
+  TaskConfirmationResult,
   TaskSessionEvent,
   WorkspaceTrustResult,
   WorkspaceTrustState,
@@ -14,10 +15,11 @@ const MAX_ARGS = 128;
 
 export interface TaskExecutionBridge {
   readonly native: boolean;
-  readWorkspaceTrust(workspaceRoot: string): Promise<WorkspaceTrustResult>;
-  setWorkspaceTrust(workspaceRoot: string, state: WorkspaceTrustState): Promise<WorkspaceTrustResult>;
+  readWorkspaceTrust(workspaceRoot: string, pluginId: string): Promise<WorkspaceTrustResult>;
+  setWorkspaceTrust(workspaceRoot: string, pluginId: string, state: WorkspaceTrustState): Promise<WorkspaceTrustResult>;
   prepareTaskExecution(workspaceRoot: string, request: TaskExecutionRequest): Promise<TaskExecutionReview>;
-  startTaskExecution(workspaceRoot: string, reviewId: string): Promise<TaskExecutionStarted>;
+  readTaskConfirmation?(workspaceRoot: string, reviewId: string): Promise<TaskConfirmationResult>;
+  startTaskExecution(workspaceRoot: string, reviewId: string, rememberConfirmation: boolean): Promise<TaskExecutionStarted>;
   cancelTaskExecution(runId: string): Promise<void>;
   subscribeTaskSession(
     listener: (event: TaskSessionEvent) => void,
@@ -29,8 +31,20 @@ export function parseWorkspaceTrust(value: unknown): WorkspaceTrustResult {
   const record = object(value, "Workspace trust response");
   protocol(record, "Workspace trust response");
   const workspaceRoot = text(record.workspaceRoot, "workspaceRoot", MAX_TEXT);
+  const pluginId = text(record.pluginId, "pluginId", MAX_TEXT);
   const state = trust(record.state);
-  return { protocolVersion: 1, workspaceRoot, state };
+  return { protocolVersion: 1, workspaceRoot, pluginId, state };
+}
+
+export function parseTaskConfirmation(value: unknown): TaskConfirmationResult {
+  const record = object(value, "Task confirmation response");
+  protocol(record, "Task confirmation response");
+  if (typeof record.remembered !== "boolean") throw new Error("Task remembered is invalid.");
+  return {
+    protocolVersion: 1,
+    reviewId: text(record.reviewId, "reviewId", MAX_TEXT),
+    remembered: record.remembered,
+  };
 }
 
 export function parseTaskExecutionReview(value: unknown): TaskExecutionReview {

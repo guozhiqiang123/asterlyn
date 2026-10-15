@@ -513,7 +513,14 @@ export interface TaskExecutionRequest {
 export interface WorkspaceTrustResult {
   protocolVersion: 1;
   workspaceRoot: string;
+  pluginId: string;
   state: WorkspaceTrustState;
+}
+
+export interface TaskConfirmationResult {
+  protocolVersion: 1;
+  reviewId: string;
+  remembered: boolean;
 }
 
 export interface TaskExecutionReview {

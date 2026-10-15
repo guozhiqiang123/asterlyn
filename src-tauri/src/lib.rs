@@ -372,6 +372,7 @@ pub fn run() {
             read_workspace_trust,
             set_workspace_trust,
             prepare_task_execution,
+            read_task_confirmation,
             start_task_execution,
             cancel_task_execution,
             discover_task_artifacts,

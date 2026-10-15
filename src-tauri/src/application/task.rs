@@ -28,6 +28,15 @@ struct FileIdentity {
     digest: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskAuthorizationScope {
+    pub(crate) root: PathBuf,
+    pub(crate) plugin_id: String,
+    pub(crate) provider_id: String,
+    pub(crate) task_id: String,
+    pub(crate) fingerprint: String,
+}
+
 type Sink = Arc<dyn Fn(TaskSessionEvent) + Send + Sync + 'static>;
 struct SerialSink {
     sink: Sink,
@@ -206,6 +215,36 @@ impl TaskManager {
         }
     }
 
+    pub(crate) fn authorization_scope(
+        &self,
+        owner: &str,
+        root: &Path,
+        activation: u64,
+        review_id: &str,
+    ) -> Result<TaskAuthorizationScope, String> {
+        let reviews = self.inner.reviews.lock().map_err(lock_error)?;
+        let review = reviews
+            .get(review_id)
+            .ok_or_else(|| "task review is unknown or expired".to_string())?;
+        if review.root != root
+            || review.owner != owner
+            || review.activation != activation
+            || review.created.elapsed() >= Duration::from_secs(600)
+        {
+            return Err("task review belongs to a stale workspace activation".into());
+        }
+        if identity(&review.executable)? != review.identity {
+            return Err("task executable changed after review".into());
+        }
+        Ok(TaskAuthorizationScope {
+            root: review.root.clone(),
+            plugin_id: review.request.plugin_id.clone(),
+            provider_id: review.request.provider_id.clone(),
+            task_id: review.request.task_id.clone(),
+            fingerprint: task_authorization_fingerprint(review),
+        })
+    }
+
     pub(crate) fn cancel(&self, owner: &str, run_id: &str) -> Result<(), String> {
         let running_guard = self.inner.running.lock().map_err(lock_error)?;
         let running = running_guard
@@ -359,6 +398,28 @@ fn identity(path: &Path) -> Result<FileIdentity, String> {
         modified: metadata.modified().ok(),
         digest: format!("{:x}", hasher.finalize()),
     })
+}
+
+fn task_authorization_fingerprint(review: &Review) -> String {
+    let mut hasher = Sha256::new();
+    let root = review.root.to_string_lossy();
+    let executable = review.executable.to_string_lossy();
+    for field in [
+        root.as_bytes(),
+        review.request.plugin_id.as_bytes(),
+        review.request.provider_id.as_bytes(),
+        review.request.task_id.as_bytes(),
+        executable.as_bytes(),
+        review.identity.digest.as_bytes(),
+    ] {
+        hasher.update((field.len() as u64).to_be_bytes());
+        hasher.update(field);
+    }
+    for argument in &review.request.args {
+        hasher.update((argument.len() as u64).to_be_bytes());
+        hasher.update(argument.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
 }
 fn emit(sink: &SerialSink, mut event: TaskSessionEvent) {
     let Ok(mut sequence) = sink.sequence.lock() else {
@@ -716,6 +777,61 @@ mod tests {
                     TrustState::Trusted,
                     sink,
                 )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn authorization_scope_binds_task_arguments_and_executable_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(directory.path()).unwrap();
+        write_executable(&root, "gradlew", "exit 0");
+        let manager = TaskManager::default();
+
+        let first = prepare(
+            &manager,
+            "window-a",
+            &root,
+            1,
+            "gradlew",
+            vec![":app:assembleDebug".into()],
+        );
+        let same = prepare(
+            &manager,
+            "window-a",
+            &root,
+            1,
+            "gradlew",
+            vec![":app:assembleDebug".into()],
+        );
+        let different_args = prepare(
+            &manager,
+            "window-a",
+            &root,
+            1,
+            "gradlew",
+            vec![":app:assembleRelease".into()],
+        );
+
+        let first_scope = manager
+            .authorization_scope("window-a", &root, 1, &first.review_id)
+            .unwrap();
+        let same_scope = manager
+            .authorization_scope("window-a", &root, 1, &same.review_id)
+            .unwrap();
+        let different_scope = manager
+            .authorization_scope("window-a", &root, 1, &different_args.review_id)
+            .unwrap();
+        assert_eq!(first_scope.fingerprint, same_scope.fingerprint);
+        assert_ne!(first_scope.fingerprint, different_scope.fingerprint);
+        assert_eq!(first_scope.plugin_id, "android");
+        assert_eq!(first_scope.provider_id, "gradle");
+        assert_eq!(first_scope.task_id, "test");
+
+        write_executable(&root, "gradlew", "printf changed");
+        assert!(
+            manager
+                .authorization_scope("window-a", &root, 1, &first.review_id)
                 .is_err()
         );
     }

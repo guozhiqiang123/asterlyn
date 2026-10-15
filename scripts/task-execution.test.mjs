@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { parseTaskExecutionReview, parseTaskSessionEvent } from "../src/protocol/task-execution.ts";
+import {
+  parseTaskConfirmation,
+  parseTaskExecutionReview,
+  parseTaskSessionEvent,
+  parseWorkspaceTrust,
+} from "../src/protocol/task-execution.ts";
 import { TaskExecutionController } from "../src/application/tasks/task-execution-controller.ts";
 import { TaskExecutionRuntime } from "../src/features/tasks/task-execution-runtime.ts";
 import { renderTaskExecutionReview } from "../src/features/tasks/task-execution-view.ts";
@@ -11,6 +16,22 @@ const identity = { root: "/repo", generation: 3 };
 const review = { protocolVersion: 1, reviewId: "review-1", workspaceRoot: "/repo", pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", canonicalExecutablePath: "/repo/gradlew", args: ["assembleDebug"], cwd: "/repo", trust: "trusted" };
 
 test("task wire parsers require protocol version and bounded event fields", () => {
+  assert.deepEqual(
+    parseWorkspaceTrust({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    { protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" },
+  );
+  assert.deepEqual(
+    parseTaskConfirmation({ protocolVersion: 1, reviewId: "review-1", remembered: true }),
+    { protocolVersion: 1, reviewId: "review-1", remembered: true },
+  );
+  assert.throws(
+    () => parseWorkspaceTrust({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
+    /pluginId/,
+  );
+  assert.throws(
+    () => parseTaskConfirmation({ protocolVersion: 1, reviewId: "review-1", remembered: "yes" }),
+    /remembered/u,
+  );
   assert.deepEqual(parseTaskExecutionReview(review), review);
   assert.throws(() => parseTaskExecutionReview({ ...review, protocolVersion: 2 }), /protocol version/);
   assert.throws(() => parseTaskExecutionReview({ ...review, canonicalExecutablePath: undefined }), /canonicalExecutablePath/);
@@ -18,12 +39,58 @@ test("task wire parsers require protocol version and bounded event fields", () =
   assert.throws(() => parseTaskSessionEvent({ protocolVersion: 1, kind: "output", runId: "run", workspaceRoot: "/repo", sequence: 1, stream: "stdout", dataBase64: "" }), /dataBase64/);
 });
 
+test("task confirmation memory is plugin-scoped, explicit, and forwarded only on confirmation", async () => {
+  const startCalls = [];
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
+    prepareTaskExecution: async () => review,
+    readTaskConfirmation: async () => ({ protocolVersion: 1, reviewId: "review-1", remembered: false }),
+    startTaskExecution: async (root, reviewId, rememberConfirmation) => {
+      startCalls.push({ root, reviewId, rememberConfirmation });
+      return { protocolVersion: 1, runId: "run-remember", reviewId, workspaceRoot: root };
+    },
+    cancelTaskExecution: async () => {},
+    subscribeTaskSession: async () => () => {},
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, {
+    pluginId: "android", providerId: "gradle", taskId: "assembleDebug",
+    label: "assembleDebug", executablePath: "gradlew", args: ["assembleDebug"],
+  }, true);
+  assert.equal(controller.state.confirmationMemory, "available");
+  await controller.confirm(identity, true);
+  assert.deepEqual(startCalls, [{ root: "/repo", reviewId: "review-1", rememberConfirmation: true }]);
+});
+
+test("a matching remembered confirmation is surfaced without silently creating a new grant", async () => {
+  const bridge = {
+    native: false,
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
+    prepareTaskExecution: async () => review,
+    readTaskConfirmation: async () => ({ protocolVersion: 1, reviewId: "review-1", remembered: true }),
+    startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-remembered", reviewId: "review-1", workspaceRoot: "/repo" }),
+    cancelTaskExecution: async () => {},
+    subscribeTaskSession: async () => () => {},
+  };
+  const controller = new TaskExecutionController(bridge);
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, {
+    pluginId: "android", providerId: "gradle", taskId: "assembleDebug",
+    label: "assembleDebug", executablePath: "gradlew", args: ["assembleDebug"],
+  }, true);
+  assert.equal(controller.state.confirmationMemory, "remembered");
+});
+
 test("task execution requires a reviewed trusted workspace and rejects stale events", async () => {
   const events = [];
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-1", reviewId: "review-1", workspaceRoot: "/repo" }),
     cancelTaskExecution: async () => {},
@@ -47,8 +114,8 @@ test("FilesRecovery-scale task output remains complete through terminal delivery
   const listeners = [];
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-large", reviewId: "review-1", workspaceRoot: "/repo" }),
     cancelTaskExecution: async () => {},
@@ -74,8 +141,8 @@ test("task event decoding failures crash and cancel the active run", async () =>
   let cancelled = 0;
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-invalid", reviewId: "review-1", workspaceRoot: "/repo" }),
     cancelTaskExecution: async () => { cancelled += 1; },
@@ -98,8 +165,8 @@ test("task execution reports starting and cancelling immediately and only expose
   let finishCancel;
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => new Promise((resolve) => { finishStart = resolve; }),
     cancelTaskExecution: async () => new Promise((resolve) => { finishCancel = resolve; }),
@@ -161,8 +228,8 @@ test("confirmed execution moves to the Tasks panel while retaining terminal outp
     const listeners = [];
     const bridge = {
       native: false,
-      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-      setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+      setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
       prepareTaskExecution: async () => review,
       startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-background", reviewId: "review-1", workspaceRoot: "/repo" }),
       cancelTaskExecution: async () => {},
@@ -212,8 +279,8 @@ test("background discovery watchdog resolves instead of leaving the provider loa
     let cancelled = 0;
     const bridge = {
       native: false,
-      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-      setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+      setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
       prepareTaskExecution: async () => review,
       startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-timeout", reviewId: "review-1", workspaceRoot: "/repo" }),
       cancelTaskExecution: async () => { cancelled += 1; },
@@ -260,8 +327,8 @@ test("accepted cancellation releases background discovery without waiting for a 
     let cancelled = 0;
     const bridge = {
       native: false,
-      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-      setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+      readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+      setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
       prepareTaskExecution: async () => review,
       startTaskExecution: async () => ({ protocolVersion: 1, runId: `run-cancel-${cancelled}`, reviewId: "review-1", workspaceRoot: "/repo" }),
       cancelTaskExecution: async () => { cancelled += 1; },
@@ -299,8 +366,8 @@ test("cancelling while start is pending dismisses the review and cleans up the e
   let released = 0;
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => new Promise((resolve) => { finishStart = resolve; }),
     cancelTaskExecution: async (runId) => { cancelledRun = runId; },
@@ -326,8 +393,8 @@ test("trust actions preserve review, review cancel dismisses, and terminal event
   let cancelled = 0;
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "unknown" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "unknown" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => ({ ...review, trust: "unknown" }),
     startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-2", reviewId: "review-1", workspaceRoot: "/repo" }),
     cancelTaskExecution: async () => { cancelled += 1; },
@@ -355,8 +422,8 @@ test("sequence gaps crash the run and cancel native work, while stale start clea
   let cancelled = 0;
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-3", reviewId: "review-1", workspaceRoot: "/repo" }),
     cancelTaskExecution: async () => { cancelled += 1; },
@@ -377,8 +444,8 @@ test("start response from a superseded activation is cancelled and unsubscribed"
   let released = 0;
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => { controller.activateWorkspace({ root: "/new", generation: 4 }); return { protocolVersion: 1, runId: "run-stale", reviewId: "review-1", workspaceRoot: "/repo" }; },
     cancelTaskExecution: async () => { cancelled += 1; },
@@ -396,8 +463,8 @@ test("a late prepare response cannot replace a newer review in the same workspac
   const pending = [];
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => new Promise((resolve) => pending.push(resolve)),
     startTaskExecution: async () => { throw new Error("not used"); },
     cancelTaskExecution: async () => {},
@@ -419,8 +486,8 @@ test("clear and dispose clean up active native runs and subscriptions", async ()
   let released = 0;
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => ({ protocolVersion: 1, runId: `run-${cancelled}`, reviewId: "review-1", workspaceRoot: "/repo" }),
     cancelTaskExecution: async () => { cancelled += 1; },
@@ -482,8 +549,8 @@ test("terminal execution UI keeps errors and exposes retry and close output", ()
 test("host failures become dismissible terminal state without losing workspace identity", async () => {
   const bridge = {
     native: false,
-    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", state: "trusted" }),
-    setWorkspaceTrust: async (_root, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", state }),
+    readWorkspaceTrust: async () => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId: "android", state: "trusted" }),
+    setWorkspaceTrust: async (_root, pluginId, state) => ({ protocolVersion: 1, workspaceRoot: "/repo", pluginId, state }),
     prepareTaskExecution: async () => review,
     startTaskExecution: async () => { throw new Error("a task is already running for this workspace"); },
     cancelTaskExecution: async () => {},

@@ -53,7 +53,8 @@ pub(crate) use shell::{
     read_repository_slices, window_chrome_mode,
 };
 pub(crate) use task::{
-    cancel_task_execution, discover_task_artifacts, prepare_task_execution, start_task_execution,
+    cancel_task_execution, discover_task_artifacts, prepare_task_execution, read_task_confirmation,
+    start_task_execution,
 };
 pub(crate) use terminal::{close_terminal, resize_terminal, start_terminal, write_terminal};
 pub(crate) use trust::{read_workspace_trust, set_workspace_trust};

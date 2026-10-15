@@ -139,9 +139,17 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "workspaceTrustResult": {
       const result = record(value, command);
       numbers(result, command, "protocolVersion");
-      strings(result, command, "workspaceRoot");
+      strings(result, command, "workspaceRoot", "pluginId");
       assert(result.protocolVersion === 1, command, "expected workspace trust protocol version 1");
       assert(result.state === "unknown" || result.state === "trusted" || result.state === "denied", command, "invalid workspace trust state");
+      break;
+    }
+    case "taskConfirmationResult": {
+      const result = record(value, command);
+      numbers(result, command, "protocolVersion");
+      strings(result, command, "reviewId");
+      assert(result.protocolVersion === 1, command, "expected task confirmation protocol version 1");
+      assert(typeof result.remembered === "boolean", command, "invalid remembered task confirmation");
       break;
     }
     case "taskExecutionReview": {

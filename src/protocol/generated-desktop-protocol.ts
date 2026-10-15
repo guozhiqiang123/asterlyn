@@ -23,10 +23,11 @@ export interface DesktopCommandMap {
   write_terminal: { args: { sessionId: string; dataBase64: string; }; result: void };
   resize_terminal: { args: { sessionId: string; cols: number; rows: number; }; result: void };
   close_terminal: { args: { sessionId: string; }; result: boolean };
-  read_workspace_trust: { args: { workspaceRoot: string; }; result: Model.WorkspaceTrustResult };
-  set_workspace_trust: { args: { workspaceRoot: string; state: Model.WorkspaceTrustState; }; result: Model.WorkspaceTrustResult };
+  read_workspace_trust: { args: { workspaceRoot: string; pluginId: string; }; result: Model.WorkspaceTrustResult };
+  set_workspace_trust: { args: { workspaceRoot: string; pluginId: string; state: Model.WorkspaceTrustState; }; result: Model.WorkspaceTrustResult };
   prepare_task_execution: { args: { workspaceRoot: string; request: Model.TaskExecutionRequest; }; result: Model.TaskExecutionReview };
-  start_task_execution: { args: { workspaceRoot: string; reviewId: string; }; result: Model.TaskExecutionStarted };
+  read_task_confirmation: { args: { workspaceRoot: string; reviewId: string; }; result: Model.TaskConfirmationResult };
+  start_task_execution: { args: { workspaceRoot: string; reviewId: string; rememberConfirmation: boolean; }; result: Model.TaskExecutionStarted };
   cancel_task_execution: { args: { runId: string; }; result: void };
   discover_task_artifacts: { args: { repositoryRoot: string; hints: Array<string>; }; result: Model.TaskArtifactDiscovery };
   compute_workspace_fingerprint: { args: { workspaceRoot: string; paths: Array<string>; }; result: WorkspaceFingerprint };
@@ -153,6 +154,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_workspace_trust: "workspaceTrustResult",
   set_workspace_trust: "workspaceTrustResult",
   prepare_task_execution: "taskExecutionReview",
+  read_task_confirmation: "taskConfirmationResult",
   start_task_execution: "taskExecutionStarted",
   cancel_task_execution: "void",
   discover_task_artifacts: "taskArtifactDiscovery",

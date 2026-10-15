@@ -7,6 +7,7 @@ use tauri::{Manager, State};
 pub(crate) struct WorkspaceTrustResult {
     protocol_version: u8,
     workspace_root: String,
+    plugin_id: String,
     state: TrustState,
 }
 
@@ -21,6 +22,7 @@ fn path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 #[tauri::command]
 pub(crate) fn read_workspace_trust(
     workspace_root: String,
+    plugin_id: String,
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
@@ -31,13 +33,15 @@ pub(crate) fn read_workspace_trust(
     Ok(WorkspaceTrustResult {
         protocol_version: 1,
         workspace_root: root.to_string_lossy().into_owned(),
-        state: trust::read(&path(&app)?, &root)?,
+        state: trust::read(&path(&app)?, &root, &plugin_id)?,
+        plugin_id,
     })
 }
 
 #[tauri::command]
 pub(crate) fn set_workspace_trust(
     workspace_root: String,
+    plugin_id: String,
     state: TrustState,
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
@@ -47,13 +51,14 @@ pub(crate) fn set_workspace_trust(
     let root = active
         .resolve(window.label(), &workspace_root)
         .map_err(|e| e.to_string())?;
-    let result = trust::set(&path(&app)?, &root, state)?;
+    let result = trust::set(&path(&app)?, &root, &plugin_id, state)?;
     if result != TrustState::Trusted {
         tasks.cancel_workspace(&root);
     }
     Ok(WorkspaceTrustResult {
         protocol_version: 1,
         workspace_root: root.to_string_lossy().into_owned(),
+        plugin_id,
         state: result,
     })
 }

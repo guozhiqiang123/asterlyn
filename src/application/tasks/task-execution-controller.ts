@@ -2,12 +2,14 @@ import type { TaskExecutionRequest, TaskExecutionReview, TaskSessionEvent } from
 import type { TaskExecutionBridge } from "../../protocol/task-execution.ts";
 
 export type TaskExecutionStatus = "idle" | "review" | "starting" | "queued" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled" | "crashed";
+export type TaskConfirmationMemory = "unsupported" | "available" | "remembered";
 export interface TaskWorkspaceIdentity { readonly root: string; readonly generation: number; }
 export interface TaskExecutionOutput { readonly stream: "stdout" | "stderr"; readonly dataBase64: string; }
 export interface TaskExecutionState {
   readonly status: TaskExecutionStatus;
   readonly identity: TaskWorkspaceIdentity | null;
   readonly review: TaskExecutionReview | null;
+  readonly confirmationMemory: TaskConfirmationMemory;
   readonly runId: string | null;
   readonly outputs: readonly TaskExecutionOutput[];
   readonly outputBytes: number;
@@ -52,31 +54,49 @@ export class TaskExecutionController {
     this.emit();
   }
 
-  async prepare(identity: TaskWorkspaceIdentity, request: TaskExecutionRequest): Promise<TaskExecutionReview> {
+  async prepare(
+    identity: TaskWorkspaceIdentity,
+    request: TaskExecutionRequest,
+    allowConfirmationMemory = false,
+  ): Promise<TaskExecutionReview> {
     this.requireCurrent(identity);
     const prepareRequest = ++this.prepareRequest;
     const review = await this.bridge.prepareTaskExecution(identity.root, request);
     this.requireCurrent(identity);
     if (prepareRequest !== this.prepareRequest) throw new Error("Task review request is stale.");
     if (review.workspaceRoot !== identity.root) throw new Error("Task review belongs to another workspace.");
-    this.value = { ...emptyState(identity), status: "review", identity, review };
+    let confirmationMemory: TaskConfirmationMemory = allowConfirmationMemory ? "available" : "unsupported";
+    if (allowConfirmationMemory && this.bridge.readTaskConfirmation) {
+      const confirmation = await this.bridge.readTaskConfirmation(identity.root, review.reviewId);
+      this.requireCurrent(identity);
+      if (prepareRequest !== this.prepareRequest || confirmation.reviewId !== review.reviewId) {
+        throw new Error("Task confirmation response is stale.");
+      }
+      confirmationMemory = confirmation.remembered ? "remembered" : "available";
+    }
+    this.value = { ...emptyState(identity), status: "review", identity, review, confirmationMemory };
     this.emit();
     return review;
   }
 
-  async readWorkspaceTrust(identity: TaskWorkspaceIdentity): Promise<"unknown" | "trusted" | "denied"> {
+  async readWorkspaceTrust(identity: TaskWorkspaceIdentity, pluginId: string): Promise<"unknown" | "trusted" | "denied"> {
     this.requireCurrent(identity);
-    const result = await this.bridge.readWorkspaceTrust(identity.root);
+    const result = await this.bridge.readWorkspaceTrust(identity.root, pluginId);
     this.requireCurrent(identity);
-    if (result.workspaceRoot !== identity.root) throw new Error("Workspace trust belongs to another workspace.");
+    if (result.workspaceRoot !== identity.root || result.pluginId !== pluginId) throw new Error("Workspace trust belongs to another plugin workspace.");
     return result.state;
   }
 
-  async setWorkspaceTrust(identity: TaskWorkspaceIdentity, state: "unknown" | "trusted" | "denied"): Promise<void> {
+  async setWorkspaceTrust(
+    identity: TaskWorkspaceIdentity,
+    state: "unknown" | "trusted" | "denied",
+    pluginId = this.value.review?.pluginId,
+  ): Promise<void> {
     this.requireCurrent(identity);
-    const result = await this.bridge.setWorkspaceTrust(identity.root, state);
+    if (!pluginId) throw new Error("Plugin workspace trust requires a plugin ID.");
+    const result = await this.bridge.setWorkspaceTrust(identity.root, pluginId, state);
     this.requireCurrent(identity);
-    if (result.workspaceRoot !== identity.root || result.state !== state) throw new Error("Workspace trust response is stale.");
+    if (result.workspaceRoot !== identity.root || result.pluginId !== pluginId || result.state !== state) throw new Error("Workspace trust response is stale.");
     if (this.value.review && this.value.status === "review") {
       this.value = { ...this.value, review: { ...this.value.review, trust: result.state } };
     } else {
@@ -85,7 +105,7 @@ export class TaskExecutionController {
     this.emit();
   }
 
-  async confirm(identity: TaskWorkspaceIdentity): Promise<string> {
+  async confirm(identity: TaskWorkspaceIdentity, rememberConfirmation = false): Promise<string> {
     this.requireCurrent(identity);
     const review = this.value.review;
     if (this.value.status !== "review" || !review) throw new Error("A task review is required before confirmation.");
@@ -105,7 +125,11 @@ export class TaskExecutionController {
     });
     let started;
     try {
-      started = await this.bridge.startTaskExecution(identity.root, review.reviewId);
+      started = await this.bridge.startTaskExecution(
+        identity.root,
+        review.reviewId,
+        rememberConfirmation && this.value.confirmationMemory !== "unsupported",
+      );
     } catch (error) {
       this.unsubscribe?.(); this.unsubscribe = null;
       throw error;
@@ -245,7 +269,7 @@ export class TaskExecutionController {
   private emit(): void { for (const listener of this.listeners) listener(this.value); }
 }
 
-function emptyState(identity: TaskWorkspaceIdentity | null = null): TaskExecutionState { return { status: "idle", identity, review: null, runId: null, outputs: [], outputBytes: 0, outputTruncated: false, error: null, lastSequence: 0 }; }
+function emptyState(identity: TaskWorkspaceIdentity | null = null): TaskExecutionState { return { status: "idle", identity, review: null, confirmationMemory: "unsupported", runId: null, outputs: [], outputBytes: 0, outputTruncated: false, error: null, lastSequence: 0 }; }
 function sameIdentity(left: TaskWorkspaceIdentity | null, right: TaskWorkspaceIdentity | null): boolean { return left?.root === right?.root && left?.generation === right?.generation; }
 function estimateBase64Bytes(value: string): number {
   const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
