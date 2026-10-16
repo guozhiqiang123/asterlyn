@@ -4,6 +4,7 @@ import { renderHostPanelState } from "../presentation/host-presentation.ts";
 import type { PluginWorkbenchSnapshot } from "./plugin-workbench-contribution-runtime.ts";
 import type { PluginRunSessionSnapshot } from "./plugin-run-session-runtime.ts";
 import { renderSelectControl } from "../shared/select-control.ts";
+import { icon } from "../icons.ts";
 
 export function renderPluginWorkbenchView(
   viewId: string,
@@ -85,10 +86,15 @@ function renderRunView(
     : null;
   const configurationSelect = renderSelectControl(`<select data-run-configuration-provider="${attribute(provider.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.configuration.select"))}">${snapshot.configurations.map((candidate) => `<option value="${attribute(candidate.id)}" ${candidate.id === configuration.id ? "selected" : ""} ${candidate.status === "invalid" ? "disabled" : ""}>${html(candidate.label)}</option>`).join("")}</select>`);
   const selectedTarget = targets?.snapshot.targets.find((target) => target.id === targets.snapshot.selectedTargetId);
-  const targetSelect = targets ? renderSelectControl(`<select data-run-target-provider="${attribute(targets.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.target.select"))}">${targets.snapshot.selectedTargetId ? "" : `<option value="" selected disabled>${html(message(entry, locale, "run.target.select"))}</option>`}${targets.snapshot.targets.map((target) => `<option value="${attribute(target.id)}" ${target.id === targets.snapshot.selectedTargetId ? "selected" : ""} ${target.status !== "online" || !target.selectable ? "disabled" : ""}>${html(target.label)}${target.detail ? ` — ${html(target.detail)}` : ""}</option>`).join("")}</select>`) : "";
+  const targetLoading = targets?.snapshot.status === "loading";
+  const targetSelect = targets ? renderSelectControl(`<select data-run-target-provider="${attribute(targets.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.target.select"))}" ${targetLoading ? "disabled" : ""}>${targets.snapshot.selectedTargetId ? "" : `<option value="" selected disabled>${html(message(entry, locale, "run.target.select"))}</option>`}${targets.snapshot.targets.map((target) => `<option value="${attribute(target.id)}" ${target.id === targets.snapshot.selectedTargetId ? "selected" : ""} ${target.status !== "online" || !target.selectable ? "disabled" : ""}>${html(target.label)}${target.detail ? ` — ${html(target.detail)}` : ""}</option>`).join("")}</select>`) : "";
+  const refreshLabel = message(entry, locale, "device.action.refresh");
+  const targetRefresh = targets ? `<button class="compact-icon-button plugin-run-target-refresh" type="button" data-target-provider-refresh="${attribute(targets.qualifiedId)}" aria-label="${attribute(refreshLabel)}" title="${attribute(refreshLabel)}" ${targetLoading ? "disabled" : ""}>${targetLoading ? `<span class="spinner" aria-hidden="true"></span>` : icon("refresh", 15)}</button>` : "";
+  const targetControl = `<div class="plugin-run-target-control">${targetSelect}${targetRefresh}</div>`;
   const anyRunActive = runSession?.status === "running";
   const running = anyRunActive && runSession.pluginId === entry.id;
   const canRun = configuration.status === "ready"
+    && targets?.snapshot.status === "ready"
     && selectedTarget?.status === "online"
     && selectedTarget.selectable
     && !anyRunActive;
@@ -97,7 +103,7 @@ function renderRunView(
   const status = runSession?.pluginId === entry.id
     ? `<div class="plugin-run-status status-${attribute(runSession.status)}"><strong>${html(message(entry, locale, `run.session.${runSession.status}`))}</strong><span>${html(message(entry, locale, `run.phase.${runSession.phase}`))}</span>${runSession.error ? `<small>${html(runSession.error)}</small>` : ""}</div>`
     : "";
-  return `<section class="plugin-run-view"><div class="plugin-run-form"><label><span>${html(message(entry, locale, "run.configuration.select"))}</span>${configurationSelect}</label><label><span>${html(message(entry, locale, "run.target.select"))}</span>${targetSelect}</label></div><div class="plugin-run-summary"><strong>${html(labelKey ? message(entry, locale, labelKey) : configuration.label)}</strong>${configuration.detail ? `<span>${html(detailKey ? message(entry, locale, detailKey) : configuration.detail)}</span>` : ""}</div>${action}${status}</section>`;
+  return `<section class="plugin-run-view"><div class="plugin-run-form"><label><span>${html(message(entry, locale, "run.configuration.select"))}</span>${configurationSelect}</label><label><span>${html(message(entry, locale, "run.target.select"))}</span>${targetControl}</label></div><div class="plugin-run-summary"><strong>${html(labelKey ? message(entry, locale, labelKey) : configuration.label)}</strong>${configuration.detail ? `<span>${html(detailKey ? message(entry, locale, detailKey) : configuration.detail)}</span>` : ""}</div>${action}${status}</section>`;
 }
 
 function message(entry: PluginManagementEntry, locale: string, key: string): string {

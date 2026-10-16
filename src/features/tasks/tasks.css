@@ -112,6 +112,29 @@
   align-items: center;
 }
 
+.plugin-run-target-control {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+.plugin-run-target-control > .select-control { width: 100%; }
+
+.plugin-run-target-refresh {
+  width: 30px;
+  height: 30px;
+  margin-left: 0;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.plugin-run-target-refresh .spinner {
+  width: 14px;
+  height: 14px;
+}
+
 .plugin-run-button {
   min-width: 108px;
   min-height: 34px;
