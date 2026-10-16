@@ -87,6 +87,7 @@ test("disabled bundled plugins are not activated and re-enable activates once", 
   const preferences = new PluginPreferenceStore(storage, [], createSilentPluginPreferenceSync());
   let activations = 0;
   let disposals = 0;
+  let providers = [];
   const plugin = {
     id: "fixture.plugin",
     version: "1.0.0",
@@ -108,7 +109,7 @@ test("disabled bundled plugins are not activated and re-enable activates once", 
   const runtime = new PluginCompositionRuntime({
     preferenceStore: preferences,
     registerCommand: () => () => undefined,
-    replaceProviders: () => undefined,
+    replaceProviders: (_identity, next) => { providers = [...next]; },
     reportDiagnostic: () => undefined,
     reportError: (error) => { throw error; },
     loadPlugins: async () => [plugin],
@@ -116,17 +117,20 @@ test("disabled bundled plugins are not activated and re-enable activates once", 
   await runtime.activateWorkspace({ root: "/repo", generation: 1 });
   await runtime.updateWorkspaceEvidence({ root: "/repo", generation: 1 }, { kind: "workspace-catalog", platform: "posix", files: [], truncated: false });
   assert.equal(activations, 1);
+  assert.equal(providers.length, 1);
   assert.equal(runtime.managementSnapshot.entries[0].active, true);
   assert.equal(runtime.setPluginEnabled(plugin.id, false), true);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(disposals, 1);
   assert.equal(runtime.managementSnapshot.entries[0].enabled, false);
   assert.equal(runtime.managementSnapshot.entries[0].active, false);
+  assert.equal(providers.length, 0);
   assert.equal(runtime.setPluginEnabled(plugin.id, true), true);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(activations, 2);
   assert.equal(disposals, 1);
   assert.equal(runtime.managementSnapshot.entries[0].active, true);
+  assert.equal(providers.length, 1);
   runtime.dispose();
   preferences.dispose();
 });

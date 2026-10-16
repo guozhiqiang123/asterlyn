@@ -9,7 +9,7 @@ import {
 
 const identity = { root: "/workspace/android", generation: 3 };
 
-test("the bundled Android plugin activates from bounded catalog evidence with a host-reviewed refresh", async () => {
+test("the bundled Gradle plugin activates without Android evidence and returns a reviewed refresh", async () => {
   const runtime = runtimeWithCache();
   const evidence = {
     kind: "workspace-catalog",
@@ -18,7 +18,6 @@ test("the bundled Android plugin activates from bounded catalog evidence with a 
     files: [
       { workspacePath: "settings.gradle.kts" },
       { workspacePath: "gradlew" },
-      { workspacePath: "app/src/main/AndroidManifest.xml" },
     ],
   };
   const report = await runtime.activate(identity, evidence, BUNDLED_PLUGINS);
@@ -48,7 +47,7 @@ test("the bundled Android plugin activates from bounded catalog evidence with a 
   assert.deepEqual(provider.snapshot().tasks.map((task) => task.id), [":assembleDebug", ":installDebug"]);
 });
 
-test("the bundled Android plugin stays inactive for plain and malformed catalogs", async () => {
+test("the bundled Gradle plugin stays inactive for plain, incomplete, and malformed catalogs", async () => {
   const runtime = new PluginRuntime();
   const plain = await runtime.activate(identity, {
     kind: "workspace-catalog",
@@ -57,6 +56,15 @@ test("the bundled Android plugin stays inactive for plain and malformed catalogs
     files: [{ workspacePath: "README.md" }],
   }, BUNDLED_PLUGINS);
   assert.deepEqual(plain.skipped, [ANDROID_GRADLE_PLUGIN_ID]);
+  for (const evidence of [
+    { kind: "workspace-catalog", platform: "posix", truncated: false, files: [{ workspacePath: "settings.gradle" }, { workspacePath: "build.gradle" }] },
+    { kind: "workspace-catalog", platform: "posix", truncated: false, files: [{ workspacePath: "app/gradlew" }] },
+    { kind: "workspace-catalog", platform: "posix", truncated: false, files: [{ workspacePath: "gradlew.bat" }] },
+    { kind: "workspace-catalog", platform: "posix", truncated: true, files: [{ workspacePath: "gradlew" }] },
+  ]) {
+    const report = await runtime.activate(identity, evidence, BUNDLED_PLUGINS);
+    assert.deepEqual(report.skipped, [ANDROID_GRADLE_PLUGIN_ID]);
+  }
   const malformed = await runtime.activate(identity, {
     kind: "workspace-catalog",
     platform: "posix",
