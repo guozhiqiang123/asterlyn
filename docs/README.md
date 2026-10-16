@@ -101,6 +101,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-10-16-workspace-matched-plugin-surfaces.md`](benchmarks/2026-10-16-workspace-matched-plugin-surfaces.md) — plugin-owned root-wrapper matching, contribution-backed Tasks visibility, cross-repository artifact identity, and recoverable local installation.
 - [`benchmarks/2026-10-15-host-notification-and-plugin-feedback.md`](benchmarks/2026-10-15-host-notification-and-plugin-feedback.md) — bounded host tips, optional localized plugin notifications, terminal task-failure feedback, FilesRecovery evidence, and recoverable local installation.
 - [`benchmarks/2026-10-15-task-terminal-routing.md`](benchmarks/2026-10-15-task-terminal-routing.md) — selection-first task activation, native reviewed execution in the host Terminal, FilesRecovery evidence, resource gates, and recoverable local installation.
 - [`benchmarks/2026-10-15-plugin-task-authorization.md`](benchmarks/2026-10-15-plugin-task-authorization.md) — plugin-scoped durable workspace trust, exact remembered Gradle task reviews, revocation, bounds, and recoverable local installation.

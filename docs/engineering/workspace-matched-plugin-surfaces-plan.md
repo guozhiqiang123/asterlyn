@@ -2,7 +2,7 @@
 
 Date: 2026-10-16
 
-Status: planned
+Status: implemented and locally packaged for manual acceptance on 2026-10-16
 
 Governing decision: [ADR-0028](../architecture/decisions/0028-workspace-matched-plugin-surfaces.md)
 
