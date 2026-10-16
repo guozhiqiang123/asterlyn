@@ -131,6 +131,24 @@ test("ordinary folders enable workspace activities while Git activities stay dis
     assert.match(button, /\sdisabled(?:\s|>)/u);
     assert.match(button, /aria-disabled="true"/u);
   }
+  assert.match(activityButtonMarkup(html, "tasks"), /\shidden(?:\s|>)/u);
+});
+
+test("an active plugin contribution exposes the Tasks activity", () => {
+  const shell = new ShellController(memoryStorage());
+  const html = renderShellView({
+    shell: shell.state,
+    workspaceOpen: true,
+    gitAvailable: false,
+    tasksAvailable: true,
+    demo: false,
+    windowControlsAvailable: false,
+  });
+
+  const button = activityButtonMarkup(html, "tasks");
+  assert.doesNotMatch(button, /\shidden(?:\s|>)/u);
+  assert.doesNotMatch(button, /\sdisabled(?:\s|>)/u);
+  assert.match(button, /aria-disabled="false"/u);
 });
 
 test("empty-workspace reconciliation closes tool windows restored by stale layout state", () => {

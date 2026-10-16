@@ -39,6 +39,7 @@ export interface PluginTasksRuntimeOptions {
   readonly reconcileAfterTask?: (identity: PluginWorkspaceIdentity) => void | Promise<void>;
   readonly taskTerminal?: TaskTerminalSessionPort;
   readonly notificationPublisher?: HostNotificationPublisher;
+  readonly availabilityChanged?: (available: boolean) => void;
 }
 
 export interface PluginWorkspaceCatalog {
@@ -60,11 +61,14 @@ export class PluginTasksRuntime {
   private readonly copy: () => TasksCopy;
   private readonly notificationPublisher: HostNotificationPublisher | undefined;
   private readonly managementListeners = new Set<(snapshot: PluginManagementSnapshot) => void>();
+  private readonly availabilityChanged: ((available: boolean) => void) | undefined;
   private readonly releaseManagement: () => void;
   private identity: PluginWorkspaceIdentity | null = null;
+  private available = false;
 
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
     this.copy = options.copy;
+    this.availabilityChanged = options.availabilityChanged;
     this.notificationPublisher = options.notificationPublisher;
     this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
     this.artifactBridge = options.artifactBridge;
@@ -99,7 +103,10 @@ export class PluginTasksRuntime {
     );
     this.plugins = new PluginCompositionRuntime({
       registerCommand: options.registerCommand,
-      replaceProviders: (identity, providers) => controller.acceptProviders(identity, providers),
+      replaceProviders: (identity, providers) => {
+        controller.acceptProviders(identity, providers);
+        this.setAvailable(providers.length > 0);
+      },
       reportDiagnostic: (diagnostic) => options.reportError(diagnostic.error ?? new Error(diagnostic.message)),
       reportError: options.reportError,
       executeTaskRefresh: (identity, plan, signal) => this.executeTaskRefresh(identity, plan, signal),
@@ -163,6 +170,8 @@ export class PluginTasksRuntime {
     return this.managementSnapshot(this.plugins.managementSnapshot);
   }
 
+  get tasksAvailable(): boolean { return this.available; }
+
   async loadPluginManagement(): Promise<PluginManagementSnapshot> {
     const snapshot = await this.plugins.loadManagementCatalog();
     this.applyTaskPresentation(snapshot);
@@ -217,11 +226,18 @@ export class PluginTasksRuntime {
 
   dispose(): void {
     this.identity = null;
+    this.setAvailable(false);
     this.releaseManagement();
     this.managementListeners.clear();
     this.plugins.dispose();
     this.execution.dispose();
     this.tasks.dispose();
+  }
+
+  private setAvailable(available: boolean): void {
+    if (this.available === available) return;
+    this.available = available;
+    this.availabilityChanged?.(available);
   }
 
   private async executeTaskRefresh(

@@ -201,6 +201,7 @@ import { WindowChromeBinding } from "./shell/window-chrome-binding";
 import { refreshWorkbenchShortcutPresentation, shortcutFocusScope } from "./shell/shortcut-presentation.ts";
 import { WorkbenchLayoutRuntime, type WorkbenchResizeDimension } from "./shell/workbench-layout-runtime.ts";
 import { hideWorkspaceToolWindows } from "./shell/workspace-availability.ts";
+import { activityToolAvailability, reconcileActivityLayout, type ActivityAvailability } from "./shell/activity-availability.ts";
 import { WindowSession } from "./application/window-session";
 import { approveProjectWindowClose } from "./application/window-close-gate.ts";
 import { KeyboardShortcutRuntime } from "./composition/keyboard-shortcut-runtime.ts"; import { PluginTasksRuntime } from "./composition/plugin-tasks-runtime.ts"; import { reconcileAfterSuccessfulTask } from "./composition/post-task-reconciliation.ts"; import { openingTaskTerminalPort } from "./features/terminal/task-terminal-session-adapter.ts";
@@ -640,7 +641,7 @@ export class AsterlynApp {
       error: (error) => this.showError(error),
       keyboard: this.shortcuts.handleTerminalKeyEvent, presentationChanged: () => this.refreshShortcutPresentation(),
     }, initialCatalog.locale);
-    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
+    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
     this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.findResultsRuntime = new FindResultsRuntime(root, {
@@ -1814,6 +1815,7 @@ export class AsterlynApp {
       shell: this.shellState,
       workspaceOpen: Boolean(this.windowSession.workspace.state.root),
       gitAvailable: Boolean(this.windowSession.repository.state.snapshot),
+      tasksAvailable: this.pluginTasksRuntime.tasksAvailable,
       demo: bridge.isDemo,
       windowControlsAvailable: this.windowChromeBinding.available,
       localization: this.localization.catalog,
@@ -3863,10 +3865,7 @@ export class AsterlynApp {
   private hideLeftTool(): void { const tool = this.shellState.layout.leftTool; if (tool) this.toggleTool(tool); }
 
   private toggleTool(tool: ActivityTool): void {
-    if (
-      !this.windowSession.workspace.state.root ||
-      (tool !== "files" && tool !== "search" && tool !== "tasks" && tool !== "terminal" && !this.windowSession.repository.state.snapshot)
-    ) return;
+    if (this.activityAvailability(tool) < 1) return;
     if (tool === "search") {
       const current = this.shellState.layout.bottomTool;
       const next = current === "find" || current === "replace"
@@ -3912,8 +3911,8 @@ export class AsterlynApp {
     }
     this.root.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => {
       const tool = button.dataset.tool as ActivityTool;
-      const enabled = Boolean(this.windowSession.workspace.state.root &&
-        (tool === "files" || tool === "search" || tool === "tasks" || tool === "terminal" || this.windowSession.repository.state.snapshot));
+      const availability = this.activityAvailability(tool);
+      const enabled = availability > 0;
       const requestedActive =
         tool === "search"
           ? this.shellState.layout.bottomTool === "find" || this.shellState.layout.bottomTool === "replace"
@@ -3923,6 +3922,7 @@ export class AsterlynApp {
       const active = enabled && requestedActive;
       button.classList.toggle("active", active);
       button.classList.toggle("unavailable", !enabled);
+      button.toggleAttribute("hidden", availability < 0);
       button.disabled = !enabled;
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
@@ -3937,6 +3937,21 @@ export class AsterlynApp {
           : copy.gitUnavailableReorder;
     });
     this.refreshShortcutPresentation();
+  }
+
+  private activityAvailability(tool: ActivityTool): ActivityAvailability {
+    return activityToolAvailability(tool, Boolean(this.windowSession.workspace.state.root), Boolean(this.windowSession.repository.state.snapshot), this.pluginTasksRuntime.tasksAvailable);
+  }
+
+  private reconcilePluginActivityAvailability(): void {
+    if (!this.root.querySelector(".app-shell")) return;
+    const layout = this.shellState.layout;
+    const next = reconcileActivityLayout(layout, this.pluginTasksRuntime.tasksAvailable);
+    if (next !== layout) {
+      this.shellController.setLayout(next, true);
+      this.applyWorkbenchLayout(true);
+    }
+    this.renderActivityRail();
   }
 
   private bindWorkbenchSplitters(): void {

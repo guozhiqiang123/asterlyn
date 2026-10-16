@@ -2,6 +2,7 @@ import { BRAND } from "../brand.ts";
 import { icon } from "../icons.ts";
 import { renderSelectControl } from "../shared/select-control.ts";
 import type { ActivityTool } from "./activity-order.ts";
+import { activityToolAvailability } from "./activity-availability.ts";
 import { showCustomWindowControls, windowChromeClass } from "./window-chrome.ts";
 import type { ShellState } from "./shell-controller.ts";
 import type { LocaleCatalog, ShellCopy } from "../localization/catalog.ts";
@@ -11,6 +12,7 @@ export interface ShellViewModel {
   shell: ShellState;
   workspaceOpen: boolean;
   gitAvailable: boolean;
+  tasksAvailable?: boolean;
   demo: boolean;
   windowControlsAvailable: boolean;
   localization?: Pick<LocaleCatalog, "shell" | "common" | "history" | "tasks">;
@@ -119,7 +121,13 @@ function activityButton(tool: ActivityTool, model: ShellViewModel, copy: ShellCo
     : tool === "branches" || tool === "stash" || tool === "tasks" || tool === "terminal"
       ? model.shell.layout.bottomTool === tool
       : model.shell.layout.leftTool === tool;
-  const enabled = model.workspaceOpen && (tool === "files" || tool === "search" || tool === "tasks" || tool === "terminal" || model.gitAvailable);
+  const availability = activityToolAvailability(
+    tool,
+    model.workspaceOpen,
+    model.gitAvailable,
+    model.tasksAvailable ?? false,
+  );
+  const enabled = availability > 0;
   const active = enabled && requestedActive;
   const label = labels[tool];
   const title = enabled
@@ -127,7 +135,7 @@ function activityButton(tool: ActivityTool, model: ShellViewModel, copy: ShellCo
     : tool === "files" || tool === "search" || tool === "tasks" || tool === "terminal"
       ? copy.openFolderFirst
       : copy.gitUnavailableReorder;
-  return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${escapeHtml(label)}" title="${escapeHtml(title)}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown" ${enabled ? "" : "disabled"}>${icon(icons[tool], 20)}<span>${escapeHtml(label)}</span></button>`;
+  return `<button class="activity-button ${active ? "active" : ""} ${enabled ? "" : "unavailable"}" data-tool="${tool}" type="button" aria-label="${escapeHtml(label)}" title="${escapeHtml(title)}" aria-pressed="${active}" aria-disabled="${!enabled}" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown" ${availability < 0 ? "hidden" : ""} ${enabled ? "" : "disabled"}>${icon(icons[tool], 20)}<span>${escapeHtml(label)}</span></button>`;
 }
 
 function repositoryDialog(copy: ShellCopy, common: LocaleCatalog["common"]): string {
