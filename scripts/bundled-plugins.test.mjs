@@ -153,7 +153,7 @@ test("the bundled Android plugin returns a supervised staged Run plan", async ()
   }], [{
     workspacePath: "app/build/outputs/apk/demo/debug/output-metadata.json",
     byteLength: 1,
-    dataBase64: Buffer.from(JSON.stringify({ artifactType: { type: "APK" }, variantName: "DemoDebug", elements: [{ type: "SINGLE", outputFile: "app-demo-debug.apk" }] })).toString("base64"),
+    dataBase64: Buffer.from(JSON.stringify({ artifactType: { type: "APK" }, variantName: "demoDebug", elements: [{ type: "SINGLE", outputFile: "app-demo-debug.apk" }] })).toString("base64"),
   }], false), {
     operationId: "android.apk.inspect",
     parameters: { artifact: "app/build/outputs/apk/demo/debug/app-demo-debug.apk" },
