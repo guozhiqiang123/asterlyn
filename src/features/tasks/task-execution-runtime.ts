@@ -27,6 +27,11 @@ export interface TaskExecutionRuntimeOptions {
 export type TaskExecutionPresentation = "background" | "terminal";
 export type TaskExecutionProgress = "queued" | "running";
 
+export interface TaskTerminalContinuation {
+  readonly continueOnSuccess: boolean;
+  readonly cancel: () => void | Promise<void>;
+}
+
 export interface TaskArtifactAttachmentTarget {
   readonly root: string;
   readonly generation: number;
@@ -74,6 +79,7 @@ export class TaskExecutionRuntime {
   private projectedTerminalOutputCount = 0;
   private progressChanged: ((status: TaskExecutionProgress) => void) | null = null;
   private projectedProgress: TaskExecutionProgress | null = null;
+  private terminalContinuation: TaskTerminalContinuation | null = null;
 
   constructor(
     root: HTMLElement,
@@ -121,6 +127,7 @@ export class TaskExecutionRuntime {
   }
 
   get active(): boolean { return this.visible; }
+  get terminalSessionId(): string | null { return this.projectedTerminalSessionId; }
 
   activate(identity: TaskWorkspaceIdentity): void {
     if (this.finished) {
@@ -137,6 +144,7 @@ export class TaskExecutionRuntime {
     this.executionPresentation = "background";
     this.progressChanged = null;
     this.projectedProgress = null;
+    this.terminalContinuation = null;
     this.resetTaskTerminalProjection();
     this.terminalState = null;
     this.invalidateArtifacts();
@@ -150,6 +158,7 @@ export class TaskExecutionRuntime {
     finished: (result: PluginTaskExecutionResult) => void,
     presentation: TaskExecutionPresentation = "background",
     progressChanged?: (status: TaskExecutionProgress) => void,
+    terminalContinuation?: TaskTerminalContinuation,
   ): Promise<void> {
     if (this.finished) throw new Error("A task execution review is already active.");
     this.identity = identity;
@@ -160,6 +169,7 @@ export class TaskExecutionRuntime {
     this.executionPresentation = presentation;
     this.progressChanged = progressChanged ?? null;
     this.projectedProgress = null;
+    this.terminalContinuation = terminalContinuation ?? null;
     this.resetTaskTerminalProjection();
     this.terminalState = null;
     this.invalidateArtifacts();
@@ -391,7 +401,7 @@ export class TaskExecutionRuntime {
           executablePath: review.canonicalExecutablePath,
           args: [...review.args],
           workingDirectory: review.cwd,
-          cancel: () => this.cancel(identity),
+          cancel: this.terminalContinuation?.cancel ?? (() => this.cancel(identity)),
         });
       }
       for (const output of state.outputs.slice(this.projectedTerminalOutputCount)) {
@@ -399,7 +409,10 @@ export class TaskExecutionRuntime {
       }
       this.projectedTerminalOutputCount = state.outputs.length;
       if (state.status !== "idle" && state.status !== "review") {
-        terminal.update(sessionId, state.status as TaskTerminalSessionStatus, state.error, state.outputTruncated);
+        const status = this.terminalContinuation?.continueOnSuccess === true && state.status === "succeeded"
+          ? "running"
+          : state.status as TaskTerminalSessionStatus;
+        terminal.update(sessionId, status, state.error, state.outputTruncated);
       }
     } catch (error) {
       this.options.reportError?.(error);

@@ -1,5 +1,6 @@
 import type {
   Disposable,
+  PluginRunPlan,
   PluginContributionRegistry,
   RegisteredPluginContribution,
 } from "../application/plugins/index.ts";
@@ -71,6 +72,32 @@ export class PluginWorkbenchContributionRuntime {
 
   async selectTarget(qualifiedId: string, targetId: string | null): Promise<void> {
     await this.targets.get(qualifiedId)?.contribution.select?.(targetId);
+  }
+
+  async selectRunConfiguration(qualifiedId: string, configurationId: string | null): Promise<void> {
+    await this.runs.get(qualifiedId)?.contribution.select?.(configurationId);
+  }
+
+  async createRunPlan(
+    qualifiedId: string,
+    configurationId: string,
+    targetId?: string,
+  ): Promise<PluginRunPlan | null> {
+    return await this.runs.get(qualifiedId)?.contribution.run?.(configurationId, targetId) ?? null;
+  }
+
+  async revalidateTarget(
+    pluginId: string,
+    providerId: string,
+    targetId: string,
+  ): Promise<boolean> {
+    const entry = [...this.targets.values()].find(({ contribution }) =>
+      contribution.pluginId === pluginId && contribution.id === providerId
+    );
+    if (!entry) return false;
+    await entry.contribution.refresh?.();
+    const target = entry.contribution.snapshot().targets.find((candidate) => candidate.id === targetId);
+    return target?.status === "online" && target.selectable;
   }
 
   dispose(): void {

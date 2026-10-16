@@ -1,6 +1,8 @@
 import type { TasksCopy } from "../localization/catalog.ts";
 import { resolvePluginMessage } from "../application/plugins/plugin-localization.ts";
 import type { PluginCompositionRuntime } from "./plugin-runtime.ts";
+import type { PluginStagedRunPlan } from "../application/plugins/index.ts";
+import type { PluginRunSessionSnapshot } from "./plugin-run-session-runtime.ts";
 import { PluginWorkbenchContributionRuntime } from "./plugin-workbench-contribution-runtime.ts";
 
 export interface PluginWorkbenchHostRuntimeOptions {
@@ -9,6 +11,16 @@ export interface PluginWorkbenchHostRuntimeOptions {
   readonly copy: () => TasksCopy;
   readonly locale: () => "en-US" | "zh-CN";
   readonly reportError: (error: unknown) => void;
+  readonly runSession: () => PluginRunSessionSnapshot | null;
+  readonly executeRun: (request: PluginWorkbenchRunRequest) => Promise<void>;
+  readonly cancelRun: () => void;
+}
+
+export interface PluginWorkbenchRunRequest {
+  readonly pluginId: string;
+  readonly label: string;
+  readonly plan: PluginStagedRunPlan;
+  readonly revalidateTarget: () => Promise<boolean>;
 }
 
 /** Owns the optional host-rendered workbench shell after a plugin contributes one. */
@@ -18,6 +30,9 @@ export class PluginWorkbenchHostRuntime {
   private readonly copy: () => TasksCopy;
   private readonly locale: () => "en-US" | "zh-CN";
   private readonly reportError: (error: unknown) => void;
+  private readonly runSession: () => PluginRunSessionSnapshot | null;
+  private readonly executeRun: (request: PluginWorkbenchRunRequest) => Promise<void>;
+  private readonly cancelRun: () => void;
   private readonly contributions: PluginWorkbenchContributionRuntime;
   private abort: AbortController | null = null;
   private activeView = "tasks";
@@ -30,6 +45,9 @@ export class PluginWorkbenchHostRuntime {
     this.copy = options.copy;
     this.locale = options.locale;
     this.reportError = options.reportError;
+    this.runSession = options.runSession;
+    this.executeRun = options.executeRun;
+    this.cancelRun = options.cancelRun;
     let ready = false;
     this.contributions = new PluginWorkbenchContributionRuntime(
       this.plugins.contributionRegistry,
@@ -105,10 +123,33 @@ export class PluginWorkbenchHostRuntime {
       const selected = providerSnapshot?.configurations.find(
         (candidate) => candidate.id === providerSnapshot.selectedConfigurationId,
       ) ?? providerSnapshot?.configurations[0];
+      const targets = selected?.targetProviderId
+        ? snapshot.targetProviders.find((candidate) => candidate.pluginId === entry.id && candidate.providerId === selected.targetProviderId)
+        : undefined;
+      const selectedTarget = targets?.snapshot.targets.find((candidate) => candidate.id === targets.snapshot.selectedTargetId);
+      const running = this.runSession()?.status === "running";
       const runLabel = resolvePluginMessage(entry.localization, this.locale(), "panel.run");
-      runAction.disabled = selected?.status !== "ready";
+      runAction.disabled = !running && (selected?.status !== "ready" || !provider?.snapshot || !targets || selectedTarget?.status !== "online" || !selectedTarget.selectable);
       runAction.setAttribute("aria-label", runLabel);
       runAction.title = runLabel;
+      runAction.addEventListener("click", () => {
+        if (running) {
+          this.cancelRun();
+          return;
+        }
+        if (!provider || !selected || !targets || !selectedTarget) return;
+        void this.contributions.createRunPlan(provider.qualifiedId, selected.id, selectedTarget.id).then((plan) => {
+          if (!plan || !("kind" in plan) || plan.kind !== "staged") {
+            throw new Error(`Run configuration did not return a staged plan: ${selected.id}`);
+          }
+          return this.executeRun({
+            pluginId: entry.id,
+            label: selected.label,
+            plan,
+            revalidateTarget: () => this.contributions.revalidateTarget(entry.id, selected.targetProviderId as string, selectedTarget.id),
+          });
+        }).catch(this.reportError);
+      }, { signal: abort.signal });
     }
     view.innerHTML = "";
     const revision = ++this.renderRevision;
@@ -116,7 +157,7 @@ export class PluginWorkbenchHostRuntime {
       const viewId = this.activeView;
       void import("./plugin-workbench-view.ts").then(({ renderPluginWorkbenchView }) => {
         if (this.disposed || this.renderRevision !== revision || this.activeView !== viewId || !view.isConnected) return;
-        view.innerHTML = renderPluginWorkbenchView(viewId, entry.id, snapshot, entry, this.locale());
+        view.innerHTML = renderPluginWorkbenchView(viewId, entry.id, snapshot, entry, this.locale(), this.runSession());
       }).catch(this.reportError);
     }
     tabs.addEventListener("click", (event) => {
@@ -149,6 +190,14 @@ export class PluginWorkbenchHostRuntime {
       const targetId = target?.closest<HTMLElement>("[data-execution-target]")?.dataset.executionTarget;
       const providerId = target?.closest<HTMLElement>("[data-execution-target-provider]")?.dataset.executionTargetProvider;
       if (targetId && providerId) void this.contributions.selectTarget(providerId, targetId).catch(this.reportError);
+    }, { signal: abort.signal });
+    view.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLSelectElement)) return;
+      const runProvider = target.dataset.runConfigurationProvider;
+      if (runProvider) void this.contributions.selectRunConfiguration(runProvider, target.value).catch(this.reportError);
+      const targetProvider = target.dataset.runTargetProvider;
+      if (targetProvider) void this.contributions.selectTarget(targetProvider, target.value || null).catch(this.reportError);
     }, { signal: abort.signal });
   }
 

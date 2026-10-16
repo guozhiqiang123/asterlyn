@@ -1,6 +1,9 @@
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type {
   PluginManagementSnapshot,
+  PluginStagedRunPlan,
+  PluginToolOperationRequest,
+  PluginToolOperationResult,
   PluginSettingValue,
   PluginSettingsTargetResolution,
   PluginWorkspaceInvalidation,
@@ -11,7 +14,7 @@ import type { ProjectFile } from "../models.ts";
 import type { TaskExecutionBridge } from "../protocol/task-execution.ts";
 import { parseTaskArtifactDiscovery, type TaskArtifactBridge } from "../protocol/task-artifacts.ts";
 import { TaskExecutionController } from "../application/tasks/task-execution-controller.ts";
-import { TaskExecutionRuntime, type TaskExecutionProgress } from "../features/tasks/task-execution-runtime.ts";
+import { TaskExecutionRuntime, type TaskExecutionProgress, type TaskTerminalContinuation } from "../features/tasks/task-execution-runtime.ts";
 import { PluginTaskAuthorizationRuntime } from "../features/tasks/plugin-task-authorization-runtime.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
 import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY } from "../localization/task-execution-copy.ts";
@@ -26,8 +29,10 @@ import type { TaskTerminalSessionPort } from "../application/tasks/task-terminal
 import type { HostNotificationPublisher } from "../application/notifications/index.ts";
 import { pluginTaskTerminalNotification } from "./plugin-task-feedback.ts";
 import type { PluginProcessQueryBridge } from "../protocol/plugin-process-query.ts";
-import type { PluginWorkbenchHostRuntime } from "./plugin-workbench-host-runtime.ts";
+import type { PluginWorkbenchHostRuntime, PluginWorkbenchRunRequest } from "./plugin-workbench-host-runtime.ts";
 import { resolvePluginMessage } from "../application/plugins/plugin-localization.ts";
+import type { PluginToolOperationBridge } from "../protocol/plugin-tool-operation.ts";
+import { PluginRunSessionRuntime, type PluginRunTerminalStatus } from "./plugin-run-session-runtime.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -43,6 +48,7 @@ export interface PluginTasksRuntimeOptions {
   readonly taskTerminal?: TaskTerminalSessionPort;
   readonly notificationPublisher?: HostNotificationPublisher;
   readonly processQueryBridge?: PluginProcessQueryBridge;
+  readonly toolOperationBridge?: PluginToolOperationBridge;
   readonly availabilityChanged?: (available: boolean) => void;
   readonly identityChanged?: () => void;
 }
@@ -70,6 +76,8 @@ export class PluginTasksRuntime {
   private readonly availabilityChanged: ((available: boolean) => void) | undefined;
   private readonly locale: () => "en-US" | "zh-CN";
   private readonly identityChanged: (() => void) | undefined;
+  private readonly toolOperationBridge: PluginToolOperationBridge | undefined;
+  private readonly runSession: PluginRunSessionRuntime;
   private readonly releaseManagement: () => void;
   private workbenchHost: PluginWorkbenchHostRuntime | null = null;
   private workbenchHostPromise: Promise<PluginWorkbenchHostRuntime> | null = null;
@@ -83,6 +91,7 @@ export class PluginTasksRuntime {
     this.availabilityChanged = options.availabilityChanged;
     this.identityChanged = options.identityChanged;
     this.notificationPublisher = options.notificationPublisher;
+    this.toolOperationBridge = options.toolOperationBridge;
     this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
     this.artifactBridge = options.artifactBridge;
     this.reconcileAfterTask = options.reconcileAfterTask;
@@ -130,6 +139,21 @@ export class PluginTasksRuntime {
       processQueryBridge: options.processQueryBridge,
       workspaceStateStorage: options.recentTaskStorage,
       locale: options.locale,
+      mutationBlocked: () => this.runSession.busy,
+    });
+    this.runSession = new PluginRunSessionRuntime({
+      executeInstall: (identity, plan, signal, cancel) => this.executeRunInstall(identity, plan, signal, cancel),
+      discoverArtifacts: async (identity, hints) => {
+        const discovery = parseTaskArtifactDiscovery(await this.artifactBridge.discoverTaskArtifacts(identity.root, hints));
+        if (!this.matches(identity) || discovery.workspaceRoot !== identity.root) throw new Error("Run artifact discovery no longer matches the active workspace.");
+        return discovery.artifacts.map((artifact) => ({ ...artifact }));
+      },
+      executeTool: (pluginId, identity, requestId, request) => this.executePluginTool(pluginId, identity, requestId, request),
+      cancelTool: (pluginId, identity, requestId) => this.cancelPluginTool(pluginId, identity, requestId),
+      taskTerminal: options.taskTerminal,
+      changed: () => this.workbenchHost?.render(),
+      completed: (request, snapshot, result) => this.completeRunSession(request, snapshot.status, result),
+      reportError: options.reportError,
     });
     this.releaseManagement = this.plugins.subscribeManagement((snapshot) => {
       this.applyTaskPresentation(snapshot);
@@ -139,9 +163,9 @@ export class PluginTasksRuntime {
     });
     this.tasks = new TasksRuntime(root, controller, {
       copy: options.copy,
-      refresh: (identity) => this.plugins.refreshProviders(identity),
+      refresh: (identity) => this.runSession.busy ? Promise.reject(new PluginTaskBusyError()) : this.plugins.refreshProviders(identity),
       cancel: (identity) => this.plugins.cancelTask(identity),
-      runTask: (taskKey, identity) => this.plugins.runTask(taskKey, identity),
+      runTask: (taskKey, identity) => this.runSession.busy ? Promise.reject(new PluginTaskBusyError()) : this.plugins.runTask(taskKey, identity),
       revealOutput: (taskKey, identity) => { this.execution.reveal(taskKey, identity); },
       error: (error) => options.reportError(error instanceof PluginTaskBusyError ? new Error(options.copy().busy) : error),
     });
@@ -150,6 +174,7 @@ export class PluginTasksRuntime {
   }
 
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {
+    this.runSession.reset();
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
     this.authorization.activate(identity);
     this.tasks.activate(identity);
@@ -265,9 +290,78 @@ export class PluginTasksRuntime {
     this.workbenchHost?.dispose();
     this.workbenchHost = null;
     this.managementListeners.clear();
+    this.runSession.dispose();
     this.plugins.dispose();
     this.execution.dispose();
     this.tasks.dispose();
+  }
+
+
+  private async executeWorkbenchRun(request: PluginWorkbenchRunRequest): Promise<void> {
+    const identity = this.identity;
+    if (!identity) throw new Error("Run is unavailable without an active workspace.");
+    await this.runSession.run({ identity, ...request });
+  }
+
+  private async executeRunInstall(
+    identity: PluginWorkspaceIdentity,
+    plan: PluginStagedRunPlan["install"],
+    signal: AbortSignal,
+    cancel: () => void,
+  ): Promise<{ readonly result: PluginTaskExecutionResult; readonly terminalSessionId: string | null }> {
+    const continuation: TaskTerminalContinuation = { continueOnSuccess: true, cancel };
+    const result = await this.executeTask(identity, plan, signal, "terminal", undefined, continuation);
+    return { result, terminalSessionId: this.execution.terminalSessionId };
+  }
+
+  private async executePluginTool(
+    pluginId: string,
+    identity: PluginWorkspaceIdentity,
+    requestId: string,
+    request: PluginToolOperationRequest,
+  ): Promise<PluginToolOperationResult> {
+    if (!this.matches(identity)) throw new Error("Plugin tool operation no longer matches the active workspace.");
+    const plugin = await this.plugins.plugin(pluginId);
+    if (!plugin || !this.matches(identity)) throw new Error(`Plugin is no longer active: ${pluginId}`);
+    const { createPluginToolOperationExecutor } = await import("./plugin-tool-operation-capability.ts");
+    const executor = createPluginToolOperationExecutor(this.toolOperationBridge, plugin, identity);
+    if (!executor) throw new Error(`Plugin tool operations are unavailable: ${pluginId}`);
+    return executor.execute(requestId, request);
+  }
+
+  private async cancelPluginTool(
+    pluginId: string,
+    identity: PluginWorkspaceIdentity,
+    requestId: string,
+  ): Promise<void> {
+    const plugin = await this.plugins.plugin(pluginId);
+    const { createPluginToolOperationExecutor } = await import("./plugin-tool-operation-capability.ts");
+    const executor = plugin ? createPluginToolOperationExecutor(this.toolOperationBridge, plugin, identity) : undefined;
+    await executor?.cancel(requestId);
+  }
+
+  private completeRunSession(
+    request: { readonly identity: PluginWorkspaceIdentity; readonly pluginId: string; readonly label: string; readonly plan: PluginStagedRunPlan },
+    status: PluginRunTerminalStatus,
+    installResult: PluginTaskExecutionResult | null,
+  ): void {
+    this.recentTasks?.record({
+      pluginId: request.plan.install.request.pluginId,
+      providerId: request.plan.install.request.providerId,
+      taskId: request.plan.install.request.taskId,
+      label: request.label,
+      status,
+      timestamp: Date.now(),
+    });
+    if (status === "succeeded") {
+      void Promise.resolve().then(() => this.reconcileAfterTask?.(request.identity)).catch(this.reportError);
+    }
+    if (!this.matches(request.identity)) return;
+    const notification = pluginTaskTerminalNotification(this.copy(), request.pluginId, request.label, status);
+    if (notification && this.notificationPublisher) {
+      try { this.notificationPublisher.publish(notification); } catch (error) { this.reportError(error); }
+    }
+    if (installResult?.status === "succeeded") this.workbenchHost?.render();
   }
 
   private setAvailable(available: boolean): void {
@@ -284,6 +378,9 @@ export class PluginTasksRuntime {
         copy: this.copy,
         locale: this.locale,
         reportError: this.reportError,
+        runSession: () => this.runSession.snapshot,
+        executeRun: (request) => this.executeWorkbenchRun(request),
+        cancelRun: () => this.runSession.cancel(),
       }));
     const host = await this.workbenchHostPromise;
     if (!this.identity) {
@@ -375,6 +472,7 @@ export class PluginTasksRuntime {
     signal: AbortSignal,
     presentation: "background" | "terminal",
     progressChanged?: (status: TaskExecutionProgress) => void,
+    terminalContinuation?: TaskTerminalContinuation,
   ): Promise<PluginTaskExecutionResult> {
     return new Promise<PluginTaskExecutionResult>((resolve) => {
       let settled = false;
@@ -402,7 +500,7 @@ export class PluginTasksRuntime {
         complete({ status: "cancelled", outputs: [], truncated: false, error: "Task refresh was cancelled." });
         return;
       }
-      void this.execution.prepare(identity, plan.request, complete, presentation, progressChanged).then(() => {
+      void this.execution.prepare(identity, plan.request, complete, presentation, progressChanged, terminalContinuation).then(() => {
         if (signal.aborted) abort();
       }).catch((error) => complete({
         status: "crashed",

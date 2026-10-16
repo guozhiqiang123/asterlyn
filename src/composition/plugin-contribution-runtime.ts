@@ -44,6 +44,7 @@ export interface PluginContributionRuntimeOptions {
     progressChanged: (status: Extract<TaskRunState, "queued" | "running">) => void,
   ) => Promise<PluginTaskExecutionResult>;
   readonly providerRefreshTitle?: (providerLabel: string) => string;
+  readonly mutationBlocked?: () => boolean;
 }
 
 /** Maps restricted plugin data into window-owned command and Tasks capabilities. */
@@ -96,7 +97,7 @@ export class PluginContributionRuntime {
 
   async refreshProviders(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
     if (!this.matches(identity)) return;
-    if (this.runInFlight) throw new PluginTaskBusyError();
+    if (this.runInFlight || this.options.mutationBlocked?.()) throw new PluginTaskBusyError();
     if (this.refreshInFlight) return this.refreshInFlight;
     const operation = this.refreshProvidersSerialized(identity, providerQualifiedId);
     this.refreshInFlight = operation;
@@ -109,7 +110,7 @@ export class PluginContributionRuntime {
 
   async runTask(taskKey: string, identity: PluginWorkspaceIdentity): Promise<void> {
     if (!this.matches(identity)) return;
-    if (this.refreshInFlight || this.runInFlight) throw new PluginTaskBusyError();
+    if (this.refreshInFlight || this.runInFlight || this.options.mutationBlocked?.()) throw new PluginTaskBusyError();
     const [providerQualifiedId, ...taskParts] = taskKey.split(":");
     const taskId = taskParts.join(":");
     if (!providerQualifiedId) throw new Error(`Task is not runnable: ${taskKey}`);

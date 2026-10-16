@@ -54,6 +54,7 @@ export interface PluginCompositionRuntimeOptions {
   readonly processQueryBridge?: PluginProcessQueryBridge;
   readonly workspaceStateStorage?: PluginWorkspaceStateStorage;
   readonly locale?: () => string;
+  readonly mutationBlocked?: () => boolean;
 }
 
 /** Window-scoped orchestration. Bundled plugin code stays behind a lazy project-evidence gate. */
@@ -156,6 +157,11 @@ export class PluginCompositionRuntime {
   }
 
   get managementSnapshot(): PluginManagementSnapshot { return this.management.snapshot; }
+
+  async plugin(pluginId: string): Promise<BundledPlugin | null> {
+    const plugins = await this.bundledPlugins();
+    return plugins.find((plugin) => plugin.id === pluginId) ?? null;
+  }
 
   subscribeManagement(listener: (snapshot: PluginManagementSnapshot) => void): () => void {
     return this.management.subscribe(listener);

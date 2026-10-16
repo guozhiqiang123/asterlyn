@@ -85,6 +85,50 @@
   gap: 3px;
 }
 
+.plugin-run-view {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 18px;
+}
+
+.plugin-run-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 320px));
+  gap: 12px;
+}
+
+.plugin-run-form > label,
+.plugin-run-summary,
+.plugin-run-status {
+  display: grid;
+  gap: 6px;
+}
+
+.plugin-run-form > label > span,
+.plugin-run-summary > span,
+.plugin-run-status > span,
+.plugin-run-status > small { color: var(--text-muted); }
+
+.plugin-run-summary,
+.plugin-run-status {
+  max-width: 652px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+}
+
+.plugin-run-status.status-succeeded { border-color: color-mix(in srgb, var(--success) 55%, var(--border)); }
+.plugin-run-status.status-failed,
+.plugin-run-status.status-crashed { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); }
+
+@media (max-width: 720px) {
+  .plugin-run-form { grid-template-columns: minmax(0, 1fr); }
+}
+
 .plugin-device-view small,
 .plugin-workbench-empty span { color: var(--text-muted); }
 

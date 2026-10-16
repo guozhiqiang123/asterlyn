@@ -2,6 +2,8 @@ import type { PluginManagementEntry } from "../application/plugins/index.ts";
 import { resolvePluginMessage } from "../application/plugins/plugin-localization.ts";
 import { renderHostPanelState } from "../presentation/host-presentation.ts";
 import type { PluginWorkbenchSnapshot } from "./plugin-workbench-contribution-runtime.ts";
+import type { PluginRunSessionSnapshot } from "./plugin-run-session-runtime.ts";
+import { renderSelectControl } from "../shared/select-control.ts";
 
 export function renderPluginWorkbenchView(
   viewId: string,
@@ -9,6 +11,7 @@ export function renderPluginWorkbenchView(
   workbench: PluginWorkbenchSnapshot,
   entry: PluginManagementEntry,
   locale: string,
+  runSession: PluginRunSessionSnapshot | null = null,
 ): string {
   if (viewId === "devices") return renderDeviceView(
     workbench.targetProviders.filter((provider) => provider.pluginId === pluginId),
@@ -17,8 +20,10 @@ export function renderPluginWorkbenchView(
   );
   if (viewId === "run") return renderRunView(
     workbench.runConfigurationProviders.filter((provider) => provider.pluginId === pluginId),
+    workbench.targetProviders.filter((provider) => provider.pluginId === pluginId),
     entry,
     locale,
+    runSession,
   );
   return "";
 }
@@ -55,8 +60,10 @@ function renderDeviceView(
 
 function renderRunView(
   providers: PluginWorkbenchSnapshot["runConfigurationProviders"],
+  targetProviders: PluginWorkbenchSnapshot["targetProviders"],
   entry: PluginManagementEntry,
   locale: string,
+  runSession: PluginRunSessionSnapshot | null,
 ): string {
   const provider = providers[0];
   if (!provider) return renderHostPanelState({ kind: "empty", title: message(entry, locale, "run.empty") });
@@ -68,11 +75,20 @@ function renderRunView(
   if (!configuration) return renderHostPanelState({ kind: "empty", title: message(entry, locale, "run.empty") });
   const labelKey = configuration.metadata?.labelKey;
   const detailKey = configuration.metadata?.detailKey;
-  return renderHostPanelState({
+  if (configuration.status !== "ready") return renderHostPanelState({
     kind: configuration.status === "invalid" ? "error" : "empty",
     title: labelKey ? message(entry, locale, labelKey) : configuration.label,
     detail: detailKey ? message(entry, locale, detailKey) : configuration.detail,
   });
+  const targets = configuration.targetProviderId
+    ? targetProviders.find((candidate) => candidate.providerId === configuration.targetProviderId) ?? null
+    : null;
+  const configurationSelect = renderSelectControl(`<select data-run-configuration-provider="${attribute(provider.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.configuration.select"))}">${snapshot.configurations.map((candidate) => `<option value="${attribute(candidate.id)}" ${candidate.id === configuration.id ? "selected" : ""} ${candidate.status === "invalid" ? "disabled" : ""}>${html(candidate.label)}</option>`).join("")}</select>`);
+  const targetSelect = targets ? renderSelectControl(`<select data-run-target-provider="${attribute(targets.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.target.select"))}">${targets.snapshot.targets.map((target) => `<option value="${attribute(target.id)}" ${target.id === targets.snapshot.selectedTargetId ? "selected" : ""} ${target.status !== "online" || !target.selectable ? "disabled" : ""}>${html(target.label)}${target.detail ? ` — ${html(target.detail)}` : ""}</option>`).join("")}</select>`) : "";
+  const status = runSession?.pluginId === entry.id
+    ? `<div class="plugin-run-status status-${attribute(runSession.status)}"><strong>${html(message(entry, locale, `run.session.${runSession.status}`))}</strong><span>${html(message(entry, locale, `run.phase.${runSession.phase}`))}</span>${runSession.error ? `<small>${html(runSession.error)}</small>` : ""}</div>`
+    : "";
+  return `<section class="plugin-run-view"><div class="plugin-run-form"><label><span>${html(message(entry, locale, "run.configuration.select"))}</span>${configurationSelect}</label><label><span>${html(message(entry, locale, "run.target.select"))}</span>${targetSelect}</label></div><div class="plugin-run-summary"><strong>${html(labelKey ? message(entry, locale, labelKey) : configuration.label)}</strong>${configuration.detail ? `<span>${html(detailKey ? message(entry, locale, detailKey) : configuration.detail)}</span>` : ""}</div>${status}</section>`;
 }
 
 function message(entry: PluginManagementEntry, locale: string, key: string): string {
