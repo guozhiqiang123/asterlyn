@@ -32,7 +32,7 @@ test("terminal header exposes explicit lifecycle actions and accessible explanat
   const idleHeader = renderTerminalHeader(idle, EN_US.terminal);
   assert.match(idleHeader, /No active session/);
   assert.match(idleHeader, /Start a new terminal session in the current project folder/);
-  assert.match(idleHeader, /data-terminal-action="close"[^>]*disabled/);
+  assert.doesNotMatch(idleHeader, /data-terminal-action="close"/);
 
   const runningHeader = renderTerminalHeader({
     ...idle,
@@ -43,7 +43,7 @@ test("terminal header exposes explicit lifecycle actions and accessible explanat
   }, EN_US.terminal);
   assert.match(runningHeader, />bash</);
   assert.match(runningHeader, /data-terminal-action="restart"[^>]*disabled/);
-  assert.doesNotMatch(runningHeader, /data-terminal-action="close"[^>]*disabled/);
+  assert.doesNotMatch(runningHeader, /data-terminal-action="close"/);
 });
 
 test("terminal shortcut availability exactly follows header lifecycle policy", () => {
@@ -70,6 +70,9 @@ test("task terminal header exposes cancellation only while the task owns the Ter
   const activeHeader = renderTaskTerminalHeader(active, EN_US.terminal);
   assert.match(activeHeader, /assembleDebug — Running/u);
   assert.doesNotMatch(activeHeader, /data-terminal-action="close"[^>]*disabled/u);
+  assert.match(activeHeader, /aria-label="Cancel"/u);
+  assert.match(activeHeader, /<circle cx="12" cy="12" r="9"\/>/u);
+  assert.doesNotMatch(activeHeader, /<rect x="7" y="7" width="10" height="10"/u);
   assert.match(activeHeader, /data-terminal-action="restart"[^>]*disabled/u);
   assert.equal(taskTerminalActionAvailable("running", "close"), true);
   assert.equal(taskTerminalActionAvailable("running", "restart"), false);

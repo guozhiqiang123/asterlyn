@@ -59,7 +59,7 @@ export function renderTerminalHeader(state: TerminalState, copy: TerminalCopy): 
     summary,
     state.cwd ?? summary,
     state.status === "error",
-    copy.close,
+    null,
     copy,
     (action) => terminalActionAvailable(state, action),
   );
@@ -139,20 +139,20 @@ function renderTerminalActions(
   summary: string,
   title: string,
   error: boolean,
-  closeLabel: string,
+  closeLabel: string | null,
   copy: TerminalCopy,
   available: (action: TerminalCommandAction) => boolean,
 ): string {
   const button = (
     action: TerminalCommandAction,
     label: string,
-    glyph: "refresh" | "trash" | "stop",
+    glyph: "refresh" | "trash" | "cancel",
     size: number,
   ) => `<button class="compact-icon-button" type="button" data-terminal-action="${action}" aria-label="${escapeAttribute(label)}" title="${escapeAttribute(label)}" ${available(action) ? "" : "disabled"}>${icon(glyph, size)}</button>`;
   return `<span class="terminal-session-status ${error ? "error" : ""}" title="${escapeAttribute(title)}">${escapeHtml(summary)}</span>
     ${button("restart", copy.newSession, "refresh", 15)}
     ${button("clear", copy.clear, "trash", 15)}
-    ${button("close", closeLabel, "stop", 14)}`;
+    ${closeLabel ? button("close", closeLabel, "cancel", 15) : ""}`;
 }
 
 export function taskTerminalSummary(state: TaskTerminalPresentation, copy: TaskExecutionCopy): string {
