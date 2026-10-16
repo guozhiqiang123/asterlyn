@@ -105,7 +105,7 @@ test("accepts optional workspace tool and bounded target/run contributions", asy
   assert.equal(runtime.contributions.get("android.run")?.kind, "run-configuration-provider");
 });
 
-test("rejects invalid optional workspace tool and process-query declarations", async () => {
+test("rejects invalid optional workspace tool, process-query, and tool-operation declarations", async () => {
   const runtime = new PluginRuntime();
   const malformedTool = plugin("bad-tool", () => undefined);
   malformedTool.manifest.workspaceTool = {
@@ -120,6 +120,16 @@ test("rejects invalid optional workspace tool and process-query declarations", a
     executables: [{ type: "environment", variable: "BAD-NAME", relativePath: "platform-tools/adb" }],
   }];
   await assert.rejects(runtime.activate(identity, {}, [malformedQuery]), /Invalid (?:plugin )?process query/u);
+
+  const malformedOperation = plugin("bad-operation", () => undefined);
+  malformedOperation.manifest.toolOperations = [{
+    id: "android.adb.launch", intent: "mutation",
+    args: [{ type: "parameter", name: "missing" }],
+    parameters: [{ name: "target", kind: "executionTargetId" }],
+    timeoutMs: 10_000, maxOutputBytes: 10_000,
+    executables: [{ type: "path", name: "adb" }],
+  }];
+  await assert.rejects(runtime.activate(identity, {}, [malformedOperation]), /Unknown plugin tool-operation parameter/u);
 });
 
 test("isolates an activation failure and reports it", async () => {

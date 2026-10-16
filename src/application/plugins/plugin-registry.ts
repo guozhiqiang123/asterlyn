@@ -178,7 +178,11 @@ export class PluginRuntime {
     const activationIdentity = Object.freeze({ root: identity.root, generation: identity.generation });
     if (this.disposed) return { identity: activationIdentity, activated: [], skipped: [], diagnostics: [] };
     const pluginIds = new Set<string>();
-    const optionalValidation = plugins.some((plugin) => plugin.manifest.workspaceTool !== undefined || plugin.manifest.processQueries !== undefined)
+    const optionalValidation = plugins.some((plugin) =>
+      plugin.manifest.workspaceTool !== undefined ||
+      plugin.manifest.processQueries !== undefined ||
+      plugin.manifest.toolOperations !== undefined
+    )
       ? (await import("./plugin-optional-contract-validation.ts")).validateOptionalPluginManifest
       : null;
     for (const plugin of plugins) {

@@ -10,6 +10,7 @@ import type {
   SdkWorkspaceIdentity,
   SdkPluginWorkspaceToolDescriptor,
   SdkProcessQueryDeclaration,
+  SdkToolOperationDeclaration,
   SdkExecutionTargetProviderSnapshot,
   SdkRunConfigurationProviderSnapshot,
 } from "../../../packages/plugin-sdk/index.ts";
@@ -57,7 +58,24 @@ export function adaptPluginManifest(manifest: SdkPluginManifest): BundledPluginM
       : { taskAuthorization: adaptTaskAuthorization(manifest.taskAuthorization) }),
     ...(manifest.workspaceTool === undefined ? {} : { workspaceTool: adaptWorkspaceTool(manifest.workspaceTool) }),
     ...(manifest.processQueries === undefined ? {} : { processQueries: adaptProcessQueries(manifest.processQueries) }),
+    ...(manifest.toolOperations === undefined ? {} : { toolOperations: adaptToolOperations(manifest.toolOperations) }),
   };
+}
+
+function adaptToolOperations(values: readonly SdkToolOperationDeclaration[]): readonly SdkToolOperationDeclaration[] {
+  return Object.freeze(values.map((operation) => Object.freeze({
+    id: operation.id,
+    intent: operation.intent,
+    args: Object.freeze(operation.args.map((argument) => Object.freeze({ ...argument }))),
+    parameters: Object.freeze(operation.parameters.map((parameter) => Object.freeze({
+      name: parameter.name,
+      kind: parameter.kind,
+      ...(parameter.suffixes === undefined ? {} : { suffixes: Object.freeze([...parameter.suffixes]) }),
+    }))),
+    timeoutMs: operation.timeoutMs,
+    maxOutputBytes: operation.maxOutputBytes,
+    executables: Object.freeze(operation.executables.map((candidate) => Object.freeze({ ...candidate }))),
+  })));
 }
 
 /** Adapts a host-independent SDK module at the single host boundary. */

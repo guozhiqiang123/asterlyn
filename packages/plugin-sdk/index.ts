@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.4.0" as const;
+export const PLUGIN_SDK_VERSION = "1.5.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -40,6 +40,19 @@ export const SDK_PLUGIN_PROCESS_QUERY_LIMITS = Object.freeze({
   maxWorkspacePropertyPathLength: 256,
   maxWorkspacePropertyKeyLength: 128,
   maxPathNameLength: 128,
+});
+
+export const SDK_PLUGIN_TOOL_OPERATION_LIMITS = Object.freeze({
+  maxOperations: 32,
+  maxIdLength: 128,
+  maxArguments: 64,
+  maxArgumentLength: 1_024,
+  maxParameters: 16,
+  maxParameterNameLength: 128,
+  maxParameterValueLength: 4_096,
+  maxTimeoutMs: 60_000,
+  maxOutputBytes: 1_048_576,
+  maxArtifactSuffixLength: 32,
 });
 
 export const SDK_PLUGIN_EXECUTION_TARGET_LIMITS = Object.freeze({
@@ -119,6 +132,51 @@ export interface SdkProcessQueriesCapability {
   execute(queryId: string): Promise<SdkProcessQueryResult>;
 }
 
+export type SdkToolOperationIntent = "query" | "mutation";
+export type SdkToolOperationParameterKind =
+  | "executionTargetId"
+  | "androidApplicationId"
+  | "androidComponent"
+  | "workspaceArtifact";
+
+export interface SdkToolOperationParameterDeclaration {
+  readonly name: string;
+  readonly kind: SdkToolOperationParameterKind;
+  /** Required only for workspaceArtifact parameters. */
+  readonly suffixes?: readonly string[];
+}
+
+export type SdkToolOperationArgument =
+  | { readonly type: "literal"; readonly value: string }
+  | { readonly type: "parameter"; readonly name: string };
+
+/** Static package declaration inspected before plugin code runs. */
+export interface SdkToolOperationDeclaration {
+  readonly id: string;
+  readonly intent: SdkToolOperationIntent;
+  readonly args: readonly SdkToolOperationArgument[];
+  readonly parameters: readonly SdkToolOperationParameterDeclaration[];
+  readonly timeoutMs: number;
+  readonly maxOutputBytes: number;
+  readonly executables: readonly SdkProcessExecutableCandidate[];
+}
+
+export interface SdkToolOperationRequest {
+  readonly operationId: string;
+  readonly parameters: Readonly<Record<string, string>>;
+}
+
+export type SdkToolOperationStatus = "succeeded" | "failed" | "timed-out" | "cancelled" | "crashed";
+
+export interface SdkToolOperationResult {
+  readonly status: SdkToolOperationStatus;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly truncated: boolean;
+  readonly exitCode: number | null;
+  readonly error: string | null;
+}
+
 export interface SdkWorkspaceStateCapability {
   read(key: string): Promise<string | null>;
   write(key: string, value: string): Promise<void>;
@@ -180,6 +238,8 @@ export interface SdkPluginManifest {
   readonly workspaceTool?: SdkPluginWorkspaceToolDescriptor;
   /** Static, host-admitted external-tool queries. */
   readonly processQueries?: readonly SdkProcessQueryDeclaration[];
+  /** Static, typed operations executable only through a host-supervised Run phase. */
+  readonly toolOperations?: readonly SdkToolOperationDeclaration[];
 }
 
 /** Static package metadata that can be inspected before executable plugin code is loaded. */
@@ -241,7 +301,7 @@ export interface SdkRunConfigurationProviderContribution {
   readonly subscribe?: (listener: () => void) => SdkDisposable;
   readonly select?: (configurationId: string | null) => void | Promise<void>;
   /** Returns a host-reviewed plan; no process, shell, PTY, or executable handle is exposed. */
-  readonly run?: (configurationId: string) => SdkTaskRunPlan | null | Promise<SdkTaskRunPlan | null>;
+  readonly run?: (configurationId: string, targetId?: string) => SdkRunPlan | null | Promise<SdkRunPlan | null>;
 }
 
 export interface SdkCollectionNode {
@@ -329,6 +389,43 @@ export interface SdkTaskRefreshPlan {
 export interface SdkTaskRunPlan extends SdkTaskRefreshPlan {
   readonly artifactSearch?: { readonly hints: readonly string[] };
 }
+
+export interface SdkRunArtifact {
+  readonly workspacePath: string;
+  readonly kind: "apk" | "aab";
+  readonly byteLength: number;
+}
+
+export type SdkRunSessionPhase =
+  | "building"
+  | "resolving-artifact"
+  | "validating-target"
+  | "launching";
+
+export interface SdkRunSessionResult {
+  readonly status: "succeeded" | "failed" | "cancelled" | "crashed";
+  readonly phase: SdkRunSessionPhase;
+  readonly error: string | null;
+}
+
+/**
+ * A host-supervised build/install -> artifact inspection -> launch plan. Callbacks only transform
+ * bounded values into the next reviewed plan; they never receive a process or filesystem handle.
+ */
+export interface SdkStagedRunPlan {
+  readonly kind: "staged";
+  readonly install: SdkTaskRunPlan;
+  readonly inspect: (
+    artifacts: readonly SdkRunArtifact[],
+  ) => SdkToolOperationRequest | null | Promise<SdkToolOperationRequest | null>;
+  readonly launch: (
+    inspection: SdkToolOperationResult,
+  ) => SdkToolOperationRequest | null | Promise<SdkToolOperationRequest | null>;
+  readonly apply: (result: SdkRunSessionResult) => void;
+}
+
+/** The single-task form remains source-compatible while staged Run rolls out. */
+export type SdkRunPlan = SdkTaskRunPlan | SdkStagedRunPlan;
 
 export interface SdkWorkspaceInvalidation {
   readonly paths: readonly string[];

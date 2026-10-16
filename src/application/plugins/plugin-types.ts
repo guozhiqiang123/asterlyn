@@ -24,6 +24,13 @@ import type {
   SdkTaskAuthorizationDescriptor,
   SdkTaskRefreshPlan,
   SdkTaskRunPlan,
+  SdkRunPlan,
+  SdkStagedRunPlan,
+  SdkRunArtifact,
+  SdkRunSessionResult,
+  SdkToolOperationDeclaration,
+  SdkToolOperationRequest,
+  SdkToolOperationResult,
   SdkWorkspaceInvalidation,
   SdkWorkspaceIdentity,
 } from "../../../packages/plugin-sdk/index.ts";
@@ -36,6 +43,13 @@ export type PluginTaskExecutionResult = SdkTaskExecutionResult;
 export type PluginWorkspaceInvalidation = SdkWorkspaceInvalidation;
 export type PluginTaskRefreshPlan = SdkTaskRefreshPlan;
 export type PluginTaskRunPlan = SdkTaskRunPlan;
+export type PluginRunPlan = SdkRunPlan;
+export type PluginStagedRunPlan = SdkStagedRunPlan;
+export type PluginRunArtifact = SdkRunArtifact;
+export type PluginRunSessionResult = SdkRunSessionResult;
+export type PluginToolOperationDeclaration = SdkToolOperationDeclaration;
+export type PluginToolOperationRequest = SdkToolOperationRequest;
+export type PluginToolOperationResult = SdkToolOperationResult;
 export type PluginWorkspaceToolDescriptor = SdkPluginWorkspaceToolDescriptor;
 export type PluginProcessQueryDeclaration = SdkProcessQueryDeclaration;
 export type PluginProcessQueriesCapability = SdkProcessQueriesCapability;

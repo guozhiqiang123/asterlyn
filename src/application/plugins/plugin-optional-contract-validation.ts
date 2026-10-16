@@ -1,5 +1,6 @@
 import {
   SDK_PLUGIN_PROCESS_QUERY_LIMITS,
+  SDK_PLUGIN_TOOL_OPERATION_LIMITS,
   SDK_PLUGIN_WORKSPACE_TOOL_LIMITS,
 } from "../../../packages/plugin-sdk/index.ts";
 import type { BundledPlugin } from "./plugin-types.ts";
@@ -9,6 +10,55 @@ const IDENTIFIER = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 export function validateOptionalPluginManifest(plugin: BundledPlugin): void {
   validateWorkspaceTool(plugin.id, plugin.manifest.workspaceTool);
   validateProcessQueries(plugin.id, plugin.manifest.processQueries);
+  validateToolOperations(plugin.id, plugin.manifest.toolOperations);
+}
+
+function validateToolOperations(pluginId: string, operations: BundledPlugin["manifest"]["toolOperations"]): void {
+  if (operations === undefined) return;
+  if (!Array.isArray(operations) || operations.length > SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxOperations) {
+    throw new Error(`Invalid plugin tool operations: ${pluginId}`);
+  }
+  const ids = new Set<string>();
+  for (const operation of operations) {
+    if (!identifier(operation.id, SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxIdLength) || ids.has(operation.id) ||
+      !["query", "mutation"].includes(operation.intent) ||
+      !Array.isArray(operation.args) || operation.args.length > SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxArguments ||
+      !Array.isArray(operation.parameters) || operation.parameters.length > SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxParameters ||
+      !Number.isSafeInteger(operation.timeoutMs) || operation.timeoutMs < 1 || operation.timeoutMs > SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxTimeoutMs ||
+      !Number.isSafeInteger(operation.maxOutputBytes) || operation.maxOutputBytes < 1 || operation.maxOutputBytes > SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxOutputBytes ||
+      !Array.isArray(operation.executables) || operation.executables.length === 0) {
+      throw new Error(`Invalid plugin tool operation: ${pluginId}.${operation.id}`);
+    }
+    const parameters = new Map<string, string>();
+    for (const parameter of operation.parameters) {
+      if (!identifier(parameter.name, SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxParameterNameLength) || parameters.has(parameter.name) ||
+        !["executionTargetId", "androidApplicationId", "androidComponent", "workspaceArtifact"].includes(parameter.kind) ||
+        (parameter.kind === "workspaceArtifact" ? !validArtifactSuffixes(parameter.suffixes) : parameter.suffixes !== undefined)) {
+        throw new Error(`Invalid plugin tool-operation parameter: ${pluginId}.${operation.id}`);
+      }
+      parameters.set(parameter.name, parameter.kind);
+    }
+    const referenced = new Set<string>();
+    for (const argument of operation.args) {
+      if (argument.type === "literal") {
+        if (typeof argument.value !== "string" || argument.value.length > SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxArgumentLength || argument.value.includes("\0")) {
+          throw new Error(`Invalid plugin tool-operation argument: ${pluginId}.${operation.id}`);
+        }
+      } else if (argument.type === "parameter") {
+        if (!parameters.has(argument.name)) throw new Error(`Unknown plugin tool-operation parameter: ${pluginId}.${operation.id}.${argument.name}`);
+        referenced.add(argument.name);
+      } else throw new Error(`Invalid plugin tool-operation argument: ${pluginId}.${operation.id}`);
+    }
+    if (referenced.size !== parameters.size) throw new Error(`Unused plugin tool-operation parameter: ${pluginId}.${operation.id}`);
+    validateExecutables(pluginId, operation.id, operation.executables);
+    ids.add(operation.id);
+  }
+}
+
+function validArtifactSuffixes(value: readonly string[] | undefined): boolean {
+  return Array.isArray(value) && value.length > 0 && value.length <= 8 && value.every((suffix) =>
+    typeof suffix === "string" && /^\.[a-z0-9]+$/u.test(suffix) && suffix.length <= SDK_PLUGIN_TOOL_OPERATION_LIMITS.maxArtifactSuffixLength
+  );
 }
 
 function validateWorkspaceTool(pluginId: string, tool: BundledPlugin["manifest"]["workspaceTool"]): void {
@@ -46,25 +96,29 @@ function validateProcessQueries(pluginId: string, queries: BundledPlugin["manife
       !Array.isArray(query.executables) || query.executables.length === 0) {
       throw new Error(`Invalid plugin process query: ${pluginId}.${query.id}`);
     }
-    const candidates = new Set<string>();
-    for (const candidate of query.executables) {
-      let key: string;
-      if (candidate.type === "environment") {
-        if (!environmentVariable(candidate.variable) || !pathPart(candidate.relativePath, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxRelativePathLength)) throw invalidExecutable(pluginId, query.id);
-        key = `environment:${candidate.variable}:${candidate.relativePath}`;
-      } else if (candidate.type === "workspaceProperty") {
-        if (!pathPart(candidate.path, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxWorkspacePropertyPathLength) ||
-          !identifier(candidate.key, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxWorkspacePropertyKeyLength) ||
-          !pathPart(candidate.relativePath, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxRelativePathLength)) throw invalidExecutable(pluginId, query.id);
-        key = `workspaceProperty:${candidate.path}:${candidate.key}:${candidate.relativePath}`;
-      } else if (candidate.type === "path") {
-        if (!pathPart(candidate.name, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxPathNameLength)) throw invalidExecutable(pluginId, query.id);
-        key = `path:${candidate.name}`;
-      } else throw invalidExecutable(pluginId, query.id);
-      if (candidates.has(key)) throw new Error(`Duplicate process query executable: ${pluginId}.${query.id}`);
-      candidates.add(key);
-    }
+    validateExecutables(pluginId, query.id, query.executables);
     ids.add(query.id);
+  }
+}
+
+function validateExecutables(pluginId: string, operationId: string, executables: readonly import("../../../packages/plugin-sdk/index.ts").SdkProcessExecutableCandidate[]): void {
+  const candidates = new Set<string>();
+  for (const candidate of executables) {
+    let key: string;
+    if (candidate.type === "environment") {
+      if (!environmentVariable(candidate.variable) || !pathPart(candidate.relativePath, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxRelativePathLength)) throw invalidExecutable(pluginId, operationId);
+      key = `environment:${candidate.variable}:${candidate.relativePath}`;
+    } else if (candidate.type === "workspaceProperty") {
+      if (!pathPart(candidate.path, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxWorkspacePropertyPathLength) ||
+        !identifier(candidate.key, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxWorkspacePropertyKeyLength) ||
+        !pathPart(candidate.relativePath, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxRelativePathLength)) throw invalidExecutable(pluginId, operationId);
+      key = `workspaceProperty:${candidate.path}:${candidate.key}:${candidate.relativePath}`;
+    } else if (candidate.type === "path") {
+      if (!pathPart(candidate.name, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxPathNameLength)) throw invalidExecutable(pluginId, operationId);
+      key = `path:${candidate.name}`;
+    } else throw invalidExecutable(pluginId, operationId);
+    if (candidates.has(key)) throw new Error(`Duplicate process executable: ${pluginId}.${operationId}`);
+    candidates.add(key);
   }
 }
 

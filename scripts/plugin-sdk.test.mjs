@@ -11,6 +11,7 @@ import {
   SDK_PLUGIN_PROCESS_QUERY_LIMITS,
   SDK_PLUGIN_EXECUTION_TARGET_LIMITS,
   SDK_PLUGIN_RUN_CONFIGURATION_LIMITS,
+  SDK_PLUGIN_TOOL_OPERATION_LIMITS,
 } from "../packages/plugin-sdk/index.ts";
 import { representativePlugin } from "../packages/plugin-sdk/fixture.ts";
 import { adaptPluginManifest, adaptSdkPluginCatalog, assertCompatiblePluginSdk } from "../src/application/plugins/plugin-sdk-adapter.ts";
@@ -30,13 +31,14 @@ const manifest = {
 
 test("host adapter accepts the supported SDK major and preserves declarative metadata", () => {
   assert.equal(PLUGIN_SDK_MAJOR, 1);
-  assert.equal(PLUGIN_SDK_VERSION, "1.4.0");
+  assert.equal(PLUGIN_SDK_VERSION, "1.5.0");
   assert.equal(Object.isFrozen(SDK_PLUGIN_LOCALIZATION_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_NOTIFICATION_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_WORKSPACE_TOOL_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_PROCESS_QUERY_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_EXECUTION_TARGET_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_RUN_CONFIGURATION_LIMITS), true);
+  assert.equal(Object.isFrozen(SDK_PLUGIN_TOOL_OPERATION_LIMITS), true);
   assert.deepEqual(adaptPluginManifest(manifest), {
     id: "example.plugin",
     version: "1.2.3",
@@ -53,7 +55,7 @@ test("host adapter accepts the supported SDK major and preserves declarative met
   assert.equal(Object.isFrozen(adapted.localization.locales["en-US"]), true);
 });
 
-test("host adapter preserves and freezes optional workbench and process-query declarations", () => {
+test("host adapter preserves and freezes optional workbench, query, and tool-operation declarations", () => {
   const adapted = adaptPluginManifest({
     ...manifest,
     localization: {
@@ -80,6 +82,26 @@ test("host adapter preserves and freezes optional workbench and process-query de
         { type: "path", name: "adb" },
       ],
     }],
+    toolOperations: [{
+      id: "android.adb.launch",
+      intent: "mutation",
+      args: [
+        { type: "literal", value: "-s" },
+        { type: "parameter", name: "target" },
+        { type: "literal", value: "shell" },
+        { type: "literal", value: "am" },
+        { type: "literal", value: "start" },
+        { type: "literal", value: "-n" },
+        { type: "parameter", name: "component" },
+      ],
+      parameters: [
+        { name: "target", kind: "executionTargetId" },
+        { name: "component", kind: "androidComponent" },
+      ],
+      timeoutMs: 15_000,
+      maxOutputBytes: 262_144,
+      executables: [{ type: "path", name: "adb" }],
+    }],
   });
   assert.equal(adapted.workspaceTool.defaultView, "run");
   assert.equal(adapted.workspaceTool.icon, "device");
@@ -90,12 +112,20 @@ test("host adapter preserves and freezes optional workbench and process-query de
   assert.deepEqual(adapted.processQueries[0].executables[0], {
     type: "environment", variable: "ANDROID_HOME", relativePath: "platform-tools/adb",
   });
+  assert.equal(Object.isFrozen(adapted.toolOperations), true);
+  assert.equal(Object.isFrozen(adapted.toolOperations[0]), true);
+  assert.equal(Object.isFrozen(adapted.toolOperations[0].args), true);
+  assert.equal(Object.isFrozen(adapted.toolOperations[0].parameters), true);
+  assert.deepEqual(adapted.toolOperations[0].parameters[1], {
+    name: "component", kind: "androidComponent",
+  });
 });
 
 test("old plugin manifests remain compatible when optional 1.4 declarations are absent", () => {
   const adapted = adaptPluginManifest(manifest);
   assert.equal("workspaceTool" in adapted, false);
   assert.equal("processQueries" in adapted, false);
+  assert.equal("toolOperations" in adapted, false);
 });
 
 test("host adapter preserves and freezes declarative task authorization", () => {
