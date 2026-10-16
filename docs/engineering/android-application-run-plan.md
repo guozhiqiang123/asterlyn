@@ -300,3 +300,27 @@ installation at
 The installed package proves artifact matching and final APK identity acquisition. Interactive
 device installation and launch remain the human acceptance step because they mutate the selected
 physical device.
+
+## Terminal-state presentation correction — 2026-10-16
+
+Real SuperBoost acceptance confirmed that the host received the successful ADB launch result and
+returned the session and Run button to idle, but the Run card still rendered the retained
+`launching` phase as “Launching application…”. Phase localization describes active progress, not a
+terminal result. The host presentation now renders phase copy only while the session status is
+`running`; succeeded, failed, cancelled, and crashed snapshots render their terminal result and any
+error detail without a contradictory in-progress sentence.
+
+The regression covers a successful snapshot whose retained diagnostic phase is `launching`: the
+localized success result remains visible, the active phase copy is absent, and Run is available
+again. TypeScript checking, 1,199 host script tests, the production build, strict deep signature
+verification, and rendered native smoke passed.
+
+- archive:
+  `target/release/bundle/macos/Asterlyn-0.1.8-local-2026-10-16-run-terminal-status.app.zip`;
+- archive size: 10,032,544 bytes; SHA-256:
+  `18432ccacb32979ffe0310da62a9c629dfbbcb2ba963d6dd00d4a0d0c33bbec8`; and
+- packaged and installed executable SHA-256:
+  `abd0470b4553686d59dc3e639115ff72920cb725e324af9227eb9eb7b045fee2`.
+
+The previous installation is recoverable at
+`/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261016-run-terminal-status/Asterlyn.app`.
