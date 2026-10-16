@@ -149,6 +149,7 @@ export class PluginTasksRuntime {
         return {
           artifacts: discovery.artifacts.map((artifact) => ({ ...artifact })),
           sidecars: discovery.sidecars.map((sidecar) => ({ ...sidecar })),
+          truncated: discovery.truncated,
         };
       },
       executeTool: (pluginId, identity, requestId, request) => this.executePluginTool(pluginId, identity, requestId, request),

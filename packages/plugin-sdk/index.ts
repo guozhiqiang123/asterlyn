@@ -50,7 +50,7 @@ export const SDK_PLUGIN_TOOL_OPERATION_LIMITS = Object.freeze({
   maxParameters: 16,
   maxParameterNameLength: 128,
   maxParameterValueLength: 4_096,
-  maxTimeoutMs: 60_000,
+  maxTimeoutMs: 300_000,
   maxOutputBytes: 1_048_576,
   maxArtifactSuffixLength: 32,
 });
@@ -432,6 +432,7 @@ export interface SdkStagedRunPlan {
   readonly inspect: (
     artifacts: readonly SdkRunArtifact[],
     sidecars: readonly SdkRunArtifactSidecar[],
+    truncated: boolean,
   ) => SdkToolOperationRequest | null | Promise<SdkToolOperationRequest | null>;
   /** Optional for SDK 1.5 compatibility; current Android Run plans install before launch. */
   readonly deploy?: (

@@ -129,20 +129,20 @@ test("the bundled Android plugin returns a supervised staged Run plan", async ()
     status: "succeeded",
     outputs: [{
       stream: "stdout",
-      dataBase64: Buffer.from("Tasks runnable from root project 'root'\nInstall tasks\n-------------\n:app:installDemoDebug - Installs DemoDebug.\n").toString("base64"),
+      dataBase64: Buffer.from("Tasks runnable from root project 'root'\nBuild tasks\n-----------\n:app:assembleDemoDebug - Assembles DemoDebug.\n\nInstall tasks\n-------------\n:app:installDemoDebug - Installs DemoDebug.\n").toString("base64"),
     }],
     truncated: false,
     error: null,
   });
   await settle();
   const configuration = runProvider.snapshot().configurations[0];
-  assert.equal(configuration.detail, ":app:installDemoDebug");
+  assert.equal(configuration.detail, ":app:assembleDemoDebug");
   const plan = await runProvider.run(configuration.id, "phone-1");
   assert.equal(plan.kind, "staged");
-  assert.deepEqual(plan.install.artifactSearch, { hints: ["app/build/outputs/apk"] });
-  plan.install.apply({
+  assert.deepEqual(plan.build.artifactSearch, { hints: ["app/build/outputs/apk"], sidecarNames: ["output-metadata.json"] });
+  plan.build.apply({
     status: "succeeded",
-    outputs: [{ stream: "stdout", dataBase64: Buffer.from("Installing APK 'app-demo-debug.apk' on 'Pixel'\n").toString("base64") }],
+    outputs: [{ stream: "stdout", dataBase64: Buffer.from("BUILD SUCCESSFUL\n").toString("base64") }],
     truncated: false,
     error: null,
   });
@@ -150,7 +150,11 @@ test("the bundled Android plugin returns a supervised staged Run plan", async ()
     workspacePath: "app/build/outputs/apk/demo/debug/app-demo-debug.apk",
     kind: "apk",
     byteLength: 1,
-  }]), {
+  }], [{
+    workspacePath: "app/build/outputs/apk/demo/debug/output-metadata.json",
+    byteLength: 1,
+    dataBase64: Buffer.from(JSON.stringify({ artifactType: { type: "APK" }, variantName: "DemoDebug", elements: [{ type: "SINGLE", outputFile: "app-demo-debug.apk" }] })).toString("base64"),
+  }], false), {
     operationId: "android.apk.inspect",
     parameters: { artifact: "app/build/outputs/apk/demo/debug/app-demo-debug.apk" },
   });

@@ -40,7 +40,7 @@ export interface PluginRunSessionRuntimeOptions {
     identity: PluginWorkspaceIdentity,
     hints: readonly string[],
     sidecarNames: readonly string[],
-  ) => Promise<{ readonly artifacts: readonly PluginRunArtifact[]; readonly sidecars: readonly PluginRunArtifactSidecar[] }>;
+  ) => Promise<{ readonly artifacts: readonly PluginRunArtifact[]; readonly sidecars: readonly PluginRunArtifactSidecar[]; readonly truncated: boolean }>;
   readonly executeTool: (
     pluginId: string,
     identity: PluginWorkspaceIdentity,
@@ -95,7 +95,7 @@ export class PluginRunSessionRuntime {
       if (!hints || hints.length === 0) throw new Error("Run plan did not declare an artifact search.");
       const discovery = await this.options.discoverArtifacts(request.identity, hints, buildPlan.artifactSearch?.sidecarNames ?? []);
       this.ensureActive(request, abort);
-      const inspectionRequest = await request.plan.inspect(discovery.artifacts, discovery.sidecars);
+      const inspectionRequest = await request.plan.inspect(discovery.artifacts, discovery.sidecars, discovery.truncated);
       if (!inspectionRequest) throw new Error("Run plan could not resolve one authoritative APK artifact.");
       const inspection = await this.executeTool(request, requestId, "inspect", inspectionRequest, abort);
       this.appendToolResult(terminalSessionId, inspection);

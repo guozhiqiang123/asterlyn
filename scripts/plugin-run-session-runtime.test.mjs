@@ -14,7 +14,7 @@ test("staged Run builds, resolves, installs on the selected target, launches, an
       result: { status: "succeeded", outputs: [], truncated: false, error: null },
       terminalSessionId: "terminal-1",
     }),
-    discoverArtifacts: async () => ({ artifacts: [{ workspacePath: "app/build/outputs/apk/debug/app.apk", kind: "apk", byteLength: 12 }], sidecars: [] }),
+    discoverArtifacts: async () => ({ artifacts: [{ workspacePath: "app/build/outputs/apk/debug/app.apk", kind: "apk", byteLength: 12 }], sidecars: [], truncated: false }),
     executeTool: async (_pluginId, _identity, requestId, request) => ({
       status: "succeeded",
       stdout: request.operationId === "android.apk.inspect"
@@ -67,7 +67,7 @@ test("staged Run stops before launch when target revalidation fails", async () =
   let final = null;
   const runtime = new PluginRunSessionRuntime({
     executeBuild: async () => ({ result: { status: "succeeded", outputs: [], truncated: false, error: null }, terminalSessionId: null }),
-    discoverArtifacts: async () => ({ artifacts: [{ workspacePath: "app/build/outputs/apk/debug/app.apk", kind: "apk", byteLength: 12 }], sidecars: [] }),
+    discoverArtifacts: async () => ({ artifacts: [{ workspacePath: "app/build/outputs/apk/debug/app.apk", kind: "apk", byteLength: 12 }], sidecars: [], truncated: false }),
     executeTool: async (_pluginId, _identity, _requestId, request) => {
       if (request.operationId === "android.adb.launch") launchCount += 1;
       return { status: "succeeded", stdout: "manifest", stderr: "", truncated: false, exitCode: 0, error: null };
