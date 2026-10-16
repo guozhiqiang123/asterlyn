@@ -2,7 +2,7 @@
 
 Date: 2026-10-16
 
-Status: planned
+Status: implemented and installed; manual product acceptance pending
 
 Governing decision: [ADR-0029](../architecture/decisions/0029-supervised-terminal-workspace.md)
 
@@ -80,6 +80,50 @@ Commit boundary: task projection and cross-feature tests; no Plugin SDK change.
   and record exact artifact identity and remaining manual checks.
 
 Commit boundary: acceptance evidence only when tracked evidence changes.
+
+## Implementation and verification evidence
+
+Implementation commits:
+
+- `84ccf3e` records the governing ADR, contracts, and delivery plan.
+- `8dd5cec` replaces the native one-session slot with a bounded, owner-scoped session registry.
+- `ddb835c` adds the shared event router and pure bounded tab model.
+- `32705bc` delivers the host tab strip, independent Shell/task resources, retained task output,
+  localization, and keyboard behavior.
+- `3c27c4d` starts a requested Shell before the lazy renderer reports dimensions, then reconciles
+  to the fitted size so startup output cannot depend on view timing.
+
+Automated verification completed on 2026-10-16:
+
+- TypeScript type checking passed.
+- The complete frontend script suite passed: 1,175 tests.
+- Focused Terminal/controller/router/tab coverage passed: 21 tests.
+- `asterlyn-terminal` passed all 7 Rust tests, including eight-session admission, sibling isolation,
+  exact close, root replacement, and owner cleanup.
+- Terminal Clippy passed with warnings denied; the complete Rust workspace test suite passed.
+- The production frontend and native application bundle built successfully. Vite still reports the
+  existing advisory for one 500.42 kB shared chunk; the repository's entry-chunk hard gate passes.
+
+Local package and installation evidence:
+
+- `/Applications/Asterlyn.app` is the newly built `0.1.8` arm64 application with identifier
+  `dev.asterlyn.desktop`; strict deep code-sign verification passes with an ad-hoc hardened-runtime
+  signature suitable for local installation.
+- Installed and packaged executable SHA-256 values match:
+  `56420853f40259ca0304b87748b739d0958cec4a6b241c81f0a1c775c7839b74`.
+- DMG SHA-256:
+  `d7f91b80782316da1dd44753e32831765ceb7083e6485ab98666f781e27a7857`.
+- The immediately replaced build remains recoverable at
+  `~/Library/Application Support/Asterlyn Install Backups/20261016-multi-tab-terminal-prefinal/Asterlyn.app`;
+  the earlier pre-feature backup was left untouched.
+- Launching the installed build with FilesRecovery produced one visible layer-0 application window,
+  rendered the tab workspace, and advanced the initial tab header to the running `zsh` state.
+- A browser-rendered integration probe mounted the same xterm workspace with non-zero geometry;
+  pure interaction tests cover creation, selection, close selection, safe task eviction, and limits.
+- With FilesRecovery and one live Shell, the host process RSS snapshot was 56,736 KiB. Normalized
+  one/four/eight-tab memory comparison and hands-on native keyboard/mouse behavior remain part of
+  the user's manual acceptance because macOS accessibility inspection exposed no application
+  windows for this locally signed build even though CoreGraphics confirmed the visible window.
 
 ## Acceptance matrix
 
