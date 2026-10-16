@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.5.0" as const;
+export const PLUGIN_SDK_VERSION = "1.6.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -387,7 +387,11 @@ export interface SdkTaskRefreshPlan {
 }
 
 export interface SdkTaskRunPlan extends SdkTaskRefreshPlan {
-  readonly artifactSearch?: { readonly hints: readonly string[] };
+  readonly artifactSearch?: {
+    readonly hints: readonly string[];
+    /** Bounded sidecar filenames transported as opaque bytes for plugin-owned parsing. */
+    readonly sidecarNames?: readonly string[];
+  };
 }
 
 export interface SdkRunArtifact {
@@ -396,10 +400,17 @@ export interface SdkRunArtifact {
   readonly byteLength: number;
 }
 
+export interface SdkRunArtifactSidecar {
+  readonly workspacePath: string;
+  readonly byteLength: number;
+  readonly dataBase64: string;
+}
+
 export type SdkRunSessionPhase =
   | "building"
   | "resolving-artifact"
   | "validating-target"
+  | "installing"
   | "launching";
 
 export interface SdkRunSessionResult {
@@ -409,14 +420,22 @@ export interface SdkRunSessionResult {
 }
 
 /**
- * A host-supervised build/install -> artifact inspection -> launch plan. Callbacks only transform
+ * A host-supervised build -> artifact inspection -> exact-target install -> launch plan. Callbacks only transform
  * bounded values into the next reviewed plan; they never receive a process or filesystem handle.
  */
 export interface SdkStagedRunPlan {
   readonly kind: "staged";
-  readonly install: SdkTaskRunPlan;
+  /** Current contract. The task builds artifacts but does not install them. */
+  readonly build?: SdkTaskRunPlan;
+  /** Compatibility alias for SDK 1.5 plugins. New plugins must use build. */
+  readonly install?: SdkTaskRunPlan;
   readonly inspect: (
     artifacts: readonly SdkRunArtifact[],
+    sidecars: readonly SdkRunArtifactSidecar[],
+  ) => SdkToolOperationRequest | null | Promise<SdkToolOperationRequest | null>;
+  /** Optional for SDK 1.5 compatibility; current Android Run plans install before launch. */
+  readonly deploy?: (
+    inspection: SdkToolOperationResult,
   ) => SdkToolOperationRequest | null | Promise<SdkToolOperationRequest | null>;
   readonly launch: (
     inspection: SdkToolOperationResult,

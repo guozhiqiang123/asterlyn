@@ -142,11 +142,14 @@ export class PluginTasksRuntime {
       mutationBlocked: () => this.runSession.busy,
     });
     this.runSession = new PluginRunSessionRuntime({
-      executeInstall: (identity, plan, signal, cancel) => this.executeRunInstall(identity, plan, signal, cancel),
-      discoverArtifacts: async (identity, hints) => {
-        const discovery = parseTaskArtifactDiscovery(await this.artifactBridge.discoverTaskArtifacts(identity.root, hints));
+      executeBuild: (identity, plan, signal, cancel) => this.executeRunBuild(identity, plan, signal, cancel),
+      discoverArtifacts: async (identity, hints, sidecarNames) => {
+        const discovery = parseTaskArtifactDiscovery(await this.artifactBridge.discoverTaskArtifacts(identity.root, hints, sidecarNames));
         if (!this.matches(identity) || discovery.workspaceRoot !== identity.root) throw new Error("Run artifact discovery no longer matches the active workspace.");
-        return discovery.artifacts.map((artifact) => ({ ...artifact }));
+        return {
+          artifacts: discovery.artifacts.map((artifact) => ({ ...artifact })),
+          sidecars: discovery.sidecars.map((sidecar) => ({ ...sidecar })),
+        };
       },
       executeTool: (pluginId, identity, requestId, request) => this.executePluginTool(pluginId, identity, requestId, request),
       cancelTool: (pluginId, identity, requestId) => this.cancelPluginTool(pluginId, identity, requestId),
@@ -303,9 +306,9 @@ export class PluginTasksRuntime {
     await this.runSession.run({ identity, ...request });
   }
 
-  private async executeRunInstall(
+  private async executeRunBuild(
     identity: PluginWorkspaceIdentity,
-    plan: PluginStagedRunPlan["install"],
+    plan: NonNullable<PluginStagedRunPlan["build"] | PluginStagedRunPlan["install"]>,
     signal: AbortSignal,
     cancel: () => void,
   ): Promise<{ readonly result: PluginTaskExecutionResult; readonly terminalSessionId: string | null }> {
@@ -343,12 +346,14 @@ export class PluginTasksRuntime {
   private completeRunSession(
     request: { readonly identity: PluginWorkspaceIdentity; readonly pluginId: string; readonly label: string; readonly plan: PluginStagedRunPlan },
     status: PluginRunTerminalStatus,
-    installResult: PluginTaskExecutionResult | null,
+    buildResult: PluginTaskExecutionResult | null,
   ): void {
+    const buildPlan = request.plan.build ?? request.plan.install;
+    if (!buildPlan) return;
     this.recentTasks?.record({
-      pluginId: request.plan.install.request.pluginId,
-      providerId: request.plan.install.request.providerId,
-      taskId: request.plan.install.request.taskId,
+      pluginId: buildPlan.request.pluginId,
+      providerId: buildPlan.request.providerId,
+      taskId: buildPlan.request.taskId,
       label: request.label,
       status,
       timestamp: Date.now(),
@@ -361,7 +366,7 @@ export class PluginTasksRuntime {
     if (notification && this.notificationPublisher) {
       try { this.notificationPublisher.publish(notification); } catch (error) { this.reportError(error); }
     }
-    if (installResult?.status === "succeeded") this.workbenchHost?.render();
+    if (buildResult?.status === "succeeded") this.workbenchHost?.render();
   }
 
   private setAvailable(available: boolean): void {

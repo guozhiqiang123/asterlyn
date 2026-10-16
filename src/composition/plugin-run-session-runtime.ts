@@ -1,5 +1,6 @@
 import type {
   PluginRunArtifact,
+  PluginRunArtifactSidecar,
   PluginStagedRunPlan,
   PluginTaskExecutionResult,
   PluginToolOperationRequest,
@@ -16,7 +17,7 @@ export interface PluginRunSessionSnapshot {
   readonly pluginId: string;
   readonly label: string;
   readonly status: PluginRunSessionStatus;
-  readonly phase: "building" | "resolving-artifact" | "validating-target" | "launching";
+  readonly phase: "building" | "resolving-artifact" | "validating-target" | "installing" | "launching";
   readonly error: string | null;
 }
 
@@ -29,16 +30,17 @@ export interface PluginRunSessionRequest {
 }
 
 export interface PluginRunSessionRuntimeOptions {
-  readonly executeInstall: (
+  readonly executeBuild: (
     identity: PluginWorkspaceIdentity,
-    plan: PluginStagedRunPlan["install"],
+    plan: NonNullable<PluginStagedRunPlan["build"] | PluginStagedRunPlan["install"]>,
     signal: AbortSignal,
     cancel: () => void,
   ) => Promise<{ readonly result: PluginTaskExecutionResult; readonly terminalSessionId: string | null }>;
   readonly discoverArtifacts: (
     identity: PluginWorkspaceIdentity,
     hints: readonly string[],
-  ) => Promise<readonly PluginRunArtifact[]>;
+    sidecarNames: readonly string[],
+  ) => Promise<{ readonly artifacts: readonly PluginRunArtifact[]; readonly sidecars: readonly PluginRunArtifactSidecar[] }>;
   readonly executeTool: (
     pluginId: string,
     identity: PluginWorkspaceIdentity,
@@ -51,7 +53,7 @@ export interface PluginRunSessionRuntimeOptions {
   readonly completed: (
     request: PluginRunSessionRequest,
     snapshot: PluginRunSessionSnapshot & { readonly status: PluginRunTerminalStatus },
-    installResult: PluginTaskExecutionResult | null,
+    buildResult: PluginTaskExecutionResult | null,
   ) => void;
   readonly reportError: (error: unknown) => void;
 }
@@ -75,24 +77,25 @@ export class PluginRunSessionRuntime {
     const abort = new AbortController();
     this.active = { request, abort, toolRequestId: null };
     let terminalSessionId: string | null = null;
-    let installResult: PluginTaskExecutionResult | null = null;
+    let buildResult: PluginTaskExecutionResult | null = null;
     this.publish({ requestId, pluginId: request.pluginId, label: request.label, status: "running", phase: "building", error: null });
     try {
-      const install = await this.options.executeInstall(request.identity, request.plan.install, abort.signal, () => this.cancel());
-      installResult = install.result;
-      terminalSessionId = install.terminalSessionId;
-      safelyApply(() => request.plan.install.apply(install.result), this.options.reportError);
-      if (install.result.status !== "succeeded") {
-        this.finish(taskStatus(install.result.status), "building", install.result.error, terminalSessionId, install.result.truncated, request, installResult);
+      const buildPlan = stagedBuildPlan(request.plan);
+      const build = await this.options.executeBuild(request.identity, buildPlan, abort.signal, () => this.cancel());
+      buildResult = build.result;
+      terminalSessionId = build.terminalSessionId;
+      safelyApply(() => buildPlan.apply(build.result), this.options.reportError);
+      if (build.result.status !== "succeeded") {
+        this.finish(taskStatus(build.result.status), "building", build.result.error, terminalSessionId, build.result.truncated, request, buildResult);
         return;
       }
       this.phase("resolving-artifact");
-      this.append(terminalSessionId, "\r\n[Asterlyn] Resolving installed Android application…\r\n");
-      const hints = request.plan.install.artifactSearch?.hints;
+      this.append(terminalSessionId, "\r\n[Asterlyn] Resolving built Android application…\r\n");
+      const hints = buildPlan.artifactSearch?.hints;
       if (!hints || hints.length === 0) throw new Error("Run plan did not declare an artifact search.");
-      const artifacts = await this.options.discoverArtifacts(request.identity, hints);
+      const discovery = await this.options.discoverArtifacts(request.identity, hints, buildPlan.artifactSearch?.sidecarNames ?? []);
       this.ensureActive(request, abort);
-      const inspectionRequest = await request.plan.inspect(artifacts);
+      const inspectionRequest = await request.plan.inspect(discovery.artifacts, discovery.sidecars);
       if (!inspectionRequest) throw new Error("Run plan could not resolve one authoritative APK artifact.");
       const inspection = await this.executeTool(request, requestId, "inspect", inspectionRequest, abort);
       this.appendToolResult(terminalSessionId, inspection);
@@ -103,6 +106,20 @@ export class PluginRunSessionRuntime {
       if (!await request.revalidateTarget()) throw new Error("The selected Android device is no longer online and selectable.");
       this.ensureActive(request, abort);
 
+      if (request.plan.deploy) {
+        this.phase("installing");
+        const deployRequest = await request.plan.deploy(inspection);
+        if (!deployRequest) throw new Error("Run plan could not create an exact-device installation request.");
+        this.append(terminalSessionId, "[Asterlyn] Installing application on selected device…\r\n");
+        const deployment = await this.executeTool(request, requestId, "install", deployRequest, abort);
+        this.appendToolResult(terminalSessionId, deployment);
+        if (deployment.status !== "succeeded") throw operationError("Android installation", deployment);
+        this.phase("validating-target");
+        this.append(terminalSessionId, "[Asterlyn] Revalidating selected device after installation…\r\n");
+        if (!await request.revalidateTarget()) throw new Error("The selected Android device disconnected after installation.");
+        this.ensureActive(request, abort);
+      }
+
       this.phase("launching");
       const launchRequest = await request.plan.launch(inspection);
       if (!launchRequest) throw new Error("Run plan could not resolve the Android launch component.");
@@ -110,12 +127,12 @@ export class PluginRunSessionRuntime {
       const launch = await this.executeTool(request, requestId, "launch", launchRequest, abort);
       this.appendToolResult(terminalSessionId, launch);
       if (launch.status !== "succeeded") throw operationError("Android launch", launch);
-      this.finish("succeeded", "launching", null, terminalSessionId, install.result.truncated || launch.truncated, request, installResult);
+      this.finish("succeeded", "launching", null, terminalSessionId, build.result.truncated || launch.truncated, request, buildResult);
     } catch (error) {
       const cancelled = abort.signal.aborted;
       const message = cancelled ? "Run was cancelled." : error instanceof Error ? error.message : String(error);
       const status: PluginRunSessionStatus = cancelled ? "cancelled" : "failed";
-      this.finish(status, this.value?.phase ?? "building", message, terminalSessionId, installResult?.truncated ?? false, request, installResult);
+      this.finish(status, this.value?.phase ?? "building", message, terminalSessionId, buildResult?.truncated ?? false, request, buildResult);
     } finally {
       if (this.active?.request === request) this.active = null;
     }
@@ -209,6 +226,12 @@ export class PluginRunSessionRuntime {
 
 function taskStatus(status: PluginTaskExecutionResult["status"]): PluginRunTerminalStatus {
   return status;
+}
+
+function stagedBuildPlan(plan: PluginStagedRunPlan): NonNullable<PluginStagedRunPlan["build"] | PluginStagedRunPlan["install"]> {
+  const task = plan.build ?? plan.install;
+  if (!task) throw new Error("Run plan did not declare a build task.");
+  return task;
 }
 
 function terminalStatus(status: PluginRunTerminalStatus): TaskTerminalSessionStatus {

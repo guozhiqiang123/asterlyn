@@ -31,7 +31,7 @@ export interface DesktopCommandMap {
   read_task_confirmation: { args: { workspaceRoot: string; reviewId: string; }; result: Model.TaskConfirmationResult };
   start_task_execution: { args: { workspaceRoot: string; reviewId: string; rememberConfirmation: boolean; }; result: Model.TaskExecutionStarted };
   cancel_task_execution: { args: { runId: string; }; result: void };
-  discover_task_artifacts: { args: { repositoryRoot: string; hints: Array<string>; }; result: Model.TaskArtifactDiscovery };
+  discover_task_artifacts: { args: { repositoryRoot: string; hints: Array<string>; sidecarNames: Array<string>; }; result: Model.TaskArtifactDiscovery };
   compute_workspace_fingerprint: { args: { workspaceRoot: string; paths: Array<string>; }; result: WorkspaceFingerprint };
   read_plugin_task_cache: { args: { workspaceRoot: string; pluginId: string; providerId: string; }; result: PluginTaskCacheReadResult };
   write_plugin_task_cache: { args: { workspaceRoot: string; pluginId: string; providerId: string; fingerprint: WorkspaceFingerprint; payloadBase64: string; }; result: PluginTaskCacheMutationResult };

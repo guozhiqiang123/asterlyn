@@ -14,6 +14,7 @@ const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 const MAX_PROPERTIES_BYTES: u64 = 64 * 1024;
 const ADB_QUERY_TIMEOUT: Duration = Duration::from_secs(10);
 const TOOL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
+const ANDROID_INSTALL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const MAX_REQUEST_ID_LENGTH: usize = 256;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -578,6 +579,28 @@ fn admitted_tool_operation(plugin_id: &str, operation_id: &str) -> Option<Admitt
             max_output_bytes: MAX_OUTPUT_BYTES,
             executable: ExecutableResolver::AndroidAdb,
         }),
+        ("dev.asterlyn.android-gradle", "android.adb.install") => Some(AdmittedToolOperation {
+            args: &[
+                ToolOperationArgument::Literal("-s"),
+                ToolOperationArgument::Parameter("target"),
+                ToolOperationArgument::Literal("install"),
+                ToolOperationArgument::Literal("-r"),
+                ToolOperationArgument::Parameter("artifact"),
+            ],
+            parameters: &[
+                ToolOperationParameter {
+                    name: "target",
+                    kind: ToolOperationParameterKind::ExecutionTargetId,
+                },
+                ToolOperationParameter {
+                    name: "artifact",
+                    kind: ToolOperationParameterKind::WorkspaceApk,
+                },
+            ],
+            timeout: ANDROID_INSTALL_TIMEOUT,
+            max_output_bytes: MAX_OUTPUT_BYTES,
+            executable: ExecutableResolver::AndroidAdb,
+        }),
         _ => None,
     }
 }
@@ -1059,6 +1082,9 @@ mod tests {
             admitted_tool_operation("dev.asterlyn.android-gradle", "android.apk.inspect").is_some()
         );
         assert!(
+            admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.install").is_some()
+        );
+        assert!(
             admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.shell").is_none()
         );
     }
@@ -1204,6 +1230,43 @@ mod tests {
                 "com.example.app/$(bad)"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn exact_device_install_contains_the_apk_and_serial() {
+        let directory = tempfile::tempdir().unwrap();
+        let operation =
+            admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.install").unwrap();
+        fs::create_dir_all(directory.path().join("app/build/outputs/apk/debug")).unwrap();
+        fs::write(
+            directory
+                .path()
+                .join("app/build/outputs/apk/debug/app-debug.apk"),
+            b"apk",
+        )
+        .unwrap();
+        let args = operation
+            .resolve_arguments(
+                directory.path(),
+                &HashMap::from([
+                    ("target".into(), "emulator-5554".into()),
+                    (
+                        "artifact".into(),
+                        "app/build/outputs/apk/debug/app-debug.apk".into(),
+                    ),
+                ]),
+            )
+            .unwrap();
+        assert_eq!(&args[..4], &["-s", "emulator-5554", "install", "-r"]);
+        assert_eq!(
+            PathBuf::from(&args[4]),
+            fs::canonicalize(
+                directory
+                    .path()
+                    .join("app/build/outputs/apk/debug/app-debug.apk")
+            )
+            .unwrap()
         );
     }
 }

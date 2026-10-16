@@ -553,10 +553,17 @@ export interface TaskArtifact {
   byteLength: number;
 }
 
+export interface TaskArtifactSidecar {
+  workspacePath: string;
+  byteLength: number;
+  dataBase64: string;
+}
+
 export interface TaskArtifactDiscovery {
-  protocolVersion: 1;
+  protocolVersion: 1 | 2;
   workspaceRoot: string;
   artifacts: TaskArtifact[];
+  sidecars: TaskArtifactSidecar[];
   truncated: boolean;
 }
 

@@ -34,7 +34,7 @@
     { "name": "read_task_confirmation", "args": { "workspaceRoot": "string", "reviewId": "string" }, "result": "TaskConfirmationResult", "validator": "taskConfirmationResult" },
     { "name": "start_task_execution", "args": { "workspaceRoot": "string", "reviewId": "string", "rememberConfirmation": "boolean" }, "result": "TaskExecutionStarted", "validator": "taskExecutionStarted" },
     { "name": "cancel_task_execution", "args": { "runId": "string" }, "result": "void", "validator": "void" },
-    { "name": "discover_task_artifacts", "args": { "repositoryRoot": "string", "hints": "array:string" }, "result": "TaskArtifactDiscovery", "validator": "taskArtifactDiscovery" },
+    { "name": "discover_task_artifacts", "args": { "repositoryRoot": "string", "hints": "array:string", "sidecarNames": "array:string" }, "result": "TaskArtifactDiscovery", "validator": "taskArtifactDiscovery" },
     { "name": "compute_workspace_fingerprint", "args": { "workspaceRoot": "string", "paths": "array:string" }, "result": "WorkspaceFingerprint", "validator": "workspaceFingerprint" },
     { "name": "read_plugin_task_cache", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string" }, "result": "PluginTaskCacheReadResult", "validator": "pluginTaskCacheReadResult" },
     { "name": "write_plugin_task_cache", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string", "fingerprint": "WorkspaceFingerprint", "payloadBase64": "string" }, "result": "PluginTaskCacheMutationResult", "validator": "pluginTaskCacheMutationResult" },

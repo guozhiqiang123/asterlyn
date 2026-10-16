@@ -7,16 +7,20 @@ export const TASK_ARTIFACT_LIMITS = Object.freeze({
   maxPathBytes: 4_096,
   maxFileBytes: 1_073_741_824,
   maxTotalBytes: 2_147_483_648,
+  maxSidecarNames: 4,
+  maxSidecars: 64,
+  maxSidecarBytes: 65_536,
+  maxSidecarTotalBytes: 524_288,
 });
 
 export interface TaskArtifactBridge {
-  discoverTaskArtifacts(repositoryRoot: string, hints: readonly string[]): Promise<TaskArtifactDiscovery>;
+  discoverTaskArtifacts(repositoryRoot: string, hints: readonly string[], sidecarNames?: readonly string[]): Promise<TaskArtifactDiscovery>;
   revealTaskArtifact(repositoryRoot: string, workspacePath: string): Promise<void>;
 }
 
 export function parseTaskArtifactDiscovery(value: unknown): TaskArtifactDiscovery {
   const source = record(value, "Task artifact discovery");
-  if (source.protocolVersion !== 1) throw new Error("Task artifact discovery has unsupported protocol version.");
+  if (source.protocolVersion !== 1 && source.protocolVersion !== 2) throw new Error("Task artifact discovery has unsupported protocol version.");
   const workspaceRoot = boundedText(source.workspaceRoot, "workspaceRoot", 16_384);
   if (!Array.isArray(source.artifacts) || source.artifacts.length > TASK_ARTIFACT_LIMITS.maxArtifacts) {
     throw new Error("Task artifacts are invalid or exceed the result limit.");
@@ -37,12 +41,35 @@ export function parseTaskArtifactDiscovery(value: unknown): TaskArtifactDiscover
   const totalBytes = artifacts.reduce((total, artifact) => total + artifact.byteLength, 0);
   if (totalBytes > TASK_ARTIFACT_LIMITS.maxTotalBytes) throw new Error("Task artifacts exceed the total size limit.");
   artifacts.sort((left, right) => left.workspacePath < right.workspacePath ? -1 : left.workspacePath > right.workspacePath ? 1 : 0);
-  return { protocolVersion: 1, workspaceRoot, artifacts, truncated: source.truncated };
+  const rawSidecars = source.protocolVersion === 1 && source.sidecars === undefined ? [] : source.sidecars;
+  if (!Array.isArray(rawSidecars) || rawSidecars.length > TASK_ARTIFACT_LIMITS.maxSidecars) {
+    throw new Error("Task artifact sidecars are invalid or exceed the result limit.");
+  }
+  const seenSidecars = new Set<string>();
+  const sidecars = rawSidecars.map((candidate) => {
+    const sidecar = record(candidate, "Task artifact sidecar");
+    const workspacePath = workspaceRelativePath(sidecar.workspacePath);
+    const byteLength = sidecarBytes(sidecar.byteLength);
+    const dataBase64 = boundedBase64(sidecar.dataBase64, byteLength);
+    if (seenSidecars.has(workspacePath)) throw new Error("Task artifact sidecar paths must be unique.");
+    seenSidecars.add(workspacePath);
+    return { workspacePath, byteLength, dataBase64 };
+  });
+  if (sidecars.reduce((total, sidecar) => total + sidecar.byteLength, 0) > TASK_ARTIFACT_LIMITS.maxSidecarTotalBytes) {
+    throw new Error("Task artifact sidecars exceed the total size limit.");
+  }
+  sidecars.sort((left, right) => left.workspacePath < right.workspacePath ? -1 : left.workspacePath > right.workspacePath ? 1 : 0);
+  return { protocolVersion: source.protocolVersion, workspaceRoot, artifacts, sidecars, truncated: source.truncated };
 }
 
 export function validTaskArtifactHints(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.length > 0 && value.length <= TASK_ARTIFACT_LIMITS.maxHints &&
     value.every((hint) => validTaskArtifactHint(hint));
+}
+
+export function validTaskArtifactSidecarNames(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.length <= TASK_ARTIFACT_LIMITS.maxSidecarNames &&
+    value.every((name) => typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(name));
 }
 
 export function validTaskArtifactHint(value: unknown): value is string {
@@ -75,6 +102,20 @@ function artifactBytes(value: unknown): number {
     throw new Error("Task artifact byteLength is invalid.");
   }
   return value as number;
+}
+
+function sidecarBytes(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > TASK_ARTIFACT_LIMITS.maxSidecarBytes) {
+    throw new Error("Task artifact sidecar byteLength is invalid.");
+  }
+  return value as number;
+}
+
+function boundedBase64(value: unknown, byteLength: number): string {
+  if (typeof value !== "string" || value.length > Math.ceil(byteLength / 3) * 4 + 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value)) {
+    throw new Error("Task artifact sidecar data is invalid.");
+  }
+  return value;
 }
 
 function boundedText(value: unknown, field: string, limit: number): string {

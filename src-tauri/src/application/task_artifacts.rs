@@ -1,3 +1,4 @@
+use asterlyn_task::encode_output;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -9,6 +10,10 @@ const MAX_DIRECTORIES: usize = 512;
 const MAX_ARTIFACTS: usize = 64;
 const MAX_FILE_BYTES: u64 = 1 << 30;
 const MAX_TOTAL_BYTES: u64 = 2 << 30;
+const MAX_SIDECAR_NAMES: usize = 4;
+const MAX_SIDECARS: usize = 64;
+const MAX_SIDECAR_BYTES: u64 = 64 * 1024;
+const MAX_SIDECAR_TOTAL_BYTES: u64 = 512 * 1024;
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -20,36 +25,57 @@ pub(crate) struct TaskArtifact {
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct TaskArtifactSidecar {
+    pub(crate) workspace_path: String,
+    pub(crate) byte_length: u64,
+    pub(crate) data_base64: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct TaskArtifactDiscovery {
     pub(crate) protocol_version: u32,
     pub(crate) workspace_root: String,
     pub(crate) artifacts: Vec<TaskArtifact>,
+    pub(crate) sidecars: Vec<TaskArtifactSidecar>,
     pub(crate) truncated: bool,
 }
 
 pub(crate) fn scan_task_artifacts(
     root: &Path,
     hints: &[String],
+    sidecar_names: &[String],
 ) -> Result<TaskArtifactDiscovery, String> {
     if hints.len() > MAX_HINTS {
         return Err(format!("at most {MAX_HINTS} artifact hints are allowed"));
     }
+    let sidecar_names = validate_sidecar_names(sidecar_names)?;
     let mut artifacts = BTreeMap::new();
+    let mut sidecars = BTreeMap::new();
     let mut state = DiscoveryState::default();
     for hint in hints {
         let relative = validate_hint(hint)?;
         let Some(directory) = resolve_hint(root, &relative) else {
             continue;
         };
-        walk_directory(root, &directory, 0, &mut state, &mut artifacts)?;
+        walk_directory(
+            root,
+            &directory,
+            0,
+            &mut state,
+            &mut artifacts,
+            &sidecar_names,
+            &mut sidecars,
+        )?;
         if state.truncated {
             break;
         }
     }
     Ok(TaskArtifactDiscovery {
-        protocol_version: 1,
+        protocol_version: 2,
         workspace_root: root.to_string_lossy().into_owned(),
         artifacts: artifacts.into_values().collect(),
+        sidecars: sidecars.into_values().collect(),
         truncated: state.truncated,
     })
 }
@@ -58,7 +84,29 @@ pub(crate) fn scan_task_artifacts(
 struct DiscoveryState {
     directories: usize,
     total_bytes: u64,
+    sidecar_total_bytes: u64,
     truncated: bool,
+}
+
+fn validate_sidecar_names(values: &[String]) -> Result<Vec<String>, String> {
+    if values.len() > MAX_SIDECAR_NAMES {
+        return Err(format!(
+            "at most {MAX_SIDECAR_NAMES} artifact sidecar names are allowed"
+        ));
+    }
+    let mut values = values.to_vec();
+    values.sort();
+    values.dedup();
+    if values.iter().any(|value| {
+        value.is_empty()
+            || value.len() > 64
+            || !value.bytes().enumerate().all(|(index, byte)| {
+                byte.is_ascii_alphanumeric() || (index > 0 && matches!(byte, b'.' | b'_' | b'-'))
+            })
+    }) {
+        return Err("artifact sidecar names must be simple bounded filenames".into());
+    }
+    Ok(values)
 }
 
 fn validate_hint(hint: &str) -> Result<PathBuf, String> {
@@ -116,6 +164,8 @@ fn walk_directory(
     depth: usize,
     state: &mut DiscoveryState,
     artifacts: &mut BTreeMap<String, TaskArtifact>,
+    sidecar_names: &[String],
+    sidecars: &mut BTreeMap<String, TaskArtifactSidecar>,
 ) -> Result<(), String> {
     if depth > MAX_DEPTH {
         state.truncated = true;
@@ -142,16 +192,89 @@ fn walk_directory(
             if depth == MAX_DEPTH {
                 state.truncated = true;
             } else {
-                walk_directory(root, &path, depth + 1, state, artifacts)?;
+                walk_directory(
+                    root,
+                    &path,
+                    depth + 1,
+                    state,
+                    artifacts,
+                    sidecar_names,
+                    sidecars,
+                )?;
             }
         } else if metadata.is_file() {
-            add_file(root, &path, metadata.len(), state, artifacts);
+            if path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| sidecar_names.iter().any(|name| name == value))
+            {
+                add_sidecar(root, &path, metadata.len(), state, sidecars)?;
+            } else {
+                add_file(root, &path, metadata.len(), state, artifacts);
+            }
         }
         if state.truncated {
             break;
         }
     }
     Ok(())
+}
+
+fn add_sidecar(
+    root: &Path,
+    path: &Path,
+    byte_length: u64,
+    state: &mut DiscoveryState,
+    sidecars: &mut BTreeMap<String, TaskArtifactSidecar>,
+) -> Result<(), String> {
+    if byte_length > MAX_SIDECAR_BYTES {
+        state.truncated = true;
+        return Ok(());
+    }
+    let Some(workspace_path) = normalized_workspace_path(root, path) else {
+        return Ok(());
+    };
+    if sidecars.contains_key(&workspace_path) {
+        return Ok(());
+    }
+    if sidecars.len() >= MAX_SIDECARS
+        || state.sidecar_total_bytes.saturating_add(byte_length) > MAX_SIDECAR_TOTAL_BYTES
+    {
+        state.truncated = true;
+        return Ok(());
+    }
+    let bytes = fs::read(path)
+        .map_err(|error| format!("read artifact sidecar {}: {error}", path.display()))?;
+    if bytes.len() as u64 != byte_length {
+        return Err(format!(
+            "artifact sidecar changed while reading: {}",
+            path.display()
+        ));
+    }
+    state.sidecar_total_bytes = state.sidecar_total_bytes.saturating_add(byte_length);
+    sidecars.insert(
+        workspace_path.clone(),
+        TaskArtifactSidecar {
+            workspace_path,
+            byte_length,
+            data_base64: encode_output(&bytes),
+        },
+    );
+    Ok(())
+}
+
+fn normalized_workspace_path(root: &Path, path: &Path) -> Option<String> {
+    let relative = path.strip_prefix(root).ok()?;
+    Some(
+        relative
+            .components()
+            .filter_map(|component| match component {
+                Component::Normal(value) => Some(value.to_string_lossy()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
 }
 
 fn add_file(
@@ -172,17 +295,9 @@ fn add_file(
         "aab" => "aab",
         _ => return,
     };
-    let Ok(relative) = path.strip_prefix(root) else {
+    let Some(workspace_path) = normalized_workspace_path(root, path) else {
         return;
     };
-    let workspace_path = relative
-        .components()
-        .filter_map(|component| match component {
-            Component::Normal(value) => Some(value.to_string_lossy()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("/");
     if artifacts.contains_key(&workspace_path) {
         return;
     }
@@ -225,7 +340,7 @@ mod tests {
             "app/build/outputs/apk".into(),
             "app/build/outputs/apk".into(),
         ];
-        let result = scan_task_artifacts(dir.path(), &hints).unwrap();
+        let result = scan_task_artifacts(dir.path(), &hints, &[]).unwrap();
         assert_eq!(
             result
                 .artifacts
@@ -248,9 +363,11 @@ mod tests {
             "app//build/outputs/apk",
             "app/src",
         ] {
-            assert!(scan_task_artifacts(dir.path(), &[hint.into()]).is_err());
+            assert!(scan_task_artifacts(dir.path(), &[hint.into()], &[]).is_err());
         }
-        assert!(scan_task_artifacts(dir.path(), &vec!["a/build/outputs/apk".into(); 9]).is_err());
+        assert!(
+            scan_task_artifacts(dir.path(), &vec!["a/build/outputs/apk".into(); 9], &[]).is_err()
+        );
     }
 
     #[test]
@@ -265,7 +382,8 @@ mod tests {
         )
         .unwrap();
         file(dir.path(), "app/build/outputs/apk/release/readme.txt", 1);
-        let result = scan_task_artifacts(dir.path(), &["app/build/outputs/apk".into()]).unwrap();
+        let result =
+            scan_task_artifacts(dir.path(), &["app/build/outputs/apk".into()], &[]).unwrap();
         assert_eq!(result.artifacts.len(), 1);
     }
 
@@ -279,8 +397,34 @@ mod tests {
                 1,
             );
         }
-        let result = scan_task_artifacts(dir.path(), &["app/build/outputs/apk".into()]).unwrap();
+        let result =
+            scan_task_artifacts(dir.path(), &["app/build/outputs/apk".into()], &[]).unwrap();
         assert!(result.truncated);
         assert_eq!(result.artifacts.len(), 64);
+    }
+
+    #[test]
+    fn transports_requested_bounded_sidecars_without_interpreting_them() {
+        let dir = tempdir().unwrap();
+        file(dir.path(), "app/build/outputs/apk/debug/app.apk", 1);
+        let metadata = br#"{"variantName":"debug","elements":[]}"#;
+        let path = dir
+            .path()
+            .join("app/build/outputs/apk/debug/output-metadata.json");
+        fs::write(&path, metadata).unwrap();
+        file(dir.path(), "app/build/outputs/apk/debug/ignored.json", 4);
+        let result = scan_task_artifacts(
+            dir.path(),
+            &["app/build/outputs/apk".into()],
+            &["output-metadata.json".into()],
+        )
+        .unwrap();
+        assert_eq!(result.protocol_version, 2);
+        assert_eq!(result.sidecars.len(), 1);
+        assert_eq!(
+            result.sidecars[0].workspace_path,
+            "app/build/outputs/apk/debug/output-metadata.json"
+        );
+        assert_eq!(result.sidecars[0].data_base64, encode_output(metadata));
     }
 }

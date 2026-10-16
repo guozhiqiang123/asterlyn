@@ -26,13 +26,14 @@ fn authorization_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Stri
 pub(crate) fn discover_task_artifacts(
     repository_root: String,
     hints: Vec<String>,
+    sidecar_names: Vec<String>,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<TaskArtifactDiscovery, String> {
     let root = active_workspaces
         .resolve(window.label(), &repository_root)
         .map_err(|error| error.to_string())?;
-    scan_task_artifacts(&root, &hints)
+    scan_task_artifacts(&root, &hints, &sidecar_names)
 }
 #[tauri::command]
 pub(crate) fn prepare_task_execution(

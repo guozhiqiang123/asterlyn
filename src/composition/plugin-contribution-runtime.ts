@@ -20,7 +20,7 @@ import type { TaskRunState } from "../application/tasks/index.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
 import type { TaskProviderCollection } from "../features/tasks/tasks-model.ts";
 import { normalizeHierarchicalCollection } from "../application/plugins/plugin-collection-adapter.ts";
-import { validTaskArtifactHints } from "../protocol/task-artifacts.ts";
+import { validTaskArtifactHints, validTaskArtifactSidecarNames } from "../protocol/task-artifacts.ts";
 
 type RegisteredCommand = Extract<RegisteredPluginContribution, { readonly kind: "command" }>;
 type RegisteredProvider = Extract<RegisteredPluginContribution, { readonly kind: "provider" }>;
@@ -445,7 +445,8 @@ function validTaskPlan(plan: PluginTaskRunPlan, contribution: RegisteredProvider
   return validRefreshPlan(plan, contribution) && plan.request.taskId === taskId &&
     (plan.artifactSearch === undefined || (
       typeof plan.artifactSearch === "object" && plan.artifactSearch !== null &&
-      validTaskArtifactHints(plan.artifactSearch.hints)
+      validTaskArtifactHints(plan.artifactSearch.hints) &&
+      (plan.artifactSearch.sidecarNames === undefined || validTaskArtifactSidecarNames(plan.artifactSearch.sidecarNames))
     ));
 }
 

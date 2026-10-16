@@ -6,13 +6,14 @@ import {
   TASK_ARTIFACT_LIMITS,
   validTaskArtifactHint,
   validTaskArtifactHints,
+  validTaskArtifactSidecarNames,
 } from "../src/protocol/task-artifacts.ts";
 import { taskArtifactAttachmentMatches } from "../src/features/tasks/task-execution-runtime.ts";
 import { renderTaskExecutionReview } from "../src/features/tasks/task-execution-view.ts";
 import { EN_US_TASK_EXECUTION_COPY } from "../src/localization/task-execution-copy.ts";
 
 const artifact = (workspacePath, kind = "apk", byteLength = 12) => ({ workspacePath, kind, byteLength });
-const discovery = (artifacts, extra = {}) => ({ protocolVersion: 1, workspaceRoot: "/repo", artifacts, truncated: false, ...extra });
+const discovery = (artifacts, extra = {}) => ({ protocolVersion: 2, workspaceRoot: "/repo", artifacts, sidecars: [], truncated: false, ...extra });
 
 test("artifact discovery parser accepts bounded sorted workspace-relative results", () => {
   const value = discovery([
@@ -23,7 +24,7 @@ test("artifact discovery parser accepts bounded sorted workspace-relative result
 });
 
 test("artifact discovery parser fails closed on unsafe, duplicate, and oversized results", () => {
-  assert.throws(() => parseTaskArtifactDiscovery({ ...discovery([]), protocolVersion: 2 }), /protocol version/u);
+  assert.throws(() => parseTaskArtifactDiscovery({ ...discovery([]), protocolVersion: 3 }), /protocol version/u);
   assert.throws(() => parseTaskArtifactDiscovery(discovery([artifact("../escape.apk")])), /invalid component/u);
   assert.throws(() => parseTaskArtifactDiscovery(discovery([artifact("app\\escape.apk")])), /normalized relative/u);
   assert.throws(() => parseTaskArtifactDiscovery(discovery([artifact("app.aab", "apk")])), /does not match/u);
@@ -41,6 +42,17 @@ test("artifact hints allow only bounded Gradle output directories", () => {
   }
   assert.equal(validTaskArtifactHints([]), false);
   assert.equal(validTaskArtifactHints(Array.from({ length: 9 }, () => "app/build/outputs/apk")), false);
+  assert.equal(validTaskArtifactSidecarNames(["output-metadata.json"]), true);
+  assert.equal(validTaskArtifactSidecarNames(["../metadata.json"]), false);
+});
+
+test("artifact discovery transports bounded opaque sidecars", () => {
+  const data = btoa('{"variantName":"debug"}');
+  const value = discovery([artifact("app/build/outputs/apk/debug/app.apk")], {
+    sidecars: [{ workspacePath: "app/build/outputs/apk/debug/output-metadata.json", byteLength: 23, dataBase64: data }],
+  });
+  assert.deepEqual(parseTaskArtifactDiscovery(value), value);
+  assert.throws(() => parseTaskArtifactDiscovery({ ...value, sidecars: [{ ...value.sidecars[0], workspacePath: "../escape.json" }] }), /invalid component/u);
 });
 
 test("artifact attachment survives background execution and rejects stale workspace, task, and dismissal generation", () => {
