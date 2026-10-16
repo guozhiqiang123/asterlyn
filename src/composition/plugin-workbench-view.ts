@@ -101,7 +101,7 @@ function renderRunView(
   const actionLabel = message(entry, locale, running ? "run.action.stop" : "run.action.start");
   const action = `<div class="plugin-run-actions"><button class="primary-button plugin-run-button" type="button" data-plugin-run-action ${running || canRun ? "" : "disabled"}>${html(actionLabel)}</button></div>`;
   const status = runSession?.pluginId === entry.id
-    ? `<div class="plugin-run-status status-${attribute(runSession.status)}"><strong>${html(message(entry, locale, `run.session.${runSession.status}`))}</strong><span>${html(message(entry, locale, `run.phase.${runSession.phase}`))}</span>${runSession.error ? `<small>${html(runSession.error)}</small>` : ""}</div>`
+    ? `<div class="plugin-run-status status-${attribute(runSession.status)}"><strong>${html(message(entry, locale, `run.session.${runSession.status}`))}</strong>${runSession.status === "running" ? `<span>${html(message(entry, locale, `run.phase.${runSession.phase}`))}</span>` : ""}${runSession.error ? `<small>${html(runSession.error)}</small>` : ""}</div>`
     : "";
   return `<section class="plugin-run-view"><div class="plugin-run-form"><label><span>${html(message(entry, locale, "run.configuration.select"))}</span>${configurationSelect}</label><label><span>${html(message(entry, locale, "run.target.select"))}</span>${targetControl}</label></div><div class="plugin-run-summary"><strong>${html(labelKey ? message(entry, locale, labelKey) : configuration.label)}</strong>${configuration.detail ? `<span>${html(detailKey ? message(entry, locale, detailKey) : configuration.detail)}</span>` : ""}</div>${action}${status}</section>`;
 }

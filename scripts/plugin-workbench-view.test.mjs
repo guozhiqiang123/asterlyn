@@ -209,3 +209,45 @@ test("active Android Run action becomes a localized Stop button", () => {
   assert.match(html, /data-plugin-run-action[^>]*>停止<\/button>/u);
   assert.doesNotMatch(html, /data-plugin-run-action disabled/u);
 });
+
+test("completed Android Run status does not retain an in-progress phase message", () => {
+  const html = renderPluginWorkbenchView("run", manifest.id, {
+    targetProviders: [{
+      qualifiedId: `${manifest.id}:android-devices`,
+      pluginId: manifest.id,
+      providerId: "android-devices",
+      snapshot: {
+        status: "ready",
+        selectedTargetId: "phone-1",
+        targets: [{ id: "phone-1", label: "Pixel 10", status: "online", selectable: true, metadata: {} }],
+      },
+    }],
+    runConfigurationProviders: [{
+      qualifiedId: `${manifest.id}:android-run-configurations`,
+      pluginId: manifest.id,
+      providerId: "android-run-configurations",
+      snapshot: {
+        status: "ready",
+        selectedConfigurationId: "android-run::app:installDebug",
+        configurations: [{
+          id: "android-run::app:installDebug",
+          label: "app · Debug",
+          status: "ready",
+          targetProviderId: "android-devices",
+          metadata: {},
+        }],
+      },
+    }],
+  }, entry, "zh-CN", {
+    requestId: "run-1",
+    pluginId: manifest.id,
+    label: "app · Debug",
+    status: "succeeded",
+    phase: "launching",
+    error: null,
+  });
+
+  assert.match(html, /Android 应用已启动。/u);
+  assert.doesNotMatch(html, /正在启动应用/u);
+  assert.match(html, /data-plugin-run-action[^>]*>运行<\/button>/u);
+});
