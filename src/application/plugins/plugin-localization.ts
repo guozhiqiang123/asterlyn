@@ -9,7 +9,7 @@ const DISALLOWED_CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u;
 
 /** Validates untrusted plugin copy and returns a detached immutable catalog. */
 export function validateAndFreezePluginLocalization(
-  manifest: Pick<SdkPluginManifest, "id" | "nameKey" | "descriptionKey" | "localization" | "settings">,
+  manifest: Pick<SdkPluginManifest, "id" | "nameKey" | "descriptionKey" | "localization" | "settings" | "workspaceTool">,
 ): SdkPluginLocalization {
   const source = manifest.localization;
   if (!isPlainRecord(source) || typeof source.defaultLocale !== "string" || !isPlainRecord(source.locales)) {
@@ -83,9 +83,13 @@ export function resolvePluginMessageOrNull(
 }
 
 function referencedMessageKeys(
-  manifest: Pick<SdkPluginManifest, "nameKey" | "descriptionKey" | "settings">,
+  manifest: Pick<SdkPluginManifest, "nameKey" | "descriptionKey" | "settings" | "workspaceTool">,
 ): readonly string[] {
   const keys = [manifest.nameKey, manifest.descriptionKey];
+  if (manifest.workspaceTool !== undefined) {
+    keys.push(manifest.workspaceTool.titleKey);
+    for (const view of manifest.workspaceTool.views) keys.push(view.labelKey);
+  }
   for (const setting of manifest.settings) {
     keys.push(setting.labelKey);
     if (setting.descriptionKey !== undefined) keys.push(setting.descriptionKey);

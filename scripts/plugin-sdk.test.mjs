@@ -7,6 +7,10 @@ import {
   PLUGIN_SDK_VERSION,
   SDK_PLUGIN_LOCALIZATION_LIMITS,
   SDK_PLUGIN_NOTIFICATION_LIMITS,
+  SDK_PLUGIN_WORKSPACE_TOOL_LIMITS,
+  SDK_PLUGIN_PROCESS_QUERY_LIMITS,
+  SDK_PLUGIN_EXECUTION_TARGET_LIMITS,
+  SDK_PLUGIN_RUN_CONFIGURATION_LIMITS,
 } from "../packages/plugin-sdk/index.ts";
 import { representativePlugin } from "../packages/plugin-sdk/fixture.ts";
 import { adaptPluginManifest, adaptSdkPluginCatalog, assertCompatiblePluginSdk } from "../src/application/plugins/plugin-sdk-adapter.ts";
@@ -26,9 +30,13 @@ const manifest = {
 
 test("host adapter accepts the supported SDK major and preserves declarative metadata", () => {
   assert.equal(PLUGIN_SDK_MAJOR, 1);
-  assert.equal(PLUGIN_SDK_VERSION, "1.3.0");
+  assert.equal(PLUGIN_SDK_VERSION, "1.4.0");
   assert.equal(Object.isFrozen(SDK_PLUGIN_LOCALIZATION_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_NOTIFICATION_LIMITS), true);
+  assert.equal(Object.isFrozen(SDK_PLUGIN_WORKSPACE_TOOL_LIMITS), true);
+  assert.equal(Object.isFrozen(SDK_PLUGIN_PROCESS_QUERY_LIMITS), true);
+  assert.equal(Object.isFrozen(SDK_PLUGIN_EXECUTION_TARGET_LIMITS), true);
+  assert.equal(Object.isFrozen(SDK_PLUGIN_RUN_CONFIGURATION_LIMITS), true);
   assert.deepEqual(adaptPluginManifest(manifest), {
     id: "example.plugin",
     version: "1.2.3",
@@ -43,6 +51,51 @@ test("host adapter accepts the supported SDK major and preserves declarative met
   const adapted = adaptPluginManifest(manifest);
   assert.equal(Object.isFrozen(adapted.localization), true);
   assert.equal(Object.isFrozen(adapted.localization.locales["en-US"]), true);
+});
+
+test("host adapter preserves and freezes optional workbench and process-query declarations", () => {
+  const adapted = adaptPluginManifest({
+    ...manifest,
+    localization: {
+      ...manifest.localization,
+      locales: { "en-US": {
+        ...manifest.localization.locales["en-US"],
+        "tool.title": "Example", "view.run": "Run", "view.devices": "Devices",
+      } },
+    },
+    workspaceTool: {
+      id: "android",
+      titleKey: "tool.title",
+      icon: "device",
+      views: [{ id: "run", labelKey: "view.run" }, { id: "devices", labelKey: "view.devices" }],
+      defaultView: "run",
+    },
+    processQueries: [{
+      id: "adb.devices",
+      args: ["devices", "-l"],
+      timeoutMs: 10_000,
+      maxOutputBytes: 262_144,
+      executables: [
+        { type: "environment", variable: "ANDROID_HOME", relativePath: "platform-tools/adb" },
+        { type: "path", name: "adb" },
+      ],
+    }],
+  });
+  assert.equal(adapted.workspaceTool.defaultView, "run");
+  assert.equal(adapted.workspaceTool.icon, "device");
+  assert.equal(Object.isFrozen(adapted.workspaceTool), true);
+  assert.equal(Object.isFrozen(adapted.workspaceTool.views), true);
+  assert.equal(Object.isFrozen(adapted.processQueries), true);
+  assert.equal(Object.isFrozen(adapted.processQueries[0]), true);
+  assert.deepEqual(adapted.processQueries[0].executables[0], {
+    type: "environment", variable: "ANDROID_HOME", relativePath: "platform-tools/adb",
+  });
+});
+
+test("old plugin manifests remain compatible when optional 1.4 declarations are absent", () => {
+  const adapted = adaptPluginManifest(manifest);
+  assert.equal("workspaceTool" in adapted, false);
+  assert.equal("processQueries" in adapted, false);
 });
 
 test("host adapter preserves and freezes declarative task authorization", () => {

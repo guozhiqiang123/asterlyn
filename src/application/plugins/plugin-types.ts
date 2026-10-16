@@ -7,6 +7,12 @@ import type {
 } from "../../protocol/plugin-task-cache.ts";
 import type {
   SdkPluginManifest,
+  SdkPluginWorkspaceToolDescriptor,
+  SdkProcessQueryDeclaration,
+  SdkProcessQueriesCapability,
+  SdkWorkspaceStateCapability,
+  SdkExecutionTargetProviderContribution,
+  SdkRunConfigurationProviderContribution,
   SdkPluginLocalization,
   SdkPluginNotificationCapability,
   SdkPluginNotificationRequest,
@@ -30,6 +36,12 @@ export type PluginTaskExecutionResult = SdkTaskExecutionResult;
 export type PluginWorkspaceInvalidation = SdkWorkspaceInvalidation;
 export type PluginTaskRefreshPlan = SdkTaskRefreshPlan;
 export type PluginTaskRunPlan = SdkTaskRunPlan;
+export type PluginWorkspaceToolDescriptor = SdkPluginWorkspaceToolDescriptor;
+export type PluginProcessQueryDeclaration = SdkProcessQueryDeclaration;
+export type PluginProcessQueriesCapability = SdkProcessQueriesCapability;
+export type PluginWorkspaceStateCapability = SdkWorkspaceStateCapability;
+export type PluginExecutionTargetProviderContribution = SdkExecutionTargetProviderContribution;
+export type PluginRunConfigurationProviderContribution = SdkRunConfigurationProviderContribution;
 export type PluginTaskExecutionRequest = SdkTaskExecutionRequest;
 export type PluginTaskAuthorizationDescriptor = SdkTaskAuthorizationDescriptor;
 export type PluginNotificationRequest = SdkPluginNotificationRequest;
@@ -123,13 +135,19 @@ export interface PluginTaskArtifactSearch {
 }
 
 /** Execution plans are deliberately the only value a provider may return to the host. */
-export type PluginContribution = PluginCommandContribution | PluginProviderContribution;
+export type PluginContribution =
+  | PluginCommandContribution
+  | PluginProviderContribution
+  | PluginExecutionTargetProviderContribution
+  | PluginRunConfigurationProviderContribution;
 
 export interface PluginActivationContext {
   readonly identity: PluginWorkspaceIdentity;
   readonly evidence: PluginEvidenceSnapshot;
   readonly taskCache: PluginTaskCacheCapability;
   readonly notifications?: PluginNotificationCapability;
+  readonly processQueries?: PluginProcessQueriesCapability;
+  readonly workspaceState?: PluginWorkspaceStateCapability;
   contribute(contribution: PluginContribution): Disposable;
 }
 

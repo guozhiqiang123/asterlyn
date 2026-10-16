@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.3.0" as const;
+export const PLUGIN_SDK_VERSION = "1.4.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -20,6 +20,52 @@ export const SDK_PLUGIN_NOTIFICATION_LIMITS = Object.freeze({
   maxResolvedMessageLength: 512,
 });
 
+export const SDK_PLUGIN_WORKSPACE_TOOL_LIMITS = Object.freeze({
+  maxIdLength: 128,
+  maxTitleKeyLength: 128,
+  maxViews: 16,
+  maxViewIdLength: 128,
+  maxViewLabelKeyLength: 128,
+});
+
+export const SDK_PLUGIN_PROCESS_QUERY_LIMITS = Object.freeze({
+  maxQueries: 32,
+  maxIdLength: 128,
+  maxArguments: 64,
+  maxArgumentLength: 1_024,
+  maxTimeoutMs: 60_000,
+  maxOutputBytes: 1_048_576,
+  maxEnvironmentVariableLength: 128,
+  maxRelativePathLength: 512,
+  maxWorkspacePropertyPathLength: 256,
+  maxWorkspacePropertyKeyLength: 128,
+  maxPathNameLength: 128,
+});
+
+export const SDK_PLUGIN_EXECUTION_TARGET_LIMITS = Object.freeze({
+  maxProviderIdLength: 128,
+  maxTargetIdLength: 512,
+  maxLabelLength: 512,
+  maxDetailLength: 2_048,
+  maxTargets: 256,
+  maxMetadataEntries: 32,
+  maxMetadataKeyLength: 128,
+  maxMetadataValueLength: 1_024,
+  maxErrorLength: 2_048,
+});
+
+export const SDK_PLUGIN_RUN_CONFIGURATION_LIMITS = Object.freeze({
+  maxProviderIdLength: 128,
+  maxConfigurationIdLength: 512,
+  maxLabelLength: 512,
+  maxDetailLength: 2_048,
+  maxConfigurations: 256,
+  maxMetadataEntries: 32,
+  maxMetadataKeyLength: 128,
+  maxMetadataValueLength: 1_024,
+  maxErrorLength: 2_048,
+});
+
 export type SdkPluginNotificationKind = "info" | "success" | "warning" | "error";
 
 export interface SdkPluginNotificationRequest {
@@ -30,6 +76,52 @@ export interface SdkPluginNotificationRequest {
 /** Optional, host-rendered plain-text notifications bound to the activating plugin. */
 export interface SdkPluginNotificationCapability {
   publish(request: SdkPluginNotificationRequest): void;
+}
+
+export interface SdkWorkspaceToolViewDescriptor {
+  readonly id: string;
+  readonly labelKey: string;
+}
+
+/** Declarative host-rendered identity for a plugin workbench. */
+export interface SdkPluginWorkspaceToolDescriptor {
+  readonly id: string;
+  readonly titleKey: string;
+  readonly icon: "device" | "list" | "puzzle";
+  readonly views: readonly SdkWorkspaceToolViewDescriptor[];
+  readonly defaultView: string;
+}
+
+export type SdkProcessExecutableCandidate =
+  | { readonly type: "environment"; readonly variable: string; readonly relativePath: string }
+  | { readonly type: "workspaceProperty"; readonly path: string; readonly key: string; readonly relativePath: string }
+  | { readonly type: "path"; readonly name: string };
+
+export interface SdkProcessQueryDeclaration {
+  readonly id: string;
+  readonly args: readonly string[];
+  readonly timeoutMs: number;
+  readonly maxOutputBytes: number;
+  readonly executables: readonly SdkProcessExecutableCandidate[];
+}
+
+export type SdkProcessQueryStatus = "succeeded" | "failed" | "timed-out" | "cancelled";
+
+export interface SdkProcessQueryResult {
+  readonly status: SdkProcessQueryStatus;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly truncated: boolean;
+  readonly error: string | null;
+}
+
+export interface SdkProcessQueriesCapability {
+  execute(queryId: string): Promise<SdkProcessQueryResult>;
+}
+
+export interface SdkWorkspaceStateCapability {
+  read(key: string): Promise<string | null>;
+  write(key: string, value: string): Promise<void>;
 }
 
 export interface SdkWorkspaceIdentity {
@@ -85,12 +177,71 @@ export interface SdkPluginManifest {
   readonly localization: SdkPluginLocalization;
   readonly settings: readonly SdkSettingDescriptor[];
   readonly taskAuthorization?: SdkTaskAuthorizationDescriptor;
+  readonly workspaceTool?: SdkPluginWorkspaceToolDescriptor;
+  /** Static, host-admitted external-tool queries. */
+  readonly processQueries?: readonly SdkProcessQueryDeclaration[];
 }
 
 /** Static package metadata that can be inspected before executable plugin code is loaded. */
 export interface SdkPluginPackageManifest extends SdkPluginManifest {
   readonly schemaVersion: 1;
   readonly capabilities: readonly string[];
+}
+
+export type SdkExecutionTargetStatus = "online" | "offline" | "unauthorized" | "unknown";
+export type SdkExecutionTargetProviderStatus = "loading" | "ready" | "unavailable" | "error";
+
+export interface SdkExecutionTargetDescriptor {
+  readonly id: string;
+  readonly label: string;
+  readonly detail?: string;
+  readonly status: SdkExecutionTargetStatus;
+  readonly selectable: boolean;
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+
+export interface SdkExecutionTargetProviderSnapshot {
+  readonly status: SdkExecutionTargetProviderStatus;
+  readonly targets: readonly SdkExecutionTargetDescriptor[];
+  readonly selectedTargetId: string | null;
+  readonly error?: string;
+}
+
+export interface SdkExecutionTargetProviderContribution {
+  readonly kind: "execution-target-provider";
+  readonly id: string;
+  readonly snapshot: () => SdkExecutionTargetProviderSnapshot;
+  readonly subscribe?: (listener: () => void) => SdkDisposable;
+  readonly refresh?: () => void | Promise<void>;
+  readonly select?: (targetId: string | null) => void | Promise<void>;
+}
+
+export type SdkRunConfigurationStatus = "ready" | "incomplete" | "invalid";
+
+export interface SdkRunConfigurationDescriptor {
+  readonly id: string;
+  readonly label: string;
+  readonly detail?: string;
+  readonly status: SdkRunConfigurationStatus;
+  readonly targetProviderId?: string;
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+
+export interface SdkRunConfigurationProviderSnapshot {
+  readonly status: "loading" | "ready" | "error";
+  readonly configurations: readonly SdkRunConfigurationDescriptor[];
+  readonly selectedConfigurationId: string | null;
+  readonly error?: string;
+}
+
+export interface SdkRunConfigurationProviderContribution {
+  readonly kind: "run-configuration-provider";
+  readonly id: string;
+  readonly snapshot: () => SdkRunConfigurationProviderSnapshot;
+  readonly subscribe?: (listener: () => void) => SdkDisposable;
+  readonly select?: (configurationId: string | null) => void | Promise<void>;
+  /** Returns a host-reviewed plan; no process, shell, PTY, or executable handle is exposed. */
+  readonly run?: (configurationId: string) => SdkTaskRunPlan | null | Promise<SdkTaskRunPlan | null>;
 }
 
 export interface SdkCollectionNode {
@@ -220,12 +371,18 @@ export interface SdkPluginProviderContribution {
   readonly invalidate?: (invalidation: SdkWorkspaceInvalidation) => void | Promise<void>;
   readonly run?: (taskId: string) => SdkTaskRunPlan | null | Promise<SdkTaskRunPlan | null>;
 }
-export type SdkPluginContribution = SdkPluginCommandContribution | SdkPluginProviderContribution;
+export type SdkPluginContribution =
+  | SdkPluginCommandContribution
+  | SdkPluginProviderContribution
+  | SdkExecutionTargetProviderContribution
+  | SdkRunConfigurationProviderContribution;
 export interface SdkPluginActivationContext {
   readonly identity: SdkWorkspaceIdentity;
   readonly evidence: readonly SdkWorkspaceEvidence[];
   readonly taskCache: SdkPluginTaskCacheCapability;
   readonly notifications?: SdkPluginNotificationCapability;
+  readonly processQueries?: SdkProcessQueriesCapability;
+  readonly workspaceState?: SdkWorkspaceStateCapability;
   contribute(contribution: SdkPluginContribution): SdkDisposable;
 }
 export interface SdkPluginMatchContext { readonly identity: SdkWorkspaceIdentity; readonly evidence: readonly SdkWorkspaceEvidence[]; }

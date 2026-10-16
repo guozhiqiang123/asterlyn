@@ -82,6 +82,46 @@ test("rejects malformed or colliding task authorization declarations", async () 
   await assert.rejects(runtime.activate(identity, {}, [collision]), /Invalid plugin task authorization/u);
 });
 
+test("accepts optional workspace tool and bounded target/run contributions", async () => {
+  const runtime = new PluginRuntime();
+  const report = await runtime.activate(identity, {}, [
+    plugin("android", (ctx) => {
+      ctx.contribute({
+        kind: "execution-target-provider", id: "devices",
+        snapshot: () => ({ status: "ready", targets: [], selectedTargetId: null }),
+        refresh: async () => undefined,
+        select: async () => undefined,
+      });
+      ctx.contribute({
+        kind: "run-configuration-provider", id: "run",
+        snapshot: () => ({ status: "ready", configurations: [], selectedConfigurationId: null }),
+        select: async () => undefined,
+        run: () => null,
+      });
+    }),
+  ]);
+  assert.deepEqual(report.activated, ["android"]);
+  assert.equal(runtime.contributions.get("android.devices")?.kind, "execution-target-provider");
+  assert.equal(runtime.contributions.get("android.run")?.kind, "run-configuration-provider");
+});
+
+test("rejects invalid optional workspace tool and process-query declarations", async () => {
+  const runtime = new PluginRuntime();
+  const malformedTool = plugin("bad-tool", () => undefined);
+  malformedTool.manifest.workspaceTool = {
+    id: "android", titleKey: "tool.title", icon: "window",
+    views: [{ id: "run", labelKey: "view.run" }], defaultView: "run",
+  };
+  await assert.rejects(runtime.activate(identity, {}, [malformedTool]), /Invalid plugin workspace tool/u);
+
+  const malformedQuery = plugin("bad-query", () => undefined);
+  malformedQuery.manifest.processQueries = [{
+    id: "adb.devices", args: ["devices"], timeoutMs: 10_000, maxOutputBytes: 10_000,
+    executables: [{ type: "environment", variable: "BAD-NAME", relativePath: "platform-tools/adb" }],
+  }];
+  await assert.rejects(runtime.activate(identity, {}, [malformedQuery]), /Invalid (?:plugin )?process query/u);
+});
+
 test("isolates an activation failure and reports it", async () => {
   const diagnostics = [];
   const runtime = new PluginRuntime(undefined, (diagnostic) => diagnostics.push(diagnostic));
