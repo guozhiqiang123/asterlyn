@@ -14,6 +14,7 @@ import {
   terminalInteractionMode,
 } from "../src/features/terminal/terminal-panel.ts";
 import { TerminalView, TerminalWriteBuffer } from "../src/features/terminal/terminal-view.ts";
+import { TerminalShellTab } from "../src/features/terminal/terminal-shell-tab.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 
 const idle = {
@@ -141,6 +142,28 @@ test("clearing terminal content does not re-arm automatic shell startup", () => 
   assert.equal(resets, 1);
   assert.equal(clears, 1);
   assert.equal(view.ready, true);
+});
+
+test("a shell tab starts before the lazy terminal renderer reports dimensions", async () => {
+  const starts = [];
+  const bridge = {
+    native: true,
+    async subscribeTerminal() { return () => undefined; },
+    async startTerminal(workspaceRoot, cols, rows) {
+      starts.push({ workspaceRoot, cols, rows });
+      return { protocolVersion: 1, sessionId: "shell-1", shell: "zsh", cwd: workspaceRoot };
+    },
+    async writeTerminal() {}, async resizeTerminal() {}, async closeTerminal() { return true; },
+  };
+  const tab = new TerminalShellTab(bridge, "/repo", EN_US.terminal, {
+    status() {}, error() {}, changed() {},
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(starts, [{ workspaceRoot: "/repo", cols: 80, rows: 24 }]);
+  assert.equal(tab.state.status, "running");
+  tab.dispose();
 });
 
 test("a completed task retains its transcript in its own terminal tab", () => {

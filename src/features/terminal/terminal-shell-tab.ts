@@ -53,6 +53,9 @@ export class TerminalShellTab {
       if (frame.kind === "output") this.view.write(frame.bytes);
       else this.view.write(new TextEncoder().encode(this.copy.outputTruncated(frame.omittedBytes)));
     });
+    // Opening a tab is the user's request to start a shell. Do not make process startup depend on
+    // the lazy renderer producing its first fitted dimensions; output remains safely buffered.
+    queueMicrotask(() => this.startIfRequested(80, 24));
   }
 
   get state() { return this.controller.state; }
@@ -109,8 +112,14 @@ export class TerminalShellTab {
   }
 
   private startIfRequested(cols: number, rows: number): void {
-    if (!this.autoStart) return;
+    if (!this.autoStart) {
+      if (this.controller.state.status === "running") this.controller.resize(cols, rows);
+      return;
+    }
     this.autoStart = false;
-    void this.controller.start(cols, rows);
+    void this.controller.start(cols, rows).then(() => {
+      const dimensions = this.view.dimensions();
+      if (dimensions) this.controller.resize(dimensions.cols, dimensions.rows);
+    });
   }
 }
