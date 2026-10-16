@@ -11,8 +11,7 @@ import {
 import type { TaskPresentation, TasksState } from "./tasks-model.ts";
 import {
   buildTaskTree,
-  taskTreeBranchKeys,
-  taskTreeDefaultExpandedKeys,
+  TASK_TREE_ROOT_KEY,
   taskTreeRows,
   type TaskTreeBranch,
   type TaskTreeRow,
@@ -48,6 +47,7 @@ export interface TasksCopy {
   readonly revealOutput: string;
   readonly notRunnable: string;
   readonly androidQuickActions: string;
+  readonly presentationModes: Readonly<Record<TaskPresentation, string>>;
   readonly quickActionKinds: Readonly<Record<AndroidTaskQuickActionKind, string>>;
   readonly quickActionModule: string;
   readonly quickActionVariant: string;
@@ -93,6 +93,7 @@ export const DEFAULT_TASKS_COPY: TasksCopy = Object.freeze({
   revealOutput: "Reveal output",
   notRunnable: "This task is not runnable.",
   androidQuickActions: "Android quick actions",
+  presentationModes: { "all-tasks-tree": "All tasks", "quick-actions-tree": "Android quick actions" },
   quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" },
   quickActionModule: "Module",
   quickActionVariant: "Variant",
@@ -122,7 +123,7 @@ export function renderTasksView(
 ): string {
   const entries = taskPresentationEntries(state, presentation, copy);
   const projectedState = entries === state.visibleEntries ? state : { ...state, entries, visibleEntries: entries };
-  const status = renderStatus(projectedState, copy);
+  const status = renderStatus(projectedState, copy, presentation);
   const query = `<label class="tasks-query-label"><input data-tasks-query type="search" value="${escapeAttribute(state.query)}" placeholder="${escapeAttribute(copy.queryPlaceholder)}" aria-label="${escapeAttribute(copy.queryPlaceholder)}" /></label>`;
   const collectionToolbar = renderHierarchicalCollectionToolbar({
     mode: viewMode,
@@ -136,7 +137,7 @@ export function renderTasksView(
   });
   const queryRow = `<div class="tasks-query-row">${query}${collectionToolbar}</div>`;
   const tree = buildTaskTree(entries, state.identity?.root ?? "", presentation === "quick-actions-tree" ? copy.androidQuickActions : copy.title, presentation === "all-tasks-tree" ? state.providers : []);
-  const expanded = expandedTreeNodes ?? (presentation === "quick-actions-tree" ? taskTreeBranchKeys(tree) : taskTreeDefaultExpandedKeys(tree));
+  const expanded = expandedTreeNodes ?? new Set([TASK_TREE_ROOT_KEY]);
   const forceExpanded = viewMode === "tree" && state.query.trim().length > 0;
   const projection = taskTreeRows(tree, expanded, visibleLimit, forceExpanded, viewMode);
   const list = entries.length > 0
@@ -157,7 +158,7 @@ export function renderTasksView(
 export function taskPresentationEntries(
   state: TasksState,
   presentation: TaskPresentation,
-  copy: Pick<TasksCopy, "quickActionKinds">,
+  _copy: Pick<TasksCopy, "quickActionKinds">,
 ): readonly TasksState["visibleEntries"][number][] {
   if (presentation === "all-tasks-tree") return state.visibleEntries;
   return state.visibleEntries.filter((entry) => entry.task.runnable && entry.task.androidQuickAction).map((entry) => {
@@ -165,7 +166,7 @@ export function taskPresentationEntries(
     return action ? {
       ...entry,
       displayLabel: entry.task.id,
-      task: { ...entry.task, group: copy.quickActionKinds[action.kind] },
+      task: { ...entry.task, group: action.kind },
     } : entry;
   });
 }
@@ -201,7 +202,7 @@ function taskBranchRow(
   };
 }
 
-function renderStatus(state: TasksState, copy: TasksCopy): string {
+function renderStatus(state: TasksState, copy: TasksCopy, presentation: TaskPresentation): string {
   const hasVisibleContent = state.visibleEntries.length > 0;
   if (state.status === "empty") return renderHostPanelState({ kind: "empty", title: copy.empty });
   if (state.status === "unavailable") {
@@ -228,14 +229,18 @@ function renderStatus(state: TasksState, copy: TasksCopy): string {
   }
   if (cache?.status === "ready" && cache.restoredTaskCount !== undefined) {
     return hasVisibleContent
-      ? `<p class="tasks-discovery-count" data-tasks-cache-state="ready" role="status">${escapeHtml(copy.cacheRestored(cache.restoredTaskCount))}</p>`
+      ? renderDiscoveryCount(copy.cacheRestored(cache.restoredTaskCount), copy.presentationModes[presentation], ` data-tasks-cache-state="ready"`)
       : renderHostPanelState({ kind: "empty", title: copy.noResults, detail: copy.cacheRestored(cache.restoredTaskCount), attributes: { "data-tasks-cache-state": "ready" } });
   }
   if (state.status === "ready") return hasVisibleContent
-    ? `<p class="tasks-discovery-count" role="status">${escapeHtml(copy.discovered(state.entries.length))}</p>`
+    ? renderDiscoveryCount(copy.discovered(state.entries.length), copy.presentationModes[presentation])
     : renderHostPanelState({ kind: "empty", title: copy.noResults });
   if (!hasVisibleContent) return renderHostPanelState({ kind: "empty", title: copy.noResults });
   return "";
+}
+
+function renderDiscoveryCount(message: string, mode: string, attributes = ""): string {
+  return `<p class="tasks-discovery-count"${attributes} role="status"><span>${escapeHtml(message)}</span><span class="tasks-presentation-mode">${escapeHtml(mode)}</span></p>`;
 }
 
 function renderLoading(state: TasksState, copy: TasksCopy, hasVisibleContent: boolean): string {

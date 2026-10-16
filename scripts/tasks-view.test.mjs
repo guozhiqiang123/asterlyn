@@ -13,7 +13,7 @@ const copy = {
     "evidence-incomplete": "Incomplete evidence",
     "workspace-untrusted": "Untrusted workspace",
   },
-  error: "Error", noResults: "No results", queryPlaceholder: "Filter", run: "Run", retry: "Retry", revealOutput: "Reveal", notRunnable: "Disabled", androidQuickActions: "Quick actions", quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" }, quickActionModule: "Module", quickActionVariant: "Variant", cacheValidating: "Verifying configuration", cacheRestored: (count) => `${count} restored`, cacheStale: "Showing stale tasks", cacheStaleReasons: { "fingerprint-mismatch": "Configuration changed", "watcher-change": "Watcher changed", "overflow-recovery": "Overflow recovery", "cache-expired": "Cache expired", "cache-corrupt": "Cache corrupt", "fingerprint-unavailable": "Fingerprint unavailable" }, refreshStale: "Refresh", retainedTasks: (count) => `Previous ${count}`, status: { failed: "Failed" },
+  error: "Error", noResults: "No results", queryPlaceholder: "Filter", run: "Run", retry: "Retry", revealOutput: "Reveal", notRunnable: "Disabled", androidQuickActions: "Quick actions", presentationModes: { "all-tasks-tree": "All tasks", "quick-actions-tree": "Quick actions" }, quickActionKinds: { assemble: "Assemble", bundle: "Bundle", install: "Install", uninstall: "Uninstall" }, quickActionModule: "Module", quickActionVariant: "Variant", cacheValidating: "Verifying configuration", cacheRestored: (count) => `${count} restored`, cacheStale: "Showing stale tasks", cacheStaleReasons: { "fingerprint-mismatch": "Configuration changed", "watcher-change": "Watcher changed", "overflow-recovery": "Overflow recovery", "cache-expired": "Cache expired", "cache-corrupt": "Cache corrupt", "fingerprint-unavailable": "Fingerprint unavailable" }, refreshStale: "Refresh", retainedTasks: (count) => `Previous ${count}`, status: { failed: "Failed" },
 };
 
 function expanded(entries, root = "/project") {
@@ -90,6 +90,7 @@ test("ready discovery reports the task count while retaining the filter and list
   const entry = { key: "p:one", providerId: "p", providerLabel: "P", task: { id: "one", label: "one", group: "Build", runnable: true } };
   const html = renderTasksView({ identity: { root: "/project", generation: 1 }, status: "ready", providers: [{ id: "p", label: "P", snapshot: { status: "ready", tasks: [entry.task] } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null }, copy, 250, expanded([entry]));
   assert.match(html, /1 discovered/);
+  assert.match(html, /tasks-presentation-mode">All tasks</u);
   assert.match(html, /data-tasks-query/);
   assert.doesNotMatch(html, /<span class="sr-only">Filter<\/span>/u);
   assert.match(html, /data-task-key="p:one"/);
@@ -97,6 +98,14 @@ test("ready discovery reports the task count while retaining the filter and list
   assert.match(html, /data-collection-command="toggle-view"/u);
   assert.match(html, /data-collection-command="expand-all"/u);
   assert.match(html, /data-collection-command="collapse-all"/u);
+});
+
+test("cache restoration shows the active task presentation beside the count", () => {
+  const entry = { key: "p:one", providerId: "p", providerLabel: "P", task: { id: ":app:installDebug", label: "installDebug", group: "Install tasks", projectPath: ":app", runnable: true, androidQuickAction: { kind: "install", module: ":app", variant: "Debug" } } };
+  const state = { identity: { root: "/project", generation: 1 }, status: "ready", providers: [{ id: "p", label: "P", snapshot: { status: "ready", tasks: [entry.task], cache: { status: "ready", restoredTaskCount: 1 } } }], entries: [entry], visibleEntries: [entry], query: "", selectedIndex: 0, error: null, unavailableReason: null };
+  const html = renderTasksView(state, copy, 250, expanded([entry]), "quick-actions-tree");
+  assert.match(html, /1 restored/u);
+  assert.match(html, /tasks-presentation-mode">Quick actions/u);
 });
 
 test("flat task mode renders only task leaves through the shared collection contract", () => {

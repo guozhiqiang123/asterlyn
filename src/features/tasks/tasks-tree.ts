@@ -56,7 +56,7 @@ export function buildTaskTree(
     .filter((provider) => provider.collection)
     .sort((left, right) => compareText(left.id, right.id))
     .flatMap((provider) => contributedNodes(provider, entries, tasksLabel));
-  const fallback = fallbackNodes(entries.filter((entry) => !contributedProviderIds.has(entry.providerId)), tasksLabel);
+  const fallback = fallbackNodes(entries.filter((entry) => !contributedProviderIds.has(entry.providerId)));
   const children = [...contributed, ...fallback]
     .sort(compareRootNodes)
     .map((node, order) => ({ ...node, order }));
@@ -132,7 +132,7 @@ function contributedNodes(
   return (children.get(null) ?? []).map((node) => visit(node, TASK_TREE_ROOT_KEY)).filter(isTaskTreeNode);
 }
 
-function fallbackNodes(entries: readonly TasksEntry[], tasksLabel: string): readonly TaskTreeNode[] {
+function fallbackNodes(entries: readonly TasksEntry[]): readonly TaskTreeNode[] {
   const buckets = new Map<string, ProjectBucket>();
   for (const entry of entries) {
     const projectPath = taskProjectPath(entry);
@@ -148,27 +148,26 @@ function fallbackNodes(entries: readonly TasksEntry[], tasksLabel: string): read
   const children: TaskTreeNode[] = [];
   const sorted = [...buckets.values()].sort(compareProjects);
   for (const bucket of sorted.filter(({ projectPath }) => projectPath === ":")) {
-    children.push(tasksBranch(bucket, TASK_TREE_ROOT_KEY, tasksLabel, children.length));
+    children.push(...groupBranches(bucket, TASK_TREE_ROOT_KEY, children.length * 100_000));
   }
   for (const bucket of sorted.filter(({ projectPath }) => projectPath !== ":")) {
     const key = projectKey(bucket);
-    children.push(branch("module", key, TASK_TREE_ROOT_KEY, bucket.projectPath.slice(1) || bucket.projectPath, children.length, [
-      tasksBranch(bucket, key, tasksLabel, 0),
-    ], true, bucket.providerLabel));
+    children.push(branch("module", key, TASK_TREE_ROOT_KEY, bucket.projectPath.slice(1) || bucket.projectPath, children.length * 100_000,
+      groupBranches(bucket, key), false, bucket.providerLabel));
   }
   return children;
 }
 
-function tasksBranch(bucket: ProjectBucket, parentKey: string, label: string, order: number): TaskTreeBranch {
-  const key = `${projectKey(bucket)}:tasks`;
+function groupBranches(bucket: ProjectBucket, parentKey: string, orderOffset = 0): readonly TaskTreeBranch[] {
+  const key = projectKey(bucket);
   const groups = [...bucket.groups.entries()].sort(([left], [right]) => compareText(left, right));
-  return branch("tasks", key, parentKey, label, order, groups.map(([group, entries], groupOrder) => {
+  return groups.map(([group, entries], groupOrder) => {
     const groupKey = `${key}:group:${encode(group)}`;
-    return branch("group", groupKey, key, groupLabel(group), groupOrder,
+    return branch("group", groupKey, parentKey, groupLabel(group), orderOffset + groupOrder,
       [...entries].sort((left, right) => compareText(left.task.id, right.task.id)).map((entry, taskOrder) =>
         task(`${groupKey}:task:${encode(entry.key)}`, groupKey, taskDisplayLabel(entry), taskOrder, entry)),
       false);
-  }), true, bucket.projectPath === ":" ? bucket.providerLabel : undefined);
+  });
 }
 
 function branch(

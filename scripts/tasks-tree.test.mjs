@@ -16,21 +16,19 @@ const entry = (providerId, id, group, projectPath) => ({
   task: { id, label: id, group, projectPath, runnable: true },
 });
 
-test("default expansion reveals each project Tasks folder but keeps task groups collapsed", () => {
+test("default expansion reveals root groups and modules while keeping every branch collapsed", () => {
   const tree = buildTaskTree([
     entry("gradle", ":help", "Help tasks", ":"),
     entry("gradle", ":app:installDebug", "Install tasks", ":app"),
   ], "/repo/FilesRecovery", "Tasks");
   const defaults = taskTreeDefaultExpandedKeys(tree);
   const rows = taskTreeRows(tree, defaults, 250);
-  assert.deepEqual(rows.rows.map((row) => row.node.label), [
-    "Tasks", "help", "app", "Tasks", "install",
-  ]);
+  assert.deepEqual(rows.rows.map((row) => row.node.label), ["help", "app"]);
   assert.equal(rows.visibleTasks, 0);
-  assert.equal([...defaults].some((key) => key.includes(":group:")), false);
+  assert.deepEqual([...defaults], [TASK_TREE_ROOT_KEY]);
 });
 
-test("builds workspace, root tasks, module tasks, groups, and exact task leaves", () => {
+test("builds workspace, direct root groups, module groups, and exact task leaves", () => {
   const tree = buildTaskTree([
     entry("gradle", ":help", "Help tasks", ":"),
     entry("gradle", ":app:assembleDebug", "Build tasks", ":app"),
@@ -40,14 +38,14 @@ test("builds workspace, root tasks, module tasks, groups, and exact task leaves"
   assert.equal(tree.key, TASK_TREE_ROOT_KEY);
   assert.equal(tree.label, "FilesRecovery");
   assert.deepEqual(tree.children.map((node) => [node.kind, node.label]), [
-    ["tasks", "Tasks"],
+    ["group", "help"],
     ["module", "app"],
     ["module", "feature:sub"],
   ]);
   const app = tree.children[1];
-  assert.deepEqual(app.children[0].children.map((group) => group.label), ["build", "install"]);
-  assert.equal(app.children[0].children[0].children[0].label, ":app:assembleDebug");
-  assert.equal(app.children[0].children[0].children[0].entry.task.id, ":app:assembleDebug");
+  assert.deepEqual(app.children.map((group) => group.label), ["build", "install"]);
+  assert.equal(app.children[0].children[0].label, ":app:assembleDebug");
+  assert.equal(app.children[0].children[0].entry.task.id, ":app:assembleDebug");
 });
 
 test("flattening respects expansion, bounds task leaves, and keeps stable branch keys", () => {
@@ -71,7 +69,7 @@ test("force-expanded search projections show every matching ancestor without cha
   const tree = buildTaskTree([match], "C:\\work\\FilesRecovery", "Tasks");
   const expanded = new Set([TASK_TREE_ROOT_KEY]);
   const rows = taskTreeRows(tree, expanded, 250, true);
-  assert.deepEqual(rows.rows.map((row) => row.node.label), ["app", "Tasks", "install", ":app:installDebug"]);
+  assert.deepEqual(rows.rows.map((row) => row.node.label), ["app", "install", ":app:installDebug"]);
   assert.deepEqual([...expanded], [TASK_TREE_ROOT_KEY]);
 });
 
@@ -83,7 +81,7 @@ test("provider identity keeps same-name module and task nodes distinct", () => {
   const modules = tree.children.filter((node) => node.kind === "module");
   assert.equal(modules.length, 2);
   assert.notEqual(modules[0].key, modules[1].key);
-  const keys = modules.map((module) => module.children[0].children[0].children[0].key);
+  const keys = modules.map((module) => module.children[0].children[0].key);
   assert.notEqual(keys[0], keys[1]);
 });
 
@@ -95,15 +93,14 @@ test("uses a contributed provider hierarchy and joins leaves to exact task entri
       providerId: "android.gradle-tasks", source: "contributed", truncated: false,
       nodes: [
         { id: "android.gradle-tasks:collection:app", parentId: null, label: "app", kind: "group", order: 0, depth: 0, metadata: { "android.gradle.nodeKind": "module" } },
-        { id: "android.gradle-tasks:collection:tasks", parentId: "android.gradle-tasks:collection:app", label: "Tasks", kind: "group", order: 0, depth: 1, metadata: { "android.gradle.nodeKind": "tasks" } },
-        { id: "android.gradle-tasks:collection:build", parentId: "android.gradle-tasks:collection:tasks", label: "build", kind: "group", order: 0, depth: 2, metadata: { "android.gradle.nodeKind": "group" } },
-        { id: "android.gradle-tasks:collection:assemble", parentId: "android.gradle-tasks:collection:build", label: "assembleDebug", kind: "task", order: 0, depth: 3, taskId: ":app:assembleDebug" },
+        { id: "android.gradle-tasks:collection:build", parentId: "android.gradle-tasks:collection:app", label: "build", kind: "group", order: 0, depth: 1, metadata: { "android.gradle.nodeKind": "group" } },
+        { id: "android.gradle-tasks:collection:assemble", parentId: "android.gradle-tasks:collection:build", label: "assembleDebug", kind: "task", order: 0, depth: 2, taskId: ":app:assembleDebug" },
       ],
     },
   }];
   const tree = buildTaskTree(entries, "/repo/FilesRecovery", "Tasks", providers);
   assert.deepEqual(tree.children.map((node) => [node.kind, node.label]), [["module", "app"]]);
-  const leaf = tree.children[0].children[0].children[0].children[0];
+  const leaf = tree.children[0].children[0].children[0];
   assert.equal(leaf.key, "android.gradle-tasks:collection:assemble");
   assert.equal(leaf.label, ":app:assembleDebug");
   assert.equal(leaf.entry, entries[0]);

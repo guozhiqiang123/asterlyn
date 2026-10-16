@@ -350,7 +350,19 @@
 }
 
 .tasks-discovery-count {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 8px 10px 2px;
   color: var(--text-muted);
   font-size: 10px;
+}
+
+.tasks-presentation-mode {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: var(--surface-inset);
+  line-height: 1.4;
 }

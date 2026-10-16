@@ -4,7 +4,6 @@ import {
   buildTaskTree,
   TASK_TREE_ROOT_KEY,
   taskTreeBranchKeys,
-  taskTreeDefaultExpandedKeys,
 } from "./tasks-tree.ts";
 import { DisclosureState, type CollectionViewMode, type HierarchicalCollectionNavigationKey } from "../../presentation/hierarchical-collection.ts";
 import { hierarchicalCollectionDomNavigation, hierarchicalCollectionRowElement } from "../../presentation/hierarchical-collection-dom.ts";
@@ -217,7 +216,7 @@ export class TasksRuntime {
       const current = this.treeDisclosures[presentation];
       const expanded = this.treeExpansionTouched[presentation]
         ? new Set([...available].filter((key) => current.isExpanded(key)))
-        : presentation === "quick-actions-tree" ? available : taskTreeDefaultExpandedKeys(tree);
+        : new Set([TASK_TREE_ROOT_KEY]);
       expanded.add(TASK_TREE_ROOT_KEY);
       this.treeDisclosures[presentation] = expandedDisclosure(expanded);
     }
@@ -295,7 +294,7 @@ function expandedDisclosure(keys: Iterable<string>): DisclosureState {
 function initialDisclosures(): Record<TaskPresentation, DisclosureState> {
   return {
     "all-tasks-tree": expandedDisclosure([TASK_TREE_ROOT_KEY]),
-    "quick-actions-tree": new DisclosureState({ defaultExpanded: true }),
+    "quick-actions-tree": expandedDisclosure([TASK_TREE_ROOT_KEY]),
   };
 }
 

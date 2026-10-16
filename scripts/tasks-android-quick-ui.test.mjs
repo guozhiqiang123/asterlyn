@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { TasksController } from "../src/features/tasks/tasks-controller.ts";
-import { renderTasksView } from "../src/features/tasks/tasks-view.ts";
+import { DEFAULT_TASKS_COPY, renderTasksView, taskPresentationEntries } from "../src/features/tasks/tasks-view.ts";
 import { buildTaskTree, taskTreeBranchKeys } from "../src/features/tasks/tasks-tree.ts";
 
 const identity = { root: "/repo", generation: 1 };
 const task = (id, quickAction) => ({ id, label: id, group: "Build tasks", runnable: true, androidQuickAction: quickAction });
+
+function expandedQuick(state) {
+  const entries = taskPresentationEntries(state, "quick-actions-tree", DEFAULT_TASKS_COPY);
+  return taskTreeBranchKeys(buildTaskTree(entries, state.identity.root, DEFAULT_TASKS_COPY.androidQuickActions));
+}
 
 test("normalizes bounded Android quick metadata and drops invalid metadata", () => {
   const controller = new TasksController();
@@ -28,9 +33,10 @@ test("renders every module candidate with exact task keys and accessible labels"
     { key: "gradle::app:installDebug", providerId: "gradle", providerLabel: "Gradle", task: task(":app:installDebug", { kind: "install", module: ":app", variant: "Debug" }) },
     { key: "gradle::demo:installDebug", providerId: "gradle", providerLabel: "Gradle", task: task(":demo:installDebug", { kind: "install", module: ":demo", variant: "Debug" }) },
   ];
-  const html = renderTasksView({ identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null,
+  const state = { identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null,
     providers: [], entries, visibleEntries: entries,
-  }, undefined, 250, undefined, "quick-actions-tree");
+  };
+  const html = renderTasksView(state, undefined, 250, expandedQuick(state), "quick-actions-tree");
   assert.match(html, /data-tasks-presentation="quick-actions-tree"/u);
   assert.match(html, /data-task-key="gradle::app:installDebug"/u);
   assert.match(html, /data-task-key="gradle::demo:installDebug"/u);
@@ -51,9 +57,10 @@ test("keeps every Android quick-action kind visible in large catalogs", () => {
       return { key: `gradle:${id}`, providerId: "gradle", providerLabel: "Gradle", task: task(id, { kind, module: ":app", variant: "Debug" }) };
     }),
   ];
-  const html = renderTasksView({ identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null,
+  const state = { identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null,
     providers: [], entries, visibleEntries: entries,
-  }, undefined, 250, undefined, "quick-actions-tree");
+  };
+  const html = renderTasksView(state, undefined, 250, expandedQuick(state), "quick-actions-tree");
   assert.equal((html.match(/data-task-key="gradle:/gu) ?? []).length, 203);
   assert.match(html, /data-tasks-presentation="quick-actions-tree"/u);
   assert.match(html, />bundle</u);
@@ -68,13 +75,28 @@ test("all-task and quick-action tree projections are mutually exclusive", () => 
   ];
   const state = { identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null, providers: [], entries, visibleEntries: entries };
   const all = renderTasksView(state, undefined, 250, taskTreeBranchKeys(buildTaskTree(entries, identity.root)));
-  const quick = renderTasksView(state, undefined, 250, undefined, "quick-actions-tree");
+  const quick = renderTasksView(state, undefined, 250, expandedQuick(state), "quick-actions-tree");
   assert.match(all, /data-tasks-presentation="all-tasks-tree"/u);
   assert.match(all, /data-task-key="gradle::app:check"/u);
   assert.doesNotMatch(all, /data-tasks-presentation="quick-actions-tree"/u);
   assert.match(quick, /data-tasks-presentation="quick-actions-tree"/u);
   assert.match(quick, /data-task-key="gradle::app:assembleDebug"/u);
   assert.doesNotMatch(quick, /data-task-key="gradle::app:check"/u);
+});
+
+test("quick actions start collapsed, omit the presentation wrapper, and keep English group names", () => {
+  const entries = [
+    { key: "gradle::app:installDebug", providerId: "gradle", providerLabel: "Gradle", task: task(":app:installDebug", { kind: "install", module: ":app", variant: "Debug" }) },
+  ];
+  const state = { identity, status: "ready", query: "", selectedIndex: 0, error: null, unavailableReason: null, providers: [], entries, visibleEntries: entries };
+  const chineseCopy = { ...DEFAULT_TASKS_COPY, androidQuickActions: "Android 快捷操作", presentationModes: { "all-tasks-tree": "全部任务", "quick-actions-tree": "Android 快捷操作" }, quickActionKinds: { assemble: "组装", bundle: "打包", install: "安装", uninstall: "卸载" } };
+  const collapsed = renderTasksView(state, chineseCopy, 250, undefined, "quick-actions-tree");
+  assert.match(collapsed, />app</u);
+  assert.doesNotMatch(collapsed, /data-task-key=/u);
+  assert.doesNotMatch(collapsed, />Android 快捷操作<\/strong>/u);
+  const opened = renderTasksView(state, chineseCopy, 250, expandedQuick(state), "quick-actions-tree");
+  assert.match(opened, />install</u);
+  assert.doesNotMatch(opened, />安装</u);
 });
 
 test("flat quick actions retain complete Gradle task identities", () => {
