@@ -1,6 +1,7 @@
 import type {
   PluginRunArtifact,
   PluginRunArtifactSidecar,
+  PluginRunRecoveryConfirmation,
   PluginStagedRunPlan,
   PluginTaskExecutionResult,
   PluginToolOperationRequest,
@@ -17,7 +18,7 @@ export interface PluginRunSessionSnapshot {
   readonly pluginId: string;
   readonly label: string;
   readonly status: PluginRunSessionStatus;
-  readonly phase: "building" | "resolving-artifact" | "validating-target" | "installing" | "launching";
+  readonly phase: "building" | "resolving-artifact" | "validating-target" | "installing" | "awaiting-deployment-recovery" | "recovering-deployment" | "launching";
   readonly error: string | null;
 }
 
@@ -48,6 +49,7 @@ export interface PluginRunSessionRuntimeOptions {
     request: PluginToolOperationRequest,
   ) => Promise<PluginToolOperationResult>;
   readonly cancelTool: (pluginId: string, identity: PluginWorkspaceIdentity, requestId: string) => Promise<void>;
+  readonly confirmRecovery?: (pluginId: string, confirmation: PluginRunRecoveryConfirmation) => Promise<boolean>;
   readonly taskTerminal?: TaskTerminalSessionPort;
   readonly changed: (snapshot: PluginRunSessionSnapshot | null) => void;
   readonly completed: (
@@ -111,9 +113,35 @@ export class PluginRunSessionRuntime {
         const deployRequest = await request.plan.deploy(inspection);
         if (!deployRequest) throw new Error("Run plan could not create an exact-device installation request.");
         this.append(terminalSessionId, "[Asterlyn] Installing application on selected device…\r\n");
-        const deployment = await this.executeTool(request, requestId, "install", deployRequest, abort);
+        let deployment = await this.executeTool(request, requestId, "install", deployRequest, abort);
         this.appendToolResult(terminalSessionId, deployment);
-        if (deployment.status !== "succeeded") throw operationError("Android installation", deployment);
+        if (deployment.status !== "succeeded") {
+          const recovery = await request.plan.recoverDeployment?.(inspection, deployment);
+          if (!recovery || !this.options.confirmRecovery) throw operationError("Android installation", deployment);
+          this.ensureActive(request, abort);
+          this.phase("awaiting-deployment-recovery");
+          const confirmed = await this.options.confirmRecovery(request.pluginId, recovery.confirmation);
+          this.ensureActive(request, abort);
+          if (!confirmed) {
+            this.append(terminalSessionId, "[Asterlyn] Existing application was preserved; Run cancelled.\r\n");
+            this.finish("cancelled", "awaiting-deployment-recovery", null, terminalSessionId, build.result.truncated || deployment.truncated, request, buildResult);
+            return;
+          }
+          this.phase("recovering-deployment");
+          this.append(terminalSessionId, "[Asterlyn] Uninstalling incompatible existing application…\r\n");
+          const recovered = await this.executeTool(request, requestId, "recover-deployment", recovery.operation, abort);
+          this.appendToolResult(terminalSessionId, recovered);
+          if (recovered.status !== "succeeded") throw operationError("Android uninstall", recovered);
+          this.phase("validating-target");
+          this.append(terminalSessionId, "[Asterlyn] Revalidating selected device after uninstall…\r\n");
+          if (!await request.revalidateTarget()) throw new Error("The selected Android device disconnected after uninstall.");
+          this.ensureActive(request, abort);
+          this.phase("installing");
+          this.append(terminalSessionId, "[Asterlyn] Retrying installation on selected device…\r\n");
+          deployment = await this.executeTool(request, requestId, "retry-install", deployRequest, abort);
+          this.appendToolResult(terminalSessionId, deployment);
+          if (deployment.status !== "succeeded") throw operationError("Android installation retry", deployment);
+        }
         this.phase("validating-target");
         this.append(terminalSessionId, "[Asterlyn] Revalidating selected device after installation…\r\n");
         if (!await request.revalidateTarget()) throw new Error("The selected Android device disconnected after installation.");

@@ -89,3 +89,54 @@ test("staged Run stops before launch when target revalidation fails", async () =
   assert.equal(final.status, "failed");
   assert.equal(final.phase, "validating-target");
 });
+
+test("signature-conflict recovery requires confirmation, uninstalls once, and retries the exact deployment", async () => {
+  const operations = [];
+  const confirmations = [];
+  const phases = [];
+  let installCount = 0;
+  const runtime = new PluginRunSessionRuntime({
+    executeBuild: async () => ({ result: { status: "succeeded", outputs: [], truncated: false, error: null }, terminalSessionId: null }),
+    discoverArtifacts: async () => ({ artifacts: [{ workspacePath: "app/build/outputs/apk/debug/app.apk", kind: "apk", byteLength: 12 }], sidecars: [], truncated: false }),
+    executeTool: async (_pluginId, _identity, _requestId, request) => {
+      operations.push(request);
+      if (request.operationId === "android.apk.inspect") {
+        return { status: "succeeded", stdout: "package: name='com.example'\nlaunchable-activity: name='.MainActivity'\n", stderr: "", truncated: false, exitCode: 0, error: null };
+      }
+      if (request.operationId === "android.adb.install" && installCount++ === 0) {
+        return { status: "failed", stdout: "", stderr: "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]", truncated: false, exitCode: 1, error: null };
+      }
+      return { status: "succeeded", stdout: "Success\n", stderr: "", truncated: false, exitCode: 0, error: null };
+    },
+    cancelTool: async () => undefined,
+    confirmRecovery: async (pluginId, confirmation) => { confirmations.push({ pluginId, confirmation }); return true; },
+    changed: (snapshot) => { if (snapshot) phases.push(`${snapshot.status}:${snapshot.phase}`); },
+    completed: () => undefined,
+    reportError: (error) => { throw error; },
+  });
+  const confirmation = {
+    titleKey: "run.recovery.uninstall.title",
+    messageKey: "run.recovery.uninstall.message",
+    confirmLabelKey: "run.recovery.uninstall.confirm",
+    cancelLabelKey: "run.recovery.uninstall.cancel",
+    destructive: true,
+  };
+  const deploy = { operationId: "android.adb.install", parameters: { target: "emulator-5554", artifact: "app/build/outputs/apk/debug/app.apk" } };
+  const plan = {
+    kind: "staged",
+    build: { request: { pluginId: "plugin", providerId: "tasks", taskId: "assemble", label: "Build", executablePath: "/gradlew", args: ["assemble"] }, artifactSearch: { hints: ["app/build/outputs/apk"] }, apply() {} },
+    inspect: () => ({ operationId: "android.apk.inspect", parameters: { artifact: "app/build/outputs/apk/debug/app.apk" } }),
+    deploy: () => deploy,
+    recoverDeployment: () => ({ confirmation, operation: { operationId: "android.adb.uninstall", parameters: { target: "emulator-5554", applicationId: "com.example" } } }),
+    launch: () => ({ operationId: "android.adb.launch", parameters: { target: "emulator-5554", component: "com.example/com.example.MainActivity" } }),
+    apply() {},
+  };
+  await runtime.run({ identity, pluginId: "plugin", label: "Run", plan, revalidateTarget: async () => true });
+  assert.deepEqual(operations.map((operation) => operation.operationId), [
+    "android.apk.inspect", "android.adb.install", "android.adb.uninstall", "android.adb.install", "android.adb.launch",
+  ]);
+  assert.deepEqual(confirmations, [{ pluginId: "plugin", confirmation }]);
+  assert.ok(phases.includes("running:awaiting-deployment-recovery"));
+  assert.ok(phases.includes("running:recovering-deployment"));
+  assert.equal(runtime.snapshot.status, "succeeded");
+});

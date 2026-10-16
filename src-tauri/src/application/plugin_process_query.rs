@@ -88,6 +88,7 @@ struct ToolOperationParameter {
 #[derive(Debug, Clone, Copy)]
 enum ToolOperationParameterKind {
     ExecutionTargetId,
+    AndroidApplicationId,
     AndroidComponent,
     WorkspaceApk,
 }
@@ -601,6 +602,27 @@ fn admitted_tool_operation(plugin_id: &str, operation_id: &str) -> Option<Admitt
             max_output_bytes: MAX_OUTPUT_BYTES,
             executable: ExecutableResolver::AndroidAdb,
         }),
+        ("dev.asterlyn.android-gradle", "android.adb.uninstall") => Some(AdmittedToolOperation {
+            args: &[
+                ToolOperationArgument::Literal("-s"),
+                ToolOperationArgument::Parameter("target"),
+                ToolOperationArgument::Literal("uninstall"),
+                ToolOperationArgument::Parameter("applicationId"),
+            ],
+            parameters: &[
+                ToolOperationParameter {
+                    name: "target",
+                    kind: ToolOperationParameterKind::ExecutionTargetId,
+                },
+                ToolOperationParameter {
+                    name: "applicationId",
+                    kind: ToolOperationParameterKind::AndroidApplicationId,
+                },
+            ],
+            timeout: TOOL_OPERATION_TIMEOUT,
+            max_output_bytes: MAX_OUTPUT_BYTES,
+            executable: ExecutableResolver::AndroidAdb,
+        }),
         _ => None,
     }
 }
@@ -642,6 +664,13 @@ fn validate_tool_parameter(
                 Ok(value.to_string())
             } else {
                 Err("invalid Android launch component".into())
+            }
+        }
+        ToolOperationParameterKind::AndroidApplicationId => {
+            if valid_android_name(value) {
+                Ok(value.to_string())
+            } else {
+                Err("invalid Android application ID".into())
             }
         }
         ToolOperationParameterKind::WorkspaceApk => {
@@ -1085,6 +1114,10 @@ mod tests {
             admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.install").is_some()
         );
         assert!(
+            admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.uninstall")
+                .is_some()
+        );
+        assert!(
             admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.shell").is_none()
         );
     }
@@ -1267,6 +1300,34 @@ mod tests {
                     .join("app/build/outputs/apk/debug/app-debug.apk")
             )
             .unwrap()
+        );
+    }
+
+    #[test]
+    fn exact_device_uninstall_contains_only_the_package_and_serial() {
+        let operation =
+            admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.uninstall")
+                .unwrap();
+        let args = operation
+            .resolve_arguments(
+                Path::new("/"),
+                &HashMap::from([
+                    ("target".into(), "emulator-5554".into()),
+                    ("applicationId".into(), "com.example.demo".into()),
+                ]),
+            )
+            .unwrap();
+        assert_eq!(
+            args,
+            ["-s", "emulator-5554", "uninstall", "com.example.demo"]
+        );
+        assert!(
+            validate_tool_parameter(
+                Path::new("/"),
+                ToolOperationParameterKind::AndroidApplicationId,
+                "com.example;rm"
+            )
+            .is_err()
         );
     }
 }

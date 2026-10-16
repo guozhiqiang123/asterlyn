@@ -28,6 +28,7 @@ import type {
   SdkStagedRunPlan,
   SdkRunArtifact,
   SdkRunArtifactSidecar,
+  SdkRunRecoveryConfirmation,
   SdkRunSessionResult,
   SdkToolOperationDeclaration,
   SdkToolOperationRequest,
@@ -48,6 +49,7 @@ export type PluginRunPlan = SdkRunPlan;
 export type PluginStagedRunPlan = SdkStagedRunPlan;
 export type PluginRunArtifact = SdkRunArtifact;
 export type PluginRunArtifactSidecar = SdkRunArtifactSidecar;
+export type PluginRunRecoveryConfirmation = SdkRunRecoveryConfirmation;
 export type PluginRunSessionResult = SdkRunSessionResult;
 export type PluginToolOperationDeclaration = SdkToolOperationDeclaration;
 export type PluginToolOperationRequest = SdkToolOperationRequest;

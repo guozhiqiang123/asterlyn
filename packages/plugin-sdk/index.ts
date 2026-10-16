@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.6.0" as const;
+export const PLUGIN_SDK_VERSION = "1.7.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -411,12 +411,27 @@ export type SdkRunSessionPhase =
   | "resolving-artifact"
   | "validating-target"
   | "installing"
+  | "awaiting-deployment-recovery"
+  | "recovering-deployment"
   | "launching";
 
 export interface SdkRunSessionResult {
   readonly status: "succeeded" | "failed" | "cancelled" | "crashed";
   readonly phase: SdkRunSessionPhase;
   readonly error: string | null;
+}
+
+export interface SdkRunRecoveryConfirmation {
+  readonly titleKey: string;
+  readonly messageKey: string;
+  readonly confirmLabelKey: string;
+  readonly cancelLabelKey: string;
+  readonly destructive: true;
+}
+
+export interface SdkRunDeploymentRecoveryPlan {
+  readonly confirmation: SdkRunRecoveryConfirmation;
+  readonly operation: SdkToolOperationRequest;
 }
 
 /**
@@ -438,6 +453,11 @@ export interface SdkStagedRunPlan {
   readonly deploy?: (
     inspection: SdkToolOperationResult,
   ) => SdkToolOperationRequest | null | Promise<SdkToolOperationRequest | null>;
+  /** One host-confirmed recovery may run after a failed deployment before the exact deployment is retried. */
+  readonly recoverDeployment?: (
+    inspection: SdkToolOperationResult,
+    deployment: SdkToolOperationResult,
+  ) => SdkRunDeploymentRecoveryPlan | null | Promise<SdkRunDeploymentRecoveryPlan | null>;
   readonly launch: (
     inspection: SdkToolOperationResult,
   ) => SdkToolOperationRequest | null | Promise<SdkToolOperationRequest | null>;
