@@ -92,10 +92,19 @@ provider fails, and is accessible by keyboard at 200% zoom in light and dark the
 - Add the Android project-model provider needed to populate those fields; do not make regex parsing
   of Gradle build files the final source of truth.
 
+ADR-0031 refines the first delivery path: the complete Gradle project model is not a prerequisite
+for ordinary Run. The plugin may acquire application ID and launcher component after a successful
+install from verified final-APK metadata. A project-model provider remains a later enhancement for
+pre-build configuration intelligence.
+
 Gate: configuration invalidation after a Flavor/task change is visible, recoverable, and never runs
 the stale task.
 
 ## Phase AW6 — supervised build, install, and launch
+
+The executable breakdown, typed tool-operation authority, artifact containment, retained session
+state, and expanded acceptance matrix are governed by
+[the Android application Run plan](android-application-run-plan.md).
 
 - Validate the current configuration and online target immediately before execution.
 - Route the Gradle build/install step through existing reviewed task execution and its dedicated
