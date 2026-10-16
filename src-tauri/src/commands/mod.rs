@@ -11,7 +11,9 @@ pub(crate) use plugin_cache::{
     cleanup_plugin_task_cache, compute_workspace_fingerprint, mark_plugin_task_cache_dirty,
     read_plugin_task_cache, write_plugin_task_cache,
 };
-pub(crate) use plugin_process_query::execute_plugin_process_query;
+pub(crate) use plugin_process_query::{
+    cancel_plugin_tool_operation, execute_plugin_process_query, execute_plugin_tool_operation,
+};
 mod git_reads;
 mod image;
 mod shell;

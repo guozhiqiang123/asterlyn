@@ -6,7 +6,9 @@
     "PluginTaskCacheReadResult": "./plugin-task-cache",
     "PluginTaskCacheMutationResult": "./plugin-task-cache",
     "PluginTaskCacheCleanupResult": "./plugin-task-cache",
-    "PluginProcessQueryResult": "./plugin-process-query"
+    "PluginProcessQueryResult": "./plugin-process-query",
+    "PluginToolOperationParameters": "./plugin-tool-operation",
+    "PluginToolOperationResult": "./plugin-tool-operation"
   },
   "commands": [
     { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
@@ -39,6 +41,8 @@
     { "name": "mark_plugin_task_cache_dirty", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string", "reason": "PluginTaskCacheDirtyReason" }, "result": "PluginTaskCacheMutationResult", "validator": "pluginTaskCacheMutationResult" },
     { "name": "cleanup_plugin_task_cache", "args": {}, "result": "PluginTaskCacheCleanupResult", "validator": "pluginTaskCacheCleanupResult" },
     { "name": "execute_plugin_process_query", "args": { "workspaceRoot": "string", "pluginId": "string", "queryId": "string" }, "result": "PluginProcessQueryResult", "validator": "pluginProcessQueryResult" },
+    { "name": "execute_plugin_tool_operation", "args": { "workspaceRoot": "string", "pluginId": "string", "requestId": "string", "operationId": "string", "parameters": "PluginToolOperationParameters" }, "result": "PluginToolOperationResult", "validator": "pluginToolOperationResult" },
+    { "name": "cancel_plugin_tool_operation", "args": { "requestId": "string" }, "result": "void", "validator": "void" },
     { "name": "read_tracked_changes", "args": { "repositoryRoot": "string" }, "result": "TrackedChangeScan", "validator": "trackedChangeScan" },
     { "name": "open_repository_window", "args": { "path": "string" }, "result": "ProjectWindowOpenResult", "validator": "projectWindowOpenResult" },
     { "name": "read_history_page", "args": { "repositoryRoot": "string", "query": "HistoryQuery", "offset": "number", "limit": "number" }, "result": "HistoryPage", "validator": "historyPage" },

@@ -32,6 +32,8 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
   switch (validator) {
     case "pluginProcessQueryResult":
       throw new Error(`${command}: process query results require the feature-scoped validator.`);
+    case "pluginToolOperationResult":
+      throw new Error(`${command}: plugin tool-operation results require the feature-scoped validator.`);
     case "void":
       assert(value === null || value === undefined, command, "expected no response body");
       break;

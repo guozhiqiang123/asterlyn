@@ -385,7 +385,9 @@ pub fn run() {
             write_plugin_task_cache,
             mark_plugin_task_cache_dirty,
             cleanup_plugin_task_cache,
-            execute_plugin_process_query
+            execute_plugin_process_query,
+            execute_plugin_tool_operation,
+            cancel_plugin_tool_operation
         ])
         .build(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");

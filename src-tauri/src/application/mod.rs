@@ -24,7 +24,9 @@ pub(crate) use commit_file_restore::{
 };
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
-pub(crate) use plugin_process_query::{PluginProcessQueryManager, PluginProcessQueryResult};
+pub(crate) use plugin_process_query::{
+    PluginProcessQueryManager, PluginProcessQueryResult, PluginToolOperationResult,
+};
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
 pub(crate) use task::TaskManager;
 pub(crate) use task_artifacts::{TaskArtifactDiscovery, scan_task_artifacts};

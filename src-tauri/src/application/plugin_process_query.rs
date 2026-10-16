@@ -13,6 +13,8 @@ const MAX_RUNNING_PER_OWNER: usize = 4;
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 const MAX_PROPERTIES_BYTES: u64 = 64 * 1024;
 const ADB_QUERY_TIMEOUT: Duration = Duration::from_secs(10);
+const TOOL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
+const MAX_REQUEST_ID_LENGTH: usize = 256;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +41,21 @@ pub(crate) struct PluginProcessQueryResult {
     pub(crate) error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PluginToolOperationResult {
+    pub(crate) protocol_version: u8,
+    pub(crate) plugin_id: String,
+    pub(crate) request_id: String,
+    pub(crate) operation_id: String,
+    pub(crate) status: PluginProcessQueryStatus,
+    pub(crate) stdout_base64: String,
+    pub(crate) stderr_base64: String,
+    pub(crate) truncated: bool,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) error: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct AdmittedQuery {
     args: &'static [&'static str],
@@ -46,13 +63,73 @@ struct AdmittedQuery {
     executable: ExecutableResolver,
 }
 
+#[derive(Debug, Clone)]
+struct AdmittedToolOperation {
+    args: &'static [ToolOperationArgument],
+    parameters: &'static [ToolOperationParameter],
+    timeout: Duration,
+    max_output_bytes: usize,
+    executable: ExecutableResolver,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ToolOperationArgument {
+    Literal(&'static str),
+    Parameter(&'static str),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ToolOperationParameter {
+    name: &'static str,
+    kind: ToolOperationParameterKind,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ToolOperationParameterKind {
+    ExecutionTargetId,
+    AndroidComponent,
+    WorkspaceApk,
+}
+
+impl AdmittedToolOperation {
+    fn resolve_arguments(
+        &self,
+        root: &Path,
+        values: &HashMap<String, String>,
+    ) -> Result<Vec<String>, String> {
+        if values.len() != self.parameters.len() {
+            return Err("tool-operation parameters do not match the admitted declaration".into());
+        }
+        let mut resolved = HashMap::new();
+        for parameter in self.parameters {
+            let value = values
+                .get(parameter.name)
+                .ok_or_else(|| format!("missing tool-operation parameter: {}", parameter.name))?;
+            let value = validate_tool_parameter(root, parameter.kind, value)?;
+            resolved.insert(parameter.name, value);
+        }
+        self.args
+            .iter()
+            .map(|argument| match argument {
+                ToolOperationArgument::Literal(value) => Ok((*value).to_string()),
+                ToolOperationArgument::Parameter(name) => resolved
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| format!("unresolved tool-operation parameter: {name}")),
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum ExecutableResolver {
     AndroidAdb,
+    AndroidAapt,
 }
 
 struct RunningQuery {
     owner: String,
+    request_id: Option<String>,
     child: Arc<Mutex<Option<Child>>>,
     pid: u32,
     cancelled: Arc<AtomicBool>,
@@ -180,6 +257,7 @@ impl PluginProcessQueryManager {
                 key.clone(),
                 RunningQuery {
                     owner: owner.to_string(),
+                    request_id: None,
                     child: child.clone(),
                     pid,
                     cancelled: cancelled.clone(),
@@ -187,7 +265,7 @@ impl PluginProcessQueryManager {
             );
         }
 
-        let collected = collect_query(child, cancelled, query.timeout);
+        let collected = collect_query(child, cancelled, query.timeout, MAX_OUTPUT_BYTES);
         if let Ok(mut running) = self.inner.running.lock() {
             running.remove(&key);
         }
@@ -217,6 +295,204 @@ impl PluginProcessQueryManager {
 
     pub(crate) fn cancel_owner(&self, owner: &str) {
         self.cancel_matching(|value| value.owner == owner);
+    }
+
+    pub(crate) fn execute_tool_operation(
+        &self,
+        owner: &str,
+        root: &Path,
+        plugin_id: &str,
+        request_id: &str,
+        operation_id: &str,
+        parameters: &HashMap<String, String>,
+    ) -> PluginToolOperationResult {
+        if !valid_request_id(request_id) {
+            return tool_result(
+                plugin_id,
+                request_id,
+                operation_id,
+                PluginProcessQueryStatus::Failed,
+                None,
+                false,
+                Vec::new(),
+                Vec::new(),
+                Some("invalid tool-operation request identity".into()),
+            );
+        }
+        let Some(operation) = admitted_tool_operation(plugin_id, operation_id) else {
+            return tool_result(
+                plugin_id,
+                request_id,
+                operation_id,
+                PluginProcessQueryStatus::Failed,
+                None,
+                false,
+                Vec::new(),
+                Vec::new(),
+                Some("tool operation is not admitted by the bundled plugin catalog".into()),
+            );
+        };
+        let args = match operation.resolve_arguments(root, parameters) {
+            Ok(value) => value,
+            Err(error) => {
+                return tool_result(
+                    plugin_id,
+                    request_id,
+                    operation_id,
+                    PluginProcessQueryStatus::Failed,
+                    None,
+                    false,
+                    Vec::new(),
+                    Vec::new(),
+                    Some(error),
+                );
+            }
+        };
+        let executable = match resolve_executable(root, operation.executable) {
+            Ok(value) => value,
+            Err(error) => {
+                return tool_result(
+                    plugin_id,
+                    request_id,
+                    operation_id,
+                    PluginProcessQueryStatus::Failed,
+                    None,
+                    false,
+                    Vec::new(),
+                    Vec::new(),
+                    Some(error),
+                );
+            }
+        };
+        let key = format!(
+            "operation-{}",
+            self.inner
+                .sequence
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1
+        );
+        let child = match spawn_process(&executable, root, &args) {
+            Ok(value) => value,
+            Err(error) => {
+                return tool_result(
+                    plugin_id,
+                    request_id,
+                    operation_id,
+                    PluginProcessQueryStatus::Crashed,
+                    None,
+                    false,
+                    Vec::new(),
+                    Vec::new(),
+                    Some(error),
+                );
+            }
+        };
+        let pid = child.id();
+        let child = Arc::new(Mutex::new(Some(child)));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        {
+            let mut running = match self.inner.running.lock() {
+                Ok(value) => value,
+                Err(_) => {
+                    terminate(pid, &child);
+                    return tool_result(
+                        plugin_id,
+                        request_id,
+                        operation_id,
+                        PluginProcessQueryStatus::Crashed,
+                        None,
+                        false,
+                        Vec::new(),
+                        Vec::new(),
+                        Some("tool-operation registry lock was poisoned".into()),
+                    );
+                }
+            };
+            if running.values().any(|value| {
+                value.owner == owner && value.request_id.as_deref() == Some(request_id)
+            }) {
+                terminate(pid, &child);
+                return tool_result(
+                    plugin_id,
+                    request_id,
+                    operation_id,
+                    PluginProcessQueryStatus::Failed,
+                    None,
+                    false,
+                    Vec::new(),
+                    Vec::new(),
+                    Some("tool-operation request is already active".into()),
+                );
+            }
+            if running
+                .values()
+                .filter(|value| value.owner == owner)
+                .count()
+                >= MAX_RUNNING_PER_OWNER
+            {
+                terminate(pid, &child);
+                return tool_result(
+                    plugin_id,
+                    request_id,
+                    operation_id,
+                    PluginProcessQueryStatus::Failed,
+                    None,
+                    false,
+                    Vec::new(),
+                    Vec::new(),
+                    Some("too many plugin tool operations are active for this window".into()),
+                );
+            }
+            running.insert(
+                key.clone(),
+                RunningQuery {
+                    owner: owner.to_string(),
+                    request_id: Some(request_id.to_string()),
+                    child: child.clone(),
+                    pid,
+                    cancelled: cancelled.clone(),
+                },
+            );
+        }
+        let collected = collect_query(
+            child,
+            cancelled,
+            operation.timeout,
+            operation.max_output_bytes,
+        );
+        if let Ok(mut running) = self.inner.running.lock() {
+            running.remove(&key);
+        }
+        match collected {
+            Ok(output) => tool_result(
+                plugin_id,
+                request_id,
+                operation_id,
+                output.status,
+                output.exit_code,
+                output.truncated,
+                output.stdout,
+                output.stderr,
+                output.error,
+            ),
+            Err(error) => tool_result(
+                plugin_id,
+                request_id,
+                operation_id,
+                PluginProcessQueryStatus::Crashed,
+                None,
+                false,
+                Vec::new(),
+                Vec::new(),
+                Some(error),
+            ),
+        }
+    }
+
+    pub(crate) fn cancel_request(&self, owner: &str, request_id: &str) {
+        self.cancel_matching(|value| {
+            value.owner == owner && value.request_id.as_deref() == Some(request_id)
+        });
     }
 
     pub(crate) fn cancel_all(&self) {
@@ -262,51 +538,201 @@ fn admitted_query(plugin_id: &str, query_id: &str) -> Option<AdmittedQuery> {
     }
 }
 
+fn admitted_tool_operation(plugin_id: &str, operation_id: &str) -> Option<AdmittedToolOperation> {
+    match (plugin_id, operation_id) {
+        ("dev.asterlyn.android-gradle", "android.apk.inspect") => Some(AdmittedToolOperation {
+            args: &[
+                ToolOperationArgument::Literal("dump"),
+                ToolOperationArgument::Literal("badging"),
+                ToolOperationArgument::Parameter("artifact"),
+            ],
+            parameters: &[ToolOperationParameter {
+                name: "artifact",
+                kind: ToolOperationParameterKind::WorkspaceApk,
+            }],
+            timeout: TOOL_OPERATION_TIMEOUT,
+            max_output_bytes: MAX_OUTPUT_BYTES,
+            executable: ExecutableResolver::AndroidAapt,
+        }),
+        ("dev.asterlyn.android-gradle", "android.adb.launch") => Some(AdmittedToolOperation {
+            args: &[
+                ToolOperationArgument::Literal("-s"),
+                ToolOperationArgument::Parameter("target"),
+                ToolOperationArgument::Literal("shell"),
+                ToolOperationArgument::Literal("am"),
+                ToolOperationArgument::Literal("start"),
+                ToolOperationArgument::Literal("-n"),
+                ToolOperationArgument::Parameter("component"),
+            ],
+            parameters: &[
+                ToolOperationParameter {
+                    name: "target",
+                    kind: ToolOperationParameterKind::ExecutionTargetId,
+                },
+                ToolOperationParameter {
+                    name: "component",
+                    kind: ToolOperationParameterKind::AndroidComponent,
+                },
+            ],
+            timeout: TOOL_OPERATION_TIMEOUT,
+            max_output_bytes: MAX_OUTPUT_BYTES,
+            executable: ExecutableResolver::AndroidAdb,
+        }),
+        _ => None,
+    }
+}
+
+fn valid_request_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_REQUEST_ID_LENGTH
+        && value.bytes().all(|value| {
+            value.is_ascii_alphanumeric() || matches!(value, b'.' | b'_' | b'-' | b':')
+        })
+}
+
+fn validate_tool_parameter(
+    root: &Path,
+    kind: ToolOperationParameterKind,
+    value: &str,
+) -> Result<String, String> {
+    if value.is_empty() || value.len() > 4_096 || value.contains('\0') {
+        return Err("invalid tool-operation parameter value".into());
+    }
+    match kind {
+        ToolOperationParameterKind::ExecutionTargetId => {
+            if value.len() <= 512
+                && value.bytes().all(|value| {
+                    value.is_ascii_alphanumeric() || matches!(value, b'.' | b'_' | b'-' | b':')
+                })
+            {
+                Ok(value.to_string())
+            } else {
+                Err("invalid Android execution target".into())
+            }
+        }
+        ToolOperationParameterKind::AndroidComponent => {
+            let Some((package, activity)) = value.split_once('/') else {
+                return Err("invalid Android launch component".into());
+            };
+            let activity = activity.strip_prefix('.').unwrap_or(activity);
+            if valid_android_name(package) && valid_android_name(activity) {
+                Ok(value.to_string())
+            } else {
+                Err("invalid Android launch component".into())
+            }
+        }
+        ToolOperationParameterKind::WorkspaceApk => {
+            let relative = Path::new(value);
+            if relative.is_absolute() {
+                return Err("workspace artifact must use a relative path".into());
+            }
+            let canonical_root = std::fs::canonicalize(root)
+                .map_err(|error| format!("resolve active workspace: {error}"))?;
+            let canonical = std::fs::canonicalize(canonical_root.join(relative))
+                .map_err(|error| format!("resolve workspace artifact: {error}"))?;
+            if !canonical.starts_with(&canonical_root)
+                || !canonical.is_file()
+                || canonical.extension().and_then(|value| value.to_str()) != Some("apk")
+            {
+                return Err("workspace artifact is not an admitted APK".into());
+            }
+            Ok(canonical.to_string_lossy().into_owned())
+        }
+    }
+}
+
+fn valid_android_name(value: &str) -> bool {
+    value.len() <= 512
+        && value.split('.').all(|part| {
+            !part.is_empty()
+                && part.bytes().enumerate().all(|(index, value)| {
+                    value.is_ascii_alphabetic()
+                        || value == b'_'
+                        || (index > 0 && (value.is_ascii_digit() || value == b'$'))
+                })
+        })
+}
+
 fn resolve_executable(root: &Path, resolver: ExecutableResolver) -> Result<PathBuf, String> {
     match resolver {
         ExecutableResolver::AndroidAdb => resolve_android_adb(root),
+        ExecutableResolver::AndroidAapt => resolve_android_aapt(root),
     }
+}
+
+fn resolve_android_aapt(root: &Path) -> Result<PathBuf, String> {
+    let name = if cfg!(windows) { "aapt.exe" } else { "aapt" };
+    let mut candidates = Vec::new();
+    for sdk in android_sdk_roots(root) {
+        let build_tools = sdk.join("build-tools");
+        let Ok(entries) = std::fs::read_dir(build_tools) else {
+            continue;
+        };
+        let mut versions = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect::<Vec<_>>();
+        versions.sort_by(|left, right| right.file_name().cmp(&left.file_name()));
+        candidates.extend(versions.into_iter().map(|version| version.join(name)));
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path).map(|entry| entry.join(name)));
+    }
+    first_executable(candidates).ok_or_else(|| {
+        "Android Asset Packaging Tool was not found. Install Android SDK Build Tools or configure sdk.dir, ANDROID_SDK_ROOT, or ANDROID_HOME.".into()
+    })
 }
 
 fn resolve_android_adb(root: &Path) -> Result<PathBuf, String> {
     let name = if cfg!(windows) { "adb.exe" } else { "adb" };
     let mut candidates = Vec::new();
-    if let Some(sdk) = workspace_android_sdk(root) {
-        candidates.push(sdk.join("platform-tools").join(name));
-    }
-    for variable in ["ANDROID_SDK_ROOT", "ANDROID_HOME"] {
-        if let Some(value) = std::env::var_os(variable) {
-            candidates.push(PathBuf::from(value).join("platform-tools").join(name));
-        }
-    }
-    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
-        let home = PathBuf::from(home);
-        if cfg!(target_os = "macos") {
-            candidates.push(home.join("Library/Android/sdk/platform-tools").join(name));
-        } else if cfg!(windows) {
-            if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-                candidates.push(
-                    PathBuf::from(local)
-                        .join("Android/Sdk/platform-tools")
-                        .join(name),
-                );
-            }
-        } else {
-            candidates.push(home.join("Android/Sdk/platform-tools").join(name));
-        }
-    }
+    candidates.extend(
+        android_sdk_roots(root)
+            .into_iter()
+            .map(|sdk| sdk.join("platform-tools").join(name)),
+    );
     if let Some(path) = std::env::var_os("PATH") {
         candidates.extend(std::env::split_paths(&path).map(|entry| entry.join(name)));
     }
+    first_executable(candidates).ok_or_else(|| "Android Debug Bridge was not found. Configure sdk.dir, ANDROID_SDK_ROOT, ANDROID_HOME, or PATH.".into())
+}
+
+fn first_executable(candidates: Vec<PathBuf>) -> Option<PathBuf> {
     for candidate in candidates {
         let Ok(canonical) = std::fs::canonicalize(candidate) else {
             continue;
         };
         if canonical.is_file() && executable_file(&canonical) {
-            return Ok(canonical);
+            return Some(canonical);
         }
     }
-    Err("Android Debug Bridge was not found. Configure sdk.dir, ANDROID_SDK_ROOT, ANDROID_HOME, or PATH.".into())
+    None
+}
+
+fn android_sdk_roots(root: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(sdk) = workspace_android_sdk(root) {
+        candidates.push(sdk);
+    }
+    for variable in ["ANDROID_SDK_ROOT", "ANDROID_HOME"] {
+        if let Some(value) = std::env::var_os(variable) {
+            candidates.push(PathBuf::from(value));
+        }
+    }
+    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
+        let home = PathBuf::from(home);
+        if cfg!(target_os = "macos") {
+            candidates.push(home.join("Library/Android/sdk"));
+        } else if cfg!(windows) {
+            if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+                candidates.push(PathBuf::from(local).join("Android/Sdk"));
+            }
+        } else {
+            candidates.push(home.join("Android/Sdk"));
+        }
+    }
+    candidates
 }
 
 fn workspace_android_sdk(root: &Path) -> Option<PathBuf> {
@@ -352,6 +778,14 @@ fn executable_file(_path: &Path) -> bool {
 }
 
 fn spawn_query(executable: &Path, root: &Path, args: &[&str]) -> Result<Child, String> {
+    let args = args
+        .iter()
+        .map(|value| (*value).to_string())
+        .collect::<Vec<_>>();
+    spawn_process(executable, root, &args)
+}
+
+fn spawn_process(executable: &Path, root: &Path, args: &[String]) -> Result<Child, String> {
     let mut command = Command::new(executable);
     command
         .args(args)
@@ -402,6 +836,7 @@ fn collect_query(
     child: Arc<Mutex<Option<Child>>>,
     cancelled: Arc<AtomicBool>,
     timeout: Duration,
+    max_output_bytes: usize,
 ) -> Result<CollectedOutput, String> {
     let (stdout, stderr) = {
         let mut guard = child.lock().map_err(lock_error)?;
@@ -410,7 +845,7 @@ fn collect_query(
             .ok_or_else(|| "process query disappeared".to_string())?;
         (value.stdout.take(), value.stderr.take())
     };
-    let remaining = Arc::new(AtomicUsize::new(MAX_OUTPUT_BYTES));
+    let remaining = Arc::new(AtomicUsize::new(max_output_bytes));
     let truncated = Arc::new(AtomicBool::new(false));
     let stdout_handle = stdout.map(|pipe| {
         let remaining = remaining.clone();
@@ -570,6 +1005,31 @@ fn result(
     }
 }
 
+fn tool_result(
+    plugin_id: &str,
+    request_id: &str,
+    operation_id: &str,
+    status: PluginProcessQueryStatus,
+    exit_code: Option<i32>,
+    truncated: bool,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    error: Option<String>,
+) -> PluginToolOperationResult {
+    PluginToolOperationResult {
+        protocol_version: PROTOCOL_VERSION,
+        plugin_id: plugin_id.to_string(),
+        request_id: request_id.to_string(),
+        operation_id: operation_id.to_string(),
+        status,
+        stdout_base64: encode_output(&stdout),
+        stderr_base64: encode_output(&stderr),
+        truncated,
+        exit_code,
+        error,
+    }
+}
+
 fn lock_error<T>(_: std::sync::PoisonError<T>) -> String {
     "process query lock was poisoned".into()
 }
@@ -577,6 +1037,7 @@ fn lock_error<T>(_: std::sync::PoisonError<T>) -> String {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use base64::Engine;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
@@ -594,6 +1055,12 @@ mod tests {
         assert!(admitted_query("dev.asterlyn.android-gradle", "adb.devices").is_some());
         assert!(admitted_query("dev.asterlyn.android-gradle", "adb.shell").is_none());
         assert!(admitted_query("unknown", "adb.devices").is_none());
+        assert!(
+            admitted_tool_operation("dev.asterlyn.android-gradle", "android.apk.inspect").is_some()
+        );
+        assert!(
+            admitted_tool_operation("dev.asterlyn.android-gradle", "android.adb.shell").is_none()
+        );
     }
 
     #[test]
@@ -655,6 +1122,88 @@ mod tests {
         assert_eq!(
             resolve_android_adb(directory.path()).unwrap(),
             fs::canonicalize(adb).unwrap()
+        );
+    }
+
+    #[test]
+    fn apk_inspection_is_bounded_to_the_active_workspace() {
+        let directory = tempfile::tempdir().unwrap();
+        let sdk = directory.path().join("sdk");
+        fs::create_dir_all(sdk.join("build-tools/36.0.0")).unwrap();
+        executable(
+            &sdk.join("build-tools/36.0.0"),
+            "aapt",
+            "printf '%s\\n' \"$*\"",
+        );
+        fs::write(
+            directory.path().join("local.properties"),
+            format!("sdk.dir={}\n", sdk.display()),
+        )
+        .unwrap();
+        fs::create_dir_all(directory.path().join("app/build/outputs/apk/debug")).unwrap();
+        fs::write(
+            directory
+                .path()
+                .join("app/build/outputs/apk/debug/app-debug.apk"),
+            b"apk",
+        )
+        .unwrap();
+        let output = PluginProcessQueryManager::default().execute_tool_operation(
+            "window-a",
+            directory.path(),
+            "dev.asterlyn.android-gradle",
+            "run-1",
+            "android.apk.inspect",
+            &HashMap::from([(
+                "artifact".into(),
+                "app/build/outputs/apk/debug/app-debug.apk".into(),
+            )]),
+        );
+        assert_eq!(output.status, PluginProcessQueryStatus::Succeeded);
+        assert!(
+            String::from_utf8(
+                base64::engine::general_purpose::STANDARD
+                    .decode(output.stdout_base64)
+                    .unwrap()
+            )
+            .unwrap()
+            .contains("dump badging")
+        );
+
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        let rejected = validate_tool_parameter(
+            directory.path(),
+            ToolOperationParameterKind::WorkspaceApk,
+            outside.path().to_str().unwrap(),
+        );
+        assert!(rejected.is_err());
+    }
+
+    #[test]
+    fn launch_parameters_reject_shell_injection() {
+        assert!(
+            validate_tool_parameter(
+                Path::new("/"),
+                ToolOperationParameterKind::ExecutionTargetId,
+                "emulator-5554;rm"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_tool_parameter(
+                Path::new("/"),
+                ToolOperationParameterKind::AndroidComponent,
+                "com.example.app/com.example.app.MainActivity"
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_tool_parameter(
+                Path::new("/"),
+                ToolOperationParameterKind::AndroidComponent,
+                "com.example.app/$(bad)"
+            )
+            .is_err()
         );
     }
 }

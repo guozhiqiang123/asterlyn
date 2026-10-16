@@ -1,4 +1,8 @@
-use crate::application::{ActiveWorkspaces, PluginProcessQueryManager, PluginProcessQueryResult};
+use crate::application::{
+    ActiveWorkspaces, PluginProcessQueryManager, PluginProcessQueryResult,
+    PluginToolOperationResult,
+};
+use std::collections::HashMap;
 use tauri::State;
 
 #[tauri::command]
@@ -20,4 +24,43 @@ pub(crate) async fn execute_plugin_process_query(
     })
     .await
     .map_err(|error| format!("process query worker could not complete: {error}"))
+}
+
+#[tauri::command]
+pub(crate) async fn execute_plugin_tool_operation(
+    workspace_root: String,
+    plugin_id: String,
+    request_id: String,
+    operation_id: String,
+    parameters: HashMap<String, String>,
+    window: tauri::WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
+    queries: State<'_, PluginProcessQueryManager>,
+) -> Result<PluginToolOperationResult, String> {
+    let root = active
+        .resolve(window.label(), &workspace_root)
+        .map_err(|error| error.to_string())?;
+    let owner = window.label().to_string();
+    let manager = queries.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.execute_tool_operation(
+            &owner,
+            &root,
+            &plugin_id,
+            &request_id,
+            &operation_id,
+            &parameters,
+        )
+    })
+    .await
+    .map_err(|error| format!("plugin tool-operation worker could not complete: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn cancel_plugin_tool_operation(
+    request_id: String,
+    window: tauri::WebviewWindow,
+    queries: State<'_, PluginProcessQueryManager>,
+) {
+    queries.cancel_request(window.label(), &request_id);
 }

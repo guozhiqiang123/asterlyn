@@ -15,6 +15,7 @@ import { demoSystemFileClipboardBridge } from "./demo-system-file-clipboard-brid
 import { demoTaskArtifactBridge } from "./demo-task-artifact-bridge.ts";
 import { demoPluginTaskCacheBridge } from "./demo-plugin-task-cache-bridge.ts";
 import { demoPluginProcessQueryBridge } from "./demo-plugin-process-query-bridge.ts";
+import { demoPluginToolOperationBridge } from "./demo-plugin-tool-operation-bridge.ts";
 import { demoCreateStash, demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
 import {
   demoCommitDetails,
@@ -152,6 +153,7 @@ const demoBridge: DesktopBridge = {
   ...demoTaskArtifactBridge,
   ...demoPluginTaskCacheBridge,
   ...demoPluginProcessQueryBridge,
+  ...demoPluginToolOperationBridge,
   ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
   ...createDemoRemoteOperationBridge(cancelledDemoRemoteOperations, demoDelay, completeDemoMutation),
