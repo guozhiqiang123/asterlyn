@@ -119,7 +119,6 @@ export class TerminalPanel {
     this.installWorkspace(session.workspaceRoot);
     this.autoStartShell = false;
     this.taskSession = { descriptor: session, status: "starting", error: null, outputTruncated: false, outputEndedWithCarriageReturn: false };
-    this.view.reset();
     this.view.setInteractionMode("task-running");
     this.view.write(new TextEncoder().encode(taskTerminalCommandLine(session)));
     void this.controller.close().catch((error) => this.feedback.error(error));
@@ -157,11 +156,13 @@ export class TerminalPanel {
     if (becameTruncated) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(this.taskCopy.outputTruncated)}]\r\n`));
     if (isTerminalTaskTerminalStatus(status)) {
       this.taskSession = null;
-      this.autoStartShell = false;
-      this.view.reset();
+      this.autoStartShell = true;
+      this.view.write(new TextEncoder().encode("\r\n"));
     }
     this.view.setInteractionMode(taskTerminalInteractionMode(status));
     this.renderHeader();
+    const dimensions = this.view.dimensions();
+    if (dimensions) this.startShellIfRequested(dimensions.cols, dimensions.rows);
     const kind = status === "succeeded" ? "success" : isActiveTaskTerminalStatus(status) ? "busy" : status === "cancelled" ? "normal" : "warning";
     this.feedback.status(summary, kind);
   }
@@ -319,7 +320,7 @@ export function shouldAutoStartShell(hasTaskSession: boolean, state: TerminalSta
 
 export function taskTerminalCommandLine(session: TaskTerminalSessionDescriptor): string {
   const parts = [session.executablePath, ...session.args].map((value) => JSON.stringify(value));
-  return `\x1b[90m# ${sanitizeTerminalText(session.label)}\r\n> ${parts.join(" ")}\x1b[0m\r\n\r\n`;
+  return `\r\n\x1b[90m# ${sanitizeTerminalText(session.label)}\r\n> ${parts.join(" ")}\x1b[0m\r\n\r\n`;
 }
 
 function terminalSummary(state: TerminalState, copy: TerminalCopy): string {

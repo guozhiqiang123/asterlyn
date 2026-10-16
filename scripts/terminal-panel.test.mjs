@@ -142,7 +142,7 @@ test("clearing terminal content does not re-arm automatic shell startup", () => 
   assert.equal(view.ready, true);
 });
 
-test("a completed task releases Terminal ownership and restores the idle header", () => {
+test("a completed task retains its transcript and hands the Terminal back to a real shell", async () => {
   const header = {
     dataset: {}, innerHTML: "",
     classList: { toggle() {} },
@@ -151,9 +151,13 @@ test("a completed task releases Terminal ownership and restores the idle header"
   const root = {
     querySelector(selector) { return selector === "#terminal-header-actions" ? header : null; },
   };
+  const starts = [];
   const bridge = {
     async subscribeTerminal() { return () => undefined; },
-    async startTerminal() { throw new Error("not expected"); },
+    async startTerminal(workspaceRoot, cols, rows) {
+      starts.push({ workspaceRoot, cols, rows });
+      return { protocolVersion: 1, sessionId: "shell-1", shell: "zsh", cwd: workspaceRoot };
+    },
     async writeTerminal() {}, async resizeTerminal() {}, async closeTerminal() { return true; },
   };
   const panel = new TerminalPanel(root, bridge, EN_US.terminal, { status() {}, error() {} });
@@ -164,14 +168,60 @@ test("a completed task releases Terminal ownership and restores the idle header"
   });
   assert.equal(panel.revealTask("review-1"), true);
   assert.equal(panel.autoStartShell, false);
+  panel.appendTask("review-1", {
+    stream: "stdout",
+    dataBase64: Buffer.from("BUILD SUCCESSFUL\n", "utf8").toString("base64"),
+  });
 
   panel.updateTask("review-1", "succeeded", null, false);
 
   assert.equal(panel.revealTask("review-1"), false);
-  assert.equal(panel.autoStartShell, false);
+  assert.equal(panel.autoStartShell, true);
   assert.match(header.innerHTML, /No active session/u);
   assert.match(header.innerHTML, /data-terminal-action="restart"/u);
+  const retained = panel.view.pendingWrites.drain();
+  const transcript = retained.chunks.map((chunk) => new TextDecoder().decode(chunk)).join("");
+  assert.match(transcript, /assembleDebug/u);
+  assert.match(transcript, /BUILD SUCCESSFUL\r\n/u);
+
+  panel.startShellIfRequested(120, 36);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(starts, [{ workspaceRoot: "/repo", cols: 120, rows: 36 }]);
+  assert.equal(panel.autoStartShell, false);
+  assert.equal(panel.controller.state.status, "running");
+  assert.match(header.innerHTML, />zsh</u);
   panel.dispose();
+});
+
+test("every terminal task result retains output and arms the same shell handoff", () => {
+  for (const status of ["succeeded", "failed", "cancelled", "crashed"]) {
+    const bridge = {
+      async subscribeTerminal() { return () => undefined; },
+      async startTerminal() { throw new Error("lazy handoff should wait for terminal dimensions"); },
+      async writeTerminal() {}, async resizeTerminal() {}, async closeTerminal() { return true; },
+    };
+    const panel = new TerminalPanel({ querySelector() { return null; } }, bridge, EN_US.terminal, {
+      status() {}, error() {},
+    });
+    panel.beginTask({
+      sessionId: `review-${status}`, workspaceRoot: "/repo", taskKey: "android.gradle:assembleDebug",
+      label: "assembleDebug", executablePath: "/repo/gradlew", args: ["assembleDebug"],
+      workingDirectory: "/repo", cancel() {},
+    });
+    panel.appendTask(`review-${status}`, {
+      stream: "stderr",
+      dataBase64: Buffer.from(`terminal-${status}\n`, "utf8").toString("base64"),
+    });
+
+    panel.updateTask(`review-${status}`, status, status === "failed" ? "failed" : null, false);
+
+    const pending = panel.view.pendingWrites.drain();
+    const transcript = pending.chunks.map((chunk) => new TextDecoder().decode(chunk)).join("");
+    assert.match(transcript, new RegExp(`terminal-${status}\\r\\n`, "u"));
+    assert.equal(panel.autoStartShell, true);
+    panel.dispose();
+  }
 });
 
 test("reviewed task command summary is display-only and escapes terminal controls", () => {
