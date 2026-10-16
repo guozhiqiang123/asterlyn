@@ -40,6 +40,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0027-host-notification-center-and-plugin-notifications.md`](architecture/decisions/0027-host-notification-center-and-plugin-notifications.md) — bounded host notification lifecycle, plugin localization-key capability, and authoritative task-failure feedback.
 - [`architecture/decisions/0028-workspace-matched-plugin-surfaces.md`](architecture/decisions/0028-workspace-matched-plugin-surfaces.md) — bounded plugin workspace matching and host-owned contribution-backed activity visibility.
 - [`architecture/decisions/0029-supervised-terminal-workspace.md`](architecture/decisions/0029-supervised-terminal-workspace.md) — bounded multi-PTY ownership, host Terminal tabs, independent task histories, and complete lifecycle cleanup.
+- [`architecture/decisions/0030-plugin-run-targets-and-android-workbench.md`](architecture/decisions/0030-plugin-run-targets-and-android-workbench.md) — generic plugin run/target/session contracts, bounded external-tool queries, and the host-rendered Android workbench.
 
 ## Delivery
 
@@ -50,6 +51,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/host-notification-and-plugin-feedback-plan.md`](engineering/host-notification-and-plugin-feedback-plan.md) — staged host notification extraction, optional plugin contract, task-result feedback, and local acceptance plan.
 - [`engineering/workspace-matched-plugin-surfaces-plan.md`](engineering/workspace-matched-plugin-surfaces-plan.md) — staged root-wrapper Gradle matching, provider-derived Tasks visibility, lifecycle tests, and local acceptance.
 - [`engineering/multi-session-terminal-plan.md`](engineering/multi-session-terminal-plan.md) — native multi-session kernel, host tab workspace, Shell/task tabs, resource gates, and local acceptance.
+- [`engineering/android-workbench-and-device-discovery-plan.md`](engineering/android-workbench-and-device-discovery-plan.md) — phased SDK, bounded ADB discovery, Android workbench, run configuration, build/install/launch, and acceptance plan.
 - [`engineering/empty-workspace-startup-plan.md`](engineering/empty-workspace-startup-plan.md) — first-launch cancellation, disabled project tools, and the actionable Welcome state.
 - [`engineering/foundation-hardening.md`](engineering/foundation-hardening.md) — post-CM4 feature freeze, executable boundary plan, migration sequence, and acceptance gates.
 - [`engineering/2026-09-29-audit-remediation-plan.md`](engineering/2026-09-29-audit-remediation-plan.md) — ordered credential, workspace-recovery, terminal-flow-control, lifecycle, and ownership hardening plan.
