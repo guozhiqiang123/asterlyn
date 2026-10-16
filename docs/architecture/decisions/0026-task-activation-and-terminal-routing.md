@@ -4,6 +4,10 @@ Date: 2026-10-15
 
 Status: accepted
 
+The task-replaces-shell presentation described below is superseded by
+[ADR-0029](0029-supervised-terminal-workspace.md): reviewed tasks now target independent host-owned
+task tabs while exact native execution remains unchanged.
+
 ## Context
 
 The Tasks surface currently treats a primary-row click as both selection and execution. This makes

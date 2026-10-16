@@ -71,6 +71,11 @@ Add multiple named tabs, new/close/reopen actions, terminal search, shell select
 font settings, working-directory display, and explicit copy/paste commands. Each window receives a
 bounded session count and total output budget before this phase can close.
 
+The multi-session and task-tab subset is now governed by
+[ADR-0029](../architecture/decisions/0029-supervised-terminal-workspace.md) and delivered through the
+[multi-session Terminal plan](../engineering/multi-session-terminal-plan.md). Search, shell
+selection, reopen, scrollback/font settings, and explicit copy/paste remain deferred.
+
 ### T3 — Cross-platform hardening
 
 Exercise Windows ConPTY and macOS installed packages with interactive shells, full-screen programs,

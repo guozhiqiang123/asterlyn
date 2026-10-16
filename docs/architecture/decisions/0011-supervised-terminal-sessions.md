@@ -4,6 +4,10 @@
 
 Accepted on 2026-09-14 for the first Stage 3 terminal slice.
 
+The one-live-session-per-window restriction is superseded by
+[ADR-0029](0029-supervised-terminal-workspace.md); the remaining supervision, authorization,
+transport, and cleanup rules continue to apply per session.
+
 ## Context
 
 Asterlyn needs an integrated terminal without turning the presentation layer into a process owner,
