@@ -52,8 +52,9 @@ export const ZH_CN = {
   },
   stash: ZH_CN_STASH_COPY,
   terminal: {
-    notRunning: "没有活动会话",
-    starting: "正在启动终端…",
+    tabs: "终端标签页", newTab: "新建终端标签页", closeTab: (title) => `关闭${title}`, shellTab: (index) => `终端 ${index}`,
+    shellLimit: "单个窗口最多保留 8 个活动终端会话。", tabLimit: "单个窗口最多保留 12 个终端标签页，请先关闭一个标签页。",
+    notRunning: "没有活动会话", starting: "正在启动终端…",
     running: "终端正在运行",
     started: (shell) => `${shell} 终端已启动`,
     exited: (code) => `终端已退出（${code}）`,

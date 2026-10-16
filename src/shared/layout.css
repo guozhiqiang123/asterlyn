@@ -275,24 +275,142 @@
 }
 
 .terminal-tool-host {
+  display: grid;
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+  grid-template-rows: 30px minmax(0, 1fr);
+  background: var(--surface-inset);
+}
+
+.terminal-tabs-toolbar {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-chrome);
+}
+
+.terminal-tab-list {
+  display: flex;
+  overflow-x: auto;
+  min-width: 0;
+  align-items: stretch;
+  scrollbar-width: none;
+}
+
+.terminal-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-tab-item {
+  display: flex;
+  min-width: 84px;
+  max-width: 240px;
+  align-items: center;
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.terminal-tab-item.selected {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: inset 0 -2px var(--accent);
+}
+
+.terminal-tab-item.running .terminal-tab-button::after {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
+}
+
+.terminal-tab-button,
+.terminal-tab-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.terminal-tab-button {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px 0 9px;
+  font: inherit;
+  cursor: default;
+}
+
+.terminal-tab-button span {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab-close {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-right: 3px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.terminal-tab-item:hover .terminal-tab-close,
+.terminal-tab-item.selected .terminal-tab-close,
+.terminal-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.terminal-tab-close:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.terminal-new-tab {
+  flex: 0 0 auto;
+  margin: 3px 4px;
+}
+
+.terminal-tab-panels,
+.terminal-tab-panel {
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-tab-panel {
+  height: 100%;
   padding: 5px 0 0 6px;
   background: var(--surface-inset);
 }
 
-.terminal-tool-host .xterm {
+.terminal-tab-panel.hidden {
+  display: none;
+}
+
+.terminal-tab-panel .xterm {
   height: 100%;
 }
 
-.terminal-tool-host .xterm-viewport,
-.terminal-tool-host .xterm-screen {
+.terminal-tab-panel .xterm-viewport,
+.terminal-tab-panel .xterm-screen {
   border-radius: 0;
 }
 
-.terminal-tool-host.terminal-session-idle .xterm-cursor-layer,
-.terminal-tool-host.terminal-session-idle .xterm-cursor {
+.terminal-tab-panel.terminal-session-idle .xterm-cursor-layer,
+.terminal-tab-panel.terminal-session-idle .xterm-cursor {
   display: none;
 }
 

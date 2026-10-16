@@ -1,18 +1,32 @@
-import type { TerminalCopy } from "../../localization/catalog.ts";
-import { EN_US_TASK_EXECUTION_COPY, ZH_CN_TASK_EXECUTION_COPY, type TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
-import type { TerminalBridge } from "../../protocol/terminal.ts";
 import type { TerminalCommandAction } from "../../application/commands/terminal-command-ids.ts";
 import {
   isActiveTaskTerminalStatus,
-  isTerminalTaskTerminalStatus,
   type TaskTerminalOutputFrame,
   type TaskTerminalSessionDescriptor,
   type TaskTerminalSessionPort,
   type TaskTerminalSessionStatus,
 } from "../../application/tasks/task-terminal-session.ts";
 import { icon } from "../../icons.ts";
-import { TerminalController, type TerminalState } from "./terminal-controller.ts";
-import { TerminalView, type TerminalInteractionMode } from "./terminal-view.ts";
+import type { TerminalCopy } from "../../localization/catalog.ts";
+import type { TaskExecutionCopy } from "../../localization/task-execution-copy.ts";
+import type { TerminalBridge } from "../../protocol/terminal.ts";
+import { TerminalEventRouter } from "./terminal-event-router.ts";
+import {
+  normalizeTaskTerminalOutput,
+  renderTaskTerminalHeader,
+  renderTerminalHeader,
+  shouldAutoStartShell,
+  taskTerminalActionAvailable,
+  taskTerminalCommandLine,
+  taskTerminalInteractionMode,
+  taskTerminalSummary,
+  terminalActionAvailable,
+  terminalInteractionMode,
+  terminalTaskCopy,
+} from "./terminal-presentation.ts";
+import { TerminalShellTab } from "./terminal-shell-tab.ts";
+import { TerminalTaskTab } from "./terminal-task-tab.ts";
+import { TerminalTabs, type TerminalTabRecord } from "./terminal-tabs.ts";
 
 interface TerminalPanelFeedback {
   readonly status: (message: string, kind: "normal" | "busy" | "warning" | "success") => void;
@@ -21,18 +35,21 @@ interface TerminalPanelFeedback {
   readonly presentationChanged?: () => void;
 }
 
+type TerminalTabResource = TerminalShellTab | TerminalTaskTab;
+
+/** Coordinates bounded terminal tabs while each tab owns its own controller/view lifecycle. */
 export class TerminalPanel {
   private readonly root: HTMLElement;
+  private readonly bridge: TerminalBridge;
   private readonly feedback: TerminalPanelFeedback;
-  private readonly controller: TerminalController;
-  private readonly view = new TerminalView();
-  private readonly releaseState: () => void;
-  private readonly releaseOutput: () => void;
+  private readonly router: TerminalEventRouter;
+  private readonly tabs = new TerminalTabs();
+  private readonly resources = new Map<string, TerminalTabResource>();
   private copy: TerminalCopy;
   private taskCopy: TaskExecutionCopy;
   private visible = false;
-  private taskSession: TaskTerminalPresentation | null = null;
-  private autoStartShell = false;
+  private workspaceRoot: string | null = null;
+  private shellSequence = 0;
 
   constructor(
     root: HTMLElement,
@@ -42,103 +59,81 @@ export class TerminalPanel {
     locale: "en-US" | "zh-CN" = "en-US",
   ) {
     this.root = root;
+    this.bridge = bridge;
     this.feedback = feedback;
     this.copy = copy;
     this.taskCopy = terminalTaskCopy(locale);
-    this.controller = new TerminalController(bridge);
-    this.releaseState = this.controller.subscribe((change) => {
-      if (!this.taskSession) this.view.setInteractionMode(terminalInteractionMode(change.state));
-      this.renderHeader();
-      if (change.reason === "starting") this.feedback.status(this.copy.starting, "busy");
-      if (change.reason === "started" && change.state.shell) {
-        this.feedback.status(this.copy.started(change.state.shell), "success");
-      }
-      if (change.reason === "exited" && change.state.exitCode !== null) {
-        this.feedback.status(this.copy.exited(change.state.exitCode), "normal");
-      }
-      if (change.reason === "error" && change.state.error) {
-        this.feedback.error(new Error(change.state.error));
-      }
-    });
-    this.releaseOutput = this.controller.subscribeOutput((frame) => {
-      if (this.taskSession) return;
-      if (frame.kind === "output") this.view.write(frame.bytes);
-      else this.view.write(new TextEncoder().encode(this.copy.outputTruncated(frame.omittedBytes)));
-    });
+    this.router = new TerminalEventRouter(bridge);
   }
 
   installWorkspace(root: string): void {
-    const changed = this.controller.state.root !== root;
-    if (changed && this.taskSession?.descriptor.workspaceRoot !== root) {
-      this.taskSession = null;
-      this.view.setInteractionMode("idle");
-    }
-    this.controller.installWorkspace(root);
-    if (changed) {
-      this.view.reset();
-      this.view.setInteractionMode(this.taskSession ? "task-running" : terminalInteractionMode(this.controller.state));
-    }
+    if (this.workspaceRoot === root) return;
+    this.workspaceRoot = root;
+    this.shellSequence = 0;
+    this.disposeAllTabs();
+    this.clearPanels();
+    this.renderHeader();
   }
 
   activate(root: string): void {
     this.visible = true;
     this.installWorkspace(root);
-    this.autoStartShell = shouldAutoStartShell(this.taskSession !== null, this.controller.state);
-    const host = this.root.querySelector<HTMLElement>("#terminal-tool-host");
+    const host = this.host();
     if (!host) return;
+    this.ensureScaffold(host);
     this.bindHeader();
-    this.renderHeader();
-    this.view.setInteractionMode(this.taskSession ? "task-running" : terminalInteractionMode(this.controller.state));
-    this.view.mount(host, {
-      ready: (cols, rows) => this.startShellIfRequested(cols, rows),
-      input: (data) => { if (!this.taskSession) this.controller.sendInput(data); },
-      resize: (cols, rows) => { if (!this.taskSession) this.controller.resize(cols, rows); },
-      failure: (error) => this.controller.reportViewFailure(error),
-      keyboard: this.feedback.keyboard,
-    });
-    const dimensions = this.view.dimensions();
-    if (dimensions) this.startShellIfRequested(dimensions.cols, dimensions.rows);
-    this.view.reveal();
+    this.bindTabs(host);
+    if (this.tabs.tabs.length === 0) this.createShellTab();
+    this.renderTabs();
+    this.syncPanels(true);
   }
 
   hide(): void {
     this.visible = false;
+    this.renderHeader();
   }
 
   setCopy(copy: TerminalCopy, locale: "en-US" | "zh-CN" = "en-US"): void {
     this.copy = copy;
     this.taskCopy = terminalTaskCopy(locale);
-    if (this.visible) this.renderHeader();
+    let shellIndex = 0;
+    for (const tab of this.tabs.tabs) {
+      const resource = this.resources.get(tab.id);
+      if (resource instanceof TerminalShellTab) {
+        resource.setCopy(copy);
+        this.tabs.update(tab.id, { title: copy.shellTab(++shellIndex) });
+      }
+    }
+    this.renderTabs();
+    this.renderHeader();
   }
 
   refreshAppearance(): void {
-    this.view.refreshAppearance();
+    for (const resource of this.resources.values()) resource.refreshAppearance();
   }
 
   beginTask(session: TaskTerminalSessionDescriptor): void {
     this.installWorkspace(session.workspaceRoot);
-    this.autoStartShell = false;
-    this.taskSession = { descriptor: session, status: "starting", error: null, outputTruncated: false, outputEndedWithCarriageReturn: false };
-    this.view.setInteractionMode("task-running");
-    this.view.write(new TextEncoder().encode(taskTerminalCommandLine(session)));
-    void this.controller.close().catch((error) => this.feedback.error(error));
-    this.renderHeader();
-    this.feedback.status(taskTerminalSummary(this.taskSession, this.taskCopy), "busy");
+    const result = this.tabs.createTask(session.sessionId, session.label);
+    if (!result.ok) {
+      this.feedback.error(new Error(this.copy.tabLimit));
+      return;
+    }
+    if (result.evictedId) this.removeResource(result.evictedId);
+    if (!this.resources.has(result.tab.id)) {
+      this.resources.set(result.tab.id, new TerminalTaskTab(session, {
+        error: (error) => this.feedback.error(error),
+        keyboard: this.feedback.keyboard,
+      }));
+    }
+    this.ensureVisibleScaffold();
+    this.renderTabs();
+    this.syncPanels(true);
+    this.feedback.status(this.taskCopy.starting, "busy");
   }
 
   appendTask(sessionId: string, frame: TaskTerminalOutputFrame): void {
-    const current = this.taskSession;
-    if (current?.descriptor.sessionId !== sessionId) return;
-    try {
-      const normalized = normalizeTaskTerminalOutput(
-        decodeBase64(frame.dataBase64),
-        current.outputEndedWithCarriageReturn,
-      );
-      this.taskSession = { ...current, outputEndedWithCarriageReturn: normalized.outputEndedWithCarriageReturn };
-      this.view.write(normalized.bytes);
-    } catch (error) {
-      this.feedback.error(error);
-    }
+    this.findTask(sessionId)?.resource.append(frame);
   }
 
   updateTask(
@@ -147,65 +142,160 @@ export class TerminalPanel {
     error: string | null,
     outputTruncated: boolean,
   ): void {
-    const current = this.taskSession;
-    if (!current || current.descriptor.sessionId !== sessionId) return;
-    const becameTruncated = outputTruncated && !current.outputTruncated;
-    const next = { ...current, status, error, outputTruncated };
-    const summary = taskTerminalSummary(next, this.taskCopy);
-    this.taskSession = next;
-    if (becameTruncated) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(this.taskCopy.outputTruncated)}]\r\n`));
-    if (isTerminalTaskTerminalStatus(status)) {
-      this.taskSession = null;
-      this.autoStartShell = true;
-      this.view.write(new TextEncoder().encode("\r\n"));
-    }
-    this.view.setInteractionMode(taskTerminalInteractionMode(status));
+    const match = this.findTask(sessionId);
+    if (!match) return;
+    match.resource.update(status, error, outputTruncated, this.taskCopy.outputTruncated);
+    this.tabs.update(match.tab.id, { taskTerminal: match.resource.terminal });
+    this.renderTabs();
     this.renderHeader();
-    const dimensions = this.view.dimensions();
-    if (dimensions) this.startShellIfRequested(dimensions.cols, dimensions.rows);
-    const kind = status === "succeeded" ? "success" : isActiveTaskTerminalStatus(status) ? "busy" : status === "cancelled" ? "normal" : "warning";
-    this.feedback.status(summary, kind);
+    const presentation = {
+      descriptor: match.resource.descriptor,
+      status,
+      error,
+      outputTruncated,
+      outputEndedWithCarriageReturn: false,
+    };
+    const kind = status === "succeeded"
+      ? "success"
+      : isActiveTaskTerminalStatus(status)
+        ? "busy"
+        : status === "cancelled"
+          ? "normal"
+          : "warning";
+    this.feedback.status(taskTerminalSummary(presentation, this.taskCopy), kind);
   }
 
   revealTask(sessionId: string): boolean {
-    if (this.taskSession?.descriptor.sessionId !== sessionId) return false;
-    this.view.reveal();
+    const match = this.findTask(sessionId);
+    if (!match) return false;
+    this.selectTab(match.tab.id, true);
     return true;
   }
 
   commandAvailable(action: TerminalCommandAction): boolean {
-    return this.visible && (this.taskSession
-      ? taskTerminalActionAvailable(this.taskSession.status, action)
-      : terminalActionAvailable(this.controller.state, action));
+    if (!this.visible) return false;
+    return this.activeResource()?.commandAvailable(action) ?? false;
   }
 
   async executeCommand(action: TerminalCommandAction): Promise<void> {
-    if (!this.commandAvailable(action)) return;
-    const dimensions = this.view.dimensions() ?? { cols: 80, rows: 24 };
-    if (action === "restart") {
-      this.taskSession = null;
-      this.autoStartShell = false;
-      this.view.setInteractionMode("idle");
-      this.view.reset();
-      await this.controller.restart(dimensions.cols, dimensions.rows);
-    } else if (action === "clear") {
-      this.view.clear();
+    const resource = this.activeResource();
+    if (!resource || !resource.commandAvailable(action)) return;
+    await resource.executeCommand(action);
+    if (action === "clear" && resource instanceof TerminalTaskTab) {
       this.feedback.status(this.copy.cleared, "success");
-    } else {
-      if (this.taskSession && isActiveTaskTerminalStatus(this.taskSession.status)) {
-        await this.taskSession.descriptor.cancel();
-        return;
-      }
-      await this.controller.close();
-      this.feedback.status(this.copy.closed, "success");
     }
+    this.renderHeader();
   }
 
   dispose(): void {
-    this.releaseState();
-    this.releaseOutput();
-    this.controller.dispose();
-    this.view.dispose();
+    this.visible = false;
+    this.disposeAllTabs();
+    this.router.dispose();
+    this.clearPanels();
+  }
+
+  private createShellTab(): void {
+    const root = this.workspaceRoot;
+    if (!root) return;
+    const result = this.tabs.createShell(this.copy.shellTab(++this.shellSequence));
+    if (!result.ok) {
+      this.shellSequence -= 1;
+      this.feedback.error(new Error(result.reason === "shell-limit" ? this.copy.shellLimit : this.copy.tabLimit));
+      return;
+    }
+    this.resources.set(result.tab.id, new TerminalShellTab(
+      this.routedBridge(),
+      root,
+      this.copy,
+      {
+        status: (message, kind) => this.feedback.status(message, kind),
+        error: (error) => this.feedback.error(error),
+        keyboard: this.feedback.keyboard,
+        changed: () => {
+          if (this.tabs.selectedId === result.tab.id) this.renderHeader();
+        },
+      },
+    ));
+    this.renderTabs();
+    this.syncPanels(true);
+  }
+
+  private async closeTab(id: string): Promise<void> {
+    const resource = this.resources.get(id);
+    if (!resource) return;
+    if (resource instanceof TerminalTaskTab) {
+      if (!await resource.requestTabClose()) return;
+    } else {
+      await resource.closeTab();
+    }
+    this.resources.delete(id);
+    this.panelElement(id)?.remove();
+    this.tabs.close(id);
+    this.renderTabs();
+    this.syncPanels(true);
+  }
+
+  private selectTab(id: string, focus: boolean): void {
+    if (!this.tabs.select(id)) return;
+    this.renderTabs();
+    this.syncPanels(focus);
+  }
+
+  private syncPanels(focus: boolean): void {
+    const panels = this.panels();
+    if (!panels) {
+      this.renderHeader();
+      return;
+    }
+    for (const tab of this.tabs.tabs) {
+      const resource = this.resources.get(tab.id);
+      if (!resource) continue;
+      let panel = this.panelElement(tab.id);
+      if (!panel) {
+        panel = document.createElement("section");
+        panel.id = panelId(tab.id);
+        panel.className = "terminal-tab-panel";
+        panel.setAttribute("role", "tabpanel");
+        panel.setAttribute("aria-labelledby", tabId(tab.id));
+        panels.append(panel);
+      }
+      const selected = tab.id === this.tabs.selectedId;
+      panel.classList.toggle("hidden", !selected);
+      panel.hidden = !selected;
+      if (selected) resource.mount(panel, focus);
+    }
+    this.renderHeader();
+  }
+
+  private renderTabs(): void {
+    const list = this.host()?.querySelector<HTMLElement>(".terminal-tab-list");
+    const newButton = this.host()?.querySelector<HTMLButtonElement>("[data-terminal-new]");
+    if (!list || !newButton) return;
+    list.setAttribute("aria-label", this.copy.tabs);
+    newButton.setAttribute("aria-label", this.copy.newTab);
+    newButton.setAttribute("title", this.copy.newTab);
+    list.innerHTML = this.tabs.tabs.map((tab) => {
+      const selected = tab.id === this.tabs.selectedId;
+      const taskState = tab.kind === "task" && !tab.taskTerminal ? " running" : "";
+      return `<div class="terminal-tab-item${selected ? " selected" : ""}${taskState}" data-terminal-tab-item="${escapeAttribute(tab.id)}">
+        <button class="terminal-tab-button" id="${escapeAttribute(tabId(tab.id))}" type="button" role="tab" data-terminal-tab="${escapeAttribute(tab.id)}" aria-selected="${selected}" aria-controls="${escapeAttribute(panelId(tab.id))}" tabindex="${selected ? "0" : "-1"}" title="${escapeAttribute(tab.title)}">${icon(tab.kind === "shell" ? "terminal" : "list", 13)}<span>${escapeHtml(tab.title)}</span></button>
+        <button class="terminal-tab-close" type="button" data-terminal-tab-close="${escapeAttribute(tab.id)}" aria-label="${escapeAttribute(this.copy.closeTab(tab.title))}" title="${escapeAttribute(this.copy.closeTab(tab.title))}">${icon("close", 11)}</button>
+      </div>`;
+    }).join("");
+    this.feedback.presentationChanged?.();
+  }
+
+  private renderHeader(): void {
+    const actions = this.root.querySelector<HTMLElement>("#terminal-header-actions");
+    if (!actions) return;
+    actions.classList.toggle("hidden", !this.visible);
+    const resource = this.activeResource();
+    actions.innerHTML = resource instanceof TerminalTaskTab
+      ? resource.header(this.copy, this.taskCopy)
+      : resource instanceof TerminalShellTab
+        ? resource.header()
+        : "";
+    this.feedback.presentationChanged?.();
   }
 
   private bindHeader(): void {
@@ -220,59 +310,108 @@ export class TerminalPanel {
     });
   }
 
-  private renderHeader(): void {
-    const actions = this.root.querySelector<HTMLElement>("#terminal-header-actions");
-    if (!actions) return;
-    actions.classList.toggle("hidden", !this.visible);
-    actions.innerHTML = this.taskSession
-      ? renderTaskTerminalHeader(this.taskSession, this.copy, this.taskCopy)
-      : renderTerminalHeader(this.controller.state, this.copy);
-    this.feedback.presentationChanged?.();
+  private bindTabs(host: HTMLElement): void {
+    if (host.dataset.terminalTabsBound === "true") return;
+    host.dataset.terminalTabsBound = "true";
+    host.addEventListener("click", (event) => {
+      const target = event.target as Element | null;
+      const close = target?.closest<HTMLButtonElement>("[data-terminal-tab-close]");
+      if (close && host.contains(close)) {
+        void this.closeTab(close.dataset.terminalTabClose ?? "");
+        return;
+      }
+      const tab = target?.closest<HTMLButtonElement>("[data-terminal-tab]");
+      if (tab && host.contains(tab)) this.selectTab(tab.dataset.terminalTab ?? "", true);
+      const create = target?.closest<HTMLButtonElement>("[data-terminal-new]");
+      if (create && host.contains(create)) this.createShellTab();
+    });
+    host.addEventListener("keydown", (event) => this.handleTabKey(event));
   }
 
-  private startShellIfRequested(cols: number, rows: number): void {
-    if (!this.autoStartShell || this.taskSession) return;
-    this.autoStartShell = false;
-    void this.controller.start(cols, rows);
+  private handleTabKey(event: KeyboardEvent): void {
+    const target = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-terminal-tab]");
+    if (!target) return;
+    const index = this.tabs.tabs.findIndex((tab) => tab.id === target.dataset.terminalTab);
+    if (index < 0) return;
+    if (event.key === "Delete") {
+      event.preventDefault();
+      void this.closeTab(this.tabs.tabs[index]?.id ?? "");
+      return;
+    }
+    let next = index;
+    if (event.key === "ArrowRight") next = (index + 1) % this.tabs.tabs.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + this.tabs.tabs.length) % this.tabs.tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = this.tabs.tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const id = this.tabs.tabs[next]?.id;
+    if (id) this.selectTab(id, true);
   }
-}
 
-interface TaskTerminalPresentation {
-  readonly descriptor: TaskTerminalSessionDescriptor;
-  readonly status: TaskTerminalSessionStatus;
-  readonly error: string | null;
-  readonly outputTruncated: boolean;
-  readonly outputEndedWithCarriageReturn: boolean;
-}
+  private ensureVisibleScaffold(): void {
+    const host = this.host();
+    if (!host) return;
+    this.ensureScaffold(host);
+    this.bindTabs(host);
+  }
 
-export interface NormalizedTaskTerminalOutput {
-  readonly bytes: Uint8Array;
-  readonly outputEndedWithCarriageReturn: boolean;
-}
+  private ensureScaffold(host: HTMLElement): void {
+    if (host.querySelector(".terminal-tabs-toolbar") && host.querySelector(".terminal-tab-panels")) return;
+    host.innerHTML = `<div class="terminal-tabs-toolbar"><div class="terminal-tab-list" role="tablist" aria-label="${escapeAttribute(this.copy.tabs)}"></div><button class="compact-icon-button terminal-new-tab" type="button" data-terminal-new aria-label="${escapeAttribute(this.copy.newTab)}" title="${escapeAttribute(this.copy.newTab)}">${icon("plus", 14)}</button></div><div class="terminal-tab-panels"></div>`;
+  }
 
-/** Converts pipe-style LF newlines into terminal CRLF without breaking split CRLF frames. */
-export function normalizeTaskTerminalOutput(
-  bytes: Uint8Array,
-  outputEndedWithCarriageReturn = false,
-): NormalizedTaskTerminalOutput {
-  let previousWasCarriageReturn = outputEndedWithCarriageReturn;
-  let insertedCarriageReturns = 0;
-  for (const byte of bytes) {
-    if (byte === 0x0a && !previousWasCarriageReturn) insertedCarriageReturns += 1;
-    previousWasCarriageReturn = byte === 0x0d;
+  private routedBridge(): TerminalBridge {
+    return {
+      native: this.bridge.native,
+      startTerminal: (workspaceRoot, cols, rows) => this.bridge.startTerminal(workspaceRoot, cols, rows),
+      writeTerminal: (sessionId, dataBase64) => this.bridge.writeTerminal(sessionId, dataBase64),
+      resizeTerminal: (sessionId, cols, rows) => this.bridge.resizeTerminal(sessionId, cols, rows),
+      closeTerminal: (sessionId) => this.bridge.closeTerminal(sessionId),
+      subscribeTerminal: (listener) => this.router.subscribeTerminal(listener),
+    };
   }
-  if (insertedCarriageReturns === 0) {
-    return { bytes, outputEndedWithCarriageReturn: previousWasCarriageReturn };
+
+  private findTask(sessionId: string): { tab: TerminalTabRecord; resource: TerminalTaskTab } | null {
+    const tab = this.tabs.tabs.find((candidate) => candidate.taskSessionId === sessionId);
+    if (!tab) return null;
+    const resource = this.resources.get(tab.id);
+    return resource instanceof TerminalTaskTab ? { tab, resource } : null;
   }
-  const normalized = new Uint8Array(bytes.length + insertedCarriageReturns);
-  let offset = 0;
-  previousWasCarriageReturn = outputEndedWithCarriageReturn;
-  for (const byte of bytes) {
-    if (byte === 0x0a && !previousWasCarriageReturn) normalized[offset++] = 0x0d;
-    normalized[offset++] = byte;
-    previousWasCarriageReturn = byte === 0x0d;
+
+  private activeResource(): TerminalTabResource | null {
+    const id = this.tabs.selectedId;
+    return id ? this.resources.get(id) ?? null : null;
   }
-  return { bytes: normalized, outputEndedWithCarriageReturn: previousWasCarriageReturn };
+
+  private removeResource(id: string): void {
+    this.resources.get(id)?.dispose();
+    this.resources.delete(id);
+    this.panelElement(id)?.remove();
+  }
+
+  private disposeAllTabs(): void {
+    for (const resource of this.resources.values()) resource.dispose();
+    this.resources.clear();
+    this.tabs.clear();
+  }
+
+  private clearPanels(): void {
+    this.panels()?.replaceChildren();
+    this.renderTabs();
+  }
+
+  private host(): HTMLElement | null {
+    return this.root.querySelector<HTMLElement>("#terminal-tool-host");
+  }
+
+  private panels(): HTMLElement | null {
+    return this.host()?.querySelector<HTMLElement>(".terminal-tab-panels") ?? null;
+  }
+
+  private panelElement(id: string): HTMLElement | null {
+    return this.host()?.querySelector<HTMLElement>(`#${panelId(id)}`) ?? null;
+  }
 }
 
 export function taskTerminalPort(panel: TerminalPanel): TaskTerminalSessionPort {
@@ -284,86 +423,20 @@ export function taskTerminalPort(panel: TerminalPanel): TaskTerminalSessionPort 
   };
 }
 
-export function renderTerminalHeader(state: TerminalState, copy: TerminalCopy): string {
-  const summary = terminalSummary(state, copy);
-  return renderTerminalActions(summary, state.cwd ?? summary, state.status === "error", copy.close, copy, (action) => terminalActionAvailable(state, action));
-}
+export {
+  normalizeTaskTerminalOutput,
+  renderTaskTerminalHeader,
+  renderTerminalHeader,
+  shouldAutoStartShell,
+  taskTerminalActionAvailable,
+  taskTerminalCommandLine,
+  taskTerminalInteractionMode,
+  terminalActionAvailable,
+  terminalInteractionMode,
+};
 
-export function terminalActionAvailable(state: TerminalState, action: TerminalCommandAction): boolean {
-  if (action === "clear") return state.status !== "starting";
-  if (action === "close") return state.status === "running";
-  return state.status === "idle" || state.status === "exited" || state.status === "error";
-}
-
-export function renderTaskTerminalHeader(state: TaskTerminalPresentation, copy: TerminalCopy, taskCopy: TaskExecutionCopy = EN_US_TASK_EXECUTION_COPY): string {
-  const summary = taskTerminalSummary(state, taskCopy);
-  return renderTerminalActions(summary, state.descriptor.taskKey, state.status === "failed" || state.status === "crashed", taskCopy.cancel, copy, (action) => taskTerminalActionAvailable(state.status, action));
-}
-
-export function taskTerminalActionAvailable(status: TaskTerminalSessionStatus, action: TerminalCommandAction): boolean {
-  if (action === "clear") return true;
-  if (action === "close") return isActiveTaskTerminalStatus(status);
-  return isTerminalTaskTerminalStatus(status);
-}
-
-export function taskTerminalInteractionMode(status: TaskTerminalSessionStatus): TerminalInteractionMode {
-  return isTerminalTaskTerminalStatus(status) ? "idle" : "task-running";
-}
-
-export function terminalInteractionMode(state: TerminalState): TerminalInteractionMode {
-  return state.status === "starting" || state.status === "running" ? "interactive" : "idle";
-}
-
-export function shouldAutoStartShell(hasTaskSession: boolean, state: TerminalState): boolean {
-  return !hasTaskSession && state.status === "idle";
-}
-
-export function taskTerminalCommandLine(session: TaskTerminalSessionDescriptor): string {
-  const parts = [session.executablePath, ...session.args].map((value) => JSON.stringify(value));
-  return `\r\n\x1b[90m# ${sanitizeTerminalText(session.label)}\r\n> ${parts.join(" ")}\x1b[0m\r\n\r\n`;
-}
-
-function terminalSummary(state: TerminalState, copy: TerminalCopy): string {
-  if (state.status === "starting") return copy.starting;
-  if (state.status === "running") return state.shell ?? copy.running;
-  if (state.status === "exited" && state.exitCode !== null) return copy.exited(state.exitCode);
-  if (state.status === "error") return copy.failed;
-  return copy.notRunning;
-}
-
-function renderTerminalActions(
-  summary: string,
-  title: string,
-  error: boolean,
-  closeLabel: string,
-  copy: TerminalCopy,
-  available: (action: TerminalCommandAction) => boolean,
-): string {
-  const button = (action: TerminalCommandAction, label: string, glyph: "refresh" | "trash" | "stop", size: number) =>
-    `<button class="compact-icon-button" type="button" data-terminal-action="${action}" aria-label="${escapeAttribute(label)}" title="${escapeAttribute(label)}" ${available(action) ? "" : "disabled"}>${icon(glyph, size)}</button>`;
-  return `<span class="terminal-session-status ${error ? "error" : ""}" title="${escapeAttribute(title)}">${escapeHtml(summary)}</span>
-    ${button("restart", copy.newSession, "refresh", 15)}
-    ${button("clear", copy.clear, "trash", 15)}
-    ${button("close", closeLabel, "stop", 14)}`;
-}
-
-function taskTerminalSummary(state: TaskTerminalPresentation, copy: TaskExecutionCopy): string {
-  const summary = `${state.descriptor.label} — ${copy.status[state.status] ?? state.status}`;
-  return state.error ? `${summary} — ${sanitizeTerminalText(state.error)}` : summary;
-}
-
-function terminalTaskCopy(locale: "en-US" | "zh-CN"): TaskExecutionCopy {
-  return locale === "zh-CN" ? ZH_CN_TASK_EXECUTION_COPY : EN_US_TASK_EXECUTION_COPY;
-}
-
-function decodeBase64(value: string): Uint8Array {
-  const binary = atob(value);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function sanitizeTerminalText(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ").trim();
-}
+function tabId(id: string): string { return `${id}-button`; }
+function panelId(id: string): string { return `${id}-panel`; }
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
