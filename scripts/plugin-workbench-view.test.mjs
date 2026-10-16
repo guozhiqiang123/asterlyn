@@ -92,5 +92,82 @@ test("ready Android Run configurations use host controls and retain exact Gradle
   assert.match(html, /data-run-target-provider=/u);
   assert.match(html, /Pixel 10 — USB/u);
   assert.match(html, /offline-1[^>]*disabled/u);
-  assert.doesNotMatch(html, /<button/u);
+  assert.match(html, /class="primary-button plugin-run-button"[^>]*data-plugin-run-action/u);
+  assert.doesNotMatch(html, /data-plugin-run-action disabled/u);
+  assert.match(html, />Run<\/button>/u);
+});
+
+test("Android Run action is disabled until a device is explicitly selected", () => {
+  const html = renderPluginWorkbenchView("run", manifest.id, {
+    targetProviders: [{
+      qualifiedId: `${manifest.id}:android-devices`,
+      pluginId: manifest.id,
+      providerId: "android-devices",
+      snapshot: {
+        status: "ready",
+        selectedTargetId: null,
+        targets: [{ id: "phone-1", label: "Pixel 10", status: "online", selectable: true, metadata: {} }],
+      },
+    }],
+    runConfigurationProviders: [{
+      qualifiedId: `${manifest.id}:android-run-configurations`,
+      pluginId: manifest.id,
+      providerId: "android-run-configurations",
+      snapshot: {
+        status: "ready",
+        selectedConfigurationId: "android-run::app:installDebug",
+        configurations: [{
+          id: "android-run::app:installDebug",
+          label: "app · Debug",
+          status: "ready",
+          targetProviderId: "android-devices",
+          metadata: {},
+        }],
+      },
+    }],
+  }, entry, "en-US");
+
+  assert.match(html, /<option value="" selected disabled>Target device<\/option>/u);
+  assert.match(html, /data-plugin-run-action disabled/u);
+});
+
+test("active Android Run action becomes a localized Stop button", () => {
+  const html = renderPluginWorkbenchView("run", manifest.id, {
+    targetProviders: [{
+      qualifiedId: `${manifest.id}:android-devices`,
+      pluginId: manifest.id,
+      providerId: "android-devices",
+      snapshot: {
+        status: "ready",
+        selectedTargetId: "phone-1",
+        targets: [{ id: "phone-1", label: "Pixel 10", status: "online", selectable: true, metadata: {} }],
+      },
+    }],
+    runConfigurationProviders: [{
+      qualifiedId: `${manifest.id}:android-run-configurations`,
+      pluginId: manifest.id,
+      providerId: "android-run-configurations",
+      snapshot: {
+        status: "ready",
+        selectedConfigurationId: "android-run::app:installDebug",
+        configurations: [{
+          id: "android-run::app:installDebug",
+          label: "app · Debug",
+          status: "ready",
+          targetProviderId: "android-devices",
+          metadata: {},
+        }],
+      },
+    }],
+  }, entry, "zh-CN", {
+    requestId: "run-1",
+    pluginId: manifest.id,
+    label: "app · Debug",
+    status: "running",
+    phase: "building",
+    error: null,
+  });
+
+  assert.match(html, /data-plugin-run-action[^>]*>停止<\/button>/u);
+  assert.doesNotMatch(html, /data-plugin-run-action disabled/u);
 });

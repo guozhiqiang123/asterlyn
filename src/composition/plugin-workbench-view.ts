@@ -84,11 +84,20 @@ function renderRunView(
     ? targetProviders.find((candidate) => candidate.providerId === configuration.targetProviderId) ?? null
     : null;
   const configurationSelect = renderSelectControl(`<select data-run-configuration-provider="${attribute(provider.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.configuration.select"))}">${snapshot.configurations.map((candidate) => `<option value="${attribute(candidate.id)}" ${candidate.id === configuration.id ? "selected" : ""} ${candidate.status === "invalid" ? "disabled" : ""}>${html(candidate.label)}</option>`).join("")}</select>`);
-  const targetSelect = targets ? renderSelectControl(`<select data-run-target-provider="${attribute(targets.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.target.select"))}">${targets.snapshot.targets.map((target) => `<option value="${attribute(target.id)}" ${target.id === targets.snapshot.selectedTargetId ? "selected" : ""} ${target.status !== "online" || !target.selectable ? "disabled" : ""}>${html(target.label)}${target.detail ? ` — ${html(target.detail)}` : ""}</option>`).join("")}</select>`) : "";
+  const selectedTarget = targets?.snapshot.targets.find((target) => target.id === targets.snapshot.selectedTargetId);
+  const targetSelect = targets ? renderSelectControl(`<select data-run-target-provider="${attribute(targets.qualifiedId)}" aria-label="${attribute(message(entry, locale, "run.target.select"))}">${targets.snapshot.selectedTargetId ? "" : `<option value="" selected disabled>${html(message(entry, locale, "run.target.select"))}</option>`}${targets.snapshot.targets.map((target) => `<option value="${attribute(target.id)}" ${target.id === targets.snapshot.selectedTargetId ? "selected" : ""} ${target.status !== "online" || !target.selectable ? "disabled" : ""}>${html(target.label)}${target.detail ? ` — ${html(target.detail)}` : ""}</option>`).join("")}</select>`) : "";
+  const anyRunActive = runSession?.status === "running";
+  const running = anyRunActive && runSession.pluginId === entry.id;
+  const canRun = configuration.status === "ready"
+    && selectedTarget?.status === "online"
+    && selectedTarget.selectable
+    && !anyRunActive;
+  const actionLabel = message(entry, locale, running ? "run.action.stop" : "run.action.start");
+  const action = `<div class="plugin-run-actions"><button class="primary-button plugin-run-button" type="button" data-plugin-run-action ${running || canRun ? "" : "disabled"}>${html(actionLabel)}</button></div>`;
   const status = runSession?.pluginId === entry.id
     ? `<div class="plugin-run-status status-${attribute(runSession.status)}"><strong>${html(message(entry, locale, `run.session.${runSession.status}`))}</strong><span>${html(message(entry, locale, `run.phase.${runSession.phase}`))}</span>${runSession.error ? `<small>${html(runSession.error)}</small>` : ""}</div>`
     : "";
-  return `<section class="plugin-run-view"><div class="plugin-run-form"><label><span>${html(message(entry, locale, "run.configuration.select"))}</span>${configurationSelect}</label><label><span>${html(message(entry, locale, "run.target.select"))}</span>${targetSelect}</label></div><div class="plugin-run-summary"><strong>${html(labelKey ? message(entry, locale, labelKey) : configuration.label)}</strong>${configuration.detail ? `<span>${html(detailKey ? message(entry, locale, detailKey) : configuration.detail)}</span>` : ""}</div>${status}</section>`;
+  return `<section class="plugin-run-view"><div class="plugin-run-form"><label><span>${html(message(entry, locale, "run.configuration.select"))}</span>${configurationSelect}</label><label><span>${html(message(entry, locale, "run.target.select"))}</span>${targetSelect}</label></div><div class="plugin-run-summary"><strong>${html(labelKey ? message(entry, locale, labelKey) : configuration.label)}</strong>${configuration.detail ? `<span>${html(detailKey ? message(entry, locale, detailKey) : configuration.detail)}</span>` : ""}</div>${action}${status}</section>`;
 }
 
 function message(entry: PluginManagementEntry, locale: string, key: string): string {

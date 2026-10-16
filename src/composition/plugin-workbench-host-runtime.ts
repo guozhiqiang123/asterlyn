@@ -69,9 +69,8 @@ export class PluginWorkbenchHostRuntime {
     const tabs = this.root.querySelector<HTMLElement>("#plugin-workbench-tabs");
     const view = this.root.querySelector<HTMLElement>("#plugin-workbench-view");
     const tasks = this.root.querySelector<HTMLElement>("#tasks-view-host");
-    const runAction = this.root.querySelector<HTMLButtonElement>("#plugin-run-action");
     const refreshAction = this.root.querySelector<HTMLButtonElement>("#tasks-header-refresh");
-    if (!tabs || !view || !tasks || !runAction || !refreshAction) return;
+    if (!tabs || !view || !tasks || !refreshAction) return;
     this.abort?.abort();
     const abort = new AbortController();
     this.abort = abort;
@@ -82,7 +81,6 @@ export class PluginWorkbenchHostRuntime {
       tabs.classList.add("hidden");
       view.classList.add("hidden");
       tasks.classList.remove("hidden");
-      runAction.classList.add("hidden");
       return;
     }
     if (!tool.views.some((candidate) => candidate.id === this.activeView)) {
@@ -101,7 +99,6 @@ export class PluginWorkbenchHostRuntime {
     tasks.classList.toggle("hidden", !showTasks);
     view.classList.toggle("hidden", showTasks);
     refreshAction.classList.toggle("hidden", showRun);
-    runAction.classList.toggle("hidden", !showRun);
     const snapshot = this.contributions.snapshot();
     if (showTasks) {
       refreshAction.setAttribute("aria-label", this.copy().refresh);
@@ -115,40 +112,6 @@ export class PluginWorkbenchHostRuntime {
       refreshAction.title = refreshLabel;
       refreshAction.addEventListener("click", () => {
         if (provider) void this.contributions.refreshTargets(provider.qualifiedId).catch(this.reportError);
-      }, { signal: abort.signal });
-    }
-    if (showRun) {
-      const provider = snapshot.runConfigurationProviders.find((candidate) => candidate.pluginId === entry.id);
-      const providerSnapshot = provider?.snapshot;
-      const selected = providerSnapshot?.configurations.find(
-        (candidate) => candidate.id === providerSnapshot.selectedConfigurationId,
-      ) ?? providerSnapshot?.configurations[0];
-      const targets = selected?.targetProviderId
-        ? snapshot.targetProviders.find((candidate) => candidate.pluginId === entry.id && candidate.providerId === selected.targetProviderId)
-        : undefined;
-      const selectedTarget = targets?.snapshot.targets.find((candidate) => candidate.id === targets.snapshot.selectedTargetId);
-      const running = this.runSession()?.status === "running";
-      const runLabel = resolvePluginMessage(entry.localization, this.locale(), "panel.run");
-      runAction.disabled = !running && (selected?.status !== "ready" || !provider?.snapshot || !targets || selectedTarget?.status !== "online" || !selectedTarget.selectable);
-      runAction.setAttribute("aria-label", runLabel);
-      runAction.title = runLabel;
-      runAction.addEventListener("click", () => {
-        if (running) {
-          this.cancelRun();
-          return;
-        }
-        if (!provider || !selected || !targets || !selectedTarget) return;
-        void this.contributions.createRunPlan(provider.qualifiedId, selected.id, selectedTarget.id).then((plan) => {
-          if (!plan || !("kind" in plan) || plan.kind !== "staged") {
-            throw new Error(`Run configuration did not return a staged plan: ${selected.id}`);
-          }
-          return this.executeRun({
-            pluginId: entry.id,
-            label: selected.label,
-            plan,
-            revalidateTarget: () => this.contributions.revalidateTarget(entry.id, selected.targetProviderId as string, selectedTarget.id),
-          });
-        }).catch(this.reportError);
       }, { signal: abort.signal });
     }
     view.innerHTML = "";
@@ -185,6 +148,10 @@ export class PluginWorkbenchHostRuntime {
     }, { signal: abort.signal });
     view.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-plugin-run-action]")) {
+        void this.executeSelectedRun(entry.id).catch(this.reportError);
+        return;
+      }
       const refresh = target?.closest<HTMLElement>("[data-target-provider-refresh]")?.dataset.targetProviderRefresh;
       if (refresh) void this.contributions.refreshTargets(refresh).catch(this.reportError);
       const targetId = target?.closest<HTMLElement>("[data-execution-target]")?.dataset.executionTarget;
@@ -214,6 +181,35 @@ export class PluginWorkbenchHostRuntime {
     return this.plugins.managementSnapshot.entries.find(
       (entry) => entry.active && entry.workspaceTool !== undefined,
     ) ?? null;
+  }
+
+  private async executeSelectedRun(pluginId: string): Promise<void> {
+    const running = this.runSession();
+    if (running?.pluginId === pluginId && running.status === "running") {
+      this.cancelRun();
+      return;
+    }
+    if (running?.status === "running") return;
+    const snapshot = this.contributions.snapshot();
+    const provider = snapshot.runConfigurationProviders.find((candidate) => candidate.pluginId === pluginId);
+    const selected = provider?.snapshot.configurations.find(
+      (candidate) => candidate.id === provider.snapshot.selectedConfigurationId,
+    ) ?? provider?.snapshot.configurations[0];
+    const targets = selected?.targetProviderId
+      ? snapshot.targetProviders.find((candidate) => candidate.pluginId === pluginId && candidate.providerId === selected.targetProviderId)
+      : undefined;
+    const selectedTarget = targets?.snapshot.targets.find((candidate) => candidate.id === targets.snapshot.selectedTargetId);
+    if (!provider || selected?.status !== "ready" || !targets || selectedTarget?.status !== "online" || !selectedTarget.selectable) return;
+    const plan = await this.contributions.createRunPlan(provider.qualifiedId, selected.id, selectedTarget.id);
+    if (!plan || !("kind" in plan) || plan.kind !== "staged") {
+      throw new Error(`Run configuration did not return a staged plan: ${selected.id}`);
+    }
+    await this.executeRun({
+      pluginId,
+      label: selected.label,
+      plan,
+      revalidateTarget: () => this.contributions.revalidateTarget(pluginId, selected.targetProviderId as string, selectedTarget.id),
+    });
   }
 }
 

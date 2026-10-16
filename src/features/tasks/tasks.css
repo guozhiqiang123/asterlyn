@@ -107,6 +107,17 @@
   gap: 6px;
 }
 
+.plugin-run-actions {
+  display: flex;
+  align-items: center;
+}
+
+.plugin-run-button {
+  min-width: 108px;
+  min-height: 34px;
+  padding-inline: 20px;
+}
+
 .plugin-run-form > label > span,
 .plugin-run-summary > span,
 .plugin-run-status > span,
