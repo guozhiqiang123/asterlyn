@@ -131,3 +131,65 @@ selection persistence, no scroll jump, no duplicate session, and retained failur
 
 Every commit keeps the host buildable. Cross-repository artifact pins change only after the
 corresponding SDK or plugin source commit passes its own verification.
+
+## Implementation checkpoint — 2026-10-16
+
+The first supervised Android application Run slice is implemented and installed for human
+acceptance.
+
+- Plugin SDK `1.5.0` defines typed tool operations and staged Run plans without exposing process,
+  shell, PTY, filesystem, Terminal, or notification handles to plugins.
+- The native host admits only `android.apk.inspect` and `android.adb.launch`, validates every typed
+  parameter, contains APK paths below the active workspace, and owns timeout, cancellation, output
+  bounds, child cleanup, and application/window lifecycle cleanup.
+- The host Run session owns build/install, artifact resolution, target revalidation, launch,
+  retained Terminal output, terminal notification, Stop, and one-active-session enforcement.
+- Android plugin `0.3.0` derives configurations only from exact runnable `install<Variant>` tasks in
+  workspaces with Android evidence. Instrumentation-test install tasks are excluded. Selection is
+  plugin-namespaced workspace state.
+- After Gradle succeeds, the plugin accepts only one APK identity from the installation output and
+  discovered artifacts. AAPT badging supplies the final application ID and one unique ordinary or
+  Leanback launcher component; missing, malformed, truncated, or ambiguous identity fails closed.
+- The Run and device selectors are host-rendered controls. The title-bar Run action is enabled only
+  for a ready configuration and currently online selectable target, and changes behavior to Stop
+  while the host session is active.
+
+FilesRecovery acceptance evidence:
+
+- the real `tasks --all` output contained 15,980 tasks and projected 25 application Run
+  configurations;
+- an existing flavor APK resolved to application ID `com.photo.recovery.global.tt` and launcher
+  component `com.files.recovery.page.SplashActivity` through AAPT, without reading Gradle/source
+  declarations as final authority; and
+- the current Android SDK and one connected online physical device were discovered successfully.
+
+Automated verification:
+
+- Android plugin: type check, 59 tests, and build passed;
+- host frontend: type check, production build, and all 1,193 script tests passed;
+- native host: 102 tests passed and two operating-system watcher tests remained intentionally
+  ignored for installed acceptance;
+- built and installed rendered-shell smoke checks passed; and
+- the Vite main entry remained within its 500 kB hard budget at 499.63 kB.
+
+Local package and installation:
+
+- accepted archive:
+  `target/release/bundle/macos/Asterlyn-0.1.8-local-2026-10-16-android-run-final.app.zip`;
+- archive size: 10,019,838 bytes; SHA-256:
+  `87f6955df28f567ea498d6e79880d6980ed621522595f3b43248f9ed0d9fc017`;
+- packaged and installed executable SHA-256:
+  `05310245089af5b383099bca99ef146f1572bd5a29ca7caefabc4a3aea5ec1bb`;
+- `/Applications/Asterlyn.app` passed strict deep signature verification and was relaunched with
+  FilesRecovery; and
+- the pre-feature installation is recoverable at
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261016-android-run/Asterlyn.app`.
+
+The first automatically bundled candidate was rejected because its resources were not sealed. It
+was never accepted as the final installation; the final bundle was deep ad-hoc signed with hardened
+runtime and strictly reverified before replacement.
+
+Human acceptance still owns the final product gate: choose a FilesRecovery variant and device,
+confirm the reviewed Gradle install, verify automatic application launch, inspect the retained
+Terminal history and notification, and exercise Stop/device-disconnect retry. This slice does not
+claim debugger, Logcat, split-APK Run, parallel Run, or full Android Studio parity.
