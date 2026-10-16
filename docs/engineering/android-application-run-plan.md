@@ -9,9 +9,9 @@ and acceptance land as separately reviewable commits.
 ## Scope
 
 The milestone delivers ordinary Android application Run: choose an exact application
-module/variant and online device, execute the reviewed Gradle install task, acquire authoritative
-identity from the final APK, launch the exact component with ADB, retain the Terminal transcript,
-and expose deterministic Stop/success/failure state.
+module/variant and online device, execute the reviewed Gradle assemble task, resolve the exact APK
+from bounded AGP output metadata, install it only on that device, launch the exact component with
+ADB, retain the Terminal transcript, and expose deterministic Stop/success/failure state.
 
 It does not deliver source debugging, JDWP attach, breakpoints, variable inspection, Logcat,
 instrumentation tests, app links, wireless pairing, emulator creation, parallel Runs, or a general
@@ -60,11 +60,11 @@ and registry cleanup.
 ## AR3 — host Run-session runtime
 
 - Add one window/workspace-scoped Run controller and immutable snapshots for idle, queued,
-  building, resolving, validating, launching, succeeded, failed, and cancelled states.
-- Route the install phase through the existing reviewed task controller and dedicated Terminal tab.
+  building, resolving, validating, installing, launching, succeeded, failed, and cancelled states.
+- Route the build phase through the existing reviewed task controller and dedicated Terminal tab.
 - Preserve one transcript and append host-owned phase markers without exposing Terminal authority
   to the plugin.
-- Add exact target revalidation immediately before launch.
+- Add exact target revalidation immediately before install and again before launch.
 - Route Stop to the active Gradle child or declared tool operation.
 - Publish terminal results through the notification center and keep retained history after the
   active session releases its resources.
@@ -76,13 +76,15 @@ all terminal states return the Run control to an idle/retryable state.
 
 In the independent plugin repository:
 
-- derive one configuration per exact verified `install<Variant>` task with explicit module and
-  variant metadata;
+- derive one configuration per exact verified installable variant, but bind Run execution to its
+  exact verified `assemble<Variant>` peer;
 - expose all candidates, require selection when more than one exists, and persist only the stable
   selected ID under the plugin namespace;
 - invalidate selection and resolved identity when the task/configuration fingerprint changes;
-- extend install-task artifact hints to the exact module APK output root;
-- parse bounded AGP output metadata and final APK-manifest tool output;
+- extend build-task artifact hints with bounded `output-metadata.json` sidecar discovery at the
+  exact module APK output root;
+- parse bounded AGP output metadata, require the exact variant and one `SINGLE` APK, then parse the
+  final APK-manifest tool output;
 - normalize application ID and launcher component, including relative names and
   `activity-alias`, without guessing multiple launchers; and
 - return staged install, inspect, and ADB launch plans through SDK contracts only.
@@ -190,6 +192,23 @@ was never accepted as the final installation; the final bundle was deep ad-hoc s
 runtime and strictly reverified before replacement.
 
 Human acceptance still owns the final product gate: choose a FilesRecovery variant and device,
-confirm the reviewed Gradle install, verify automatic application launch, inspect the retained
+confirm the reviewed Gradle task, verify automatic application launch, inspect the retained
 Terminal history and notification, and exercise Stop/device-disconnect retry. This slice does not
 claim debugger, Logcat, split-APK Run, parallel Run, or full Android Studio parity.
+
+## Exact-device deployment correction — 2026-10-16
+
+The next accepted increment replaces Gradle-owned installation with host-owned exact-device
+deployment:
+
+1. retain `install<Variant>` only as application-variant discovery evidence;
+2. execute the matching `assemble<Variant>` task;
+3. transport bounded `output-metadata.json` sidecars with generic artifact discovery;
+4. let the Android plugin select exactly one `SINGLE` APK for the exact variant;
+5. inspect that APK, revalidate the selected target, and execute admitted
+   `adb -s <serial> install -r <apk>`;
+6. revalidate once more and launch the exact component; and
+7. retain the complete build, install, and launch transcript under one cancellable Run session.
+
+This increment fails closed for split outputs. Split support requires a separate target-spec and
+`install-multiple` contract rather than treating every APK in a directory as one install set.
