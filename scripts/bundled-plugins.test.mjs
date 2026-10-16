@@ -38,7 +38,7 @@ test("the bundled Gradle plugin activates without Android evidence and returns a
     "android.quickAction.variant": "Debug",
   });
   assert.deepEqual((await provider.run(":assembleDebug")).artifactSearch, { hints: ["build/outputs/apk"] });
-  assert.equal((await provider.run(":installDebug")).artifactSearch, undefined);
+  assert.deepEqual((await provider.run(":installDebug")).artifactSearch, { hints: ["build/outputs/apk"] });
   provider.refresh().apply({ status: "cancelled", outputs: [], truncated: false, error: null });
   assert.match(provider.snapshot().error, /cancelled/u);
   assert.deepEqual(provider.snapshot().tasks.map((task) => task.id), [":assembleDebug", ":installDebug"]);
@@ -106,6 +106,54 @@ test("the bundled Android plugin accepts a multi-chunk 16000-task catalog", asyn
   assert.equal(provider.snapshot().status, "ready");
   assert.equal(provider.snapshot().tasks.length, 16_000);
   assert.equal(provider.snapshot().tasks.at(-1).id, ":task15999");
+});
+
+test("the bundled Android plugin returns a supervised staged Run plan", async () => {
+  const runtime = runtimeWithCache();
+  await runtime.activate(identity, {
+    kind: "workspace-catalog",
+    platform: "posix",
+    truncated: false,
+    files: [
+      { workspacePath: "settings.gradle.kts" },
+      { workspacePath: "gradlew" },
+      { workspacePath: "app/src/main/AndroidManifest.xml" },
+    ],
+  }, BUNDLED_PLUGINS);
+  const contributions = runtime.contributions.list();
+  const provider = contributions.find((contribution) => contribution.qualifiedId === `${ANDROID_GRADLE_PLUGIN_ID}.gradle-tasks`);
+  const runProvider = contributions.find((contribution) => contribution.qualifiedId === `${ANDROID_GRADLE_PLUGIN_ID}.android-run-configurations`);
+  assert.ok(provider);
+  assert.ok(runProvider);
+  provider.refresh().apply({
+    status: "succeeded",
+    outputs: [{
+      stream: "stdout",
+      dataBase64: Buffer.from("Tasks runnable from root project 'root'\nInstall tasks\n-------------\n:app:installDemoDebug - Installs DemoDebug.\n").toString("base64"),
+    }],
+    truncated: false,
+    error: null,
+  });
+  await settle();
+  const configuration = runProvider.snapshot().configurations[0];
+  assert.equal(configuration.detail, ":app:installDemoDebug");
+  const plan = await runProvider.run(configuration.id, "phone-1");
+  assert.equal(plan.kind, "staged");
+  assert.deepEqual(plan.install.artifactSearch, { hints: ["app/build/outputs/apk"] });
+  plan.install.apply({
+    status: "succeeded",
+    outputs: [{ stream: "stdout", dataBase64: Buffer.from("Installing APK 'app-demo-debug.apk' on 'Pixel'\n").toString("base64") }],
+    truncated: false,
+    error: null,
+  });
+  assert.deepEqual(plan.inspect([{
+    workspacePath: "app/build/outputs/apk/demo/debug/app-demo-debug.apk",
+    kind: "apk",
+    byteLength: 1,
+  }]), {
+    operationId: "android.apk.inspect",
+    parameters: { artifact: "app/build/outputs/apk/demo/debug/app-demo-debug.apk" },
+  });
 });
 
 function runtimeWithCache() {

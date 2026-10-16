@@ -9,7 +9,7 @@
     },
     "src/adapters/demo/demo-desktop-bridge.ts": {
       "owner": "deterministic browser demo adapter",
-      "maximumLines": 2375,
+      "maximumLines": 2377,
       "burnDownPhase": "reviewed demo fixture; split by capability before adding behavior"
     },
     "src/localization/catalog.ts": {
