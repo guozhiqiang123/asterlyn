@@ -47,7 +47,7 @@ export interface TerminalViewActions {
   readonly keyboard?: (event: KeyboardEvent) => boolean;
 }
 
-export type TerminalInteractionMode = "interactive" | "task-running" | "task-complete";
+export type TerminalInteractionMode = "idle" | "interactive" | "task-running";
 
 export class TerminalView {
   private parent: HTMLElement | null = null;
@@ -60,7 +60,7 @@ export class TerminalView {
   private generation = 0;
   private ready = false;
   private actions: TerminalViewActions | null = null;
-  private interactionMode: TerminalInteractionMode = "interactive";
+  private interactionMode: TerminalInteractionMode = "idle";
   private readonly pendingWrites = new TerminalWriteBuffer();
 
   mount(parent: HTMLElement, actions: TerminalViewActions): void {
@@ -70,7 +70,7 @@ export class TerminalView {
       return;
     }
     if (this.parent === parent && !this.terminal) return;
-    this.parent?.classList.remove("terminal-task-complete");
+    this.parent?.classList.remove("terminal-session-idle");
     this.disposeRuntime();
     this.parent = parent;
     const generation = ++this.generation;
@@ -151,9 +151,14 @@ export class TerminalView {
 
   reset(): void {
     this.pendingWrites.clear();
-    this.terminal?.reset();
-    this.terminal?.clear();
-    this.ready = false;
+    const terminal = this.terminal;
+    if (!terminal) return;
+    terminal.write("", () => {
+      if (this.terminal !== terminal) return;
+      terminal.reset();
+      terminal.clear();
+      this.applyInteractionMode();
+    });
   }
 
   refreshAppearance(): void {
@@ -166,18 +171,19 @@ export class TerminalView {
   dispose(): void {
     this.generation += 1;
     this.disposeRuntime();
-    this.parent?.classList.remove("terminal-task-complete");
+    this.parent?.classList.remove("terminal-session-idle");
     this.parent = null;
     this.actions = null;
   }
 
   private applyInteractionMode(): void {
-    const taskComplete = this.interactionMode === "task-complete";
-    this.parent?.classList.toggle("terminal-task-complete", taskComplete);
+    const idle = this.interactionMode === "idle";
+    this.parent?.classList.toggle("terminal-session-idle", idle);
     if (!this.terminal) return;
     this.terminal.options.disableStdin = this.interactionMode !== "interactive";
-    this.terminal.options.cursorBlink = !taskComplete;
-    this.terminal.options.cursorInactiveStyle = taskComplete ? "none" : "outline";
+    this.terminal.options.cursorBlink = !idle;
+    this.terminal.options.cursorInactiveStyle = idle ? "none" : "outline";
+    this.terminal.write(idle ? "\x1b[?25l" : "\x1b[?25h");
   }
 
   private requestFit(): void {

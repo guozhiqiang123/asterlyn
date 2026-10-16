@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  TerminalPanel,
   renderTaskTerminalHeader,
   renderTerminalHeader,
   normalizeTaskTerminalOutput,
   taskTerminalActionAvailable,
   taskTerminalCommandLine,
   taskTerminalInteractionMode,
+  shouldAutoStartShell,
   terminalActionAvailable,
+  terminalInteractionMode,
 } from "../src/features/terminal/terminal-panel.ts";
 import { TerminalView, TerminalWriteBuffer } from "../src/features/terminal/terminal-view.ts";
 import { EN_US } from "../src/localization/en-US.ts";
@@ -55,7 +58,7 @@ test("terminal shortcut availability exactly follows header lifecycle policy", (
   assert.equal(terminalActionAvailable(starting, "close"), false);
 });
 
-test("task terminal header exposes cancel while active and new session after completion", () => {
+test("task terminal header exposes cancellation only while the task owns the Terminal", () => {
   const descriptor = {
     sessionId: "review-1", workspaceRoot: "/repo", taskKey: "android.gradle:assembleDebug",
     label: "assembleDebug", executablePath: "/repo/gradlew", args: ["assembleDebug"],
@@ -74,13 +77,21 @@ test("task terminal header exposes cancel while active and new session after com
   assert.match(finishedHeader, /data-terminal-action="close"[^>]*disabled/u);
   assert.doesNotMatch(finishedHeader, /data-terminal-action="restart"[^>]*disabled/u);
   assert.equal(taskTerminalInteractionMode("running"), "task-running");
-  assert.equal(taskTerminalInteractionMode("failed"), "task-complete");
+  for (const status of ["succeeded", "failed", "cancelled", "crashed"]) {
+    assert.equal(taskTerminalInteractionMode(status), "idle");
+  }
+  assert.equal(terminalInteractionMode(idle), "idle");
+  assert.equal(terminalInteractionMode({ ...idle, status: "running", sessionId: "shell-1" }), "interactive");
+  assert.equal(shouldAutoStartShell(false, idle), true);
+  assert.equal(shouldAutoStartShell(true, idle), false);
 });
 
-test("completed task terminals become read-only and lose their live cursor", () => {
+test("idle terminals reject input and hide the live cursor", () => {
   const classes = new Set();
+  const writes = [];
   const terminal = {
     options: { disableStdin: false, cursorBlink: true, cursorInactiveStyle: "outline" },
+    write(value) { writes.push(value); },
   };
   const terminalView = Object.create(TerminalView.prototype);
   terminalView.parent = {
@@ -93,17 +104,74 @@ test("completed task terminals become read-only and lose their live cursor", () 
   };
   terminalView.terminal = terminal;
 
-  terminalView.setInteractionMode("task-complete");
+  terminalView.setInteractionMode("idle");
   assert.equal(terminal.options.disableStdin, true);
   assert.equal(terminal.options.cursorBlink, false);
   assert.equal(terminal.options.cursorInactiveStyle, "none");
-  assert.equal(classes.has("terminal-task-complete"), true);
+  assert.equal(classes.has("terminal-session-idle"), true);
+  assert.equal(writes.at(-1), "\x1b[?25l");
 
   terminalView.setInteractionMode("interactive");
   assert.equal(terminal.options.disableStdin, false);
   assert.equal(terminal.options.cursorBlink, true);
   assert.equal(terminal.options.cursorInactiveStyle, "outline");
-  assert.equal(classes.has("terminal-task-complete"), false);
+  assert.equal(classes.has("terminal-session-idle"), false);
+  assert.equal(writes.at(-1), "\x1b[?25h");
+});
+
+test("clearing terminal content does not re-arm automatic shell startup", () => {
+  const view = new TerminalView();
+  let resets = 0;
+  let clears = 0;
+  let finishPendingWrites = () => undefined;
+  view.ready = true;
+  view.terminal = {
+    options: { disableStdin: false, cursorBlink: true, cursorInactiveStyle: "outline" },
+    write(_value, callback) { if (callback) finishPendingWrites = callback; },
+    reset() { resets += 1; },
+    clear() { clears += 1; },
+  };
+
+  view.reset();
+
+  assert.equal(resets, 0);
+  assert.equal(clears, 0);
+  finishPendingWrites();
+  assert.equal(resets, 1);
+  assert.equal(clears, 1);
+  assert.equal(view.ready, true);
+});
+
+test("a completed task releases Terminal ownership and restores the idle header", () => {
+  const header = {
+    dataset: {}, innerHTML: "",
+    classList: { toggle() {} },
+    addEventListener() {},
+  };
+  const root = {
+    querySelector(selector) { return selector === "#terminal-header-actions" ? header : null; },
+  };
+  const bridge = {
+    async subscribeTerminal() { return () => undefined; },
+    async startTerminal() { throw new Error("not expected"); },
+    async writeTerminal() {}, async resizeTerminal() {}, async closeTerminal() { return true; },
+  };
+  const panel = new TerminalPanel(root, bridge, EN_US.terminal, { status() {}, error() {} });
+  panel.beginTask({
+    sessionId: "review-1", workspaceRoot: "/repo", taskKey: "android.gradle:assembleDebug",
+    label: "assembleDebug", executablePath: "/repo/gradlew", args: ["assembleDebug"],
+    workingDirectory: "/repo", cancel() {},
+  });
+  assert.equal(panel.revealTask("review-1"), true);
+  assert.equal(panel.autoStartShell, false);
+
+  panel.updateTask("review-1", "succeeded", null, false);
+
+  assert.equal(panel.revealTask("review-1"), false);
+  assert.equal(panel.autoStartShell, false);
+  assert.match(header.innerHTML, /No active session/u);
+  assert.match(header.innerHTML, /data-terminal-action="restart"/u);
+  panel.dispose();
 });
 
 test("reviewed task command summary is display-only and escapes terminal controls", () => {

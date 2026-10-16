@@ -291,7 +291,8 @@
   border-radius: 0;
 }
 
-.terminal-tool-host.terminal-task-complete .xterm-cursor-layer {
+.terminal-tool-host.terminal-session-idle .xterm-cursor-layer,
+.terminal-tool-host.terminal-session-idle .xterm-cursor {
   display: none;
 }
 

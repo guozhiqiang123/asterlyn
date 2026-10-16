@@ -32,6 +32,7 @@ export class TerminalPanel {
   private taskCopy: TaskExecutionCopy;
   private visible = false;
   private taskSession: TaskTerminalPresentation | null = null;
+  private autoStartShell = false;
 
   constructor(
     root: HTMLElement,
@@ -46,6 +47,7 @@ export class TerminalPanel {
     this.taskCopy = terminalTaskCopy(locale);
     this.controller = new TerminalController(bridge);
     this.releaseState = this.controller.subscribe((change) => {
+      if (!this.taskSession) this.view.setInteractionMode(terminalInteractionMode(change.state));
       this.renderHeader();
       if (change.reason === "starting") this.feedback.status(this.copy.starting, "busy");
       if (change.reason === "started" && change.state.shell) {
@@ -69,30 +71,33 @@ export class TerminalPanel {
     const changed = this.controller.state.root !== root;
     if (changed && this.taskSession?.descriptor.workspaceRoot !== root) {
       this.taskSession = null;
-      this.view.setInteractionMode("interactive");
+      this.view.setInteractionMode("idle");
     }
     this.controller.installWorkspace(root);
-    if (changed) this.view.reset();
+    if (changed) {
+      this.view.reset();
+      this.view.setInteractionMode(this.taskSession ? "task-running" : terminalInteractionMode(this.controller.state));
+    }
   }
 
   activate(root: string): void {
     this.visible = true;
     this.installWorkspace(root);
+    this.autoStartShell = shouldAutoStartShell(this.taskSession !== null, this.controller.state);
     const host = this.root.querySelector<HTMLElement>("#terminal-tool-host");
     if (!host) return;
     this.bindHeader();
     this.renderHeader();
+    this.view.setInteractionMode(this.taskSession ? "task-running" : terminalInteractionMode(this.controller.state));
     this.view.mount(host, {
-      ready: (cols, rows) => { if (!this.taskSession) void this.controller.start(cols, rows); },
+      ready: (cols, rows) => this.startShellIfRequested(cols, rows),
       input: (data) => { if (!this.taskSession) this.controller.sendInput(data); },
       resize: (cols, rows) => { if (!this.taskSession) this.controller.resize(cols, rows); },
       failure: (error) => this.controller.reportViewFailure(error),
       keyboard: this.feedback.keyboard,
     });
     const dimensions = this.view.dimensions();
-    if (dimensions && !this.taskSession && this.controller.state.status === "idle") {
-      void this.controller.start(dimensions.cols, dimensions.rows);
-    }
+    if (dimensions) this.startShellIfRequested(dimensions.cols, dimensions.rows);
     this.view.reveal();
   }
 
@@ -112,6 +117,7 @@ export class TerminalPanel {
 
   beginTask(session: TaskTerminalSessionDescriptor): void {
     this.installWorkspace(session.workspaceRoot);
+    this.autoStartShell = false;
     this.taskSession = { descriptor: session, status: "starting", error: null, outputTruncated: false, outputEndedWithCarriageReturn: false };
     this.view.reset();
     this.view.setInteractionMode("task-running");
@@ -144,15 +150,20 @@ export class TerminalPanel {
   ): void {
     const current = this.taskSession;
     if (!current || current.descriptor.sessionId !== sessionId) return;
-    const becameTerminal = isTerminalTaskTerminalStatus(status) && !isTerminalTaskTerminalStatus(current.status);
     const becameTruncated = outputTruncated && !current.outputTruncated;
-    this.taskSession = { ...current, status, error, outputTruncated };
+    const next = { ...current, status, error, outputTruncated };
+    const summary = taskTerminalSummary(next, this.taskCopy);
+    this.taskSession = next;
     if (becameTruncated) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(this.taskCopy.outputTruncated)}]\r\n`));
-    if (becameTerminal) this.view.write(new TextEncoder().encode(`\r\n[${sanitizeTerminalText(taskTerminalSummary(this.taskSession, this.taskCopy))}]\r\n`));
+    if (isTerminalTaskTerminalStatus(status)) {
+      this.taskSession = null;
+      this.autoStartShell = false;
+      this.view.reset();
+    }
     this.view.setInteractionMode(taskTerminalInteractionMode(status));
     this.renderHeader();
     const kind = status === "succeeded" ? "success" : isActiveTaskTerminalStatus(status) ? "busy" : status === "cancelled" ? "normal" : "warning";
-    this.feedback.status(taskTerminalSummary(this.taskSession, this.taskCopy), kind);
+    this.feedback.status(summary, kind);
   }
 
   revealTask(sessionId: string): boolean {
@@ -172,7 +183,8 @@ export class TerminalPanel {
     const dimensions = this.view.dimensions() ?? { cols: 80, rows: 24 };
     if (action === "restart") {
       this.taskSession = null;
-      this.view.setInteractionMode("interactive");
+      this.autoStartShell = false;
+      this.view.setInteractionMode("idle");
       this.view.reset();
       await this.controller.restart(dimensions.cols, dimensions.rows);
     } else if (action === "clear") {
@@ -215,6 +227,12 @@ export class TerminalPanel {
       ? renderTaskTerminalHeader(this.taskSession, this.copy, this.taskCopy)
       : renderTerminalHeader(this.controller.state, this.copy);
     this.feedback.presentationChanged?.();
+  }
+
+  private startShellIfRequested(cols: number, rows: number): void {
+    if (!this.autoStartShell || this.taskSession) return;
+    this.autoStartShell = false;
+    void this.controller.start(cols, rows);
   }
 }
 
@@ -288,7 +306,15 @@ export function taskTerminalActionAvailable(status: TaskTerminalSessionStatus, a
 }
 
 export function taskTerminalInteractionMode(status: TaskTerminalSessionStatus): TerminalInteractionMode {
-  return isTerminalTaskTerminalStatus(status) ? "task-complete" : "task-running";
+  return isTerminalTaskTerminalStatus(status) ? "idle" : "task-running";
+}
+
+export function terminalInteractionMode(state: TerminalState): TerminalInteractionMode {
+  return state.status === "starting" || state.status === "running" ? "interactive" : "idle";
+}
+
+export function shouldAutoStartShell(hasTaskSession: boolean, state: TerminalState): boolean {
+  return !hasTaskSession && state.status === "idle";
 }
 
 export function taskTerminalCommandLine(session: TaskTerminalSessionDescriptor): string {
