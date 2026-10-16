@@ -9,14 +9,14 @@ import type {
   PluginTaskCacheCapability,
   PluginNotificationCapability,
   PluginNotificationRequest,
+  PluginProcessQueriesCapability,
+  PluginWorkspaceStateCapability,
   PluginWorkspaceIdentity,
   RegisteredPluginContribution,
 } from "./plugin-types.ts";
 import {
   SDK_PLUGIN_EXECUTION_TARGET_LIMITS,
-  SDK_PLUGIN_PROCESS_QUERY_LIMITS,
   SDK_PLUGIN_RUN_CONFIGURATION_LIMITS,
-  SDK_PLUGIN_WORKSPACE_TOOL_LIMITS,
 } from "../../../packages/plugin-sdk/index.ts";
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
@@ -132,6 +132,14 @@ export class PluginRuntime {
     plugin: BundledPlugin,
     identity: PluginWorkspaceIdentity,
   ) => PluginNotificationCapability | undefined;
+  private readonly processQueriesFor: (
+    plugin: BundledPlugin,
+    identity: PluginWorkspaceIdentity,
+  ) => PluginProcessQueriesCapability | undefined | Promise<PluginProcessQueriesCapability | undefined>;
+  private readonly workspaceStateFor: (
+    plugin: BundledPlugin,
+    identity: PluginWorkspaceIdentity,
+  ) => PluginWorkspaceStateCapability | undefined | Promise<PluginWorkspaceStateCapability | undefined>;
 
   constructor(
     contributions = new PluginContributionRegistry(),
@@ -144,11 +152,21 @@ export class PluginRuntime {
       plugin: BundledPlugin,
       identity: PluginWorkspaceIdentity,
     ) => PluginNotificationCapability | undefined = () => undefined,
+    processQueriesFor: (
+      plugin: BundledPlugin,
+      identity: PluginWorkspaceIdentity,
+    ) => PluginProcessQueriesCapability | undefined | Promise<PluginProcessQueriesCapability | undefined> = () => undefined,
+    workspaceStateFor: (
+      plugin: BundledPlugin,
+      identity: PluginWorkspaceIdentity,
+    ) => PluginWorkspaceStateCapability | undefined | Promise<PluginWorkspaceStateCapability | undefined> = () => undefined,
   ) {
     this.contributions = contributions;
     this.reportDiagnostic = reportDiagnostic;
     this.taskCacheFor = taskCacheFor;
     this.notificationsFor = notificationsFor;
+    this.processQueriesFor = processQueriesFor;
+    this.workspaceStateFor = workspaceStateFor;
   }
 
   async activate(
@@ -160,8 +178,12 @@ export class PluginRuntime {
     const activationIdentity = Object.freeze({ root: identity.root, generation: identity.generation });
     if (this.disposed) return { identity: activationIdentity, activated: [], skipped: [], diagnostics: [] };
     const pluginIds = new Set<string>();
+    const optionalValidation = plugins.some((plugin) => plugin.manifest.workspaceTool !== undefined || plugin.manifest.processQueries !== undefined)
+      ? (await import("./plugin-optional-contract-validation.ts")).validateOptionalPluginManifest
+      : null;
     for (const plugin of plugins) {
       validatePlugin(plugin);
+      optionalValidation?.(plugin);
       if (pluginIds.has(plugin.id)) throw new Error(`Duplicate plugin ID: ${plugin.id}`);
       pluginIds.add(plugin.id);
     }
@@ -211,12 +233,22 @@ export class PluginRuntime {
         skipped.push(plugin.id);
         continue;
       }
+      const [processQueries, workspaceState] = await Promise.all([
+        this.processQueriesFor(plugin, identity),
+        this.workspaceStateFor(plugin, identity),
+      ]);
+      if (token !== this.sequence || this.disposed) {
+        skipped.push(plugin.id);
+        continue;
+      }
       const scope = new ActivationScope(
         batch,
         plugin,
         { identity, evidence: snapshot },
         this.taskCacheFor(plugin.id, identity),
         this.notificationsFor(plugin, identity),
+        processQueries,
+        workspaceState,
       );
       try {
         const returned = await plugin.activate(scope.context);
@@ -347,6 +379,8 @@ class ActivationScope {
     source: { readonly identity: PluginWorkspaceIdentity; readonly evidence: PluginEvidenceSnapshot },
     taskCache: PluginTaskCacheCapability,
     notifications: PluginNotificationCapability | undefined,
+    processQueries: PluginProcessQueriesCapability | undefined,
+    workspaceState: PluginWorkspaceStateCapability | undefined,
   ) {
     this.batch = batch;
     this.plugin = plugin;
@@ -355,6 +389,8 @@ class ActivationScope {
       identity: source.identity,
       evidence: source.evidence,
       taskCache,
+      ...(processQueries === undefined ? {} : { processQueries }),
+      ...(workspaceState === undefined ? {} : { workspaceState }),
       ...(notifications === undefined
         ? {}
         : {
@@ -450,8 +486,6 @@ function validatePlugin(plugin: BundledPlugin): void {
       throw new Error(`Invalid plugin task authorization: ${plugin.id}`);
     }
   }
-  validateWorkspaceTool(plugin.id, plugin.manifest.workspaceTool);
-  validateProcessQueries(plugin.id, plugin.manifest.processQueries);
   if (typeof plugin.matches !== "function" || typeof plugin.activate !== "function" ||
     (plugin.evidenceKey !== undefined && typeof plugin.evidenceKey !== "function")) {
     throw new Error(`Invalid plugin descriptor: ${plugin.id}`);
@@ -486,72 +520,6 @@ function validateContribution(contribution: PluginContribution): void {
   }
 }
 
-function validateWorkspaceTool(pluginId: string, tool: BundledPlugin["manifest"]["workspaceTool"]): void {
-  if (tool === undefined) return;
-  if (!validBoundedIdentifier(tool.id, SDK_PLUGIN_WORKSPACE_TOOL_LIMITS.maxIdLength) ||
-    !validLocalizationKey(tool.titleKey, SDK_PLUGIN_WORKSPACE_TOOL_LIMITS.maxTitleKeyLength) ||
-    !["device", "list", "puzzle"].includes(tool.icon) ||
-    !Array.isArray(tool.views) || tool.views.length === 0 || tool.views.length > SDK_PLUGIN_WORKSPACE_TOOL_LIMITS.maxViews ||
-    !validBoundedIdentifier(tool.defaultView, SDK_PLUGIN_WORKSPACE_TOOL_LIMITS.maxViewIdLength)) {
-    throw new Error(`Invalid plugin workspace tool: ${pluginId}`);
-  }
-  const ids = new Set<string>();
-  for (const view of tool.views) {
-    if (!validBoundedIdentifier(view.id, SDK_PLUGIN_WORKSPACE_TOOL_LIMITS.maxViewIdLength) || ids.has(view.id) ||
-      !validLocalizationKey(view.labelKey, SDK_PLUGIN_WORKSPACE_TOOL_LIMITS.maxViewLabelKeyLength)) {
-      throw new Error(`Invalid plugin workspace tool view: ${pluginId}.${view.id}`);
-    }
-    ids.add(view.id);
-  }
-  if (!ids.has(tool.defaultView)) throw new Error(`Invalid plugin workspace tool default view: ${pluginId}.${tool.defaultView}`);
-}
-
-function validateProcessQueries(pluginId: string, queries: BundledPlugin["manifest"]["processQueries"]): void {
-  if (queries === undefined) return;
-  if (!Array.isArray(queries) || queries.length > SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxQueries) {
-    throw new Error(`Invalid plugin process queries: ${pluginId}`);
-  }
-  const ids = new Set<string>();
-  for (const query of queries) {
-    if (!validBoundedIdentifier(query.id, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxIdLength) || ids.has(query.id) ||
-      !Array.isArray(query.args) || query.args.length > SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxArguments ||
-      !query.args.every((arg: unknown) => typeof arg === "string" && arg.length <= SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxArgumentLength && !arg.includes("\0")) ||
-      !Number.isSafeInteger(query.timeoutMs) || query.timeoutMs < 1 || query.timeoutMs > SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxTimeoutMs ||
-      !Number.isSafeInteger(query.maxOutputBytes) || query.maxOutputBytes < 1 || query.maxOutputBytes > SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxOutputBytes ||
-      !Array.isArray(query.executables) || query.executables.length === 0) {
-      throw new Error(`Invalid plugin process query: ${pluginId}.${query.id}`);
-    }
-    const candidates = new Set<string>();
-    for (const candidate of query.executables) {
-      let key: string;
-      if (candidate.type === "environment") {
-        if (!validEnvironmentVariable(candidate.variable) ||
-          !validPathPart(candidate.relativePath, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxRelativePathLength)) {
-          throw new Error(`Invalid process query executable: ${pluginId}.${query.id}`);
-        }
-        key = `environment:${candidate.variable}:${candidate.relativePath}`;
-      } else if (candidate.type === "workspaceProperty") {
-        if (!validPathPart(candidate.path, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxWorkspacePropertyPathLength) ||
-          !validBoundedIdentifier(candidate.key, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxWorkspacePropertyKeyLength) ||
-          !validPathPart(candidate.relativePath, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxRelativePathLength)) {
-          throw new Error(`Invalid process query executable: ${pluginId}.${query.id}`);
-        }
-        key = `workspaceProperty:${candidate.path}:${candidate.key}:${candidate.relativePath}`;
-      } else if (candidate.type === "path") {
-        if (!validPathPart(candidate.name, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxPathNameLength)) {
-          throw new Error(`Invalid process query executable: ${pluginId}.${query.id}`);
-        }
-        key = `path:${candidate.name}`;
-      } else {
-        throw new Error(`Invalid process query executable: ${pluginId}.${query.id}`);
-      }
-      if (candidates.has(key)) throw new Error(`Duplicate process query executable: ${pluginId}.${query.id}`);
-      candidates.add(key);
-    }
-    ids.add(query.id);
-  }
-}
-
 function validateExecutionTargetProvider(contribution: Extract<PluginContribution, { kind: "execution-target-provider" }>): void {
   if (!validBoundedIdentifier(contribution.id, SDK_PLUGIN_EXECUTION_TARGET_LIMITS.maxProviderIdLength) ||
     typeof contribution.snapshot !== "function" ||
@@ -574,18 +542,6 @@ function validateRunConfigurationProvider(contribution: Extract<PluginContributi
 
 function validBoundedIdentifier(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= maxLength && IDENTIFIER.test(value);
-}
-
-function validLocalizationKey(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= maxLength && /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(value);
-}
-
-function validEnvironmentVariable(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxEnvironmentVariableLength && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
-}
-
-function validPathPart(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= maxLength && !value.includes("\0") && !value.includes("\\");
 }
 
 function unavailableTaskCache(

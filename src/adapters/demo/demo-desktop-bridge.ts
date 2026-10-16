@@ -14,6 +14,7 @@ import { demoWorkspaceReplacementDiff } from "./demo-workspace-replacement-diff.
 import { demoSystemFileClipboardBridge } from "./demo-system-file-clipboard-bridge.ts";
 import { demoTaskArtifactBridge } from "./demo-task-artifact-bridge.ts";
 import { demoPluginTaskCacheBridge } from "./demo-plugin-task-cache-bridge.ts";
+import { demoPluginProcessQueryBridge } from "./demo-plugin-process-query-bridge.ts";
 import { demoCreateStash, demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
 import {
   demoCommitDetails,
@@ -142,16 +143,15 @@ interface DemoCommitFileRestorePlan {
   restoredContent: string | null;
   original: { content: string; utf8Bom: boolean; revision: number } | null;
 }
-
 interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
   repositoryRoot: string;
 }
-
 const demoBridge: DesktopBridge = {
   ...demoSystemFileClipboardBridge,
   ...demoTaskExecutionBridge,
   ...demoTaskArtifactBridge,
   ...demoPluginTaskCacheBridge,
+  ...demoPluginProcessQueryBridge,
   ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
   ...createDemoRemoteOperationBridge(cancelledDemoRemoteOperations, demoDelay, completeDemoMutation),

@@ -20,3 +20,11 @@ export async function invokeDesktopCommand<
   const value = await invokeTauri<unknown>(command, args);
   return validateDesktopResult(command, value) as Result;
 }
+
+/** Reserved for feature-scoped validators that are intentionally loaded with their feature chunk. */
+export function invokeDesktopCommandUnvalidated<Command extends DesktopCommandName>(
+  command: Command,
+  args?: DesktopCommandMap[Command]["args"],
+): Promise<unknown> {
+  return invokeTauri<unknown>(command, args);
+}

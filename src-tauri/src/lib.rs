@@ -43,11 +43,11 @@ use adapters::system_file_clipboard::{
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
-    PendingRepositoryWindowReservation, PendingRepositoryWindows, ScanRegistry, TaskManager,
-    WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
-    WorkspaceReplacementDiff, WorkspaceReplacementPreview, WorkspaceReplacementRegistry,
-    WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
-    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    PendingRepositoryWindowReservation, PendingRepositoryWindows, PluginProcessQueryManager,
+    ScanRegistry, TaskManager, WorkspaceEntryInspection, WorkspaceMutationCoordinator,
+    WorkspaceMutationPreview, WorkspaceReplacementDiff, WorkspaceReplacementPreview,
+    WorkspaceReplacementRegistry, WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry,
+    WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
     apply_authorized_replacement, exact_git_repository, execute_workspace_mutation_plan,
     finalize_replacement, finalize_workspace_mutation_recovery, inspect_workspace_entry_inventory,
@@ -227,6 +227,7 @@ pub fn run() {
         .manage(WorkspaceWatchService::default())
         .manage(TerminalSessions::default())
         .manage(TaskManager::default())
+        .manage(PluginProcessQueryManager::default())
         .setup(|app| {
             build_project_window(app.handle(), "main", "Asterlyn")?;
             Ok(())
@@ -235,6 +236,9 @@ pub fn run() {
             if matches!(event, WindowEvent::Destroyed) {
                 window.state::<ScanRegistry>().remove_window(window.label());
                 window.state::<TaskManager>().cancel_owner(window.label());
+                window
+                    .state::<PluginProcessQueryManager>()
+                    .cancel_owner(window.label());
                 window.state::<ActiveWorkspaces>().remove(window.label());
                 window
                     .state::<WorkspaceWatchService>()
@@ -380,13 +384,15 @@ pub fn run() {
             read_plugin_task_cache,
             write_plugin_task_cache,
             mark_plugin_task_cache_dirty,
-            cleanup_plugin_task_cache
+            cleanup_plugin_task_cache,
+            execute_plugin_process_query
         ])
         .build(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");
     app.run(|app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             app.state::<TaskManager>().cancel_all();
+            app.state::<PluginProcessQueryManager>().cancel_all();
         }
     });
 }

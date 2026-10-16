@@ -2,6 +2,7 @@
 import type * as Model from "../models";
 import type { WindowChromeMode } from "./window-chrome";
 import type { WorkspaceFingerprint, PluginTaskCacheDirtyReason, PluginTaskCacheReadResult, PluginTaskCacheMutationResult, PluginTaskCacheCleanupResult } from "./plugin-task-cache";
+import type { PluginProcessQueryResult } from "./plugin-process-query";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 
@@ -35,6 +36,7 @@ export interface DesktopCommandMap {
   write_plugin_task_cache: { args: { workspaceRoot: string; pluginId: string; providerId: string; fingerprint: WorkspaceFingerprint; payloadBase64: string; }; result: PluginTaskCacheMutationResult };
   mark_plugin_task_cache_dirty: { args: { workspaceRoot: string; pluginId: string; providerId: string; reason: PluginTaskCacheDirtyReason; }; result: PluginTaskCacheMutationResult };
   cleanup_plugin_task_cache: { args: Record<string, never>; result: PluginTaskCacheCleanupResult };
+  execute_plugin_process_query: { args: { workspaceRoot: string; pluginId: string; queryId: string; }; result: PluginProcessQueryResult };
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
   open_repository_window: { args: { path: string; }; result: Model.ProjectWindowOpenResult };
   read_history_page: { args: { repositoryRoot: string; query: Model.HistoryQuery; offset: number; limit: number; }; result: Model.HistoryPage };
@@ -163,6 +165,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   write_plugin_task_cache: "pluginTaskCacheMutationResult",
   mark_plugin_task_cache_dirty: "pluginTaskCacheMutationResult",
   cleanup_plugin_task_cache: "pluginTaskCacheCleanupResult",
+  execute_plugin_process_query: "pluginProcessQueryResult",
   read_tracked_changes: "trackedChangeScan",
   open_repository_window: "projectWindowOpenResult",
   read_history_page: "historyPage",

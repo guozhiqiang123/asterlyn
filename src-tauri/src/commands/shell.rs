@@ -75,8 +75,10 @@ pub(crate) async fn open_project(
     pending: State<'_, PendingRepositoryWindows>,
     terminal_sessions: State<'_, asterlyn_terminal::TerminalSessions>,
     tasks: State<'_, TaskManager>,
+    process_queries: State<'_, PluginProcessQueryManager>,
 ) -> Result<OpenedProject, WorkspaceError> {
     tasks.cancel_owner(window.label());
+    process_queries.cancel_owner(window.label());
     let token = active_workspaces.begin_activation(window.label())?;
     let project = match read_project(path).await {
         Ok(project) => project,

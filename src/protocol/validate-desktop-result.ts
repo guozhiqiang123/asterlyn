@@ -30,6 +30,8 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
   if (validatePluginTaskCacheDesktopResult(validator, value)) return value as DesktopCommandMap[Command]["result"];
   if (validateTaskExecutionDesktopResult(validator, value, command)) return value as DesktopCommandMap[Command]["result"];
   switch (validator) {
+    case "pluginProcessQueryResult":
+      throw new Error(`${command}: process query results require the feature-scoped validator.`);
     case "void":
       assert(value === null || value === undefined, command, "expected no response body");
       break;

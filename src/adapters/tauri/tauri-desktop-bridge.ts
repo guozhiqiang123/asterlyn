@@ -19,4 +19,6 @@ export const tauriDesktopBridge: DesktopBridge = {
   ...tauriTaskExecutionBridge,
   ...tauriTaskArtifactBridge,
   ...tauriPluginTaskCacheBridge,
+  executePluginProcessQuery: (...args) => import("./tauri-plugin-process-query-bridge.ts")
+    .then(({ tauriPluginProcessQueryBridge }) => tauriPluginProcessQueryBridge.executePluginProcessQuery(...args)),
 };

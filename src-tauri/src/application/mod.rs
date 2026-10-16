@@ -2,6 +2,7 @@ mod commit_file_restore;
 mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
+mod plugin_process_query;
 pub(crate) mod plugin_task_cache;
 mod search_session;
 mod task;
@@ -23,6 +24,7 @@ pub(crate) use commit_file_restore::{
 };
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
+pub(crate) use plugin_process_query::{PluginProcessQueryManager, PluginProcessQueryResult};
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
 pub(crate) use task::TaskManager;
 pub(crate) use task_artifacts::{TaskArtifactDiscovery, scan_task_artifacts};

@@ -24,6 +24,8 @@ import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
 import { createPluginTaskCacheCapability } from "./plugin-task-cache-capability.ts";
 import type { HostNotificationPublisher } from "../application/notifications/index.ts";
 import { createPluginNotificationCapability } from "./plugin-notification-capability.ts";
+import type { PluginProcessQueryBridge } from "../protocol/plugin-process-query.ts";
+import type { PluginWorkspaceStateStorage } from "./plugin-workspace-state-capability.ts";
 
 export interface PluginCompositionRuntimeOptions {
   readonly registerCommand: (descriptor: CommandDescriptor) => () => void;
@@ -49,6 +51,8 @@ export interface PluginCompositionRuntimeOptions {
   readonly preferenceStore?: PluginPreferenceStore;
   readonly taskCacheBridge?: PluginTaskCacheBridge;
   readonly notificationPublisher?: HostNotificationPublisher;
+  readonly processQueryBridge?: PluginProcessQueryBridge;
+  readonly workspaceStateStorage?: PluginWorkspaceStateStorage;
   readonly locale?: () => string;
 }
 
@@ -83,6 +87,10 @@ export class PluginCompositionRuntime {
             options.locale ?? (() => "en-US"),
             options.notificationPublisher as HostNotificationPublisher,
           ),
+      async (plugin, identity) => (await import("./plugin-process-query-capability.ts"))
+        .createPluginProcessQueriesCapability(options.processQueryBridge, plugin, identity),
+      async (plugin, identity) => (await import("./plugin-workspace-state-capability.ts"))
+        .createPluginWorkspaceStateCapability(options.workspaceStateStorage, plugin, identity),
     );
     this.contributions = new PluginContributionRuntime(this.runtime.contributions, options);
     this.preferences = options.preferenceStore ?? new PluginPreferenceStore(
@@ -105,6 +113,8 @@ export class PluginCompositionRuntime {
   pluginSettingsTargets(): PluginSettingsTargetResolution {
     return this.contributions.pluginSettingsTargets();
   }
+
+  get contributionRegistry() { return this.runtime.contributions; }
 
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {
     if (this.disposed) return;

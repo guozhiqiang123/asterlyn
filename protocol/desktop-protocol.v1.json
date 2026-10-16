@@ -5,7 +5,8 @@
     "PluginTaskCacheDirtyReason": "./plugin-task-cache",
     "PluginTaskCacheReadResult": "./plugin-task-cache",
     "PluginTaskCacheMutationResult": "./plugin-task-cache",
-    "PluginTaskCacheCleanupResult": "./plugin-task-cache"
+    "PluginTaskCacheCleanupResult": "./plugin-task-cache",
+    "PluginProcessQueryResult": "./plugin-process-query"
   },
   "commands": [
     { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
@@ -37,6 +38,7 @@
     { "name": "write_plugin_task_cache", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string", "fingerprint": "WorkspaceFingerprint", "payloadBase64": "string" }, "result": "PluginTaskCacheMutationResult", "validator": "pluginTaskCacheMutationResult" },
     { "name": "mark_plugin_task_cache_dirty", "args": { "workspaceRoot": "string", "pluginId": "string", "providerId": "string", "reason": "PluginTaskCacheDirtyReason" }, "result": "PluginTaskCacheMutationResult", "validator": "pluginTaskCacheMutationResult" },
     { "name": "cleanup_plugin_task_cache", "args": {}, "result": "PluginTaskCacheCleanupResult", "validator": "pluginTaskCacheCleanupResult" },
+    { "name": "execute_plugin_process_query", "args": { "workspaceRoot": "string", "pluginId": "string", "queryId": "string" }, "result": "PluginProcessQueryResult", "validator": "pluginProcessQueryResult" },
     { "name": "read_tracked_changes", "args": { "repositoryRoot": "string" }, "result": "TrackedChangeScan", "validator": "trackedChangeScan" },
     { "name": "open_repository_window", "args": { "path": "string" }, "result": "ProjectWindowOpenResult", "validator": "projectWindowOpenResult" },
     { "name": "read_history_page", "args": { "repositoryRoot": "string", "query": "HistoryQuery", "offset": "number", "limit": "number" }, "result": "HistoryPage", "validator": "historyPage" },

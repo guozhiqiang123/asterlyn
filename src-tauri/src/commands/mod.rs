@@ -3,6 +3,7 @@ mod commit_file_restore;
 mod git_operations;
 mod git_recovery;
 mod plugin_cache;
+mod plugin_process_query;
 pub(crate) use git_recovery::{
     list_git_worktree_recoveries, prepare_restore_changes, undo_git_worktree_recovery,
 };
@@ -10,6 +11,7 @@ pub(crate) use plugin_cache::{
     cleanup_plugin_task_cache, compute_workspace_fingerprint, mark_plugin_task_cache_dirty,
     read_plugin_task_cache, write_plugin_task_cache,
 };
+pub(crate) use plugin_process_query::execute_plugin_process_query;
 mod git_reads;
 mod image;
 mod shell;
