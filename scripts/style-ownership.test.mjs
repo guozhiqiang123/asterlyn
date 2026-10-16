@@ -128,6 +128,11 @@ test("native macOS chrome keeps the trailing settings action inset from the wind
   );
 });
 
+test("hidden optional activity buttons override the rail display mode", async () => {
+  const source = await readFile(new URL("../src/shell/shell.css", import.meta.url), "utf8");
+  assert.match(source, /\.activity-button\[hidden\]\s*\{[^}]*display:\s*none;/s);
+});
+
 test("bottom tool close stays right-aligned when feature actions are hidden", async () => {
   const source = await readFile(new URL("../src/shared/layout.css", import.meta.url), "utf8");
   assert.match(source, /\.bottom-tool-hide\s*\{[^}]*margin-left:\s*auto;/s);

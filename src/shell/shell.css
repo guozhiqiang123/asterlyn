@@ -377,6 +377,10 @@
   -webkit-user-drag: none;
 }
 
+.activity-button[hidden] {
+  display: none;
+}
+
 .activity-button:active {
   cursor: grabbing;
 }
