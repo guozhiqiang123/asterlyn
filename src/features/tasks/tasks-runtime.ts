@@ -103,7 +103,11 @@ export class TasksRuntime {
     this.abortController = controller;
     const signal = controller.signal;
     this.root.querySelector<HTMLButtonElement>("#tasks-header-refresh")
-      ?.addEventListener("click", () => { void this.refresh(); }, { signal });
+      ?.addEventListener("click", () => {
+        if (!this.root.querySelector<HTMLElement>("#tasks-view-host")?.classList.contains("hidden")) {
+          void this.refresh();
+        }
+      }, { signal });
     host.addEventListener("input", (event) => {
       const target = event.target;
       if (target instanceof HTMLInputElement && target.matches("[data-tasks-query]")) this.controller.setQuery(target.value);
@@ -275,7 +279,7 @@ export class TasksRuntime {
 
   private disclosure(): DisclosureState { return this.treeDisclosures[this.presentation]; }
 
-  private host(): HTMLElement | null { return this.root.querySelector<HTMLElement>("#tasks-tool-host"); }
+  private host(): HTMLElement | null { return this.root.querySelector<HTMLElement>("#tasks-view-host"); }
 }
 
 export function pointerTaskActivation(

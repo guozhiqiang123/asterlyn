@@ -9,6 +9,7 @@ export interface BottomToolRuntimeOptions {
   readonly navigationCopy: () => NavigationCopy;
   readonly replacementCopy: () => ReplacementCopy;
   readonly tasksCopy: () => TasksCopy;
+  readonly tasksTitle?: () => string;
   readonly workspaceRoot: () => string | null;
   readonly gitAvailable: () => boolean;
   readonly activateTerminal: (workspaceRoot: string) => void;
@@ -43,10 +44,11 @@ export class BottomToolRuntime {
     const presentation = bottomToolPresentation(tool, this.options.shellCopy(), navigation, this.options.replacementCopy(), this.options.tasksCopy());
     const title = this.query("#bottom-tool-title");
     const hide = this.query<HTMLButtonElement>("#hide-bottom-tool");
-    title.textContent = presentation.title;
+    title.textContent = presentation.showTasks ? (this.options.tasksTitle?.() ?? presentation.title) : presentation.title;
     hide.setAttribute("aria-label", presentation.hideLabel);
     hide.title = presentation.hideLabel;
     this.query("#git-operation-open").classList.toggle("hidden", !presentation.showGit);
+    this.query<HTMLButtonElement>("#plugin-run-action").classList.add("hidden");
     const tasksRefresh = this.query<HTMLButtonElement>("#tasks-header-refresh");
     tasksRefresh.classList.toggle("hidden", !presentation.showTasks);
     tasksRefresh.setAttribute("aria-label", this.options.tasksCopy().refresh);

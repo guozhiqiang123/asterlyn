@@ -74,6 +74,7 @@ export class PluginManagementRuntime {
       nameKey: plugin.manifest.nameKey,
       descriptionKey: plugin.manifest.descriptionKey,
       localization: plugin.manifest.localization,
+      ...(plugin.manifest.workspaceTool === undefined ? {} : { workspaceTool: plugin.manifest.workspaceTool }),
       enabled: preferences.enabled[plugin.id] ?? true,
       matched: this.matched.has(plugin.id),
       active: this.active.has(plugin.id),

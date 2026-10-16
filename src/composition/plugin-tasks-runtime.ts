@@ -25,6 +25,9 @@ import type { PluginTaskCacheBridge } from "../protocol/plugin-task-cache.ts";
 import type { TaskTerminalSessionPort } from "../application/tasks/task-terminal-session.ts";
 import type { HostNotificationPublisher } from "../application/notifications/index.ts";
 import { pluginTaskTerminalNotification } from "./plugin-task-feedback.ts";
+import type { PluginProcessQueryBridge } from "../protocol/plugin-process-query.ts";
+import type { PluginWorkbenchHostRuntime } from "./plugin-workbench-host-runtime.ts";
+import { resolvePluginMessage } from "../application/plugins/plugin-localization.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -39,7 +42,9 @@ export interface PluginTasksRuntimeOptions {
   readonly reconcileAfterTask?: (identity: PluginWorkspaceIdentity) => void | Promise<void>;
   readonly taskTerminal?: TaskTerminalSessionPort;
   readonly notificationPublisher?: HostNotificationPublisher;
+  readonly processQueryBridge?: PluginProcessQueryBridge;
   readonly availabilityChanged?: (available: boolean) => void;
+  readonly identityChanged?: () => void;
 }
 
 export interface PluginWorkspaceCatalog {
@@ -49,6 +54,7 @@ export interface PluginWorkspaceCatalog {
 
 /** Owns the window-level bridge from reviewed plugin contributions to the Tasks surface. */
 export class PluginTasksRuntime {
+  private readonly root: HTMLElement;
   private readonly tasks: TasksRuntime;
   private readonly plugins: PluginCompositionRuntime;
   private readonly platform: () => "posix" | "windows";
@@ -62,13 +68,20 @@ export class PluginTasksRuntime {
   private readonly notificationPublisher: HostNotificationPublisher | undefined;
   private readonly managementListeners = new Set<(snapshot: PluginManagementSnapshot) => void>();
   private readonly availabilityChanged: ((available: boolean) => void) | undefined;
+  private readonly locale: () => "en-US" | "zh-CN";
+  private readonly identityChanged: (() => void) | undefined;
   private readonly releaseManagement: () => void;
+  private workbenchHost: PluginWorkbenchHostRuntime | null = null;
+  private workbenchHostPromise: Promise<PluginWorkbenchHostRuntime> | null = null;
   private identity: PluginWorkspaceIdentity | null = null;
   private available = false;
 
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
+    this.root = root;
     this.copy = options.copy;
+    this.locale = options.locale ?? (() => "en-US");
     this.availabilityChanged = options.availabilityChanged;
+    this.identityChanged = options.identityChanged;
     this.notificationPublisher = options.notificationPublisher;
     this.recentTasks = options.recentTaskStorage ? new RecentTaskStore(options.recentTaskStorage) : null;
     this.artifactBridge = options.artifactBridge;
@@ -114,11 +127,15 @@ export class PluginTasksRuntime {
       providerRefreshTitle: (providerLabel) => `${options.copy().refresh}: ${providerLabel}`,
       taskCacheBridge: options.taskCacheBridge,
       notificationPublisher: options.notificationPublisher,
+      processQueryBridge: options.processQueryBridge,
+      workspaceStateStorage: options.recentTaskStorage,
       locale: options.locale,
     });
     this.releaseManagement = this.plugins.subscribeManagement((snapshot) => {
       this.applyTaskPresentation(snapshot);
       this.publishManagement();
+      void this.renderWorkbench();
+      this.identityChanged?.();
     });
     this.tasks = new TasksRuntime(root, controller, {
       copy: options.copy,
@@ -163,7 +180,24 @@ export class PluginTasksRuntime {
 
   render(): void {
     this.tasks.render();
+    void this.renderWorkbench();
     this.execution.render();
+  }
+
+  workbenchTitle(): string {
+    return this.workbenchIdentity().title;
+  }
+
+  workbenchIdentity(): { readonly title: string; readonly icon: "device" | "list" | "puzzle" } {
+    const entry = this.plugins.managementSnapshot.entries.find(
+      (candidate) => candidate.active && candidate.workspaceTool !== undefined,
+    );
+    return entry?.workspaceTool
+      ? {
+          title: resolvePluginMessage(entry.localization, this.locale(), entry.workspaceTool.titleKey),
+          icon: entry.workspaceTool.icon,
+        }
+      : { title: this.copy().title, icon: "list" };
   }
 
   get pluginManagementSnapshot(): PluginManagementSnapshot {
@@ -228,6 +262,8 @@ export class PluginTasksRuntime {
     this.identity = null;
     this.setAvailable(false);
     this.releaseManagement();
+    this.workbenchHost?.dispose();
+    this.workbenchHost = null;
     this.managementListeners.clear();
     this.plugins.dispose();
     this.execution.dispose();
@@ -239,6 +275,25 @@ export class PluginTasksRuntime {
     this.available = available;
     this.availabilityChanged?.(available);
   }
+
+  private async renderWorkbench(): Promise<void> {
+    this.workbenchHostPromise ??= import("./plugin-workbench-host-runtime.ts")
+      .then(({ PluginWorkbenchHostRuntime }) => new PluginWorkbenchHostRuntime({
+        root: this.root,
+        plugins: this.plugins,
+        copy: this.copy,
+        locale: this.locale,
+        reportError: this.reportError,
+      }));
+    const host = await this.workbenchHostPromise;
+    if (!this.identity) {
+      host.dispose();
+      return;
+    }
+    this.workbenchHost = host;
+    host.render();
+  }
+
 
   private async executeTaskRefresh(
     identity: PluginWorkspaceIdentity,

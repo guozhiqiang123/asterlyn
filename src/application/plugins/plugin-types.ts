@@ -184,6 +184,7 @@ export interface PluginManagementEntry {
   readonly nameKey: string;
   readonly descriptionKey: string;
   readonly localization: PluginLocalization;
+  readonly workspaceTool?: PluginWorkspaceToolDescriptor;
   readonly enabled: boolean;
   readonly matched: boolean;
   readonly active: boolean;

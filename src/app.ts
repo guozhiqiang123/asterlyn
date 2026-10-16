@@ -641,7 +641,7 @@ export class AsterlynApp {
       error: (error) => this.showError(error),
       keyboard: this.shortcuts.handleTerminalKeyEvent, presentationChanged: () => this.refreshShortcutPresentation(),
     }, initialCatalog.locale);
-    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
+    this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, processQueryBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), identityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
     this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.findResultsRuntime = new FindResultsRuntime(root, {
@@ -679,7 +679,7 @@ export class AsterlynApp {
         this.renderGitDetailPane(snapshot);
       },
       renderStash: () => this.stashRuntime.render(),
-      renderFind: () => this.findResultsRuntime.render(), renderReplace: () => this.replacementPresentationRuntime.renderTool(), renderTasks: () => this.pluginTasksRuntime.render(), pluginSettingsTargets: () => this.pluginTasksRuntime.pluginSettingsTargets(), openPluginSettings: (target) => { const route = target && "pluginId" in target ? { section: "plugins" as const, pluginId: target.pluginId, focus: target.focus } : { section: "plugins" as const }; this.settingsReturnFocus = "#plugin-settings-open"; this.openSettings(route); },
+      renderFind: () => this.findResultsRuntime.render(), renderReplace: () => this.replacementPresentationRuntime.renderTool(), renderTasks: () => this.pluginTasksRuntime.render(), tasksTitle: () => this.pluginTasksRuntime.workbenchTitle(), pluginSettingsTargets: () => this.pluginTasksRuntime.pluginSettingsTargets(), openPluginSettings: (target) => { const route = target && "pluginId" in target ? { section: "plugins" as const, pluginId: target.pluginId, focus: target.focus } : { section: "plugins" as const }; this.settingsReturnFocus = "#plugin-settings-open"; this.openSettings(route); },
     });
     this.historyReadRuntime = new GitHistoryReadRuntime(
       {
@@ -3926,8 +3926,13 @@ export class AsterlynApp {
       button.disabled = !enabled;
       button.setAttribute("aria-pressed", String(active));
       button.setAttribute("aria-disabled", String(!enabled));
-      const label = { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, tasks: copy.tasks, terminal: copy.terminal }[tool];
+      const pluginIdentity = tool === "tasks" ? this.pluginTasksRuntime.workbenchIdentity() : null;
+      const label = pluginIdentity?.title ?? { files: copy.files, search: copy.search, branches: copy.branches, changes: copy.changes, stash: copy.stash, tasks: copy.tasks, terminal: copy.terminal }[tool];
       button.setAttribute("aria-label", label);
+      if (pluginIdentity) {
+        const glyph = button.querySelector("svg");
+        if (glyph) glyph.outerHTML = icon(pluginIdentity.icon, 20);
+      }
       const labelNode = button.querySelector("span");
       if (labelNode) labelNode.textContent = label;
       button.title = enabled

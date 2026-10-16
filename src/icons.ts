@@ -6,6 +6,9 @@ const paths: Record<string, string> = {
   history:
     '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2M4.7 5.4 3 5.2l.2 1.7"/>',
   terminal: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m7 9 3 3-3 3M12.5 15H17"/>',
+  device: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10 5h4M11 18.5h2"/>',
+  play: '<path d="m8 5 11 7-11 7Z"/>',
+  puzzle: '<path d="M9 4h3a2.5 2.5 0 1 1 5 0h3v5h-3a2.5 2.5 0 1 0 0 5h3v6h-6v-3a2.5 2.5 0 1 0-5 0v3H4v-6h3a2.5 2.5 0 1 0 0-5H4V4h5Z"/>',
   head: '<path d="M5 20V5m0 1h10l4 4-4 4H5"/>',
   refresh:
     '<path d="M18.4 8A7 7 0 1 0 19 14M18.5 4.5V8h-3.6"/>',

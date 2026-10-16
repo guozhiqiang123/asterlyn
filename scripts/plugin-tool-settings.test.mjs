@@ -53,12 +53,13 @@ class FakeElement extends EventTarget {
 
 class FakeClassList {
   names = new Set();
+  add(name) { this.names.add(name); }
   toggle(name, force) { if (force) this.names.add(name); else this.names.delete(name); }
   contains(name) { return this.names.has(name); }
 }
 
 const SELECTORS = [
-  "#bottom-tool-title", "#hide-bottom-tool", "#git-operation-open", "#tasks-header-refresh",
+  "#bottom-tool-title", "#hide-bottom-tool", "#git-operation-open", "#plugin-run-action", "#tasks-header-refresh",
   "#plugin-settings-open", "#terminal-header-actions", "#git-tool-grid", "#stash-tool-grid",
   "#terminal-tool-host", "#find-tool-host", "#replacement-tool-host", "#tasks-tool-host", "#bottom-tool",
 ];
