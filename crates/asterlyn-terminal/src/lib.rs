@@ -20,6 +20,7 @@ const OUTPUT_CHUNK_BYTES: usize = 16 * 1024;
 pub const MAX_OUTPUT_FRAME_BYTES: usize = 64 * 1024;
 pub const MAX_OUTPUT_QUEUE_BYTES: usize = 256 * 1024;
 pub const MAX_OUTPUT_QUEUE_FRAMES: usize = 16;
+pub const MAX_SESSIONS_PER_OWNER: usize = 8;
 
 pub type TerminalEventSink =
     Arc<dyn Fn(TerminalEvent) -> Result<(), String> + Send + Sync + 'static>;
@@ -57,7 +58,7 @@ pub enum TerminalEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminalError {
     InvalidInput(String),
-    AlreadyRunning,
+    SessionLimitReached,
     SessionNotFound,
     StaleSession,
     Io {
@@ -70,8 +71,11 @@ impl fmt::Display for TerminalError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidInput(message) => write!(formatter, "{message}"),
-            Self::AlreadyRunning => {
-                write!(formatter, "a terminal is already running in this window")
+            Self::SessionLimitReached => {
+                write!(
+                    formatter,
+                    "this window has reached its terminal session limit"
+                )
             }
             Self::SessionNotFound => write!(formatter, "this window has no terminal session"),
             Self::StaleSession => write!(formatter, "the terminal session is no longer current"),
@@ -84,6 +88,7 @@ impl std::error::Error for TerminalError {}
 
 struct TerminalSession {
     id: String,
+    owner: String,
     root: PathBuf,
     master: Mutex<Box<dyn MasterPty + Send>>,
     writer: Mutex<Box<dyn Write + Send>>,
@@ -137,11 +142,14 @@ impl TerminalSessions {
         }
 
         let mut sessions = self.sessions.lock().map_err(|_| lock_error())?;
-        if let Some(current) = sessions.get(owner) {
-            if current.alive.load(Ordering::Acquire) {
-                return Err(TerminalError::AlreadyRunning);
-            }
-            sessions.remove(owner);
+        sessions.retain(|_, session| session.alive.load(Ordering::Acquire));
+        if sessions
+            .values()
+            .filter(|session| session.owner == owner)
+            .count()
+            >= MAX_SESSIONS_PER_OWNER
+        {
+            return Err(TerminalError::SessionLimitReached);
         }
 
         let shell = resolve_shell();
@@ -149,8 +157,8 @@ impl TerminalSessions {
             "terminal-{}",
             self.sequence.fetch_add(1, Ordering::Relaxed) + 1
         );
-        let session = spawn_session(&id, &root, &shell, size, sink)?;
-        sessions.insert(owner.to_string(), Arc::new(session));
+        let session = spawn_session(&id, owner, &root, &shell, size, sink)?;
+        sessions.insert(id.clone(), Arc::new(session));
         Ok(TerminalStarted {
             session_id: id,
             shell: shell.display_name,
@@ -207,25 +215,33 @@ impl TerminalSessions {
 
     pub fn close(&self, owner: &str, session_id: &str) -> Result<bool, TerminalError> {
         let mut sessions = self.sessions.lock().map_err(|_| lock_error())?;
-        let Some(current) = sessions.get(owner) else {
+        let Some(current) = sessions.get(session_id) else {
             return Ok(false);
         };
-        if current.id != session_id {
+        if current.owner != owner {
             return Err(TerminalError::StaleSession);
         }
-        let session = sessions.remove(owner).expect("current session was present");
+        let session = sessions
+            .remove(session_id)
+            .expect("current session was present");
         drop(sessions);
         session.terminate();
         Ok(true)
     }
 
     pub fn remove_owner(&self, owner: &str) {
-        let session = self
-            .sessions
-            .lock()
-            .ok()
-            .and_then(|mut sessions| sessions.remove(owner));
-        if let Some(session) = session {
+        let sessions = self.sessions.lock().ok().map(|mut sessions| {
+            let owned = sessions
+                .values()
+                .filter(|session| session.owner == owner)
+                .map(|session| session.id.clone())
+                .collect::<Vec<_>>();
+            owned
+                .into_iter()
+                .filter_map(|session_id| sessions.remove(&session_id))
+                .collect::<Vec<_>>()
+        });
+        for session in sessions.unwrap_or_default() {
             session.terminate();
         }
     }
@@ -233,13 +249,18 @@ impl TerminalSessions {
     pub fn remove_owner_if_root_changed(&self, owner: &str, next_root: &Path) {
         let next_root =
             std::fs::canonicalize(next_root).unwrap_or_else(|_| next_root.to_path_buf());
-        let session = self.sessions.lock().ok().and_then(|mut sessions| {
-            let should_remove = sessions
-                .get(owner)
-                .is_some_and(|session| session.root != next_root);
-            should_remove.then(|| sessions.remove(owner)).flatten()
+        let sessions = self.sessions.lock().ok().map(|mut sessions| {
+            let stale = sessions
+                .values()
+                .filter(|session| session.owner == owner && session.root != next_root)
+                .map(|session| session.id.clone())
+                .collect::<Vec<_>>();
+            stale
+                .into_iter()
+                .filter_map(|session_id| sessions.remove(&session_id))
+                .collect::<Vec<_>>()
         });
-        if let Some(session) = session {
+        for session in sessions.unwrap_or_default() {
             session.terminate();
         }
     }
@@ -248,10 +269,8 @@ impl TerminalSessions {
         self.sessions
             .lock()
             .ok()
-            .and_then(|sessions| sessions.get(owner).cloned())
-            .is_some_and(|session| {
-                session.id == session_id && session.alive.load(Ordering::Acquire)
-            })
+            .and_then(|sessions| sessions.get(session_id).cloned())
+            .is_some_and(|session| session.owner == owner && session.alive.load(Ordering::Acquire))
     }
 
     fn current(
@@ -263,10 +282,10 @@ impl TerminalSessions {
             .sessions
             .lock()
             .map_err(|_| lock_error())?
-            .get(owner)
+            .get(session_id)
             .cloned()
             .ok_or(TerminalError::SessionNotFound)?;
-        if session.id != session_id {
+        if session.owner != owner {
             return Err(TerminalError::StaleSession);
         }
         Ok(session)
@@ -377,6 +396,7 @@ impl OutputQueue {
 
 fn spawn_session(
     id: &str,
+    owner: &str,
     root: &Path,
     shell: &ShellProgram,
     size: PtySize,
@@ -569,6 +589,7 @@ fn spawn_session(
 
     Ok(TerminalSession {
         id: id.to_string(),
+        owner: owner.to_string(),
         root: root.to_path_buf(),
         master: Mutex::new(pair.master),
         writer: Mutex::new(writer),
@@ -773,11 +794,11 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn close_releases_exact_session_and_rejects_stale_input() {
+    fn sibling_sessions_are_isolated_and_exact_close_rejects_stale_input() {
         let sessions = TerminalSessions::default();
         let root = tempfile::tempdir().expect("temporary root");
         let other_root = tempfile::tempdir().expect("other temporary root");
-        let started = sessions
+        let first = sessions
             .start(
                 "window-a",
                 root.path(),
@@ -786,32 +807,50 @@ mod tests {
                 Arc::new(|_| Ok(())),
             )
             .expect("terminal starts");
-        assert!(matches!(
-            sessions.start(
+        let second = sessions
+            .start(
                 "window-a",
                 root.path(),
                 DEFAULT_COLS,
                 DEFAULT_ROWS,
-                Arc::new(|_| Ok(()))
-            ),
-            Err(TerminalError::AlreadyRunning)
-        ));
+                Arc::new(|_| Ok(())),
+            )
+            .expect("sibling terminal starts");
+        assert_ne!(first.session_id, second.session_id);
+        assert!(sessions.has_session("window-a", &first.session_id));
+        assert!(sessions.has_session("window-a", &second.session_id));
         assert!(matches!(
             sessions.write(
                 "window-a",
-                &started.session_id,
+                &first.session_id,
                 &vec![b'x'; MAX_INPUT_BYTES + 1]
             ),
             Err(TerminalError::InvalidInput(_))
         ));
+        assert!(
+            !sessions
+                .close("window-a", "terminal-obsolete")
+                .expect("unknown close is idempotent")
+        );
         assert!(matches!(
-            sessions.close("window-a", "terminal-obsolete"),
+            sessions.write("window-b", &first.session_id, b"pwd\n"),
             Err(TerminalError::StaleSession)
         ));
+        assert!(matches!(
+            sessions.close("window-b", &first.session_id),
+            Err(TerminalError::StaleSession)
+        ));
+        assert!(
+            sessions
+                .close("window-a", &first.session_id)
+                .expect("close first sibling")
+        );
+        assert!(!sessions.has_session("window-a", &first.session_id));
+        assert!(sessions.has_session("window-a", &second.session_id));
         sessions.remove_owner_if_root_changed("window-a", root.path());
-        assert!(sessions.has_session("window-a", &started.session_id));
+        assert!(sessions.has_session("window-a", &second.session_id));
         sessions.remove_owner_if_root_changed("window-a", other_root.path());
-        assert!(!sessions.has_session("window-a", &started.session_id));
+        assert!(!sessions.has_session("window-a", &second.session_id));
 
         let replacement = sessions
             .start(
@@ -832,6 +871,53 @@ mod tests {
             sessions.write("window-a", &replacement.session_id, b"pwd\n"),
             Err(TerminalError::SessionNotFound)
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn owner_session_limit_and_owner_cleanup_are_bounded() {
+        let sessions = TerminalSessions::default();
+        let root = tempfile::tempdir().expect("temporary root");
+        let mut started = Vec::new();
+        for _ in 0..MAX_SESSIONS_PER_OWNER {
+            started.push(
+                sessions
+                    .start(
+                        "window-limit",
+                        root.path(),
+                        DEFAULT_COLS,
+                        DEFAULT_ROWS,
+                        Arc::new(|_| Ok(())),
+                    )
+                    .expect("terminal inside owner limit starts"),
+            );
+        }
+        assert!(matches!(
+            sessions.start(
+                "window-limit",
+                root.path(),
+                DEFAULT_COLS,
+                DEFAULT_ROWS,
+                Arc::new(|_| Ok(())),
+            ),
+            Err(TerminalError::SessionLimitReached)
+        ));
+
+        let other = sessions
+            .start(
+                "window-other",
+                root.path(),
+                DEFAULT_COLS,
+                DEFAULT_ROWS,
+                Arc::new(|_| Ok(())),
+            )
+            .expect("another owner has an independent limit");
+        sessions.remove_owner("window-limit");
+        for session in started {
+            assert!(!sessions.has_session("window-limit", &session.session_id));
+        }
+        assert!(sessions.has_session("window-other", &other.session_id));
+        sessions.remove_owner("window-other");
     }
 
     #[cfg(unix)]
