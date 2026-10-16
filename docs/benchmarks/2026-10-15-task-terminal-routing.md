@@ -186,4 +186,22 @@ task ownership but does not reset xterm; the host starts a real shell in the sam
 prompt appears below the preserved success, failure, cancellation, or crash transcript. Beginning a
 later task appends to the same scrollback instead of clearing earlier runs.
 
-Focused and packaged acceptance evidence is recorded after validation of this correction.
+Focused and packaged acceptance evidence for this correction:
+
+- Terminal-focused tests: 15 passed, including retained output, real-shell handoff, lazy handoff,
+  and all four terminal task results.
+- Frontend script suite: 1,164 passed, 0 failed.
+- `npm run check` and `npm run build`: passed; startup chunk 499.89 kB, below the 500 kB
+  architecture limit.
+- Native tests: 96 passed, 0 failed, 2 declared operating-system watcher tests ignored.
+- Tauri Release application built successfully for version `0.1.8`; the installed app is ad-hoc
+  signed with hardened runtime and passed strict deep signature verification.
+- Installed executable SHA-256:
+  `0171777ac2093a1b0c7ab58c00071837c3b169d323ff001dd2be623f8f932d7e`.
+- Acceptance archive: `/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn-0.1.8-local-20261016-104315-terminal-history-shell.app.zip`,
+  9,865,204 bytes, SHA-256
+  `b892274a2beaec4c69d4ad03d468570cfdffeb0198592642bdaa304e04bf158a`.
+- Previous installed application:
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261016-104315-terminal-history-shell/Asterlyn.app`.
+- The installed and backup bundles passed strict deep signature verification. The installed app was
+  restarted with FilesRecovery as process `14940` for manual Gradle-task acceptance.
