@@ -52,12 +52,14 @@ Terminal.
 3. The Terminal shows a safely formatted, display-only command summary and streams stdout/stderr in
    native event order. Display quoting is never reused for execution.
 4. Success, failure, cancellation, or crash ends the task Terminal session immediately. The host
-   clears the task transcript, restores the Terminal's no-session state, disables stdin, and hides
-   the cursor without closing the bottom panel or automatically starting a shell. The task execution
-   model retains the bounded result; “Reveal output” opens that result outside Terminal.
+   retains the completed transcript in the existing xterm scrollback, releases task ownership, and
+   starts a supervised interactive shell in the same Terminal surface and workspace. The real shell
+   prompt is appended below the task result; success and failure never clear the visible history.
+   The task execution model also retains its bounded result; “Reveal output” opens that result
+   outside Terminal.
 5. While a task is active, the Terminal stop action delegates to the existing native cancellation
-   path. A new interactive shell starts only from an explicit New Session action or a later ordinary
-   user activation of an idle Terminal.
+   path. The shell handoff is a host lifecycle transition after a terminal task result, not plugin
+   access to a PTY and not a second execution of the reviewed task.
 
 The first implementation preserves the existing one-session-per-window Terminal resource model. A
 task presentation replaces the visible interactive-shell session for that window; an active shell is
@@ -68,8 +70,9 @@ native capability and security review.
 ### Ownership and bounds
 
 - Task execution owns preparation, review, process lifecycle, output ordering, and cancellation.
-- Terminal owns rendering, focus, the active transcript, idle reset, new-session controls, and panel
-  visibility. Task execution owns completed output and its later reveal surface.
+- Terminal owns rendering, focus, retained xterm scrollback, task-to-shell handoff, new-session
+  controls, and panel visibility. Task execution owns the bounded completed result and its later
+  reveal surface.
 - Shell layout owns opening the bottom tool; neither Tasks nor plugins manipulate layout DOM.
 - Session and output identity are checked on every transition. Stale frames are ignored.
 - Existing native output limits remain authoritative; any pre-mount Terminal buffering is bounded
@@ -84,9 +87,10 @@ execution surface. The cross-feature dependency is expressed through a narrow ho
 by coupling the Android/Gradle plugin to Terminal internals.
 
 The Terminal must support idle, interactive-shell, and active task-session modes, including output
-that arrives before the lazily loaded terminal view is ready. Tests must distinguish single-click
+that arrives before the lazily loaded terminal view is ready. A terminal task result transitions to
+the interactive-shell mode without resetting the xterm buffer. Tests must distinguish single-click
 selection, double-click/keyboard activation, background discovery, exact one-run routing,
-cancellation, stale output, terminal reset, and result reveal outside Terminal.
+cancellation, stale output, retained scrollback, shell handoff, and result reveal outside Terminal.
 
 ## Rejected alternatives
 

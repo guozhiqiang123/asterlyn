@@ -35,7 +35,8 @@ Commit boundary: Tasks interaction and its focused tests.
 - Define typed begin, append, complete, reveal, and cancel semantics under the host application
   boundary.
 - Add Terminal task-session mode with a bounded pre-mount transcript, stale-session filtering,
-  display-only command summary, cancellation, and deterministic return to the no-session state.
+  display-only command summary, cancellation, retained scrollback, and deterministic handoff to a
+  supervised shell in the same workspace after every terminal result.
 - Keep interactive PTY input disabled while a task transcript owns the Terminal surface.
 - Add focused tests for lifecycle, bounds, replacement, stale frames, and localized rendering.
 
@@ -77,9 +78,9 @@ files.
 | Arguments contain spaces/metacharacters | Native argument vector is unchanged; display quoting is inert |
 | stdout/stderr arrive early | Bounded transcript replays after lazy Terminal mount without loss/duplication |
 | Cancel from Terminal | Existing native task is cancelled; no shell or second task is spawned |
-| Task finishes/fails/crashes | Terminal content is cleared, the no-session header is restored, stdin and cursor are disabled, and no shell starts implicitly |
-| Reveal completed output | The bounded task result opens outside Terminal; Terminal remains in its no-session state |
-| Start a new interactive session | One explicit New Session action starts one supervised shell |
+| Task finishes/fails/crashes | The transcript remains in xterm scrollback; task ownership ends and a real interactive shell prompt appears below it in the same workspace |
+| Reveal completed output | The bounded task result opens outside Terminal; the retained transcript and current shell remain unchanged |
+| Start a new interactive session | Restart replaces only the supervised shell session; task completion already returns the existing surface to a real shell |
 | Rapid task/session replacement | Stale frames cannot mutate the current Terminal session |
 | Tree/flat, filter, load more | Selection and scroll remain stable through activation lifecycle |
 

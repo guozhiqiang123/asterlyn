@@ -17,8 +17,8 @@ Plan: [Task activation and Terminal routing](../engineering/task-terminal-routin
 - Provider discovery and cache refresh keep their background presentation and cannot open or focus
   Terminal.
 - Terminal input is disabled while a task transcript owns the surface. The active task can be
-  cancelled through the existing native path; every terminal result clears the transcript and
-  restores the open panel to its no-session state.
+  cancelled through the existing native path; every terminal result retains the transcript and
+  hands the same surface back to a supervised interactive shell in the workspace.
 - Output arriving before lazy xterm mount is retained in a 512 KiB bounded buffer. Session identity
   rejects stale output after replacement or workspace change.
 
@@ -128,13 +128,13 @@ freshly installed application remains open on FilesRecovery for the final integr
 device that becomes authorized after an earlier failure still requires an explicit retry; the task
 result and host failure notification remain the diagnostic output for that failed run.
 
-The first follow-up retained a read-only completed transcript, but manual acceptance showed that this
-still looked like a live Terminal session. The corrected contract has only three modes: no session,
-interactive shell, and read-only running task. Success, failure, cancellation, and crash now drain
-already queued xterm writes, clear the transcript, restore the no-session header, disable stdin,
-hide the cursor, and leave the bottom panel open. A resize or delayed lazy mount cannot implicitly
-start a shell; New Session remains explicit. Completed output remains available through the Tasks
-result surface.
+The first two follow-ups interpreted “end the task session” too narrowly: one retained a read-only
+completed transcript without a prompt, and the next cleared the transcript into a no-session state.
+Manual acceptance established the intended standard-terminal behavior. Success, failure,
+cancellation, and crash now retain the ordered task transcript in xterm scrollback, release task
+ownership, and append a real supervised shell prompt in the same workspace. A delayed lazy mount
+performs the same handoff after replaying its bounded buffered transcript. Completed output also
+remains available through the Tasks result surface.
 
 Follow-up verification:
 
@@ -177,3 +177,13 @@ task with an interactive shell.
   `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261016-102002-terminal-idle/Asterlyn.app`.
 - The installed and backup bundles passed strict deep signature verification. The installed app was
   restarted with FilesRecovery as process `2991` for manual Gradle-task acceptance.
+
+### Retained-transcript shell handoff correction — 2026-10-16
+
+Manual testing rejected the preceding no-session behavior because it discarded the only visible
+build history. The corrected lifecycle matches an ordinary terminal: the Gradle process result ends
+task ownership but does not reset xterm; the host starts a real shell in the same workspace and its
+prompt appears below the preserved success, failure, cancellation, or crash transcript. Beginning a
+later task appends to the same scrollback instead of clearing earlier runs.
+
+Focused and packaged acceptance evidence is recorded after validation of this correction.
