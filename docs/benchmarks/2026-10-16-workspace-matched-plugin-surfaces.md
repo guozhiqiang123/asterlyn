@@ -62,6 +62,7 @@ left for manual WebView acceptance below.
 | Host contract documentation | `722d979` (`docs: define workspace-matched plugin surfaces`) |
 | Host activity/runtime implementation | `d7ed37b` (`feat: gate plugin task activity by contributions`) |
 | Host plugin rollout | `3a3c55e` (`build: bundle Android Gradle plugin 0.1.6`) |
+| Host rendered-visibility correction | `221eb12` (`fix: hide unavailable plugin activities`) |
 
 The host vendors and pins the reviewed tarball and its metadata. Production matching does not depend
 on an implicit sibling checkout, and the host contains no Android / Gradle plugin-ID special case.
@@ -71,8 +72,8 @@ on an implicit sibling checkout, and the host contains no Android / Gradle plugi
 | Check | Result |
 | --- | --- |
 | Android / Gradle `npm run verify` | passed; 45 tests plus type check and build |
-| Host focused activity/plugin suites | passed; 47 tests |
-| Host `npm run test:scripts` | passed; 1,168 tests |
+| Host focused activity/view/style suites after rendered-visibility correction | passed; 62 tests |
+| Host `npm run test:scripts` | passed; 1,169 tests |
 | Host `npm run build` | passed without changing startup policy |
 | Host `cargo test -p asterlyn-git` | passed; 149 tests across unit and integration suites |
 | Built application rendered smoke | passed within the 6-second gate |
@@ -83,19 +84,24 @@ The first linker-only application candidate had no sealed resources and was reje
 installation acceptance. The final application was deep-signed, strictly verified, installed, and
 then smoke-tested. The rejected candidate remains recoverable and is not represented as accepted.
 
+Initial manual acceptance found that the Tasks button carried the correct `hidden` attribute but the
+activity button's explicit display rule still rendered it as disabled. The host now explicitly
+applies `display: none` to hidden activity buttons, with a stylesheet regression test covering the
+CSS cascade rather than only checking generated markup.
+
 ## Local package and installation
 
 | Item | Value |
 | --- | --- |
-| Accepted archive | `target/release/bundle/macos/Asterlyn-0.1.8-local-2026-10-16-workspace-plugin-matching.app.zip` |
-| Archive size | 9,867,937 bytes |
-| Archive SHA-256 | `5fe3b7ae87ece652e4e115db7d0f8359884a79588005d4a461804440980493dd` |
-| Built/installed executable SHA-256 | `44e690b78669af668c6b07f5bfcf696ad6e0332a4bccea1b4e751b017ee7e1ae` |
+| Accepted archive | `target/release/bundle/macos/Asterlyn-0.1.8-local-2026-10-16-hidden-plugin-activity.app.zip` |
+| Archive size | 9,867,986 bytes |
+| Archive SHA-256 | `7292e315ade9fe8ee89ddf9804e1ff4babdf04b31675f51d5210fa05b96a8f96` |
+| Built/installed executable SHA-256 | `bcee6ecbe2b4b62840f697a22c60dc52f59c8f3d3402cc23bf8ce190ef50cb5e` |
 | Installation | `/Applications/Asterlyn.app` |
-| Running installed process | PID `14940` at acceptance time |
-| Previous-app archive | `target/release/bundle/macos/Asterlyn-installed-before-workspace-plugin-matching-2026-10-16.app.zip` |
-| Previous-app archive SHA-256 | `b981af23177c1ed30257652cb9957617e00a63cbbc9ad932a4a8707cf2ed1627` |
-| Previous-app recoverable copy | `/Users/gzq/.Trash/Asterlyn-before-workspace-plugin-matching-2026-10-16.app` |
+| Running installed process | PID `53396` at acceptance time |
+| Previous-app archive | `target/release/bundle/macos/Asterlyn-installed-before-hidden-plugin-activity-2026-10-16.app.zip` |
+| Previous-app archive SHA-256 | `f84d8f97e626d077f6cd150822adf6771cf61e8f14981ac7228830467a4666bb` |
+| Previous-app recoverable copy | `/Users/gzq/.Trash/Asterlyn-before-hidden-plugin-activity-2026-10-16.app` |
 | Rejected unsealed candidate | `/Users/gzq/.Trash/Asterlyn-unsealed-rejected-workspace-plugin-matching-2026-10-16.app` |
 
 The installed executable exactly matches the verified accepted build. Windows packaging was not
