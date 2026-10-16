@@ -212,3 +212,22 @@ deployment:
 
 This increment fails closed for split outputs. Split support requires a separate target-spec and
 `install-multiple` contract rather than treating every APK in a directory as one install set.
+
+## Signature-conflict recovery increment — 2026-10-16
+
+Real-device acceptance reached the exact ADB install boundary and returned
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`: FilesRecovery was already installed with a different signing
+certificate. Android Studio surfaces this as an explicit uninstall decision because replacing the
+package requires deleting the installed application and its local data. Asterlyn will follow the
+same safety boundary:
+
+1. the Android plugin recognizes only the exact signature-conflict result and proposes a bounded
+   recovery plan for the inspected application ID and selected device;
+2. the host pauses the Run session and renders its standard destructive confirmation dialog;
+3. cancel preserves the old application and ends the session without another device mutation;
+4. confirm executes the admitted exact-device uninstall operation, revalidates the device, retries
+   the identical APK install once, and then continues to component launch; and
+5. every command and terminal state remains in the same retained Run transcript.
+
+The host does not infer Android package policy from stderr, and the plugin cannot display UI or
+execute ADB. Recovery is single-use and cannot become a generic retry loop.

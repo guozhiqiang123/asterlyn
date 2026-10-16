@@ -130,6 +130,22 @@ The explicit Run action authorizes the admitted install and launch phases for th
 artifact, and target; it does not produce a second generic process-confirmation dialog. Existing
 workspace trust and exact Gradle task-review policy still govern the build task.
 
+### Destructive deployment recovery requires a fresh confirmation
+
+An install failure does not widen the original Run authorization. A plugin may recognize one
+bounded tool result and return a declarative deployment-recovery plan containing localized review
+copy plus one separately admitted recovery operation. The host owns the alert dialog, focus,
+queueing, cancellation, lifecycle checks, operation execution, transcript, and retry of the exact
+original deployment request. The plugin never receives a dialog, DOM, process, or Terminal handle.
+
+The first recovery is Android's exact `INSTALL_FAILED_UPDATE_INCOMPATIBLE` result. The Android
+plugin may request `android.adb.uninstall` for the already selected serial and the application ID
+proven by final APK inspection. The host must explain that uninstalling removes the existing
+application and its local data. Cancellation preserves the installed application and ends Run as
+cancelled. Confirmation executes only `adb -s <serial> uninstall <applicationId>`, revalidates the
+same target, and retries the same contained APK once. No other install failure, free-form output,
+package, target, artifact, repeated recovery, or silent uninstall is accepted.
+
 ### Presentation and selection
 
 The host-rendered Run view contains:
@@ -167,6 +183,9 @@ package rules, or Activity semantics.
   `install-multiple` are supervised by the host.
 - A disconnected, replaced, offline, or unauthorized target prevents installation or launch and
   reports the exact phase failure.
+- A signature-incompatible installed package may offer one explicit destructive recovery review.
+  Decline cancels without mutation; approval uninstalls only the inspected package on the selected
+  target, revalidates it, and retries the identical deployment once.
 - Tool timeout, malformed/truncated output, non-zero launch status, cancellation, or child crash
   produces one deterministic terminal result and reaps the child tree.
 - A running session is not invalidated merely because the task provider refreshes; the next Run
