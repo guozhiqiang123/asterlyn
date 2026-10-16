@@ -269,3 +269,34 @@ Installed acceptance package:
 Human acceptance remains the final destructive-choice gate: first cancel and confirm that the old
 app remains, then rerun, approve uninstall, and confirm the same session installs and launches the
 new build while retaining its complete Terminal transcript.
+
+## AGP lower-camel variant correction — 2026-10-16
+
+SuperBoost exposed an artifact-identity mismatch after a successful Gradle build. Gradle names the
+task `:SuperBoost:assembleSuperboostDebug`, so task discovery retains the suffix
+`SuperboostDebug`; AGP writes the authoritative metadata variant as `superboostDebug`. The plugin
+previously compared those representations literally and rejected the only valid APK.
+
+Android plugin `0.5.3` now normalizes only the first task-suffix character to AGP lower camel case
+before performing the same exact, fail-closed metadata and path checks. The real SuperBoost output
+resolved to
+`SuperBoost/build/outputs/apk/superboost/debug/SuperBoost-superboost-debug.apk`; AAPT then resolved
+application ID `com.ludashi.superboost` and launch component
+`com.ludashi.superboost/com.ludashi.superboost.MainActivity`.
+
+Verification passed with 62 Android-plugin tests, 1,198 host script tests, TypeScript checking, the
+production build, strict deep signature verification, and a rendered native smoke test. The fixed
+bundle was installed and relaunched with `superboost_lite` while preserving the previous
+installation at
+`/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261016-superboost-agp-variant-fix/Asterlyn.app`.
+
+- archive:
+  `target/release/bundle/macos/Asterlyn-0.1.8-local-2026-10-16-superboost-agp-variant-fix.app.zip`;
+- archive size: 10,032,392 bytes; SHA-256:
+  `51235e4eab988ce2f075f364ba28b353f29001d87495d1b2eeb538249903caa2`; and
+- packaged and installed executable SHA-256:
+  `5497c40ed29bdfa1ec6cbfee6e2d41326dce31ddcfb6cd149419a4b72a29b2e8`.
+
+The installed package proves artifact matching and final APK identity acquisition. Interactive
+device installation and launch remain the human acceptance step because they mutate the selected
+physical device.
