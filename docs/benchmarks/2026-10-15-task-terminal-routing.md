@@ -12,13 +12,13 @@ Plan: [Task activation and Terminal routing](../engineering/task-terminal-routin
   runnable task exactly once; retry and reveal remain explicit single-click actions.
 - User-activated plugin tasks keep native reviewed execution as the sole process authority and open
   a host-owned Terminal task session. The displayed command is inert and is never used to execute.
-- Ordered stdout/stderr frames, truncation, running state, cancellation, terminal result, and later
-  reveal are projected into the retained Terminal session.
+- Ordered stdout/stderr frames, truncation, running state, and cancellation are projected into the
+  active Terminal session. Completion releases Terminal; later reveal uses the retained task result.
 - Provider discovery and cache refresh keep their background presentation and cannot open or focus
   Terminal.
 - Terminal input is disabled while a task transcript owns the surface. The active task can be
-  cancelled through the existing native path; a completed transcript can be cleared or replaced by
-  one new supervised interactive shell.
+  cancelled through the existing native path; every terminal result clears the transcript and
+  restores the open panel to its no-session state.
 - Output arriving before lazy xterm mount is retained in a 512 KiB bounded buffer. Session identity
   rejects stale output after replacement or workspace change.
 
@@ -31,7 +31,7 @@ Plan: [Task activation and Terminal routing](../engineering/task-terminal-routin
   byte architecture limit. The task feature composition was moved into the existing feature chunk;
   the limit was not raised.
 - Focused tests cover click/double-click intent, preserved selection and scroll, one Terminal begin,
-  ordered output projection, retained reveal, discovery isolation, active/completed header actions,
+  ordered output projection, result-dialog reveal, discovery isolation, active/idle header actions,
   control-character-safe display quoting, and bounded pre-mount buffering.
 
 ## FilesRecovery evidence
@@ -125,14 +125,16 @@ Together with the failed host transcript, this isolates the gap to device author
 run reached the exact Gradle task and ADB transport, while the same reviewed executable and arguments
 succeeded after ADB reported the device online. It validates the environment and command shape; the
 freshly installed application remains open on FilesRecovery for the final integrated UI retry. A
-device that becomes authorized after an earlier failure still requires an explicit retry; the
-retained transcript and host failure notification remain the diagnostic output for that failed run.
+device that becomes authorized after an earlier failure still requires an explicit retry; the task
+result and host failure notification remain the diagnostic output for that failed run.
 
-Terminal task presentation now has three explicit modes: interactive shell, read-only running task,
-and read-only completed task. Success, failure, cancellation, and crash disable xterm stdin, stop
-cursor blinking, remove the live cursor layer, disable cancellation, and enable New Session while
-retaining the transcript in the open bottom panel. Switching workspace, replacing the task, or
-starting a new interactive shell clears that presentation state without leaving stale input state.
+The first follow-up retained a read-only completed transcript, but manual acceptance showed that this
+still looked like a live Terminal session. The corrected contract has only three modes: no session,
+interactive shell, and read-only running task. Success, failure, cancellation, and crash now drain
+already queued xterm writes, clear the transcript, restore the no-session header, disable stdin,
+hide the cursor, and leave the bottom panel open. A resize or delayed lazy mount cannot implicitly
+start a shell; New Session remains explicit. Completed output remains available through the Tasks
+result surface.
 
 Follow-up verification:
 
@@ -150,3 +152,28 @@ Follow-up verification:
   `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261015-194723-task-session-end/Asterlyn.app`.
 - The installed and backup bundles passed strict deep signature verification. The installed app was
   restarted with FilesRecovery as process `20336`.
+
+### No-session correction acceptance — 2026-10-16
+
+Manual testing of the preceding package confirmed that hiding the live cursor while retaining the
+completed transcript was not the intended product state. The corrected package applies the ADR's
+no-session semantics and adds two regression boundaries: terminal reset is ordered after already
+queued xterm writes, and reset never re-arms the lazy view's automatic shell startup. This prevents
+both late output from reappearing after clear and a resize from silently replacing the completed
+task with an interactive shell.
+
+- Terminal/task/style focused tests: 65 passed, 0 failed.
+- Frontend script suite: 1,163 passed, 0 failed.
+- `npm run check` and `npm run build`: passed; startup chunk 499,890 bytes, below the 500,000-byte
+  architecture limit.
+- Tauri Release application and DMG built successfully for version `0.1.8`; the accepted app was
+  ad-hoc signed with hardened runtime and passed strict deep signature verification.
+- Installed executable SHA-256:
+  `3970a89716bb9fd27727ecda25d02aaa5d9f946f208f01834c6071ea7bd586ad`.
+- Acceptance archive: `/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn-0.1.8-local-20261016-102002-terminal-idle.app.zip`,
+  9,865,300 bytes, SHA-256
+  `45a8d815d1ab30b6d7b6cc6ff32b4b8be4f06bfe3d9c25cd16a572482ced8b42`.
+- Previous installed application:
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261016-102002-terminal-idle/Asterlyn.app`.
+- The installed and backup bundles passed strict deep signature verification. The installed app was
+  restarted with FilesRecovery as process `2991` for manual Gradle-task acceptance.

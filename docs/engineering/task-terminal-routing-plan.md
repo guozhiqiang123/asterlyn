@@ -35,8 +35,7 @@ Commit boundary: Tasks interaction and its focused tests.
 - Define typed begin, append, complete, reveal, and cancel semantics under the host application
   boundary.
 - Add Terminal task-session mode with a bounded pre-mount transcript, stale-session filtering,
-  display-only command summary, lifecycle footer, cancellation, clear, and explicit return to a new
-  interactive shell.
+  display-only command summary, cancellation, and deterministic return to the no-session state.
 - Keep interactive PTY input disabled while a task transcript owns the Terminal surface.
 - Add focused tests for lifecycle, bounds, replacement, stale frames, and localized rendering.
 
@@ -47,7 +46,7 @@ Commit boundary: host Terminal capability with no plugin-specific imports.
 - Inject the host task-terminal port into the plugin task composition runtime.
 - Route only user-activated task execution; keep discovery/refresh in background mode.
 - Open and focus the bottom Terminal after native start, stream each ordered output frame once,
-  complete the retained transcript, and make reveal-output reopen it.
+  release Terminal ownership on completion, and make reveal-output use the retained task result.
 - Reuse native cancellation and exact reviewed execution. Never serialize task arguments for shell
   execution.
 
@@ -78,8 +77,9 @@ files.
 | Arguments contain spaces/metacharacters | Native argument vector is unchanged; display quoting is inert |
 | stdout/stderr arrive early | Bounded transcript replays after lazy Terminal mount without loss/duplication |
 | Cancel from Terminal | Existing native task is cancelled; no shell or second task is spawned |
-| Task finishes/fails/crashes | Transcript and terminal status remain revealable, stdin is disabled, the live cursor is removed, and no task session remains active |
-| Start a new interactive session | Retained task presentation is cleared and one supervised shell starts |
+| Task finishes/fails/crashes | Terminal content is cleared, the no-session header is restored, stdin and cursor are disabled, and no shell starts implicitly |
+| Reveal completed output | The bounded task result opens outside Terminal; Terminal remains in its no-session state |
+| Start a new interactive session | One explicit New Session action starts one supervised shell |
 | Rapid task/session replacement | Stale frames cannot mutate the current Terminal session |
 | Tree/flat, filter, load more | Selection and scroll remain stable through activation lifecycle |
 
