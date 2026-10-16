@@ -127,7 +127,7 @@ test("signature-conflict recovery requires confirmation, uninstalls once, and re
     build: { request: { pluginId: "plugin", providerId: "tasks", taskId: "assemble", label: "Build", executablePath: "/gradlew", args: ["assemble"] }, artifactSearch: { hints: ["app/build/outputs/apk"] }, apply() {} },
     inspect: () => ({ operationId: "android.apk.inspect", parameters: { artifact: "app/build/outputs/apk/debug/app.apk" } }),
     deploy: () => deploy,
-    recoverDeployment: () => ({ confirmation, operation: { operationId: "android.adb.uninstall", parameters: { target: "emulator-5554", applicationId: "com.example" } } }),
+    recoverDeployment: () => ({ confirmation, operation: { operationId: "android.adb.uninstall", parameters: { target: "emulator-5554", application: "com.example" } } }),
     launch: () => ({ operationId: "android.adb.launch", parameters: { target: "emulator-5554", component: "com.example/com.example.MainActivity" } }),
     apply() {},
   };

@@ -607,7 +607,7 @@ fn admitted_tool_operation(plugin_id: &str, operation_id: &str) -> Option<Admitt
                 ToolOperationArgument::Literal("-s"),
                 ToolOperationArgument::Parameter("target"),
                 ToolOperationArgument::Literal("uninstall"),
-                ToolOperationArgument::Parameter("applicationId"),
+                ToolOperationArgument::Parameter("application"),
             ],
             parameters: &[
                 ToolOperationParameter {
@@ -615,7 +615,7 @@ fn admitted_tool_operation(plugin_id: &str, operation_id: &str) -> Option<Admitt
                     kind: ToolOperationParameterKind::ExecutionTargetId,
                 },
                 ToolOperationParameter {
-                    name: "applicationId",
+                    name: "application",
                     kind: ToolOperationParameterKind::AndroidApplicationId,
                 },
             ],
@@ -1313,7 +1313,7 @@ mod tests {
                 Path::new("/"),
                 &HashMap::from([
                     ("target".into(), "emulator-5554".into()),
-                    ("applicationId".into(), "com.example.demo".into()),
+                    ("application".into(), "com.example.demo".into()),
                 ]),
             )
             .unwrap();

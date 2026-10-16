@@ -158,6 +158,34 @@ test("the bundled Android plugin returns a supervised staged Run plan", async ()
     operationId: "android.apk.inspect",
     parameters: { artifact: "app/build/outputs/apk/demo/debug/app-demo-debug.apk" },
   });
+  const inspection = {
+    status: "succeeded",
+    stdout: "package: name='com.example.demo' versionCode='1'\nlaunchable-activity: name='.MainActivity' label=''\n",
+    stderr: "",
+    truncated: false,
+    exitCode: 0,
+    error: null,
+  };
+  assert.deepEqual(await plan.recoverDeployment(inspection, {
+    status: "failed",
+    stdout: "",
+    stderr: "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]",
+    truncated: false,
+    exitCode: 1,
+    error: null,
+  }), {
+    confirmation: {
+      titleKey: "run.recovery.uninstall.title",
+      messageKey: "run.recovery.uninstall.message",
+      confirmLabelKey: "run.recovery.uninstall.confirm",
+      cancelLabelKey: "run.recovery.uninstall.cancel",
+      destructive: true,
+    },
+    operation: {
+      operationId: "android.adb.uninstall",
+      parameters: { target: "phone-1", application: "com.example.demo" },
+    },
+  });
 });
 
 function runtimeWithCache() {

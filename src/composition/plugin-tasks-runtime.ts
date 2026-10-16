@@ -2,7 +2,6 @@ import type { CommandDescriptor } from "../application/commands/command-service.
 import type {
   PluginManagementSnapshot,
   PluginStagedRunPlan,
-  PluginRunRecoveryConfirmation,
   PluginToolOperationRequest,
   PluginToolOperationResult,
   PluginSettingValue,
@@ -32,9 +31,8 @@ import { pluginTaskTerminalNotification } from "./plugin-task-feedback.ts";
 import type { PluginProcessQueryBridge } from "../protocol/plugin-process-query.ts";
 import type { PluginWorkbenchHostRuntime, PluginWorkbenchRunRequest } from "./plugin-workbench-host-runtime.ts";
 import { resolvePluginMessage } from "../application/plugins/plugin-localization.ts";
-import { resolvePluginMessageOrNull } from "../application/plugins/plugin-localization.ts";
 import type { PluginToolOperationBridge } from "../protocol/plugin-tool-operation.ts";
-import { PluginRunSessionRuntime, type PluginRunTerminalStatus } from "./plugin-run-session-runtime.ts";
+import { PluginRunSessionRuntime, type PluginRunSessionRuntimeOptions, type PluginRunTerminalStatus } from "./plugin-run-session-runtime.ts";
 import type { ApplicationConfirmationRequest } from "../shared/application-confirmation-dialog.ts";
 
 export interface PluginTasksRuntimeOptions {
@@ -341,24 +339,13 @@ export class PluginTasksRuntime {
   private async confirmRunRecovery(
     options: PluginTasksRuntimeOptions,
     pluginId: string,
-    confirmation: PluginRunRecoveryConfirmation,
+    confirmation: Parameters<NonNullable<PluginRunSessionRuntimeOptions["confirmRecovery"]>>[1],
   ): Promise<boolean> {
     if (!options.confirm) return false;
     const plugin = await this.plugins.plugin(pluginId);
     if (!plugin || !this.identity) return false;
-    const resolve = (key: string): string | null => resolvePluginMessageOrNull(
-      plugin.manifest.localization,
-      this.locale(),
-      key,
-    );
-    const title = resolve(confirmation.titleKey);
-    const message = resolve(confirmation.messageKey);
-    const confirmLabel = resolve(confirmation.confirmLabelKey);
-    const cancelLabel = resolve(confirmation.cancelLabelKey);
-    if (!title || !message || !confirmLabel || !cancelLabel) {
-      throw new Error(`Plugin Run recovery copy is unavailable: ${pluginId}`);
-    }
-    return options.confirm({ title, message, confirmLabel, cancelLabel, destructive: confirmation.destructive });
+    const { confirmPluginRunRecovery } = await import("./plugin-run-recovery-confirmation.ts");
+    return confirmPluginRunRecovery(plugin, this.locale(), confirmation, options.confirm);
   }
 
   private async cancelPluginTool(
