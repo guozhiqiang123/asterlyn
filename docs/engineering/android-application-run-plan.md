@@ -231,3 +231,41 @@ same safety boundary:
 
 The host does not infer Android package policy from stderr, and the plugin cannot display UI or
 execute ADB. Recovery is single-use and cannot become a generic retry loop.
+
+### Signature-conflict recovery acceptance checkpoint
+
+The SDK `1.7.0` and Android plugin `0.5.0` implement the reviewed recovery boundary. A complete,
+untruncated `INSTALL_FAILED_UPDATE_INCOMPATIBLE` result is the only trigger. The plugin supplies
+localized confirmation keys and an admitted `android.adb.uninstall` request bound to the selected
+serial and AAPT-proven application ID. The host renders the standard destructive dialog, preserves
+the existing app on cancellation, and after approval performs one uninstall, target revalidation,
+one retry of the identical APK, and the original launch.
+
+Real FilesRecovery evidence on Pixel 4 XL `98101FFBA003AE` reached this exact state:
+
+- `:app:assemblePr051826BillingFsiLauncherDebug` succeeded;
+- AGP metadata selected one `SINGLE` APK for application ID `com.photo.recovery.global.tt` and
+  launcher `com.files.recovery.page.SplashActivity`; and
+- exact-device `adb install -r` returned `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because the retained
+  installed package uses another certificate. No automatic uninstall occurred.
+
+Verification passed with 60 Android-plugin tests, 1,195 host script tests, 105 native tests (two
+operating-system watcher tests intentionally ignored), TypeScript checking, Rust formatting, and
+the production build. The Run-session module moved to the existing feature chunk so the main
+startup chunk remains below its unchanged 500,000-byte hard limit at about 495.59 kB.
+
+Installed acceptance package:
+
+- archive: `target/release/bundle/macos/Asterlyn-0.1.8-local-2026-10-16-android-run-signature-recovery.app.zip`;
+- archive size: 10,031,586 bytes; SHA-256:
+  `4f18ed51489eff4774ac3281e121c5c03ac2b04505c74e11bfc7ed8f12325162`;
+- packaged and installed executable SHA-256:
+  `0db69bc35930a6e7a288fe5b941b960150a6591a8dd219a0d7113155e31b0aba`;
+- `/Applications/Asterlyn.app` passed strict deep signature verification and was relaunched with
+  FilesRecovery; and
+- the previous app is recoverable at
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261016-android-run-signature-recovery/Asterlyn.app`.
+
+Human acceptance remains the final destructive-choice gate: first cancel and confirm that the old
+app remains, then rerun, approve uninstall, and confirm the same session installs and launches the
+new build while retaining its complete Terminal transcript.
