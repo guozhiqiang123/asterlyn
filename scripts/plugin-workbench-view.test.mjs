@@ -52,32 +52,45 @@ test("Android device view localizes target state and keeps unsafe targets visibl
   assert.doesNotMatch(html, /Refresh devices|刷新设备/u);
 });
 
-test("incomplete Android Run configuration explains the limitation without exposing a fake action", () => {
+test("ready Android Run configurations use host controls and retain exact Gradle task identity", () => {
   const html = renderPluginWorkbenchView("run", manifest.id, {
-    targetProviders: [],
+    targetProviders: [{
+      qualifiedId: `${manifest.id}:android-devices`,
+      pluginId: manifest.id,
+      providerId: "android-devices",
+      snapshot: {
+        status: "ready",
+        selectedTargetId: "phone-1",
+        targets: [
+          { id: "phone-1", label: "Pixel 10", detail: "USB", status: "online", selectable: true, metadata: {} },
+          { id: "offline-1", label: "Old phone", status: "offline", selectable: false, metadata: {} },
+        ],
+      },
+    }],
     runConfigurationProviders: [{
       qualifiedId: `${manifest.id}:android-run-configurations`,
       pluginId: manifest.id,
       providerId: "android-run-configurations",
       snapshot: {
         status: "ready",
-        selectedConfigurationId: "android-app",
+        selectedConfigurationId: "android-run::app:installDebug",
         configurations: [{
-          id: "android-app",
-          label: "Android app",
-          detail: "fallback",
-          status: "incomplete",
+          id: "android-run::app:installDebug",
+          label: "app · Debug",
+          detail: ":app:installDebug",
+          status: "ready",
           targetProviderId: "android-devices",
-          metadata: {
-            labelKey: "run.configuration.androidApp",
-            detailKey: "run.configuration.incomplete",
-          },
+          metadata: { module: ":app", variant: "Debug", taskId: ":app:installDebug" },
         }],
       },
     }],
   }, entry, "en-US");
 
-  assert.match(html, /Android app/u);
-  assert.match(html, /application ID and launcher activity/u);
+  assert.match(html, /data-run-configuration-provider=/u);
+  assert.match(html, /app · Debug/u);
+  assert.match(html, /:app:installDebug/u);
+  assert.match(html, /data-run-target-provider=/u);
+  assert.match(html, /Pixel 10 — USB/u);
+  assert.match(html, /offline-1[^>]*disabled/u);
   assert.doesNotMatch(html, /<button/u);
 });
