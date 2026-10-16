@@ -1,6 +1,6 @@
 export const BRAND = {
   name: "Asterlyn",
   milestone: "M1",
-  version: "0.1.8",
+  version: "0.1.9",
   releaseUrl: "https://github.com/guozhiqiang123/asterlyn/releases/latest",
 } as const;
