@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -142,6 +143,64 @@ test("clearing terminal content does not re-arm automatic shell startup", () => 
   assert.equal(resets, 1);
   assert.equal(clears, 1);
   assert.equal(view.ready, true);
+});
+
+test("revealing a terminal coalesces fit and focus into one animation frame", () => {
+  const previousWindow = globalThis.window;
+  const frames = new Map();
+  let sequence = 0;
+  globalThis.window = {
+    requestAnimationFrame(callback) { const id = ++sequence; frames.set(id, callback); return id; },
+    cancelAnimationFrame(id) { frames.delete(id); },
+  };
+  try {
+    let fits = 0;
+    let focuses = 0;
+    let resizes = 0;
+    const view = new TerminalView();
+    view.parent = {
+      classList: { contains() { return false; } },
+      clientWidth: 800,
+      clientHeight: 320,
+    };
+    view.fitAddon = { fit() { fits += 1; } };
+    view.terminal = { cols: 100, rows: 30, focus() { focuses += 1; } };
+    view.ready = true;
+    view.actions = { resize() { resizes += 1; } };
+
+    view.reveal();
+    view.reveal();
+    assert.equal(frames.size, 1);
+    const frame = [...frames.values()][0];
+    frames.clear();
+    frame();
+
+    assert.equal(fits, 1);
+    assert.equal(focuses, 1);
+    assert.equal(resizes, 1);
+
+    view.reveal();
+    view.conceal();
+    const concealedFrame = [...frames.values()][0];
+    frames.clear();
+    concealedFrame();
+    assert.equal(fits, 2);
+    assert.equal(focuses, 1);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("terminal tab switching preserves keyed controls and refreshes host shortcuts once", async () => {
+  const source = await readFile(
+    new URL("../src/features/terminal/terminal-panel.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /list\.innerHTML\s*=/u);
+  assert.match(source, /existing\.get\(tab\.id\) \?\? this\.createTabItem/u);
+  assert.equal(source.match(/this\.feedback\.presentationChanged\?\.\(\)/gu)?.length, 1);
+  assert.match(source, /event\.button === 0[\s\S]*event\.preventDefault\(\)/u);
 });
 
 test("a shell tab starts before the lazy terminal renderer reports dimensions", async () => {

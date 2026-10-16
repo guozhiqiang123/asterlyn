@@ -57,6 +57,7 @@ export class TerminalView {
   private observer: ResizeObserver | null = null;
   private windowResize: (() => void) | null = null;
   private fitFrame: number | null = null;
+  private focusAfterFit = false;
   private generation = 0;
   private ready = false;
   private actions: TerminalViewActions | null = null;
@@ -125,9 +126,11 @@ export class TerminalView {
   }
 
   reveal(): void {
+    this.focusAfterFit = true;
     this.requestFit();
-    this.terminal?.focus();
   }
+
+  conceal(): void { this.focusAfterFit = false; }
 
   dimensions(): { cols: number; rows: number } | null {
     if (!this.terminal || this.terminal.cols < 2 || this.terminal.rows < 2) return null;
@@ -204,6 +207,10 @@ export class TerminalView {
         } else {
           this.actions?.resize(cols, rows);
         }
+        if (this.focusAfterFit) {
+          this.focusAfterFit = false;
+          this.terminal.focus();
+        }
       } catch (error) {
         this.actions?.failure(error);
       }
@@ -223,6 +230,7 @@ export class TerminalView {
   private disposeRuntime(): void {
     if (this.fitFrame !== null) window.cancelAnimationFrame(this.fitFrame);
     this.fitFrame = null;
+    this.focusAfterFit = false;
     this.observer?.disconnect();
     this.observer = null;
     if (this.windowResize) window.removeEventListener("resize", this.windowResize);

@@ -50,6 +50,7 @@ export class TerminalPanel {
   private visible = false;
   private workspaceRoot: string | null = null;
   private shellSequence = 0;
+  private visiblePanelId: string | null = null;
 
   constructor(
     root: HTMLElement,
@@ -236,8 +237,14 @@ export class TerminalPanel {
   }
 
   private selectTab(id: string, focus: boolean): void {
+    const previousId = this.tabs.selectedId;
     if (!this.tabs.select(id)) return;
-    this.renderTabs();
+    if (previousId === id) {
+      if (focus) this.activeResource()?.view.reveal();
+      return;
+    }
+    if (previousId) this.setTabSelected(previousId, false);
+    this.setTabSelected(id, true);
     this.syncPanels(focus);
   }
 
@@ -247,23 +254,26 @@ export class TerminalPanel {
       this.renderHeader();
       return;
     }
-    for (const tab of this.tabs.tabs) {
-      const resource = this.resources.get(tab.id);
-      if (!resource) continue;
-      let panel = this.panelElement(tab.id);
-      if (!panel) {
-        panel = document.createElement("section");
-        panel.id = panelId(tab.id);
-        panel.className = "terminal-tab-panel";
-        panel.setAttribute("role", "tabpanel");
-        panel.setAttribute("aria-labelledby", tabId(tab.id));
-        panels.append(panel);
+    const selectedId = this.tabs.selectedId;
+    if (this.visiblePanelId && this.visiblePanelId !== selectedId) {
+      const previous = this.panelElement(this.visiblePanelId);
+      if (previous) {
+        previous.classList.add("hidden");
+        previous.hidden = true;
       }
-      const selected = tab.id === this.tabs.selectedId;
-      panel.classList.toggle("hidden", !selected);
-      panel.hidden = !selected;
-      if (selected) resource.mount(panel, focus);
+      this.resources.get(this.visiblePanelId)?.view.conceal();
     }
+    if (selectedId) {
+      const tab = this.tabs.tabs.find((candidate) => candidate.id === selectedId);
+      const resource = this.resources.get(selectedId);
+      if (tab && resource) {
+        const panel = this.ensurePanel(tab, panels);
+        panel.classList.remove("hidden");
+        panel.hidden = false;
+        resource.mount(panel, focus);
+      }
+    }
+    this.visiblePanelId = selectedId;
     this.renderHeader();
   }
 
@@ -274,15 +284,42 @@ export class TerminalPanel {
     list.setAttribute("aria-label", this.copy.tabs);
     newButton.setAttribute("aria-label", this.copy.newTab);
     newButton.setAttribute("title", this.copy.newTab);
-    list.innerHTML = this.tabs.tabs.map((tab) => {
+    const existing = new Map<string, HTMLElement>();
+    list.querySelectorAll<HTMLElement>("[data-terminal-tab-item]").forEach((item) => {
+      const id = item.dataset.terminalTabItem;
+      if (id) existing.set(id, item);
+    });
+    let cursor = list.firstElementChild;
+    for (const tab of this.tabs.tabs) {
+      const item = existing.get(tab.id) ?? this.createTabItem(tab.kind);
+      existing.delete(tab.id);
       const selected = tab.id === this.tabs.selectedId;
       const taskState = tab.kind === "task" && !tab.taskTerminal ? " running" : "";
-      return `<div class="terminal-tab-item${selected ? " selected" : ""}${taskState}" data-terminal-tab-item="${escapeAttribute(tab.id)}">
-        <button class="terminal-tab-button" id="${escapeAttribute(tabId(tab.id))}" type="button" role="tab" data-terminal-tab="${escapeAttribute(tab.id)}" aria-selected="${selected}" aria-controls="${escapeAttribute(panelId(tab.id))}" tabindex="${selected ? "0" : "-1"}" title="${escapeAttribute(tab.title)}">${icon(tab.kind === "shell" ? "terminal" : "list", 13)}<span>${escapeHtml(tab.title)}</span></button>
-        <button class="terminal-tab-close" type="button" data-terminal-tab-close="${escapeAttribute(tab.id)}" aria-label="${escapeAttribute(this.copy.closeTab(tab.title))}" title="${escapeAttribute(this.copy.closeTab(tab.title))}">${icon("close", 11)}</button>
-      </div>`;
-    }).join("");
-    this.feedback.presentationChanged?.();
+      item.className = `terminal-tab-item${selected ? " selected" : ""}${taskState}`;
+      item.dataset.terminalTabItem = tab.id;
+      const button = item.querySelector<HTMLButtonElement>(".terminal-tab-button");
+      const close = item.querySelector<HTMLButtonElement>(".terminal-tab-close");
+      if (button) {
+        button.id = tabId(tab.id);
+        button.dataset.terminalTab = tab.id;
+        button.setAttribute("aria-selected", String(selected));
+        button.setAttribute("aria-controls", panelId(tab.id));
+        button.tabIndex = selected ? 0 : -1;
+        button.title = tab.title;
+        const title = button.querySelector<HTMLElement>("span");
+        if (title) title.textContent = tab.title;
+      }
+      if (close) {
+        const label = this.copy.closeTab(tab.title);
+        close.dataset.terminalTabClose = tab.id;
+        close.setAttribute("aria-label", label);
+        close.title = label;
+      }
+      if (item !== cursor) list.insertBefore(item, cursor);
+      cursor = item.nextElementSibling;
+      this.ensurePanel(tab);
+    }
+    existing.forEach((item) => item.remove());
   }
 
   private renderHeader(): void {
@@ -313,6 +350,10 @@ export class TerminalPanel {
   private bindTabs(host: HTMLElement): void {
     if (host.dataset.terminalTabsBound === "true") return;
     host.dataset.terminalTabsBound = "true";
+    host.addEventListener("mousedown", (event) => {
+      const tab = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-terminal-tab]");
+      if (event.button === 0 && tab && host.contains(tab)) event.preventDefault();
+    });
     host.addEventListener("click", (event) => {
       const target = event.target as Element | null;
       const close = target?.closest<HTMLButtonElement>("[data-terminal-tab-close]");
@@ -346,7 +387,10 @@ export class TerminalPanel {
     else return;
     event.preventDefault();
     const id = this.tabs.tabs[next]?.id;
-    if (id) this.selectTab(id, true);
+    if (id) {
+      this.selectTab(id, false);
+      this.tabButton(id)?.focus({ preventScroll: true });
+    }
   }
 
   private ensureVisibleScaffold(): void {
@@ -388,12 +432,14 @@ export class TerminalPanel {
     this.resources.get(id)?.dispose();
     this.resources.delete(id);
     this.panelElement(id)?.remove();
+    if (this.visiblePanelId === id) this.visiblePanelId = null;
   }
 
   private disposeAllTabs(): void {
     for (const resource of this.resources.values()) resource.dispose();
     this.resources.clear();
     this.tabs.clear();
+    this.visiblePanelId = null;
   }
 
   private clearPanels(): void {
@@ -411,6 +457,47 @@ export class TerminalPanel {
 
   private panelElement(id: string): HTMLElement | null {
     return this.host()?.querySelector<HTMLElement>(`#${panelId(id)}`) ?? null;
+  }
+
+  private tabButton(id: string): HTMLButtonElement | null {
+    return this.host()?.querySelector<HTMLButtonElement>(`#${tabId(id)}`) ?? null;
+  }
+
+  private setTabSelected(id: string, selected: boolean): void {
+    const button = this.tabButton(id);
+    const item = button?.closest<HTMLElement>("[data-terminal-tab-item]");
+    item?.classList.toggle("selected", selected);
+    if (!button) return;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  }
+
+  private ensurePanel(tab: TerminalTabRecord, panels = this.panels()): HTMLElement {
+    let panel = this.panelElement(tab.id);
+    if (panel) return panel;
+    panel = document.createElement("section");
+    panel.id = panelId(tab.id);
+    panel.className = "terminal-tab-panel hidden";
+    panel.hidden = true;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tabId(tab.id));
+    panels?.append(panel);
+    return panel;
+  }
+
+  private createTabItem(kind: TerminalTabRecord["kind"]): HTMLElement {
+    const item = document.createElement("div");
+    const button = document.createElement("button");
+    button.className = "terminal-tab-button";
+    button.type = "button";
+    button.setAttribute("role", "tab");
+    button.innerHTML = `${icon(kind === "shell" ? "terminal" : "list", 13)}<span></span>`;
+    const close = document.createElement("button");
+    close.className = "terminal-tab-close";
+    close.type = "button";
+    close.innerHTML = icon("close", 11);
+    item.append(button, close);
+    return item;
   }
 }
 
