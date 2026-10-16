@@ -7,14 +7,14 @@ import {
   ANDROID_GRADLE_PLUGIN_MANIFEST,
 } from "@asterlyn/plugin-android-gradle";
 
-const metadataUrl = new URL("../vendor/plugins/android-gradle-0.1.6.json", import.meta.url);
+const metadataUrl = new URL("../vendor/plugins/android-gradle-0.1.7.json", import.meta.url);
 
 test("bundled Android plugin artifact matches the reviewed release identity", async () => {
   const metadata = JSON.parse(await readFile(metadataUrl, "utf8"));
   const artifact = await readFile(new URL(`../vendor/plugins/${metadata.artifact}`, import.meta.url));
   assert.equal(createHash("sha256").update(artifact).digest("hex"), metadata.sha256);
   assert.equal(metadata.pluginId, "dev.asterlyn.android-gradle");
-  assert.equal(metadata.pluginVersion, "0.1.6");
+  assert.equal(metadata.pluginVersion, "0.1.7");
   assert.equal(metadata.sdkVersion, "1.2.0");
   assert.equal(metadata.size, artifact.byteLength);
   assert.equal(ANDROID_GRADLE_PLUGIN.id, metadata.pluginId);
