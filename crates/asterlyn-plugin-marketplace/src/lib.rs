@@ -21,6 +21,9 @@ const INSTALLATION_FILE: &str = "installations.v1.json";
 const PREVIOUS_INSTALLATION_FILE: &str = "installations.v1.previous.json";
 const NEXT_INSTALLATION_FILE: &str = "installations.v1.next.json";
 const MAX_INSTALLATION_FILE_BYTES: u64 = 512 * 1024;
+const MAX_RETAINED_PLUGIN_VERSIONS: usize = 8;
+const MAX_RETAINED_QUARANTINED_VERSIONS: usize = 3;
+const QUARANTINE_RETENTION_MS: u64 = 30 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -384,7 +387,7 @@ impl PluginInstallationStore {
                 plugin.active_version = plugin.known_good_version.clone();
             }
         }
-        if changed {
+        if changed || snapshot.recovered {
             self.write(snapshot.generation + 1, plugins)
         } else {
             Ok(PluginInstallationSnapshot {
@@ -418,6 +421,73 @@ impl PluginInstallationStore {
             }
         }
         if changed {
+            self.write(snapshot.generation + 1, plugins)
+        } else {
+            Ok(PluginInstallationSnapshot {
+                plugins,
+                ..snapshot
+            })
+        }
+    }
+
+    pub fn prune_retained_versions(
+        &self,
+        now_epoch_ms: u64,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        let snapshot = self.snapshot()?;
+        let mut plugins = snapshot.plugins;
+        let mut changed = false;
+        let quarantine_cutoff = now_epoch_ms.saturating_sub(QUARANTINE_RETENTION_MS);
+        for plugin in &mut plugins {
+            let mut retained = std::collections::BTreeSet::new();
+            for pointer in [
+                plugin.pending_version.as_ref(),
+                plugin.active_version.as_ref(),
+                plugin.known_good_version.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                retained.insert(pointer.clone());
+            }
+            let mut newest = plugin.versions.iter().collect::<Vec<_>>();
+            newest.sort_by(|left, right| {
+                right
+                    .admitted_at_epoch_ms
+                    .cmp(&left.admitted_at_epoch_ms)
+                    .then_with(|| right.version.cmp(&left.version))
+            });
+            let mut quarantined = 0;
+            for version in newest.iter().copied().filter(|version| {
+                version.runtime_status == PluginRuntimeStatus::Quarantined
+                    && version.admitted_at_epoch_ms >= quarantine_cutoff
+            }) {
+                if retained.len() >= MAX_RETAINED_PLUGIN_VERSIONS
+                    || quarantined >= MAX_RETAINED_QUARANTINED_VERSIONS
+                {
+                    break;
+                }
+                if retained.insert(version.version.clone()) {
+                    quarantined += 1;
+                }
+            }
+            for version in newest
+                .iter()
+                .copied()
+                .filter(|version| version.runtime_status == PluginRuntimeStatus::KnownGood)
+            {
+                if retained.len() >= MAX_RETAINED_PLUGIN_VERSIONS {
+                    break;
+                }
+                retained.insert(version.version.clone());
+            }
+            let previous_len = plugin.versions.len();
+            plugin
+                .versions
+                .retain(|version| retained.contains(&version.version));
+            changed |= plugin.versions.len() != previous_len;
+        }
+        if changed || snapshot.recovered {
             self.write(snapshot.generation + 1, plugins)
         } else {
             Ok(PluginInstallationSnapshot {
@@ -546,14 +616,18 @@ impl PluginInstallationStore {
     fn read_with_recovery(&self) -> Result<(PersistedInstallations, bool), MarketplaceError> {
         match self.read_file(INSTALLATION_FILE) {
             Ok(Some(value)) => Ok((value, false)),
-            Ok(None) => Ok((
-                PersistedInstallations {
-                    schema_version: INSTALLATION_SCHEMA_VERSION,
-                    generation: 1,
-                    plugins: Vec::new(),
-                },
-                false,
-            )),
+            Ok(None) => match self.read_file(PREVIOUS_INSTALLATION_FILE) {
+                Ok(Some(value)) => Ok((value, true)),
+                Ok(None) => Ok((
+                    PersistedInstallations {
+                        schema_version: INSTALLATION_SCHEMA_VERSION,
+                        generation: 1,
+                        plugins: Vec::new(),
+                    },
+                    false,
+                )),
+                Err(previous) => Err(previous),
+            },
             Err(current) => match self.read_file(PREVIOUS_INSTALLATION_FILE) {
                 Ok(Some(value)) => Ok((value, true)),
                 _ => Err(current),
@@ -563,12 +637,15 @@ impl PluginInstallationStore {
 
     fn read_file(&self, name: &str) -> Result<Option<PersistedInstallations>, MarketplaceError> {
         let path = self.root.join(name);
-        let metadata = match fs::metadata(&path) {
+        let metadata = match fs::symlink_metadata(&path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(io_error("read installation metadata", error)),
         };
-        if !metadata.is_file() || metadata.len() > MAX_INSTALLATION_FILE_BYTES {
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > MAX_INSTALLATION_FILE_BYTES
+        {
             return Err(MarketplaceError::Corrupt(
                 "installation index has an invalid size or type".into(),
             ));
@@ -599,16 +676,23 @@ impl PluginInstallationStore {
             ));
         }
         let next = self.root.join(NEXT_INSTALLATION_FILE);
+        remove_stale_file(&next, "installation next generation")?;
         write_new_file(&next, &bytes)?;
         let current = self.root.join(INSTALLATION_FILE);
         let previous = self.root.join(PREVIOUS_INSTALLATION_FILE);
-        if previous.exists() {
-            fs::remove_file(&previous)
-                .map_err(|error| io_error("replace installation backup", error))?;
-        }
-        if current.exists() {
-            fs::rename(&current, &previous)
-                .map_err(|error| io_error("preserve installation backup", error))?;
+        match self.read_file(INSTALLATION_FILE) {
+            Ok(Some(_)) => {
+                remove_stale_file(&previous, "installation backup")?;
+                fs::rename(&current, &previous)
+                    .map_err(|error| io_error("preserve installation backup", error))?;
+                sync_directory(&self.root)?;
+            }
+            Ok(None) => {}
+            Err(MarketplaceError::Corrupt(_)) => {
+                remove_stale_file(&current, "corrupt installation generation")?;
+                sync_directory(&self.root)?;
+            }
+            Err(error) => return Err(error),
         }
         fs::rename(&next, &current)
             .map_err(|error| io_error("publish installation index", error))?;
@@ -947,7 +1031,11 @@ impl PluginSourceStore {
     fn read_with_recovery(&self) -> Result<(PersistedSources, bool), MarketplaceError> {
         match self.read_file(SOURCE_FILE) {
             Ok(Some(value)) => Ok((value, false)),
-            Ok(None) => Ok((empty_sources(), false)),
+            Ok(None) => match self.read_file(PREVIOUS_SOURCE_FILE) {
+                Ok(Some(value)) => Ok((value, true)),
+                Ok(None) => Ok((empty_sources(), false)),
+                Err(previous_error) => Err(previous_error),
+            },
             Err(current_error) => match self.read_file(PREVIOUS_SOURCE_FILE) {
                 Ok(Some(value)) => Ok((value, true)),
                 Ok(None) | Err(_) => Err(current_error),
@@ -957,12 +1045,15 @@ impl PluginSourceStore {
 
     fn read_file(&self, name: &str) -> Result<Option<PersistedSources>, MarketplaceError> {
         let path = self.root.join(name);
-        let metadata = match fs::metadata(&path) {
+        let metadata = match fs::symlink_metadata(&path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(io_error("read source metadata", error)),
         };
-        if !metadata.is_file() || metadata.len() > MAX_SOURCE_FILE_BYTES {
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > MAX_SOURCE_FILE_BYTES
+        {
             return Err(MarketplaceError::Corrupt(
                 "source catalog file has an invalid size or type".into(),
             ));
@@ -993,15 +1084,23 @@ impl PluginSourceStore {
             ));
         }
         let next = self.root.join(NEXT_SOURCE_FILE);
+        remove_stale_file(&next, "source next generation")?;
         write_new_file(&next, &bytes)?;
         let current = self.root.join(SOURCE_FILE);
         let previous = self.root.join(PREVIOUS_SOURCE_FILE);
-        if previous.exists() {
-            fs::remove_file(&previous).map_err(|error| io_error("replace source backup", error))?;
-        }
-        if current.exists() {
-            fs::rename(&current, &previous)
-                .map_err(|error| io_error("preserve source backup", error))?;
+        match self.read_file(SOURCE_FILE) {
+            Ok(Some(_)) => {
+                remove_stale_file(&previous, "source backup")?;
+                fs::rename(&current, &previous)
+                    .map_err(|error| io_error("preserve source backup", error))?;
+                sync_directory(&self.root)?;
+            }
+            Ok(None) => {}
+            Err(MarketplaceError::Corrupt(_)) => {
+                remove_stale_file(&current, "corrupt source generation")?;
+                sync_directory(&self.root)?;
+            }
+            Err(error) => return Err(error),
         }
         fs::rename(&next, &current).map_err(|error| io_error("publish source catalog", error))?;
         sync_directory(&self.root)?;
@@ -1381,6 +1480,21 @@ fn write_new_file(path: &Path, bytes: &[u8]) -> Result<(), MarketplaceError> {
     file.sync_all()
         .map_err(|error| io_error("sync source catalog", error))?;
     Ok(())
+}
+
+fn remove_stale_file(path: &Path, label: &str) -> Result<(), MarketplaceError> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(io_error(&format!("inspect {label}"), error)),
+    };
+    if metadata.is_file() || metadata.file_type().is_symlink() {
+        fs::remove_file(path).map_err(|error| io_error(&format!("remove {label}"), error))
+    } else {
+        Err(MarketplaceError::Corrupt(format!(
+            "{label} is not a regular file"
+        )))
+    }
 }
 
 fn sync_directory(path: &Path) -> Result<(), MarketplaceError> {
