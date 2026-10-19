@@ -190,6 +190,14 @@ workspace or host bundle.
 Commit boundary: plugin repository release changes, host source migration, public docs, then final
 acceptance evidence.
 
+Status on 2026-10-19: the first-party Android plugin publishes a schema-2, self-contained package
+as GitHub Release `v0.5.4`. The real online Release passes source discovery, exact asset/digest
+binding, host package inspection, permission review data, and MKT4 admission/storage requirements.
+This closes the first-party packaging and online-admission portion only. Restart activation,
+healthy-start promotion, rollback, disable, and uninstall/fallback remain gated by MKT5–MKT7 and
+must not be presented as available. See
+[`2026-10-19-android-plugin-marketplace-release.md`](../benchmarks/2026-10-19-android-plugin-marketplace-release.md).
+
 ## Dependency order and parallel work
 
 MKT0 and the frozen identities precede all implementation. After MKT1 and MKT2 public types are
