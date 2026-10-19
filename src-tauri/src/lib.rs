@@ -43,11 +43,12 @@ use adapters::system_file_clipboard::{
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
-    PendingRepositoryWindowReservation, PendingRepositoryWindows, PluginProcessQueryManager,
-    ScanRegistry, TaskManager, WorkspaceEntryInspection, WorkspaceMutationCoordinator,
-    WorkspaceMutationPreview, WorkspaceReplacementDiff, WorkspaceReplacementPreview,
-    WorkspaceReplacementRegistry, WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry,
-    WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    PendingRepositoryWindowReservation, PendingRepositoryWindows, PluginMarketplaceCoordinator,
+    PluginProcessQueryManager, ScanRegistry, TaskManager, WorkspaceEntryInspection,
+    WorkspaceMutationCoordinator, WorkspaceMutationPreview, WorkspaceReplacementDiff,
+    WorkspaceReplacementPreview, WorkspaceReplacementRegistry, WorkspaceSearchIndexRegistry,
+    WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
+    WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
     apply_authorized_replacement, exact_git_repository, execute_workspace_mutation_plan,
     finalize_replacement, finalize_workspace_mutation_recovery, inspect_workspace_entry_inventory,
@@ -227,6 +228,7 @@ pub fn run() {
         .manage(WorkspaceWatchService::default())
         .manage(TerminalSessions::default())
         .manage(TaskManager::default())
+        .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .setup(|app| {
             build_project_window(app.handle(), "main", "Asterlyn")?;
@@ -267,6 +269,11 @@ pub fn run() {
             check_for_app_updates,
             install_app_update,
             open_app_update_release,
+            list_plugin_sources,
+            upsert_plugin_source,
+            set_plugin_source_enabled,
+            remove_plugin_source,
+            refresh_plugin_source,
             initial_repository,
             window_chrome_mode,
             is_last_project_window,

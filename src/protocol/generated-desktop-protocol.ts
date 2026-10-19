@@ -4,6 +4,7 @@ import type { WindowChromeMode } from "./window-chrome";
 import type { WorkspaceFingerprint, PluginTaskCacheDirtyReason, PluginTaskCacheReadResult, PluginTaskCacheMutationResult, PluginTaskCacheCleanupResult } from "./plugin-task-cache";
 import type { PluginProcessQueryResult } from "./plugin-process-query";
 import type { PluginToolOperationParameters, PluginToolOperationResult } from "./plugin-tool-operation";
+import type { PluginSourceSnapshot } from "./plugin-marketplace";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 
@@ -11,6 +12,11 @@ export interface DesktopCommandMap {
   check_for_app_updates: { args: Record<string, never>; result: Model.AppUpdateCheckResult };
   install_app_update: { args: Record<string, never>; result: Model.AppUpdateInstallResult };
   open_app_update_release: { args: { releaseUrl: string; }; result: void };
+  list_plugin_sources: { args: Record<string, never>; result: PluginSourceSnapshot };
+  upsert_plugin_source: { args: { repository: string; name: string; description: string; }; result: PluginSourceSnapshot };
+  set_plugin_source_enabled: { args: { repository: string; enabled: boolean; }; result: PluginSourceSnapshot };
+  remove_plugin_source: { args: { repository: string; }; result: PluginSourceSnapshot };
+  refresh_plugin_source: { args: { repository: string; }; result: PluginSourceSnapshot };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   is_last_project_window: { args: Record<string, never>; result: boolean };
   initial_repository: { args: Record<string, never>; result: string | null };
@@ -143,6 +149,11 @@ export const DESKTOP_RESULT_VALIDATORS: {
   check_for_app_updates: "appUpdateCheckResult",
   install_app_update: "appUpdateInstallResult",
   open_app_update_release: "void",
+  list_plugin_sources: "pluginSourceSnapshot",
+  upsert_plugin_source: "pluginSourceSnapshot",
+  set_plugin_source_enabled: "pluginSourceSnapshot",
+  remove_plugin_source: "pluginSourceSnapshot",
+  refresh_plugin_source: "pluginSourceSnapshot",
   window_chrome_mode: "windowChromeMode",
   is_last_project_window: "boolean",
   initial_repository: "nullableString",

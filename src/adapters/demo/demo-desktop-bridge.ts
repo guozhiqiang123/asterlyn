@@ -17,6 +17,7 @@ import { createDemoHistoryReadBridge } from "./demo-history-read-bridge.ts";
 import { demoPluginTaskCacheBridge } from "./demo-plugin-task-cache-bridge.ts";
 import { demoPluginProcessQueryBridge } from "./demo-plugin-process-query-bridge.ts";
 import { demoPluginToolOperationBridge } from "./demo-plugin-tool-operation-bridge.ts";
+import { demoPluginMarketplaceBridge } from "./demo-plugin-marketplace-bridge.ts";
 import { demoCreateStash, demoExecuteStashMutation, demoStashCatalog, demoStashDetails, demoStashDiff } from "./demo-stash.ts";
 import {
   demoCommitDetails,
@@ -155,6 +156,7 @@ const demoBridge: DesktopBridge = {
   ...demoPluginTaskCacheBridge,
   ...demoPluginProcessQueryBridge,
   ...demoPluginToolOperationBridge,
+  ...demoPluginMarketplaceBridge,
   ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
   ...createDemoRemoteOperationBridge(cancelledDemoRemoteOperations, demoDelay, completeDemoMutation),

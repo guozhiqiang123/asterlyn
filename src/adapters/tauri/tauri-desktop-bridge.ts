@@ -8,6 +8,7 @@ import { tauriWorkspaceBridge } from "./tauri-workspace-bridge.ts";
 import { tauriTaskExecutionBridge } from "./tauri-task-execution-bridge.ts";
 import { tauriTaskArtifactBridge } from "./tauri-task-artifact-bridge.ts";
 import { tauriPluginTaskCacheBridge } from "./tauri-plugin-task-cache-bridge.ts";
+import { tauriPluginMarketplaceBridge } from "./tauri-plugin-marketplace-bridge.ts";
 
 export const tauriDesktopBridge: DesktopBridge = {
   ...tauriAppUpdateBridge,
@@ -19,6 +20,7 @@ export const tauriDesktopBridge: DesktopBridge = {
   ...tauriTaskExecutionBridge,
   ...tauriTaskArtifactBridge,
   ...tauriPluginTaskCacheBridge,
+  ...tauriPluginMarketplaceBridge,
   executePluginProcessQuery: (...args) => import("./tauri-plugin-process-query-bridge.ts")
     .then(({ tauriPluginProcessQueryBridge }) => tauriPluginProcessQueryBridge.executePluginProcessQuery(...args)),
   executePluginToolOperation: (...args) => import("./tauri-plugin-tool-operation-bridge.ts")
