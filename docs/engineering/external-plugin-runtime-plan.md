@@ -216,6 +216,37 @@ bundled fallback; those transitions remain gated on the capability/deep-callback
 Exit gate: one plugin crash cannot blank core UI, Settings, or another plugin, and no descendant
 process survives its owner.
 
+#### EPR3a — native capability handlers
+
+The first EPR3 delivery connects the isolated capability requests to host-owned implementations
+without exposing a bridge, path resolver, process handle, or storage object to plugin JavaScript.
+
+1. Bind every request to the active window, canonical workspace root, workspace generation,
+   admitted plugin identity, and the permission required by that capability operation.
+2. Route `taskCache` through the existing bounded fingerprint/cache implementation and route
+   `processQueries` through the existing allow-listed process-query manager. The plugin continues
+   to receive SDK-shaped data rather than native command result objects.
+3. Store `workspaceState` in a host-owned, size-limited, atomic per-plugin/per-workspace store under
+   the application data directory. Keys and values are data only; plugin input never becomes a
+   path segment.
+4. Route `notifications.publish` into a window-scoped, strictly validated event. The renderer
+   resolves the admitted plugin localization key and publishes through the host notification
+   center; plugins never provide markup or arbitrary rendered content.
+5. Reject unknown capability/operation pairs, wrong argument counts or types, missing permissions,
+   stale workspaces, oversized values, and mismatched plugin identities before any side effect.
+
+Exit gate: the released Android plugin can restore workspace selections, query ADB, and read/write
+its task cache exclusively through the isolated protocol, while hostile capability fixtures cause
+no process, storage, notification, or workspace side effect.
+
+#### EPR3b — renderer contribution transaction
+
+After EPR3a, a window-owned external-runtime adapter activates eligible installed packages and
+converts the returned data/callback references into the same validated contribution interfaces as
+bundled plugins. It stages a complete plugin batch before publishing, owns subscriptions and
+callback disposal, and removes the complete batch on workspace replacement, disable, crash, or
+dispose. Bundled contributions remain the explicit fallback until healthy-start promotion exists.
+
 ### EPR4 — First-party Android parity
 
 1. Activate the admitted Android Release package through the external runtime without a bundled
