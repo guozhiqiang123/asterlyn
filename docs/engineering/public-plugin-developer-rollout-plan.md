@@ -21,8 +21,8 @@ credential, or shell access.
 - Plugin SDK: `1.8.0`, SDK major `1`.
 - Installable package schema: `2`.
 - External runtime protocol: `1`.
-- Oldest external-runtime host: `0.1.11`.
-- Initial host compatibility window: `>=0.1.11` and `<0.2.0`.
+- Oldest external-runtime host: `0.1.12`.
+- Initial host compatibility window: `>=0.1.12` and `<0.2.0`.
 - Distribution: one stable GitHub Release, one `.asterlyn-plugin.tgz` asset, one normalized
   lowercase `owner/repository`, and a GitHub-provided `sha256:` digest.
 - Runtime entry: one self-contained neutral ESM bundle. It runs only in the supervised plugin host.
@@ -80,9 +80,10 @@ APIs, or another plugin.
 Status: partially implemented. The deterministic SDK tarball and checksum are host Release
 artifacts, and the template/Android repositories pin their dependency graphs and run the canonical
 inspector. The host Release workflow now builds checksum-covered standalone inspectors for Linux,
-Windows, and both macOS architectures. Those inspector artifacts first become downloadable with the
-next host Release; the existing `v0.1.11` baseline predates them, so the template still checks out
-that oldest compatible tag in CI. The explicit oldest/current installed-host fixture pair remains
+Windows, and both macOS architectures. Those inspector artifacts first become downloadable with
+`v0.1.12`; `v0.1.11` predates the canonical inspector and therefore cannot be an external-plugin
+baseline. Template and fixture workflows must pin `v0.1.12` or newer rather than silently building
+an inspector from a mutable branch. The explicit oldest/current installed-host fixture pair remains
 open.
 
 1. Make `@asterlyn/plugin-sdk` a publishable declarative package with no host implementation, plus

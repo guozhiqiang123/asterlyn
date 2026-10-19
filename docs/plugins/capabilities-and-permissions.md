@@ -1,6 +1,6 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog for Asterlyn `0.1.11`, SDK `1.8.0`, package schema `2`, and
+Status: experimental public catalog for Asterlyn `0.1.12`, SDK `1.8.0`, package schema `2`, and
 plugin-host protocol `1`.
 
 ## Two declarations, one authority check
