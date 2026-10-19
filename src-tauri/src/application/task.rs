@@ -67,6 +67,7 @@ struct Running {
     pid: u32,
     cancelled: Arc<std::sync::atomic::AtomicBool>,
     owner: String,
+    plugin_id: String,
 }
 
 impl TaskManager {
@@ -173,6 +174,7 @@ impl TaskManager {
                     pid,
                     cancelled: cancelled.clone(),
                     owner: owner.to_string(),
+                    plugin_id: review.request.plugin_id.clone(),
                 },
             );
             let sink = Arc::new(SerialSink::new(sink));
@@ -298,6 +300,26 @@ impl TaskManager {
         }
         if let Ok(mut reviews) = self.inner.reviews.lock() {
             reviews.retain(|_, review| review.owner != owner);
+        }
+    }
+    pub(crate) fn cancel_plugin(&self, plugin_id: &str) {
+        let runs = self
+            .inner
+            .running
+            .lock()
+            .ok()
+            .map(|runs| {
+                runs.iter()
+                    .filter(|(_, value)| value.plugin_id == plugin_id)
+                    .map(|(run_id, value)| (run_id.clone(), value.owner.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for (run_id, owner) in runs {
+            let _ = self.cancel(&owner, &run_id);
+        }
+        if let Ok(mut reviews) = self.inner.reviews.lock() {
+            reviews.retain(|_, review| review.request.plugin_id != plugin_id);
         }
     }
     pub(crate) fn cancel_all(&self) {

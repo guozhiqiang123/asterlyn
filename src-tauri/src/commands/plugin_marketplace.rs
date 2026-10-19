@@ -215,6 +215,88 @@ pub(crate) fn restart_for_plugin_changes(
     Ok(())
 }
 
+#[tauri::command]
+pub(crate) fn set_installed_plugin_enabled(
+    plugin_id: String,
+    enabled: bool,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    tasks: State<'_, TaskManager>,
+    process_queries: State<'_, PluginProcessQueryManager>,
+    supervisor: State<'_, PluginHostSupervisor>,
+) -> Result<PluginInstallationSnapshot, String> {
+    marketplace.run(|| {
+        if !enabled {
+            tasks.cancel_plugin(&plugin_id);
+            process_queries.cancel_plugin(&plugin_id);
+            supervisor.stop_plugin_all(&plugin_id, ShutdownReason::Disabled);
+        }
+        installation_store(&app)?
+            .set_plugin_enabled(&plugin_id, enabled)
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[tauri::command]
+pub(crate) fn select_installed_plugin_rollback(
+    plugin_id: String,
+    version: String,
+    package_digest: String,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+) -> Result<PluginInstallationSnapshot, String> {
+    marketplace.run(|| {
+        installation_store(&app)?
+            .select_rollback(&plugin_id, &version, &package_digest)
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[tauri::command]
+pub(crate) fn uninstall_installed_plugin(
+    plugin_id: String,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    tasks: State<'_, TaskManager>,
+    process_queries: State<'_, PluginProcessQueryManager>,
+    supervisor: State<'_, PluginHostSupervisor>,
+) -> Result<PluginInstallationSnapshot, String> {
+    marketplace.run(|| {
+        let installation = installation_store(&app)?;
+        let snapshot = installation.snapshot().map_err(|error| error.to_string())?;
+        snapshot
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+            .ok_or_else(|| "installed plugin was not found".to_string())?;
+        tasks.cancel_plugin(&plugin_id);
+        process_queries.cancel_plugin(&plugin_id);
+        supervisor.stop_plugin_all(&plugin_id, ShutdownReason::Disabled);
+
+        let packages = marketplace_root(&app)?.join("packages");
+        let plugin_root = packages.join(&plugin_id);
+        let tombstone = packages.join(format!(".removing-{}-{}", plugin_id, now_ms()));
+        if plugin_root.exists() {
+            fs::rename(&plugin_root, &tombstone)
+                .map_err(|error| format!("prepare plugin package removal: {error}"))?;
+        }
+        match installation.remove_plugin(&plugin_id) {
+            Ok(snapshot) => {
+                if tombstone.exists() {
+                    let _ = fs::remove_dir_all(&tombstone);
+                }
+                Ok(snapshot)
+            }
+            Err(error) => {
+                if tombstone.exists() {
+                    let _ = fs::rename(&tombstone, &plugin_root);
+                }
+                Err(error.to_string())
+            }
+        }
+    })
+}
+
 #[derive(Clone)]
 struct ReleaseBinding {
     repository: String,

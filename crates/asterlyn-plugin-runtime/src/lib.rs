@@ -343,6 +343,24 @@ impl PluginHostSupervisor {
         }
     }
 
+    pub fn stop_plugin_all(&self, plugin_id: &str, reason: ShutdownReason) {
+        let sessions = if let Ok(mut sessions) = self.inner.sessions.lock() {
+            let keys = sessions
+                .keys()
+                .filter(|key| key.plugin_id == plugin_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            keys.into_iter()
+                .filter_map(|key| sessions.remove(&key))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        for session in sessions {
+            session.stop(reason);
+        }
+    }
+
     pub fn cancel_owner(&self, owner: &str, reason: ShutdownReason) {
         let sessions = if let Ok(mut sessions) = self.inner.sessions.lock() {
             let keys = sessions

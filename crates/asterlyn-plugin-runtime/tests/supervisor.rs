@@ -99,6 +99,29 @@ fn activates_invokes_and_shuts_down_an_isolated_session() {
 }
 
 #[test]
+fn disabling_plugin_stops_its_sessions_in_every_window() {
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    supervisor
+        .activate(activation(plugin.path()))
+        .expect("first window activation");
+    let mut second = activation(plugin.path());
+    second.owner = "window-second".to_owned();
+    supervisor
+        .activate(second)
+        .expect("second window activation");
+    assert_eq!(supervisor.active_count(), 2);
+
+    supervisor.stop_plugin_all("dev.asterlyn.fixture", ShutdownReason::Disabled);
+    assert_eq!(supervisor.active_count(), 0);
+}
+
+#[test]
 fn rejects_runtime_entries_that_escape_the_admitted_root() {
     let fixture = fixture_path().canonicalize().expect("fixture path");
     let installation = fixture.parent().expect("fixture parent");

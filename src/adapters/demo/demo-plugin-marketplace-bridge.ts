@@ -1,9 +1,10 @@
 import type {
-  PluginMarketplaceBridge, PluginSource, PluginSourceSnapshot,
+  InstalledPlugin, PluginMarketplaceBridge, PluginSource, PluginSourceSnapshot,
 } from "../../protocol/plugin-marketplace.ts";
 
 let generation = 1;
 let installationGeneration = 1;
+let installedPlugins: InstalledPlugin[] = [];
 let sources: PluginSource[] = [{
   repository: "guozhiqiang123/asterlyn-plugin-android-gradle",
   name: "Android",
@@ -53,9 +54,28 @@ export const demoPluginMarketplaceBridge: PluginMarketplaceBridge = {
     generation += 1;
     return snapshot();
   },
-  async listPluginInstallations() { return { schemaVersion: 1, generation: installationGeneration, plugins: [], recovered: false }; },
+  async listPluginInstallations() { return { schemaVersion: 1, generation: installationGeneration, plugins: structuredClone(installedPlugins), recovered: false }; },
   async preparePluginInstall(repository) { return { reviewToken: "b".repeat(64), repository, sourceGeneration: generation, assetName: "plugin-0.5.3.asterlyn-plugin.tgz", assetSizeBytes: 128_000, digest: `sha256:${"a".repeat(64)}`, pluginId: "dev.asterlyn.android-gradle", version: "0.5.3", licenseExpression: "MIT", capabilities: ["tasks"], permissions: ["host.tasks.discover"], expandedBytes: 256_000 }; },
-  async confirmPluginInstall() { installationGeneration += 1; return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: [{ pluginId: "dev.asterlyn.android-gradle", repository: "guozhiqiang123/asterlyn-plugin-android-gradle", enabled: true, bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.5.3", versions: [{ version: "0.5.3", packageDigest: `sha256:${"a".repeat(64)}`, admittedAtEpochMs: Date.now(), runtimeStatus: "pendingRestart" }] }] }; },
+  async confirmPluginInstall() {
+    installedPlugins = [{ pluginId: "dev.asterlyn.android-gradle", repository: "guozhiqiang123/asterlyn-plugin-android-gradle", enabled: true, bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.5.3", versions: [{ version: "0.5.3", packageDigest: `sha256:${"a".repeat(64)}`, admittedAtEpochMs: Date.now(), runtimeStatus: "pendingRestart" }] }];
+    installationGeneration += 1;
+    return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: structuredClone(installedPlugins) };
+  },
   async cancelPluginInstall() {},
   async restartForPluginChanges() {},
+  async setInstalledPluginEnabled(pluginId, enabled) {
+    installedPlugins = installedPlugins.map((plugin) => plugin.pluginId === pluginId ? { ...plugin, enabled } : plugin);
+    installationGeneration += 1;
+    return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: structuredClone(installedPlugins) };
+  },
+  async selectInstalledPluginRollback(pluginId, version) {
+    installedPlugins = installedPlugins.map((plugin) => plugin.pluginId === pluginId ? { ...plugin, pendingVersion: version } : plugin);
+    installationGeneration += 1;
+    return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: structuredClone(installedPlugins) };
+  },
+  async uninstallInstalledPlugin(pluginId) {
+    installedPlugins = installedPlugins.filter((plugin) => plugin.pluginId !== pluginId);
+    installationGeneration += 1;
+    return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: structuredClone(installedPlugins) };
+  },
 };

@@ -131,6 +131,7 @@ enum ExecutableResolver {
 
 struct RunningQuery {
     owner: String,
+    plugin_id: String,
     request_id: Option<String>,
     child: Arc<Mutex<Option<Child>>>,
     pid: u32,
@@ -243,6 +244,7 @@ impl PluginProcessQueryManager {
                 key.clone(),
                 RunningQuery {
                     owner: owner.to_string(),
+                    plugin_id: plugin_id.to_string(),
                     request_id: None,
                     child: child.clone(),
                     pid,
@@ -267,6 +269,10 @@ impl PluginProcessQueryManager {
 
     pub(crate) fn cancel_owner(&self, owner: &str) {
         self.cancel_matching(|value| value.owner == owner);
+    }
+
+    pub(crate) fn cancel_plugin(&self, plugin_id: &str) {
+        self.cancel_matching(|value| value.plugin_id == plugin_id);
     }
 
     pub(crate) fn execute_tool_operation(
@@ -394,6 +400,7 @@ impl PluginProcessQueryManager {
                 key.clone(),
                 RunningQuery {
                     owner: owner.to_string(),
+                    plugin_id: plugin_id.to_string(),
                     request_id: Some(request_id.to_string()),
                     child: child.clone(),
                     pid,
