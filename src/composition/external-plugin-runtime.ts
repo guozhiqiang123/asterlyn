@@ -501,7 +501,11 @@ function activatable(plugin: InstalledPlugin): boolean {
   const version = plugin.pendingVersion ?? plugin.activeVersion;
   if (!version) return false;
   const admitted = plugin.versions.find((candidate) => candidate.version === version);
-  return admitted !== undefined && admitted.runtimeStatus !== "quarantined";
+  return admitted !== undefined && (
+    admitted.runtimeStatus === "pendingRuntime" ||
+    admitted.runtimeStatus === "active" ||
+    admitted.runtimeStatus === "knownGood"
+  );
 }
 
 function runtimeEvidence(evidence: PluginEvidenceSnapshot): PluginRuntimeValue {

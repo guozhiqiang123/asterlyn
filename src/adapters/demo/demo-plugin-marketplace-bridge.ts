@@ -55,6 +55,7 @@ export const demoPluginMarketplaceBridge: PluginMarketplaceBridge = {
   },
   async listPluginInstallations() { return { schemaVersion: 1, generation: installationGeneration, plugins: [], recovered: false }; },
   async preparePluginInstall(repository) { return { reviewToken: "b".repeat(64), repository, sourceGeneration: generation, assetName: "plugin-0.5.3.asterlyn-plugin.tgz", assetSizeBytes: 128_000, digest: `sha256:${"a".repeat(64)}`, pluginId: "dev.asterlyn.android-gradle", version: "0.5.3", licenseExpression: "MIT", capabilities: ["tasks"], permissions: ["host.tasks.discover"], expandedBytes: 256_000 }; },
-  async confirmPluginInstall() { installationGeneration += 1; return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: [{ pluginId: "dev.asterlyn.android-gradle", repository: "guozhiqiang123/asterlyn-plugin-android-gradle", enabled: true, bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.5.3", versions: [{ version: "0.5.3", packageDigest: `sha256:${"a".repeat(64)}`, admittedAtEpochMs: Date.now(), runtimeStatus: "pendingRuntime" }] }] }; },
+  async confirmPluginInstall() { installationGeneration += 1; return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: [{ pluginId: "dev.asterlyn.android-gradle", repository: "guozhiqiang123/asterlyn-plugin-android-gradle", enabled: true, bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.5.3", versions: [{ version: "0.5.3", packageDigest: `sha256:${"a".repeat(64)}`, admittedAtEpochMs: Date.now(), runtimeStatus: "pendingRestart" }] }] }; },
   async cancelPluginInstall() {},
+  async restartForPluginChanges() {},
 };

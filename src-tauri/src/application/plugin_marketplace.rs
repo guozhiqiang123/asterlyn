@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use asterlyn_plugin_package::AdmissionReport;
 
@@ -20,6 +21,7 @@ pub(crate) struct PendingPluginAdmission {
 pub(crate) struct PluginMarketplaceCoordinator {
     operation: std::sync::Mutex<()>,
     admissions: std::sync::Mutex<HashMap<String, PendingPluginAdmission>>,
+    restarting: AtomicBool,
 }
 
 impl PluginMarketplaceCoordinator {
@@ -27,11 +29,24 @@ impl PluginMarketplaceCoordinator {
         &self,
         operation: impl FnOnce() -> Result<T, String>,
     ) -> Result<T, String> {
+        if self.restarting.load(Ordering::Acquire) {
+            return Err("Asterlyn is restarting to apply plugin changes.".into());
+        }
         let _guard = self
             .operation
             .lock()
             .map_err(|_| "plugin marketplace coordinator is unavailable".to_string())?;
+        if self.restarting.load(Ordering::Acquire) {
+            return Err("Asterlyn is restarting to apply plugin changes.".into());
+        }
         operation()
+    }
+
+    pub(crate) fn begin_restart(&self) -> Result<(), String> {
+        self.restarting
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|_| "Asterlyn is already restarting to apply plugin changes.".to_string())
     }
 
     pub(crate) fn insert_admission(&self, admission: PendingPluginAdmission) -> Result<(), String> {
@@ -65,5 +80,19 @@ impl PluginMarketplaceCoordinator {
             .lock()
             .map_err(|_| "plugin admission registry is unavailable".to_string())?
             .remove(token))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PluginMarketplaceCoordinator;
+
+    #[test]
+    fn restart_gate_rejects_new_marketplace_operations() {
+        let coordinator = PluginMarketplaceCoordinator::default();
+        assert_eq!(coordinator.run(|| Ok::<_, String>(7)).unwrap(), 7);
+        coordinator.begin_restart().unwrap();
+        assert!(coordinator.run(|| Ok::<_, String>(9)).is_err());
+        assert!(coordinator.begin_restart().is_err());
     }
 }

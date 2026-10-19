@@ -7,6 +7,18 @@
   gap: 12px;
 }
 
+.plugin-restart-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--focus-ring);
+  border-radius: 8px;
+  background: var(--surface-chrome);
+  color: var(--text-soft);
+}
+
 .plugin-management-tabs {
   display: flex;
   gap: 4px;

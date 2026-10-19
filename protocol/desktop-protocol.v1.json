@@ -30,6 +30,7 @@
     { "name": "prepare_plugin_install", "args": { "repository": "string" }, "result": "PluginPackageAdmissionReview", "validator": "pluginPackageAdmissionReview" },
     { "name": "confirm_plugin_install", "args": { "reviewToken": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
     { "name": "cancel_plugin_install", "args": { "reviewToken": "string" }, "result": "void", "validator": "void" },
+    { "name": "restart_for_plugin_changes", "args": {}, "result": "void", "validator": "void" },
     { "name": "activate_installed_plugin_runtime", "args": { "pluginId": "string", "workspaceRoot": "string", "workspaceGeneration": "number", "evidence": "PluginRuntimeValue", "locale": "string", "theme": "PluginRuntimeTheme" }, "result": "InstalledPluginActivation", "validator": "installedPluginActivation" },
     { "name": "confirm_installed_plugin_runtime_healthy", "args": { "pluginId": "string", "pluginVersion": "string", "packageDigest": "string", "sessionId": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
     { "name": "fail_installed_plugin_runtime_activation", "args": { "pluginId": "string", "pluginVersion": "string", "packageDigest": "string", "sessionId": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },

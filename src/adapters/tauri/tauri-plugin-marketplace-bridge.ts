@@ -15,4 +15,5 @@ export const tauriPluginMarketplaceBridge: PluginMarketplaceBridge = {
   preparePluginInstall: (repository) => invoke<PluginPackageAdmissionReview>("prepare_plugin_install", { repository }),
   confirmPluginInstall: (reviewToken) => invoke<PluginInstallationSnapshot>("confirm_plugin_install", { reviewToken }),
   cancelPluginInstall: (reviewToken) => invoke<void>("cancel_plugin_install", { reviewToken }),
+  restartForPluginChanges: () => invoke<void>("restart_for_plugin_changes"),
 };

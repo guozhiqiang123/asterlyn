@@ -22,6 +22,7 @@ export interface DesktopCommandMap {
   prepare_plugin_install: { args: { repository: string; }; result: PluginPackageAdmissionReview };
   confirm_plugin_install: { args: { reviewToken: string; }; result: PluginInstallationSnapshot };
   cancel_plugin_install: { args: { reviewToken: string; }; result: void };
+  restart_for_plugin_changes: { args: Record<string, never>; result: void };
   activate_installed_plugin_runtime: { args: { pluginId: string; workspaceRoot: string; workspaceGeneration: number; evidence: PluginRuntimeValue; locale: string; theme: PluginRuntimeTheme; }; result: InstalledPluginActivation };
   confirm_installed_plugin_runtime_healthy: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
   fail_installed_plugin_runtime_activation: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
@@ -170,6 +171,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   prepare_plugin_install: "pluginPackageAdmissionReview",
   confirm_plugin_install: "pluginInstallationSnapshot",
   cancel_plugin_install: "void",
+  restart_for_plugin_changes: "void",
   activate_installed_plugin_runtime: "installedPluginActivation",
   confirm_installed_plugin_runtime_healthy: "pluginInstallationSnapshot",
   fail_installed_plugin_runtime_activation: "pluginInstallationSnapshot",

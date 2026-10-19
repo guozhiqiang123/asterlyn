@@ -65,6 +65,9 @@ export interface PluginManagementCopy {
   readonly pendingRuntimeNote: string;
   readonly admittedPackage: string;
   readonly pendingRuntime: string;
+  readonly pendingRestart: string;
+  readonly restartToApply: string;
+  readonly restarting: string;
 }
 
 export interface PluginMarketplaceViewState {
@@ -77,6 +80,7 @@ export interface PluginMarketplaceViewState {
   readonly confirmDeleteRepository: string | null;
   readonly admissionReview: PluginPackageAdmissionReview | null;
   readonly installations: PluginInstallationSnapshot | null;
+  readonly restarting: boolean;
 }
 
 /** Renders host-owned plugin metadata; plugins contribute keys and values, never HTML. */
@@ -87,12 +91,14 @@ export function renderPluginManagementSection(
   marketplace: PluginMarketplaceViewState = {
     tab: "installed", snapshot: null, loading: false, error: null,
     busyRepository: null, form: null, confirmDeleteRepository: null, admissionReview: null, installations: null,
+    restarting: false,
   },
 ): string {
   const cards = snapshot.entries.map((entry) => renderPluginEntry(entry, copy)).join("");
   const admitted = renderAdmittedPackages(marketplace.installations, copy);
+  const restart = renderPluginRestart(marketplace, copy);
   const content = marketplace.tab === "installed"
-    ? `<div class="plugin-management-list">${admitted}${cards || (!admitted ? `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>` : "")}</div>`
+    ? `<div class="plugin-management-list">${restart}${admitted}${cards || (!admitted ? `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>` : "")}</div>`
     : renderMarketplace(marketplace, copy);
   return `<section class="settings-group plugin-management" data-plugin-management>
     <header><h2>${escapeHtml(copy.title)}</h2><p>${escapeHtml(copy.description)}</p></header>
@@ -105,8 +111,22 @@ function renderAdmittedPackages(snapshot: PluginInstallationSnapshot | null, cop
   return snapshot?.plugins.map((plugin) => {
     const pending = plugin.pendingVersion;
     const version = pending ? plugin.versions.find((candidate) => candidate.version === pending) : null;
-    return `<article class="plugin-management-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(plugin.pluginId)}</h3><p><code>${escapeHtml(plugin.repository)}</code></p></div><span class="plugin-management-status">${escapeHtml(copy.admittedPackage)}</span></div><div class="plugin-management-meta"><span>${escapeHtml(copy.version)}: <code>${escapeHtml(pending ?? "—")}</code></span><span>${escapeHtml(version?.runtimeStatus === "pendingRuntime" ? copy.pendingRuntime : version?.runtimeStatus ?? copy.inactive)}</span></div></article>`;
+    const status = version?.runtimeStatus === "pendingRuntime"
+      ? copy.pendingRuntime
+      : version?.runtimeStatus === "pendingRestart"
+        ? copy.pendingRestart
+        : version?.runtimeStatus ?? copy.inactive;
+    return `<article class="plugin-management-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(plugin.pluginId)}</h3><p><code>${escapeHtml(plugin.repository)}</code></p></div><span class="plugin-management-status">${escapeHtml(copy.admittedPackage)}</span></div><div class="plugin-management-meta"><span>${escapeHtml(copy.version)}: <code>${escapeHtml(pending ?? plugin.activeVersion ?? "—")}</code></span><span>${escapeHtml(status)}</span></div></article>`;
   }).join("") ?? "";
+}
+
+function renderPluginRestart(state: PluginMarketplaceViewState, copy: PluginManagementCopy): string {
+  const pending = state.installations?.plugins.some((plugin) => {
+    const version = plugin.versions.find((candidate) => candidate.version === plugin.pendingVersion);
+    return version?.runtimeStatus === "pendingRestart";
+  }) ?? false;
+  if (!pending) return "";
+  return `<div class="plugin-restart-banner" role="status"><span>${escapeHtml(copy.pendingRestart)}</span><button class="primary-button" type="button" data-plugin-restart ${state.restarting ? "disabled" : ""}>${escapeHtml(state.restarting ? copy.restarting : copy.restartToApply)}</button></div>`;
 }
 
 function renderMarketplace(state: PluginMarketplaceViewState, copy: PluginManagementCopy): string {

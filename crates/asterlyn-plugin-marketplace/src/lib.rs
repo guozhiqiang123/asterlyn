@@ -153,6 +153,29 @@ impl PluginInstallationStore {
     ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
         validate_installation_identity(plugin_id, repository, version, package_digest)?;
         let snapshot = self.snapshot()?;
+        if let Some(plugin) = snapshot
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+        {
+            if plugin.repository != repository {
+                return Err(MarketplaceError::Conflict(
+                    "plugin ID is already owned by another repository".into(),
+                ));
+            }
+            if let Some(existing) = plugin
+                .versions
+                .iter()
+                .find(|candidate| candidate.version == version)
+            {
+                if existing.package_digest != package_digest {
+                    return Err(MarketplaceError::Conflict(
+                        "plugin version was republished with different bytes".into(),
+                    ));
+                }
+                return Ok(snapshot);
+            }
+        }
         let mut plugins = snapshot.plugins;
         let plugin = if let Some(plugin) = plugins
             .iter_mut()
@@ -177,27 +200,15 @@ impl PluginInstallationStore {
             });
             plugins.last_mut().expect("just inserted plugin")
         };
-        if let Some(existing) = plugin
+        plugin.versions.push(AdmittedPluginVersion {
+            version: version.into(),
+            package_digest: package_digest.into(),
+            admitted_at_epoch_ms,
+            runtime_status: PluginRuntimeStatus::PendingRestart,
+        });
+        plugin
             .versions
-            .iter()
-            .find(|candidate| candidate.version == version)
-        {
-            if existing.package_digest != package_digest {
-                return Err(MarketplaceError::Conflict(
-                    "plugin version was republished with different bytes".into(),
-                ));
-            }
-        } else {
-            plugin.versions.push(AdmittedPluginVersion {
-                version: version.into(),
-                package_digest: package_digest.into(),
-                admitted_at_epoch_ms,
-                runtime_status: PluginRuntimeStatus::PendingRuntime,
-            });
-            plugin
-                .versions
-                .sort_by(|left, right| left.version.cmp(&right.version));
-        }
+            .sort_by(|left, right| left.version.cmp(&right.version));
         plugin.pending_version = Some(version.into());
         self.write(snapshot.generation + 1, plugins)
     }
@@ -323,6 +334,12 @@ impl PluginInstallationStore {
         let mut plugins = snapshot.plugins;
         let mut changed = false;
         for plugin in &mut plugins {
+            for version in &mut plugin.versions {
+                if version.runtime_status == PluginRuntimeStatus::PendingRestart {
+                    version.runtime_status = PluginRuntimeStatus::PendingRuntime;
+                    changed = true;
+                }
+            }
             let interrupted = plugin
                 .versions
                 .iter_mut()
@@ -1328,7 +1345,7 @@ mod tests {
     }
 
     #[test]
-    fn records_admitted_versions_without_selecting_them_active() {
+    fn records_admitted_versions_for_restart_without_selecting_them_active() {
         let directory = tempfile::tempdir().unwrap();
         let store = PluginInstallationStore::open(directory.path()).unwrap();
         let snapshot = store
@@ -1348,7 +1365,7 @@ mod tests {
         assert_eq!(snapshot.plugins[0].active_version, None);
         assert_eq!(
             snapshot.plugins[0].versions[0].runtime_status,
-            PluginRuntimeStatus::PendingRuntime
+            PluginRuntimeStatus::PendingRestart
         );
         assert_eq!(
             PluginInstallationStore::open(directory.path())
@@ -1358,6 +1375,18 @@ mod tests {
                 .plugins,
             snapshot.plugins
         );
+        let repeated = store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "1.2.3",
+                &format!("sha256:{}", "a".repeat(64)),
+                99,
+                false,
+            )
+            .unwrap();
+        assert_eq!(repeated.generation, snapshot.generation);
+        assert_eq!(repeated.plugins, snapshot.plugins);
     }
 
     #[test]
@@ -1375,6 +1404,7 @@ mod tests {
                 false,
             )
             .unwrap();
+        store.recover_interrupted_activations().unwrap();
 
         let active = store
             .begin_activation("dev.asterlyn.example", "1.2.3", &digest)
@@ -1432,6 +1462,7 @@ mod tests {
                 false,
             )
             .unwrap();
+        store.recover_interrupted_activations().unwrap();
         store
             .begin_activation("dev.asterlyn.example", "1.0.0", &first)
             .unwrap();
@@ -1448,6 +1479,7 @@ mod tests {
                 false,
             )
             .unwrap();
+        store.recover_interrupted_activations().unwrap();
         store
             .begin_activation("dev.asterlyn.example", "2.0.0", &update)
             .unwrap();
@@ -1485,6 +1517,7 @@ mod tests {
                 false,
             )
             .unwrap();
+        store.recover_interrupted_activations().unwrap();
         store
             .begin_activation("dev.asterlyn.example", "1.0.0", &digest)
             .unwrap();

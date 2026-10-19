@@ -12,7 +12,7 @@ const copy = {
   repository: "GitHub repository", sourceName: "Display name", sourceDescription: "Description", sourceRepositoryPlaceholder: "owner/repository", sourceNamePlaceholder: "Plugin name", sourceDescriptionPlaceholder: "Description",
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading sources…", noSources: "No sources.", notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ", marketplaceSecurityNote: "Packages are verified before installation.",
   inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", license: "License", pendingRuntimeNote: "Pending isolated runtime.",
-  admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime",
+  admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
 };
 
 const entry = {
@@ -119,4 +119,19 @@ test("plugin marketplace renders a host-owned admission review", () => {
   assert.match(html, /host\.tasks\.execute/u);
   assert.match(html, /data-plugin-admission-confirm/u);
   assert.match(html, /Pending isolated runtime/u);
+});
+
+test("installed plugins require a controlled restart before activation", () => {
+  const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy, false, {
+    tab: "installed", loading: false, error: null, busyRepository: null, form: null,
+    confirmDeleteRepository: null, admissionReview: null, snapshot: null, restarting: false,
+    installations: { schemaVersion: 1, generation: 3, recovered: false, plugins: [{
+      pluginId: "dev.asterlyn.example", repository: "asterlyn/example", enabled: true,
+      bundledFallback: false, activeVersion: null, knownGoodVersion: null, pendingVersion: "1.2.3",
+      versions: [{ version: "1.2.3", packageDigest: `sha256:${"a".repeat(64)}`, admittedAtEpochMs: 42, runtimeStatus: "pendingRestart" }],
+    }] },
+  });
+  assert.match(html, /data-plugin-restart/u);
+  assert.match(html, /Restart required/u);
+  assert.match(html, /Restart Asterlyn/u);
 });

@@ -290,6 +290,7 @@ pub fn run() {
             prepare_plugin_install,
             confirm_plugin_install,
             cancel_plugin_install,
+            restart_for_plugin_changes,
             activate_installed_plugin_runtime,
             confirm_installed_plugin_runtime_healthy,
             fail_installed_plugin_runtime_activation,

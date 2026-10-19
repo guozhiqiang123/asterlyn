@@ -11,6 +11,8 @@ use asterlyn_plugin_package::{
     AdmissionContext, SUPPORTED_CAPABILITIES, SUPPORTED_PERMISSIONS, extract_admitted_package,
     inspect_package,
 };
+use asterlyn_plugin_runtime::PluginHostSupervisor;
+use asterlyn_plugin_runtime_protocol::ShutdownReason;
 use sha2::{Digest, Sha256};
 use tauri::{Manager, State};
 
@@ -21,7 +23,9 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_RELEASE_METADATA_BYTES: u64 = 1024 * 1024;
 
-use crate::application::{PendingPluginAdmission, PluginMarketplaceCoordinator};
+use crate::application::{
+    PendingPluginAdmission, PluginMarketplaceCoordinator, PluginProcessQueryManager, TaskManager,
+};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -189,6 +193,26 @@ pub(crate) fn confirm_plugin_install(
     let result = marketplace.run(|| commit_admission(&app, &admission));
     let _ = fs::remove_file(&admission.staging_path);
     result
+}
+
+#[tauri::command]
+pub(crate) fn restart_for_plugin_changes(
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    tasks: State<'_, TaskManager>,
+    process_queries: State<'_, PluginProcessQueryManager>,
+    supervisor: State<'_, PluginHostSupervisor>,
+) -> Result<(), String> {
+    installation_store(&app)?
+        .snapshot()
+        .map_err(|error| error.to_string())?;
+    marketplace.begin_restart()?;
+    tasks.cancel_all();
+    process_queries.cancel_all();
+    supervisor.cancel_all(ShutdownReason::Restart);
+    let _ = abandon_plugin_activations(&app);
+    app.request_restart();
+    Ok(())
 }
 
 #[derive(Clone)]

@@ -42,6 +42,7 @@ export class PluginManagementBinding {
   private confirmDeleteRepository: string | null = null;
   private admissionReview: PluginPackageAdmissionReview | null = null;
   private installations: PluginInstallationSnapshot | null = null;
+  private restarting = false;
 
   constructor(
     private readonly root: HTMLElement,
@@ -71,6 +72,7 @@ export class PluginManagementBinding {
       confirmDeleteRepository: this.confirmDeleteRepository,
       admissionReview: this.admissionReview,
       installations: this.installations,
+      restarting: this.restarting,
     });
   }
 
@@ -236,6 +238,18 @@ export class PluginManagementBinding {
       void this.marketplace.confirmPluginInstall(review.reviewToken).then((snapshot) => { this.installations = snapshot; this.admissionReview = null; this.tab = "installed"; })
         .catch((error) => { this.marketplaceError = errorMessage(error); this.options.reportError(error); })
         .finally(() => { this.busyRepository = null; if (this.options.visible()) this.options.render(); });
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-plugin-restart]")?.addEventListener("click", () => {
+      if (this.restarting) return;
+      this.restarting = true;
+      this.marketplaceError = null;
+      this.options.render("[data-plugin-restart]");
+      void this.marketplace.restartForPluginChanges().catch((error) => {
+        this.restarting = false;
+        this.marketplaceError = errorMessage(error);
+        this.options.reportError(error);
+        if (this.options.visible()) this.options.render("[data-plugin-restart]");
+      });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-plugin-source-delete]").forEach((button) => {
       button.addEventListener("click", () => {

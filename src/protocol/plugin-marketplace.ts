@@ -45,6 +45,7 @@ export interface PluginMarketplaceBridge {
   preparePluginInstall(repository: string): Promise<PluginPackageAdmissionReview>;
   confirmPluginInstall(reviewToken: string): Promise<PluginInstallationSnapshot>;
   cancelPluginInstall(reviewToken: string): Promise<void>;
+  restartForPluginChanges(): Promise<void>;
 }
 
 export type PluginRuntimeStatus = "pendingRuntime" | "pendingRestart" | "active" | "knownGood" | "quarantined";
