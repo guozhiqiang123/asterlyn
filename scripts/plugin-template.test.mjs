@@ -40,7 +40,7 @@ test("template vendors the exact public SDK artifact and immutable dependency gr
 
 test("template release workflow pins the inspector baseline and publishing actions", () => {
   const workflow = read(".github/workflows/release.yml");
-  assert.match(workflow, /git clone --depth 1 --branch v0\.1\.11/);
+  assert.match(workflow, /git clone --depth 1 --branch v0\.1\.12/);
   assert.match(workflow, /softprops\/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b/);
   assert.match(workflow, /files: release\/\*\.asterlyn-plugin\.tgz/);
   assert.doesNotMatch(workflow, /uses: [^\n]+@v\d/);

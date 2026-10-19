@@ -16,7 +16,7 @@ try {
   run(npm, ["audit", "--audit-level=high"], checkout);
   run(npm, ["run", "verify"], checkout, {
     ASTERLYN_HOST_CHECKOUT: repositoryRoot,
-    ASTERLYN_HOST_VERSION: "0.1.11",
+    ASTERLYN_HOST_VERSION: "0.1.12",
   });
 
   const manifest = JSON.parse(await readFile(path.join(checkout, "manifest.json"), "utf8"));
