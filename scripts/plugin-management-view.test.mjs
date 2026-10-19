@@ -11,6 +11,8 @@ const copy = {
   installedTab: "Installed", marketplaceTab: "Marketplace", marketplaceDescription: "Discover plugins.", addSource: "Add source", editSource: "Edit source", deleteSource: "Remove source", confirmDeleteSource: "Remove this source?", cancel: "Cancel", save: "Save",
   repository: "GitHub repository", sourceName: "Display name", sourceDescription: "Description", sourceRepositoryPlaceholder: "owner/repository", sourceNamePlaceholder: "Plugin name", sourceDescriptionPlaceholder: "Description",
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading sources…", noSources: "No sources.", notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ", marketplaceSecurityNote: "Packages are verified before installation.",
+  inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", license: "License", pendingRuntimeNote: "Pending isolated runtime.",
+  admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime",
 };
 
 const entry = {
@@ -90,9 +92,11 @@ test("plugin marketplace renders configured Release sources as host-owned contro
     {
       tab: "marketplace", loading: false, error: null, busyRepository: null, form: null,
       confirmDeleteRepository: null,
+      admissionReview: null,
+      installations: null,
       snapshot: { schemaVersion: 1, generation: 2, recovered: false, sources: [{
         repository: "asterlyn/example", name: "Example", description: "Example tools", builtIn: false, enabled: true,
-        catalog: { status: "available", checkedAtEpochMs: 1, stale: false, version: "1.2.3", releaseUrl: "https://github.com/asterlyn/example/releases/tag/v1.2.3", assetName: "example.asterlyn-plugin.tgz", assetSizeBytes: 1234, digest: `sha256:${"a".repeat(64)}`, error: null, rateLimitResetEpochMs: null, etag: null, lastModified: null },
+        catalog: { status: "available", checkedAtEpochMs: 1, stale: false, version: "1.2.3", releaseUrl: "https://github.com/asterlyn/example/releases/tag/v1.2.3", assetName: "example.asterlyn-plugin.tgz", assetDownloadUrl: "https://github.com/asterlyn/example/releases/download/v1.2.3/example.asterlyn-plugin.tgz", assetSizeBytes: 1234, digest: `sha256:${"a".repeat(64)}`, error: null, rateLimitResetEpochMs: null, etag: null, lastModified: null },
       }] },
     },
   );
@@ -100,6 +104,19 @@ test("plugin marketplace renders configured Release sources as host-owned contro
   assert.match(html, /data-plugin-source="asterlyn\/example"/u);
   assert.match(html, /Release available: v1\.2\.3/u);
   assert.match(html, /data-plugin-source-refresh="asterlyn\/example"/u);
+  assert.match(html, /data-plugin-source-install="asterlyn\/example"/u);
   assert.match(html, /data-plugin-source-delete="asterlyn\/example"/u);
   assert.doesNotMatch(html, /<script|on[a-z]+=/iu);
+});
+
+test("plugin marketplace renders a host-owned admission review", () => {
+  const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy, false, {
+    tab: "marketplace", loading: false, error: null, busyRepository: null, form: null,
+    confirmDeleteRepository: null, installations: null, snapshot: { schemaVersion: 1, generation: 2, recovered: false, sources: [] },
+    admissionReview: { reviewToken: "b".repeat(64), repository: "asterlyn/example", sourceGeneration: 2, assetName: "example.asterlyn-plugin.tgz", assetSizeBytes: 1024, digest: `sha256:${"a".repeat(64)}`, pluginId: "dev.asterlyn.example", version: "1.2.3", licenseExpression: "MIT", capabilities: ["tasks"], permissions: ["host.tasks.execute"], expandedBytes: 2048 },
+  });
+  assert.match(html, /Review plugin package/u);
+  assert.match(html, /host\.tasks\.execute/u);
+  assert.match(html, /data-plugin-admission-confirm/u);
+  assert.match(html, /Pending isolated runtime/u);
 });

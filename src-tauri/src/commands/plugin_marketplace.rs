@@ -3,9 +3,15 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use asterlyn_plugin_marketplace::{
-    PluginSource, PluginSourceCatalog, PluginSourceCatalogStatus, PluginSourceSnapshot,
-    PluginSourceStore, compare_release_versions, parse_github_release,
+    PluginInstallationSnapshot, PluginInstallationStore, PluginSource, PluginSourceCatalog,
+    PluginSourceCatalogStatus, PluginSourceSnapshot, PluginSourceStore, compare_release_versions,
+    parse_github_release,
 };
+use asterlyn_plugin_package::{
+    AdmissionContext, SUPPORTED_CAPABILITIES, SUPPORTED_PERMISSIONS, extract_admitted_package,
+    inspect_package,
+};
+use sha2::{Digest, Sha256};
 use tauri::{Manager, State};
 
 #[cfg(target_os = "windows")]
@@ -15,7 +21,24 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_RELEASE_METADATA_BYTES: u64 = 1024 * 1024;
 
-use crate::application::PluginMarketplaceCoordinator;
+use crate::application::{PendingPluginAdmission, PluginMarketplaceCoordinator};
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PluginPackageAdmissionReview {
+    review_token: String,
+    repository: String,
+    source_generation: u64,
+    asset_name: String,
+    asset_size_bytes: u64,
+    digest: String,
+    plugin_id: String,
+    version: String,
+    license_expression: String,
+    capabilities: Vec<String>,
+    permissions: Vec<String>,
+    expanded_bytes: u64,
+}
 
 #[tauri::command]
 pub(crate) fn list_plugin_sources(
@@ -95,13 +118,306 @@ pub(crate) async fn refresh_plugin_source(
     })
 }
 
+#[tauri::command]
+pub(crate) fn list_plugin_installations(
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+) -> Result<PluginInstallationSnapshot, String> {
+    marketplace.run(|| {
+        installation_store(&app)?
+            .snapshot()
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn prepare_plugin_install(
+    repository: String,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+) -> Result<PluginPackageAdmissionReview, String> {
+    let snapshot =
+        marketplace.run(|| store(&app)?.snapshot().map_err(|error| error.to_string()))?;
+    let source = snapshot
+        .sources
+        .iter()
+        .find(|source| source.repository == repository)
+        .cloned()
+        .ok_or_else(|| "plugin source was not found".to_string())?;
+    if !source.enabled {
+        return Err("Enable the plugin source before installing from it.".into());
+    }
+    let catalog = source
+        .catalog
+        .as_ref()
+        .filter(|catalog| catalog.status == PluginSourceCatalogStatus::Available && !catalog.stale)
+        .ok_or_else(|| "Refresh this source before installing its package.".to_string())?;
+    let binding = ReleaseBinding::from_catalog(&source.repository, snapshot.generation, catalog)?;
+    let staging_root = marketplace_root(&app)?.join("staging");
+    fs::create_dir_all(&staging_root).map_err(|error| format!("create plugin staging: {error}"))?;
+    let prepared =
+        tauri::async_runtime::spawn_blocking(move || download_and_inspect(binding, staging_root))
+            .await
+            .map_err(|error| format!("plugin package inspection failed: {error}"))??;
+    let review = review_from(&prepared);
+    let cleanup = prepared.staging_path.clone();
+    if let Err(error) = marketplace.insert_admission(prepared) {
+        let _ = fs::remove_file(cleanup);
+        return Err(error);
+    }
+    Ok(review)
+}
+
+#[tauri::command]
+pub(crate) fn cancel_plugin_install(
+    review_token: String,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+) -> Result<(), String> {
+    if let Some(admission) = marketplace.cancel_admission(&review_token)? {
+        let _ = fs::remove_file(admission.staging_path);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn confirm_plugin_install(
+    review_token: String,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+) -> Result<PluginInstallationSnapshot, String> {
+    let admission = marketplace.take_admission(&review_token)?;
+    let result = marketplace.run(|| commit_admission(&app, &admission));
+    let _ = fs::remove_file(&admission.staging_path);
+    result
+}
+
+#[derive(Clone)]
+struct ReleaseBinding {
+    repository: String,
+    source_generation: u64,
+    version: String,
+    asset_name: String,
+    download_url: String,
+    asset_size_bytes: u64,
+    digest: String,
+}
+
+impl ReleaseBinding {
+    fn from_catalog(
+        repository: &str,
+        source_generation: u64,
+        catalog: &PluginSourceCatalog,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            repository: repository.into(),
+            source_generation,
+            version: catalog
+                .version
+                .clone()
+                .ok_or("Release version is missing")?,
+            asset_name: catalog
+                .asset_name
+                .clone()
+                .ok_or("Release asset is missing")?,
+            download_url: catalog
+                .asset_download_url
+                .clone()
+                .ok_or("Release download URL is missing")?,
+            asset_size_bytes: catalog
+                .asset_size_bytes
+                .ok_or("Release asset size is missing")?,
+            digest: catalog.digest.clone().ok_or("Release digest is missing")?,
+        })
+    }
+}
+
+fn download_and_inspect(
+    binding: ReleaseBinding,
+    staging_root: std::path::PathBuf,
+) -> Result<PendingPluginAdmission, String> {
+    let token = format!(
+        "{:x}",
+        Sha256::digest(
+            format!(
+                "{}\0{}\0{}\0{}\0{}",
+                binding.repository,
+                binding.source_generation,
+                binding.version,
+                binding.digest,
+                now_ms()
+            )
+            .as_bytes()
+        )
+    );
+    let staging_path = staging_root.join(format!("{token}.tgz"));
+    let output = hidden_command("curl")
+        .args([
+            "-sS",
+            "--fail",
+            "--location",
+            "--max-redirs",
+            "5",
+            "--proto",
+            "=https",
+            "--proto-redir",
+            "=https",
+            "--connect-timeout",
+            "10",
+            "--max-time",
+            "120",
+            "--max-filesize",
+            "67108864",
+            "-A",
+            concat!("Asterlyn/", env!("CARGO_PKG_VERSION")),
+            "--output",
+        ])
+        .arg(&staging_path)
+        .arg(&binding.download_url)
+        .output()
+        .map_err(|error| format!("could not start plugin download: {error}"))?;
+    if !output.status.success() {
+        let _ = fs::remove_file(&staging_path);
+        return Err(format!(
+            "plugin download failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let bytes = fs::read(&staging_path)
+        .map_err(|error| format!("read downloaded plugin package: {error}"))?;
+    if bytes.len() as u64 != binding.asset_size_bytes {
+        let _ = fs::remove_file(&staging_path);
+        return Err("downloaded plugin size does not match the admitted Release".into());
+    }
+    let actual = format!("sha256:{:x}", Sha256::digest(&bytes));
+    if actual != binding.digest {
+        let _ = fs::remove_file(&staging_path);
+        return Err("downloaded plugin digest does not match the admitted Release".into());
+    }
+    let context = admission_context(&binding.repository, &binding.version);
+    let report = inspect_package(&bytes, &context).map_err(|error| {
+        let _ = fs::remove_file(&staging_path);
+        error.to_string()
+    })?;
+    Ok(PendingPluginAdmission {
+        token,
+        repository: binding.repository,
+        source_generation: binding.source_generation,
+        version: binding.version,
+        asset_name: binding.asset_name,
+        asset_size_bytes: binding.asset_size_bytes,
+        digest: binding.digest,
+        staging_path,
+        report,
+    })
+}
+
+fn commit_admission(
+    app: &tauri::AppHandle,
+    admission: &PendingPluginAdmission,
+) -> Result<PluginInstallationSnapshot, String> {
+    let sources = store(app)?.snapshot().map_err(|error| error.to_string())?;
+    if sources.generation != admission.source_generation {
+        return Err("Plugin source changed after review; inspect it again.".into());
+    }
+    let source = sources
+        .sources
+        .iter()
+        .find(|source| source.repository == admission.repository)
+        .ok_or("plugin source was removed")?;
+    let catalog = source
+        .catalog
+        .as_ref()
+        .ok_or("plugin Release is unavailable")?;
+    let binding = ReleaseBinding::from_catalog(&admission.repository, sources.generation, catalog)?;
+    if binding.version != admission.version
+        || binding.asset_name != admission.asset_name
+        || binding.asset_size_bytes != admission.asset_size_bytes
+        || binding.digest != admission.digest
+    {
+        return Err("Plugin Release changed after review; inspect it again.".into());
+    }
+    let bytes = fs::read(&admission.staging_path)
+        .map_err(|error| format!("read staged plugin package: {error}"))?;
+    if format!("sha256:{:x}", Sha256::digest(&bytes)) != admission.digest {
+        return Err("staged plugin package changed after review".into());
+    }
+    let digest_key = admission
+        .digest
+        .strip_prefix("sha256:")
+        .ok_or("invalid admitted digest")?;
+    let root = marketplace_root(app)?.join("packages");
+    let final_dir = root
+        .join(&admission.report.plugin_id)
+        .join(&admission.version)
+        .join(digest_key);
+    if !final_dir.exists() {
+        fs::create_dir_all(final_dir.parent().ok_or("invalid plugin storage path")?)
+            .map_err(|error| format!("create immutable plugin storage: {error}"))?;
+        let temporary = final_dir.with_extension(format!("staging-{}", admission.token));
+        let context = admission_context(&admission.repository, &admission.version);
+        extract_admitted_package(&bytes, &context, &temporary)
+            .map_err(|error| error.to_string())?;
+        fs::rename(&temporary, &final_dir).map_err(|error| {
+            let _ = fs::remove_dir_all(&temporary);
+            format!("publish immutable plugin package: {error}")
+        })?;
+    }
+    installation_store(app)?
+        .record_admitted(
+            &admission.report.plugin_id,
+            &admission.repository,
+            &admission.version,
+            &admission.digest,
+            now_ms(),
+            source.built_in,
+        )
+        .map_err(|error| error.to_string())
+}
+
+fn review_from(admission: &PendingPluginAdmission) -> PluginPackageAdmissionReview {
+    PluginPackageAdmissionReview {
+        review_token: admission.token.clone(),
+        repository: admission.repository.clone(),
+        source_generation: admission.source_generation,
+        asset_name: admission.asset_name.clone(),
+        asset_size_bytes: admission.asset_size_bytes,
+        digest: admission.digest.clone(),
+        plugin_id: admission.report.plugin_id.clone(),
+        version: admission.version.clone(),
+        license_expression: admission.report.license_expression.clone(),
+        capabilities: admission.report.capabilities.clone(),
+        permissions: admission.report.permissions.clone(),
+        expanded_bytes: admission.report.expanded_bytes,
+    }
+}
+
+fn admission_context<'a>(repository: &'a str, version: &'a str) -> AdmissionContext<'a> {
+    AdmissionContext {
+        repository,
+        release_version: version,
+        host_version: env!("CARGO_PKG_VERSION"),
+        sdk_major: 1,
+        runtime_protocol: 1,
+        supported_capabilities: SUPPORTED_CAPABILITIES,
+        supported_permissions: SUPPORTED_PERMISSIONS,
+    }
+}
+
 fn store(app: &tauri::AppHandle) -> Result<PluginSourceStore, String> {
-    let root = app
+    PluginSourceStore::open(marketplace_root(app)?).map_err(|error| error.to_string())
+}
+
+fn installation_store(app: &tauri::AppHandle) -> Result<PluginInstallationStore, String> {
+    PluginInstallationStore::open(marketplace_root(app)?.join("installation-state"))
+        .map_err(|error| error.to_string())
+}
+
+fn marketplace_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(app
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("resolve plugin marketplace location: {error}"))?
-        .join("plugin-marketplace-v1");
-    PluginSourceStore::open(root).map_err(|error| error.to_string())
+        .join("plugin-marketplace-v1"))
 }
 
 fn discover_release(source: &PluginSource) -> PluginSourceCatalog {
@@ -295,6 +611,7 @@ fn stale_or_error(
         version: None,
         release_url: None,
         asset_name: None,
+        asset_download_url: None,
         asset_size_bytes: None,
         digest: None,
         error: Some(error.chars().take(2_048).collect()),
@@ -308,6 +625,7 @@ fn catalog_has_release(catalog: &PluginSourceCatalog) -> bool {
     catalog.version.is_some()
         && catalog.release_url.is_some()
         && catalog.asset_name.is_some()
+        && catalog.asset_download_url.is_some()
         && catalog.asset_size_bytes.is_some()
         && catalog.digest.is_some()
 }

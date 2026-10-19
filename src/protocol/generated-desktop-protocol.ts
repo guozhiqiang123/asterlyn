@@ -4,7 +4,7 @@ import type { WindowChromeMode } from "./window-chrome";
 import type { WorkspaceFingerprint, PluginTaskCacheDirtyReason, PluginTaskCacheReadResult, PluginTaskCacheMutationResult, PluginTaskCacheCleanupResult } from "./plugin-task-cache";
 import type { PluginProcessQueryResult } from "./plugin-process-query";
 import type { PluginToolOperationParameters, PluginToolOperationResult } from "./plugin-tool-operation";
-import type { PluginSourceSnapshot } from "./plugin-marketplace";
+import type { PluginSourceSnapshot, PluginInstallationSnapshot, PluginPackageAdmissionReview } from "./plugin-marketplace";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 
@@ -17,6 +17,10 @@ export interface DesktopCommandMap {
   set_plugin_source_enabled: { args: { repository: string; enabled: boolean; }; result: PluginSourceSnapshot };
   remove_plugin_source: { args: { repository: string; }; result: PluginSourceSnapshot };
   refresh_plugin_source: { args: { repository: string; }; result: PluginSourceSnapshot };
+  list_plugin_installations: { args: Record<string, never>; result: PluginInstallationSnapshot };
+  prepare_plugin_install: { args: { repository: string; }; result: PluginPackageAdmissionReview };
+  confirm_plugin_install: { args: { reviewToken: string; }; result: PluginInstallationSnapshot };
+  cancel_plugin_install: { args: { reviewToken: string; }; result: void };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   is_last_project_window: { args: Record<string, never>; result: boolean };
   initial_repository: { args: Record<string, never>; result: string | null };
@@ -154,6 +158,10 @@ export const DESKTOP_RESULT_VALIDATORS: {
   set_plugin_source_enabled: "pluginSourceSnapshot",
   remove_plugin_source: "pluginSourceSnapshot",
   refresh_plugin_source: "pluginSourceSnapshot",
+  list_plugin_installations: "pluginInstallationSnapshot",
+  prepare_plugin_install: "pluginPackageAdmissionReview",
+  confirm_plugin_install: "pluginInstallationSnapshot",
+  cancel_plugin_install: "void",
   window_chrome_mode: "windowChromeMode",
   is_last_project_window: "boolean",
   initial_repository: "nullableString",

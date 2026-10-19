@@ -4,7 +4,7 @@ import type {
 } from "../../application/plugins/plugin-types.ts";
 import type { PluginManagementCopy } from "./plugin-management-view.ts";
 import { renderPluginManagementSection, type PluginMarketplaceViewState } from "./plugin-management-view.ts";
-import type { PluginMarketplaceBridge, PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
+import type { PluginInstallationSnapshot, PluginMarketplaceBridge, PluginPackageAdmissionReview, PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
 
 export interface PluginManagementHost {
   readonly pluginManagementSnapshot: PluginManagementSnapshot;
@@ -40,6 +40,8 @@ export class PluginManagementBinding {
   private busyRepository: string | null = null;
   private sourceForm: PluginMarketplaceViewState["form"] = null;
   private confirmDeleteRepository: string | null = null;
+  private admissionReview: PluginPackageAdmissionReview | null = null;
+  private installations: PluginInstallationSnapshot | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -67,6 +69,8 @@ export class PluginManagementBinding {
       busyRepository: this.busyRepository,
       form: this.sourceForm,
       confirmDeleteRepository: this.confirmDeleteRepository,
+      admissionReview: this.admissionReview,
+      installations: this.installations,
     });
   }
 
@@ -140,8 +144,8 @@ export class PluginManagementBinding {
     }
     if (!this.marketplaceLoaded && !this.marketplaceLoading) {
       this.marketplaceLoading = true;
-      void this.marketplace.listPluginSources().then((snapshot) => {
-        this.marketplaceSnapshot = snapshot;
+      void Promise.all([this.marketplace.listPluginSources(), this.marketplace.listPluginInstallations()]).then(([snapshot, installations]) => {
+        this.marketplaceSnapshot = snapshot; this.installations = installations;
         this.marketplaceLoaded = true;
         this.marketplaceError = snapshot.recovered
           ? "The current source catalog was damaged; Asterlyn restored the previous saved generation."
@@ -210,6 +214,28 @@ export class PluginManagementBinding {
         const repository = button.dataset.pluginSourceRefresh;
         if (repository) void this.mutateSource(repository, () => this.marketplace.refreshPluginSource(repository));
       });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-plugin-source-install]").forEach((button) => button.addEventListener("click", () => {
+      const repository = button.dataset.pluginSourceInstall;
+      if (!repository || this.busyRepository) return;
+      this.busyRepository = repository;
+      this.marketplaceError = null;
+      this.options.render();
+      void this.marketplace.preparePluginInstall(repository).then((review) => { this.admissionReview = review; })
+        .catch((error) => { this.marketplaceError = errorMessage(error); this.options.reportError(error); })
+        .finally(() => { this.busyRepository = null; if (this.options.visible()) this.options.render("[data-plugin-admission-confirm]"); });
+    }));
+    this.root.querySelector<HTMLButtonElement>("[data-plugin-admission-cancel]")?.addEventListener("click", () => {
+      const token = this.admissionReview?.reviewToken; this.admissionReview = null;
+      if (token) void this.marketplace.cancelPluginInstall(token).catch((error) => this.options.reportError(error));
+      this.options.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-plugin-admission-confirm]")?.addEventListener("click", () => {
+      const review = this.admissionReview; if (!review || this.busyRepository) return;
+      this.busyRepository = review.repository; this.options.render();
+      void this.marketplace.confirmPluginInstall(review.reviewToken).then((snapshot) => { this.installations = snapshot; this.admissionReview = null; this.tab = "installed"; })
+        .catch((error) => { this.marketplaceError = errorMessage(error); this.options.reportError(error); })
+        .finally(() => { this.busyRepository = null; if (this.options.visible()) this.options.render(); });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-plugin-source-delete]").forEach((button) => {
       button.addEventListener("click", () => {

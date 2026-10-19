@@ -54,6 +54,7 @@ dependencies = [
  "asterlyn-desktop",
  "asterlyn-git",
  "asterlyn-plugin-marketplace",
+ "asterlyn-plugin-package",
  "asterlyn-task",
  "asterlyn-terminal",
  "asterlyn-workspace",

@@ -25,7 +25,7 @@ pub(crate) use commit_file_restore::{
 };
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
-pub(crate) use plugin_marketplace::PluginMarketplaceCoordinator;
+pub(crate) use plugin_marketplace::{PendingPluginAdmission, PluginMarketplaceCoordinator};
 pub(crate) use plugin_process_query::{
     PluginProcessQueryManager, PluginProcessQueryResult, PluginToolOperationResult,
 };

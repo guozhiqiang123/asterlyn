@@ -12,6 +12,8 @@ export const EN_US_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading plugin sources…", noSources: "No plugin sources are configured.",
   notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ",
   marketplaceSecurityNote: "A GitHub Release is only a download source. Asterlyn verifies its repository identity, SHA-256, package structure, compatibility, license, permissions, and isolated runtime contract before installation.",
+  inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", license: "License", pendingRuntimeNote: "The admitted package is stored immutably, but remains pending until the isolated plugin runtime is available. It does not replace the bundled plugin yet.",
+  admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime",
 };
 
 export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
@@ -26,4 +28,6 @@ export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   officialSource: "官方源", customSource: "自定义源", enableSource: "启用源", refreshSource: "检查 Release", refreshingSource: "检查中…", loadingMarketplace: "正在加载插件源…", noSources: "尚未配置插件源。",
   notChecked: "尚未检查", releaseAvailable: "发现 Release", noRelease: "没有稳定 Release", staleRelease: "缓存", packageLabel: "安装包：", checkedLabel: "检查时间：",
   marketplaceSecurityNote: "GitHub Release 只负责提供下载来源。安装前，Asterlyn 还会校验仓库身份、SHA-256、包结构、兼容性、许可证、权限和隔离运行时契约。",
+  inspectPackage: "审查安装包", inspectingPackage: "正在检查…", confirmAdmission: "准入安装包", admissionTitle: "审查插件安装包", permissions: "权限", capabilities: "能力", license: "许可证", pendingRuntimeNote: "准入后的安装包会进入不可变存储，但在隔离插件运行时可用前仍保持等待状态，不会替换当前内置插件。",
+  admittedPackage: "已准入安装包", pendingRuntime: "等待隔离运行时",
 };

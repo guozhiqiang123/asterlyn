@@ -101,6 +101,10 @@ Commit boundary: GitHub adapter, discovery service, protocol, cache, and tests.
 
 ### MKT4 — Download, admission, and immutable package storage
 
+Status: implemented for schema-2 package admission on 2026-10-19. The Settings flow exposes an
+explicit review, content-addressed immutable storage, and a recovered atomic installation index.
+Admitted packages remain `pending runtime`; activation intentionally stays gated on MKT5/MKT7.
+
 1. Start downloads only from an exact discovery token that binds source, Release, asset, size,
    digest, and source generation.
 2. Stream into application-owned staging with cancellation, timeout, byte cap, and visible progress;

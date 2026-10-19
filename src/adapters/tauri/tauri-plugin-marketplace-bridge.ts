@@ -1,4 +1,4 @@
-import type { PluginMarketplaceBridge, PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
+import type { PluginInstallationSnapshot, PluginMarketplaceBridge, PluginPackageAdmissionReview, PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
 import { invokeDesktopCommand as invoke } from "./desktop-command-adapter.ts";
 
 export const tauriPluginMarketplaceBridge: PluginMarketplaceBridge = {
@@ -11,4 +11,8 @@ export const tauriPluginMarketplaceBridge: PluginMarketplaceBridge = {
   }),
   removePluginSource: (repository) => invoke<PluginSourceSnapshot>("remove_plugin_source", { repository }),
   refreshPluginSource: (repository) => invoke<PluginSourceSnapshot>("refresh_plugin_source", { repository }),
+  listPluginInstallations: () => invoke<PluginInstallationSnapshot>("list_plugin_installations"),
+  preparePluginInstall: (repository) => invoke<PluginPackageAdmissionReview>("prepare_plugin_install", { repository }),
+  confirmPluginInstall: (reviewToken) => invoke<PluginInstallationSnapshot>("confirm_plugin_install", { reviewToken }),
+  cancelPluginInstall: (reviewToken) => invoke<void>("cancel_plugin_install", { reviewToken }),
 };

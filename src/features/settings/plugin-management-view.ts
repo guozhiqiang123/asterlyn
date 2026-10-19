@@ -5,7 +5,7 @@ import type {
   PluginSettingValue,
 } from "../../application/plugins/plugin-types.ts";
 import { renderSelectControl } from "../../shared/select-control.ts";
-import type { PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
+import type { PluginInstallationSnapshot, PluginPackageAdmissionReview, PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
 
 export interface PluginManagementCopy {
   readonly locale: string;
@@ -55,6 +55,16 @@ export interface PluginManagementCopy {
   readonly packageLabel: string;
   readonly checkedLabel: string;
   readonly marketplaceSecurityNote: string;
+  readonly inspectPackage: string;
+  readonly inspectingPackage: string;
+  readonly confirmAdmission: string;
+  readonly admissionTitle: string;
+  readonly permissions: string;
+  readonly capabilities: string;
+  readonly license: string;
+  readonly pendingRuntimeNote: string;
+  readonly admittedPackage: string;
+  readonly pendingRuntime: string;
 }
 
 export interface PluginMarketplaceViewState {
@@ -65,6 +75,8 @@ export interface PluginMarketplaceViewState {
   readonly busyRepository: string | null;
   readonly form: { readonly repository: string; readonly name: string; readonly description: string; readonly editing: boolean } | null;
   readonly confirmDeleteRepository: string | null;
+  readonly admissionReview: PluginPackageAdmissionReview | null;
+  readonly installations: PluginInstallationSnapshot | null;
 }
 
 /** Renders host-owned plugin metadata; plugins contribute keys and values, never HTML. */
@@ -74,18 +86,27 @@ export function renderPluginManagementSection(
   loading = false,
   marketplace: PluginMarketplaceViewState = {
     tab: "installed", snapshot: null, loading: false, error: null,
-    busyRepository: null, form: null, confirmDeleteRepository: null,
+    busyRepository: null, form: null, confirmDeleteRepository: null, admissionReview: null, installations: null,
   },
 ): string {
   const cards = snapshot.entries.map((entry) => renderPluginEntry(entry, copy)).join("");
+  const admitted = renderAdmittedPackages(marketplace.installations, copy);
   const content = marketplace.tab === "installed"
-    ? `<div class="plugin-management-list">${cards || `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>`}</div>`
+    ? `<div class="plugin-management-list">${admitted}${cards || (!admitted ? `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>` : "")}</div>`
     : renderMarketplace(marketplace, copy);
   return `<section class="settings-group plugin-management" data-plugin-management>
     <header><h2>${escapeHtml(copy.title)}</h2><p>${escapeHtml(copy.description)}</p></header>
     <div class="plugin-management-tabs" role="tablist" aria-label="${escapeAttribute(copy.title)}"><button type="button" role="tab" data-plugin-management-tab="installed" aria-selected="${marketplace.tab === "installed"}">${escapeHtml(copy.installedTab)}</button><button type="button" role="tab" data-plugin-management-tab="marketplace" aria-selected="${marketplace.tab === "marketplace"}">${escapeHtml(copy.marketplaceTab)}</button></div>
     ${content}
   </section>`;
+}
+
+function renderAdmittedPackages(snapshot: PluginInstallationSnapshot | null, copy: PluginManagementCopy): string {
+  return snapshot?.plugins.map((plugin) => {
+    const pending = plugin.pendingVersion;
+    const version = pending ? plugin.versions.find((candidate) => candidate.version === pending) : null;
+    return `<article class="plugin-management-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(plugin.pluginId)}</h3><p><code>${escapeHtml(plugin.repository)}</code></p></div><span class="plugin-management-status">${escapeHtml(copy.admittedPackage)}</span></div><div class="plugin-management-meta"><span>${escapeHtml(copy.version)}: <code>${escapeHtml(pending ?? "—")}</code></span><span>${escapeHtml(version?.runtimeStatus === "pendingRuntime" ? copy.pendingRuntime : version?.runtimeStatus ?? copy.inactive)}</span></div></article>`;
+  }).join("") ?? "";
 }
 
 function renderMarketplace(state: PluginMarketplaceViewState, copy: PluginManagementCopy): string {
@@ -97,7 +118,13 @@ function renderMarketplace(state: PluginMarketplaceViewState, copy: PluginManage
   const empty = !sources
     ? `<p class="plugin-management-empty" role="status">${escapeHtml(state.loading ? copy.loadingMarketplace : copy.noSources)}</p>`
     : "";
-  return `<div class="plugin-marketplace" data-plugin-marketplace><div class="plugin-marketplace-toolbar"><div><strong>${escapeHtml(copy.marketplaceTab)}</strong><span>${escapeHtml(copy.marketplaceDescription)}</span></div><button class="primary-button" type="button" data-plugin-source-add ${state.busyRepository ? "disabled" : ""}>${escapeHtml(copy.addSource)}</button></div>${error}${form}<div class="plugin-marketplace-list">${sources}${empty}</div><p class="plugin-marketplace-security-note">${escapeHtml(copy.marketplaceSecurityNote)}</p></div>`;
+  const review = state.admissionReview ? renderAdmissionReview(state.admissionReview, copy, state.busyRepository !== null) : "";
+  return `<div class="plugin-marketplace" data-plugin-marketplace><div class="plugin-marketplace-toolbar"><div><strong>${escapeHtml(copy.marketplaceTab)}</strong><span>${escapeHtml(copy.marketplaceDescription)}</span></div><button class="primary-button" type="button" data-plugin-source-add ${state.busyRepository ? "disabled" : ""}>${escapeHtml(copy.addSource)}</button></div>${error}${review}${form}<div class="plugin-marketplace-list">${sources}${empty}</div><p class="plugin-marketplace-security-note">${escapeHtml(copy.marketplaceSecurityNote)}</p></div>`;
+}
+
+function renderAdmissionReview(review: PluginPackageAdmissionReview, copy: PluginManagementCopy, busy: boolean): string {
+  const list = (values: readonly string[]) => values.length ? values.map((value) => `<code>${escapeHtml(value)}</code>`).join(" ") : "—";
+  return `<section class="plugin-source-form plugin-admission-review" role="dialog" aria-labelledby="plugin-admission-title"><h3 id="plugin-admission-title">${escapeHtml(copy.admissionTitle)}</h3><div class="plugin-management-meta"><span><b>${escapeHtml(review.pluginId)}</b></span><span>v${escapeHtml(review.version)}</span><span>${escapeHtml(formatBytes(review.assetSizeBytes))}</span></div><dl><div><dt>${escapeHtml(copy.license)}</dt><dd>${escapeHtml(review.licenseExpression)}</dd></div><div><dt>${escapeHtml(copy.capabilities)}</dt><dd>${list(review.capabilities)}</dd></div><div><dt>${escapeHtml(copy.permissions)}</dt><dd>${list(review.permissions)}</dd></div></dl><p>${escapeHtml(copy.pendingRuntimeNote)}</p><div class="plugin-source-form-actions"><button class="secondary-button" type="button" data-plugin-admission-cancel ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="button" data-plugin-admission-confirm="${escapeAttribute(review.reviewToken)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.confirmAdmission)}</button></div></section>`;
 }
 
 function renderSourceForm(
@@ -133,7 +160,9 @@ function renderSourceCard(
     ? `<div class="plugin-source-delete-review" role="alert"><span>${escapeHtml(copy.confirmDeleteSource)}</span><button class="secondary-button" type="button" data-plugin-source-delete-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-plugin-source-delete-confirm="${escapeAttribute(source.repository)}">${escapeHtml(copy.deleteSource)}</button></div>`
     : "";
   const customActions = source.builtIn ? "" : `<button class="secondary-button" type="button" data-plugin-source-edit="${escapeAttribute(source.repository)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.editSource)}</button><button class="secondary-button" type="button" data-plugin-source-delete="${escapeAttribute(source.repository)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.deleteSource)}</button>`;
-  return `<article class="plugin-management-card plugin-source-card" data-plugin-source="${escapeAttribute(source.repository)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(source.name)}</h3><p>${escapeHtml(source.description)}</p></div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableSource)}</span>${renderToggle(`<input data-plugin-source-enabled="${escapeAttribute(source.repository)}" type="checkbox" role="switch" ${source.enabled ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="${escapeAttribute(copy.enableSource)}" />`)}</div></div><div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(source.builtIn ? copy.officialSource : copy.customSource)}</span><span><code>${escapeHtml(source.repository)}</code></span><span>${escapeHtml(catalogStatus)}</span></div>${catalogError}<div class="plugin-source-release">${packageDetail}${checked}</div><div class="plugin-source-actions"><button class="primary-button" type="button" data-plugin-source-refresh="${escapeAttribute(source.repository)}" ${busy || !source.enabled ? "disabled" : ""}>${escapeHtml(busy ? copy.refreshingSource : copy.refreshSource)}</button>${customActions}</div>${deleteReview}</article>`;
+  const canInspect = catalog?.status === "available" && !catalog.stale;
+  const install = canInspect ? `<button class="primary-button" type="button" data-plugin-source-install="${escapeAttribute(source.repository)}" ${busy ? "disabled" : ""}>${escapeHtml(busy ? copy.inspectingPackage : copy.inspectPackage)}</button>` : "";
+  return `<article class="plugin-management-card plugin-source-card" data-plugin-source="${escapeAttribute(source.repository)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(source.name)}</h3><p>${escapeHtml(source.description)}</p></div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableSource)}</span>${renderToggle(`<input data-plugin-source-enabled="${escapeAttribute(source.repository)}" type="checkbox" role="switch" ${source.enabled ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="${escapeAttribute(copy.enableSource)}" />`)}</div></div><div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(source.builtIn ? copy.officialSource : copy.customSource)}</span><span><code>${escapeHtml(source.repository)}</code></span><span>${escapeHtml(catalogStatus)}</span></div>${catalogError}<div class="plugin-source-release">${packageDetail}${checked}</div><div class="plugin-source-actions"><button class="primary-button" type="button" data-plugin-source-refresh="${escapeAttribute(source.repository)}" ${busy || !source.enabled ? "disabled" : ""}>${escapeHtml(busy ? copy.refreshingSource : copy.refreshSource)}</button>${install}${customActions}</div>${deleteReview}</article>`;
 }
 
 function formatBytes(bytes: number): string {

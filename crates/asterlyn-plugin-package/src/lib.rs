@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::io::{Cursor, Read};
+use std::fs::{self, OpenOptions};
+use std::io::{Cursor, Read, Write};
 use std::path::{Component, Path};
 
 use flate2::read::GzDecoder;
@@ -88,6 +89,7 @@ pub enum AdmissionError {
     InvalidManifest(String),
     Contract(String),
     Integrity(String),
+    Storage(String),
 }
 
 impl fmt::Display for AdmissionError {
@@ -121,6 +123,7 @@ impl fmt::Display for AdmissionError {
             Self::Integrity(message) => {
                 write!(formatter, "plugin package integrity rejected: {message}")
             }
+            Self::Storage(message) => write!(formatter, "plugin package storage failed: {message}"),
         }
     }
 }
@@ -217,6 +220,53 @@ pub fn inspect_package(
         files: admitted_files,
         expanded_bytes,
     })
+}
+
+/// Expands a package only after the complete admission contract has succeeded.
+///
+/// The destination must not exist. Every file is created with `create_new`, so an admitted
+/// archive can never replace host- or plugin-owned state. Callers should rename this directory
+/// into a content-addressed final location only after this function returns successfully.
+pub fn extract_admitted_package(
+    package_bytes: &[u8],
+    context: &AdmissionContext<'_>,
+    destination: &Path,
+) -> Result<AdmissionReport, AdmissionError> {
+    let report = inspect_package(package_bytes, context)?;
+    let files = read_archive(package_bytes)?;
+    fs::create_dir(destination).map_err(|error| storage_error("create extraction root", error))?;
+    let result = (|| {
+        for admitted in &report.files {
+            let file = files.get(&admitted.path).ok_or_else(|| {
+                AdmissionError::Integrity(format!("admitted file disappeared: {}", admitted.path))
+            })?;
+            let path = destination.join(&admitted.path);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| storage_error("create package directory", error))?;
+            }
+            let mut output = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .map_err(|error| storage_error("create package file", error))?;
+            output
+                .write_all(&file.bytes)
+                .map_err(|error| storage_error("write package file", error))?;
+            output
+                .sync_all()
+                .map_err(|error| storage_error("sync package file", error))?;
+        }
+        Ok(report)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(destination);
+    }
+    result
+}
+
+fn storage_error(operation: &str, error: std::io::Error) -> AdmissionError {
+    AdmissionError::Storage(format!("{operation}: {error}"))
 }
 
 fn read_archive(package_bytes: &[u8]) -> Result<BTreeMap<String, ArchiveFile>, AdmissionError> {
@@ -611,6 +661,19 @@ mod tests {
             ("runtime/plugin.js", RUNTIME, EntryType::Regular),
             ("LICENSE", LICENSE, EntryType::Regular),
         ])
+    }
+
+    #[test]
+    fn extracts_only_after_admission_into_a_new_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("admitted");
+        let report = extract_admitted_package(&valid_package(), &context(), &destination).unwrap();
+        assert_eq!(report.plugin_id, "dev.asterlyn.example");
+        assert_eq!(
+            fs::read(destination.join("runtime/plugin.js")).unwrap(),
+            RUNTIME
+        );
+        assert!(extract_admitted_package(&valid_package(), &context(), &destination).is_err());
     }
 
     #[test]

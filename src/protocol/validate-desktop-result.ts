@@ -21,7 +21,7 @@ import {
   arrays, assert, booleans, isRecord, nullableStrings, numbers, record, strings,
   type TransportRecord,
 } from "./desktop-result-validation-primitives.ts";
-import { validatePluginSourceSnapshot } from "./plugin-marketplace.ts";
+import { validatePluginInstallationSnapshot, validatePluginPackageAdmissionReview, validatePluginSourceSnapshot } from "./plugin-marketplace.ts";
 
 export function validateDesktopResult<Command extends DesktopCommandName>(
   command: Command,
@@ -29,6 +29,8 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
 ): DesktopCommandMap[Command]["result"] {
   const validator = DESKTOP_RESULT_VALIDATORS[command];
   if (validator === "pluginSourceSnapshot") return validatePluginSourceSnapshot(value, command) as DesktopCommandMap[Command]["result"];
+  if (validator === "pluginInstallationSnapshot") return validatePluginInstallationSnapshot(value, command) as DesktopCommandMap[Command]["result"];
+  if (validator === "pluginPackageAdmissionReview") return validatePluginPackageAdmissionReview(value, command) as DesktopCommandMap[Command]["result"];
   if (validatePluginTaskCacheDesktopResult(validator, value)) return value as DesktopCommandMap[Command]["result"];
   if (validateTaskExecutionDesktopResult(validator, value, command)) return value as DesktopCommandMap[Command]["result"];
   switch (validator) {

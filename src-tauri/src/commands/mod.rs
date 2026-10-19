@@ -13,7 +13,8 @@ pub(crate) use plugin_cache::{
     read_plugin_task_cache, write_plugin_task_cache,
 };
 pub(crate) use plugin_marketplace::{
-    list_plugin_sources, refresh_plugin_source, remove_plugin_source, set_plugin_source_enabled,
+    cancel_plugin_install, confirm_plugin_install, list_plugin_installations, list_plugin_sources,
+    prepare_plugin_install, refresh_plugin_source, remove_plugin_source, set_plugin_source_enabled,
     upsert_plugin_source,
 };
 pub(crate) use plugin_process_query::{

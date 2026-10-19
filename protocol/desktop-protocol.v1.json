@@ -9,7 +9,9 @@
     "PluginProcessQueryResult": "./plugin-process-query",
     "PluginToolOperationParameters": "./plugin-tool-operation",
     "PluginToolOperationResult": "./plugin-tool-operation",
-    "PluginSourceSnapshot": "./plugin-marketplace"
+    "PluginSourceSnapshot": "./plugin-marketplace",
+    "PluginInstallationSnapshot": "./plugin-marketplace",
+    "PluginPackageAdmissionReview": "./plugin-marketplace"
   },
   "commands": [
     { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
@@ -20,6 +22,10 @@
     { "name": "set_plugin_source_enabled", "args": { "repository": "string", "enabled": "boolean" }, "result": "PluginSourceSnapshot", "validator": "pluginSourceSnapshot" },
     { "name": "remove_plugin_source", "args": { "repository": "string" }, "result": "PluginSourceSnapshot", "validator": "pluginSourceSnapshot" },
     { "name": "refresh_plugin_source", "args": { "repository": "string" }, "result": "PluginSourceSnapshot", "validator": "pluginSourceSnapshot" },
+    { "name": "list_plugin_installations", "args": {}, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
+    { "name": "prepare_plugin_install", "args": { "repository": "string" }, "result": "PluginPackageAdmissionReview", "validator": "pluginPackageAdmissionReview" },
+    { "name": "confirm_plugin_install", "args": { "reviewToken": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
+    { "name": "cancel_plugin_install", "args": { "reviewToken": "string" }, "result": "void", "validator": "void" },
     { "name": "window_chrome_mode", "args": {}, "result": "WindowChromeMode", "validator": "windowChromeMode" },
     { "name": "is_last_project_window", "args": {}, "result": "boolean", "validator": "boolean" },
     { "name": "initial_repository", "args": {}, "result": "nullable:string", "validator": "nullableString" },

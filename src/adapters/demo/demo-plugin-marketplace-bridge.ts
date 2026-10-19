@@ -3,6 +3,7 @@ import type {
 } from "../../protocol/plugin-marketplace.ts";
 
 let generation = 1;
+let installationGeneration = 1;
 let sources: PluginSource[] = [{
   repository: "guozhiqiang123/asterlyn-plugin-android-gradle",
   name: "Android",
@@ -44,7 +45,7 @@ export const demoPluginMarketplaceBridge: PluginMarketplaceBridge = {
       catalog: {
         status: "available", checkedAtEpochMs: Date.now(), stale: false, version: "0.5.3",
         releaseUrl: `https://github.com/${repository}/releases/tag/v0.5.3`,
-        assetName: "plugin-0.5.3.asterlyn-plugin.tgz", assetSizeBytes: 128_000,
+        assetName: "plugin-0.5.3.asterlyn-plugin.tgz", assetDownloadUrl: "https://github.com/guozhiqiang123/asterlyn-plugin-android-gradle/releases/download/v0.5.3/plugin-0.5.3.asterlyn-plugin.tgz", assetSizeBytes: 128_000,
         digest: `sha256:${"a".repeat(64)}`, error: null, rateLimitResetEpochMs: null,
         etag: "demo-etag", lastModified: null,
       },
@@ -52,4 +53,8 @@ export const demoPluginMarketplaceBridge: PluginMarketplaceBridge = {
     generation += 1;
     return snapshot();
   },
+  async listPluginInstallations() { return { schemaVersion: 1, generation: installationGeneration, plugins: [], recovered: false }; },
+  async preparePluginInstall(repository) { return { reviewToken: "b".repeat(64), repository, sourceGeneration: generation, assetName: "plugin-0.5.3.asterlyn-plugin.tgz", assetSizeBytes: 128_000, digest: `sha256:${"a".repeat(64)}`, pluginId: "dev.asterlyn.android-gradle", version: "0.5.3", licenseExpression: "MIT", capabilities: ["tasks"], permissions: ["host.tasks.discover"], expandedBytes: 256_000 }; },
+  async confirmPluginInstall() { installationGeneration += 1; return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: [{ pluginId: "dev.asterlyn.android-gradle", repository: "guozhiqiang123/asterlyn-plugin-android-gradle", enabled: true, bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.5.3", versions: [{ version: "0.5.3", packageDigest: `sha256:${"a".repeat(64)}`, admittedAtEpochMs: Date.now(), runtimeStatus: "pendingRuntime" }] }] }; },
+  async cancelPluginInstall() {},
 };
