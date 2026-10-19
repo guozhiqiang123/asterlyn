@@ -126,6 +126,36 @@ retention, and measured resource and accessibility results remain open.
 Exit gate: the public path is demonstrated with independently versioned bytes, not only host unit
 fixtures or bundled fallback.
 
+### MKT8E — Admitted manifest catalog and retained plugin preferences
+
+Status: planned on 2026-10-19 after installed-host acceptance exposed a contract gap. Schema-2
+packages already declare host-rendered identity, localization, settings, authorization, and
+workspace-tool metadata, but the native admission report currently retains only runtime identity,
+capabilities, permissions, and distribution data. The renderer therefore falls back to bundled
+metadata and cannot manage a genuinely independent plugin's settings.
+
+1. Extend package admission with a bounded, host-validated management-manifest projection. Read it
+   again from the immutable selected package whenever the Installed catalog is requested; do not
+   copy plugin markup or executable values into the renderer and do not duplicate large catalogs in
+   the lifecycle index.
+2. Add a versioned native Installed-manifest snapshot. Each entry binds plugin ID, selected version,
+   package digest, and either one validated manifest or one bounded diagnostic. A corrupt package
+   must fail independently rather than blanking other installed plugins or Settings.
+3. Merge admitted external manifests with the bundled catalog by stable plugin ID. The selected
+   installed manifest wins presentation metadata while bundled code remains only an explicit
+   runtime fallback. External notifications and Settings resolve copy from this same admitted
+   catalog.
+4. Keep lifecycle enablement in the Installed package card. The host-rendered settings card must
+   not expose a second conflicting enable switch for an external package.
+5. Preserve bounded raw preferences for temporarily absent plugin IDs without exposing them as an
+   active API. Uninstall removes code and lifecycle selection but retains settings; reinstall of the
+   same stable ID revalidates values against the new manifest before restoring them. Invalid or
+   removed setting values fall back to declared defaults.
+
+Exit gate: an independently installed plugin has localized identity and settings without a bundled
+copy, notifications resolve through its admitted catalog, uninstall plus unrelated preference
+changes do not erase its data, and reinstall restores only values valid under the new manifest.
+
 ## Canonical repository workflow
 
 1. Copy the template and choose an immutable plugin ID plus normalized GitHub repository identity.
@@ -158,6 +188,7 @@ fixtures or bundled fallback.
 3. Executable template, isolated verification, and Release workflow.
 4. Capability, diagnostics, source-add, and migration guides.
 5. First-party/fixture Release verification and installed acceptance evidence.
+6. Admitted manifest catalog, independent Settings integration, and reinstall-retention evidence.
 
 Each boundary must pass independently. Documentation may describe a later gate, but ordinary builds
 must not claim that gate complete until its executable evidence is committed.
