@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "sdkMajor": 1,
+  "id": "dev.example.hello",
+  "version": "0.1.0",
+  "nameKey": "name",
+  "descriptionKey": "description",
+  "localization": {
+    "defaultLocale": "en-US",
+    "locales": {
+      "en-US": {
+        "name": "Hello plugin",
+        "description": "An example isolated Asterlyn plugin."
+      },
+      "zh-CN": {
+        "name": "Hello 插件",
+        "description": "一个隔离运行的 Asterlyn 插件示例。"
+      }
+    }
+  },
+  "settings": [],
+  "capabilities": [],
+  "permissions": [],
+  "distribution": {
+    "repository": "example/asterlyn-plugin-hello",
+    "runtime": {
+      "protocol": 1,
+      "entry": "runtime/plugin.js"
+    },
+    "hostCompatibility": {
+      "minimum": "0.1.11",
+      "maximumExclusive": "0.2.0"
+    },
+    "license": {
+      "expression": "MIT",
+      "file": "LICENSE"
+    },
+    "integrity": {}
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "asterlyn-plugin-hello",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "package:release": "node scripts/build-release-package.mjs",
+    "package:inspect": "node scripts/inspect-release-package.mjs",
+    "verify": "npm run check && npm test && npm run package:release && npm run package:inspect"
+  },
+  "dependencies": {
+    "@asterlyn/plugin-sdk": "file:vendor/asterlyn-plugin-sdk-1.8.0.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "esbuild": "0.25.12",
+    "tar": "7.5.22",
+    "typescript": "7.0.2"
+  }
+}

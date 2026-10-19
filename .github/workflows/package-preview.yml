@@ -56,6 +56,9 @@ jobs:
       - name: Test delivery scripts
         run: npm run test:scripts
 
+      - name: Verify public plugin template
+        run: npm run plugin-template:verify
+
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 

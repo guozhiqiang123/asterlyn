@@ -1,0 +1,42 @@
+name: Release Asterlyn plugin
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+      - name: Require exact tag and immutable dependencies
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+          npm ci
+      - name: Check out the oldest compatible canonical inspector
+        run: git clone --depth 1 --branch v0.1.11 https://github.com/guozhiqiang123/asterlyn.git .asterlyn-host
+      - name: Verify exact Release package
+        env:
+          ASTERLYN_HOST_CHECKOUT: ${{ github.workspace }}/.asterlyn-host
+          ASTERLYN_HOST_VERSION: 0.1.11
+        run: npm run verify
+      - name: Publish one inspected package
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: release/*.asterlyn-plugin.tgz
