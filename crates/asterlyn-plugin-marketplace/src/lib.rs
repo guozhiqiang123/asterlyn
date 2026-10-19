@@ -202,6 +202,205 @@ impl PluginInstallationStore {
         self.write(snapshot.generation + 1, plugins)
     }
 
+    pub fn begin_activation(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
+            if !plugin.enabled {
+                return Err(MarketplaceError::Conflict(
+                    "installed plugin is disabled".into(),
+                ));
+            }
+            if plugin.pending_version.as_deref() != Some(version)
+                && plugin.active_version.as_deref() != Some(version)
+                && plugin.known_good_version.as_deref() != Some(version)
+            {
+                return Err(MarketplaceError::Conflict(
+                    "plugin version is not selected for activation".into(),
+                ));
+            }
+            match admitted.runtime_status {
+                PluginRuntimeStatus::PendingRuntime => {
+                    admitted.runtime_status = PluginRuntimeStatus::Active;
+                    plugin.active_version = Some(version.into());
+                    Ok(true)
+                }
+                PluginRuntimeStatus::Active | PluginRuntimeStatus::KnownGood => Ok(false),
+                PluginRuntimeStatus::PendingRestart => Err(MarketplaceError::Conflict(
+                    "plugin version requires restart before activation".into(),
+                )),
+                PluginRuntimeStatus::Quarantined => Err(MarketplaceError::Conflict(
+                    "plugin version is quarantined".into(),
+                )),
+            }
+        })
+    }
+
+    pub fn promote_healthy(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
+            if admitted.runtime_status == PluginRuntimeStatus::KnownGood
+                && plugin.active_version.as_deref() == Some(version)
+                && plugin.known_good_version.as_deref() == Some(version)
+                && plugin.pending_version.is_none()
+            {
+                return Ok(false);
+            }
+            if admitted.runtime_status != PluginRuntimeStatus::Active
+                || plugin.active_version.as_deref() != Some(version)
+            {
+                return Err(MarketplaceError::Conflict(
+                    "plugin activation is not awaiting a health checkpoint".into(),
+                ));
+            }
+            admitted.runtime_status = PluginRuntimeStatus::KnownGood;
+            plugin.active_version = Some(version.into());
+            plugin.known_good_version = Some(version.into());
+            if plugin.pending_version.as_deref() == Some(version) {
+                plugin.pending_version = None;
+            }
+            Ok(true)
+        })
+    }
+
+    pub fn mark_activation_failed(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
+            if admitted.runtime_status == PluginRuntimeStatus::Quarantined {
+                return Ok(false);
+            }
+            if !matches!(
+                admitted.runtime_status,
+                PluginRuntimeStatus::PendingRuntime | PluginRuntimeStatus::Active
+            ) {
+                return Err(MarketplaceError::Conflict(
+                    "only a pending activation can be quarantined".into(),
+                ));
+            }
+            admitted.runtime_status = PluginRuntimeStatus::Quarantined;
+            if plugin.pending_version.as_deref() == Some(version) {
+                plugin.pending_version = None;
+            }
+            if plugin.active_version.as_deref() == Some(version) {
+                plugin.active_version = plugin.known_good_version.clone();
+            }
+            Ok(true)
+        })
+    }
+
+    pub fn abandon_activation(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
+            if admitted.runtime_status != PluginRuntimeStatus::Active {
+                return Ok(false);
+            }
+            admitted.runtime_status = PluginRuntimeStatus::PendingRuntime;
+            plugin.active_version = plugin.known_good_version.clone();
+            plugin.pending_version = Some(version.into());
+            Ok(true)
+        })
+    }
+
+    pub fn recover_interrupted_activations(
+        &self,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        let snapshot = self.snapshot()?;
+        let mut plugins = snapshot.plugins;
+        let mut changed = false;
+        for plugin in &mut plugins {
+            let interrupted = plugin
+                .versions
+                .iter_mut()
+                .filter(|version| version.runtime_status == PluginRuntimeStatus::Active)
+                .map(|version| {
+                    version.runtime_status = PluginRuntimeStatus::Quarantined;
+                    version.version.clone()
+                })
+                .collect::<Vec<_>>();
+            if interrupted.is_empty() {
+                continue;
+            }
+            changed = true;
+            if plugin
+                .pending_version
+                .as_ref()
+                .is_some_and(|version| interrupted.contains(version))
+            {
+                plugin.pending_version = None;
+            }
+            if plugin
+                .active_version
+                .as_ref()
+                .is_some_and(|version| interrupted.contains(version))
+            {
+                plugin.active_version = plugin.known_good_version.clone();
+            }
+        }
+        if changed {
+            self.write(snapshot.generation + 1, plugins)
+        } else {
+            Ok(PluginInstallationSnapshot {
+                plugins,
+                ..snapshot
+            })
+        }
+    }
+
+    fn mutate_exact_version(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+        mutate: impl FnOnce(
+            &mut InstalledPlugin,
+            &mut AdmittedPluginVersion,
+        ) -> Result<bool, MarketplaceError>,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        let snapshot = self.snapshot()?;
+        let mut plugins = snapshot.plugins;
+        let plugin = plugins
+            .iter_mut()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+            .ok_or_else(|| MarketplaceError::NotFound(plugin_id.into()))?;
+        validate_installation_identity(plugin_id, &plugin.repository, version, package_digest)?;
+        let version_index = plugin
+            .versions
+            .iter()
+            .position(|candidate| candidate.version == version)
+            .ok_or_else(|| MarketplaceError::NotFound(format!("{plugin_id}@{version}")))?;
+        if plugin.versions[version_index].package_digest != package_digest {
+            return Err(MarketplaceError::Conflict(
+                "plugin package digest does not match the installed version".into(),
+            ));
+        }
+        let mut admitted = plugin.versions.remove(version_index);
+        let changed = mutate(plugin, &mut admitted)?;
+        plugin.versions.insert(version_index, admitted);
+        if changed {
+            self.write(snapshot.generation + 1, plugins)
+        } else {
+            Ok(PluginInstallationSnapshot {
+                plugins,
+                ..snapshot
+            })
+        }
+    }
+
     fn read_with_recovery(&self) -> Result<(PersistedInstallations, bool), MarketplaceError> {
         match self.read_file(INSTALLATION_FILE) {
             Ok(Some(value)) => Ok((value, false)),
@@ -324,26 +523,73 @@ fn validate_installations(value: &PersistedInstallations) -> Result<(), Marketpl
                 "duplicate or oversized installed plugin entry".into(),
             ));
         }
+        let mut versions = std::collections::BTreeSet::new();
+        let mut active_attempts = 0;
         for version in &plugin.versions {
+            if !versions.insert(version.version.as_str()) {
+                return Err(MarketplaceError::Corrupt(
+                    "duplicate installed plugin version".into(),
+                ));
+            }
             validate_installation_identity(
                 &plugin.plugin_id,
                 &plugin.repository,
                 &version.version,
                 &version.package_digest,
             )?;
+            if version.runtime_status == PluginRuntimeStatus::Active {
+                active_attempts += 1;
+            }
         }
-        if plugin.pending_version.as_ref().is_some_and(|pending| {
-            !plugin
-                .versions
-                .iter()
-                .any(|version| &version.version == pending)
+        if active_attempts > 1 {
+            return Err(MarketplaceError::Corrupt(
+                "plugin has more than one active health attempt".into(),
+            ));
+        }
+        validate_version_pointer(plugin, plugin.pending_version.as_deref(), "pending")?;
+        let active = validate_version_pointer(plugin, plugin.active_version.as_deref(), "active")?;
+        let known_good =
+            validate_version_pointer(plugin, plugin.known_good_version.as_deref(), "known-good")?;
+        if active.is_some_and(|version| {
+            !matches!(
+                version.runtime_status,
+                PluginRuntimeStatus::Active | PluginRuntimeStatus::KnownGood
+            )
         }) {
             return Err(MarketplaceError::Corrupt(
-                "pending plugin version is absent from the index".into(),
+                "active plugin pointer has an invalid runtime state".into(),
+            ));
+        }
+        if known_good
+            .is_some_and(|version| version.runtime_status != PluginRuntimeStatus::KnownGood)
+        {
+            return Err(MarketplaceError::Corrupt(
+                "known-good plugin pointer has not passed its health checkpoint".into(),
             ));
         }
     }
     Ok(())
+}
+
+fn validate_version_pointer<'a>(
+    plugin: &'a InstalledPlugin,
+    value: Option<&str>,
+    label: &str,
+) -> Result<Option<&'a AdmittedPluginVersion>, MarketplaceError> {
+    let Some(value) = value else { return Ok(None) };
+    let version = plugin
+        .versions
+        .iter()
+        .find(|version| version.version == value)
+        .ok_or_else(|| {
+            MarketplaceError::Corrupt(format!("{label} plugin version is absent from the index"))
+        })?;
+    if version.runtime_status == PluginRuntimeStatus::Quarantined {
+        return Err(MarketplaceError::Corrupt(format!(
+            "{label} plugin version is quarantined"
+        )));
+    }
+    Ok(Some(version))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1078,6 +1324,161 @@ mod tests {
                 .unwrap()
                 .plugins,
             snapshot.plugins
+        );
+    }
+
+    #[test]
+    fn promotes_only_the_exact_active_package_to_known_good() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let digest = format!("sha256:{}", "a".repeat(64));
+        store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "1.2.3",
+                &digest,
+                42,
+                false,
+            )
+            .unwrap();
+
+        let active = store
+            .begin_activation("dev.asterlyn.example", "1.2.3", &digest)
+            .unwrap();
+        assert_eq!(active.plugins[0].active_version.as_deref(), Some("1.2.3"));
+        assert_eq!(
+            active.plugins[0].versions[0].runtime_status,
+            PluginRuntimeStatus::Active
+        );
+        assert!(
+            store
+                .promote_healthy(
+                    "dev.asterlyn.example",
+                    "1.2.3",
+                    &format!("sha256:{}", "b".repeat(64)),
+                )
+                .is_err()
+        );
+
+        let healthy = store
+            .promote_healthy("dev.asterlyn.example", "1.2.3", &digest)
+            .unwrap();
+        assert_eq!(healthy.plugins[0].pending_version, None);
+        assert_eq!(healthy.plugins[0].active_version.as_deref(), Some("1.2.3"));
+        assert_eq!(
+            healthy.plugins[0].known_good_version.as_deref(),
+            Some("1.2.3")
+        );
+        assert_eq!(
+            healthy.plugins[0].versions[0].runtime_status,
+            PluginRuntimeStatus::KnownGood
+        );
+        assert_eq!(
+            store
+                .promote_healthy("dev.asterlyn.example", "1.2.3", &digest)
+                .unwrap()
+                .generation,
+            healthy.generation
+        );
+    }
+
+    #[test]
+    fn quarantines_failed_update_and_selects_previous_known_good() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let first = format!("sha256:{}", "a".repeat(64));
+        let update = format!("sha256:{}", "b".repeat(64));
+        store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "1.0.0",
+                &first,
+                1,
+                false,
+            )
+            .unwrap();
+        store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        store
+            .promote_healthy("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "2.0.0",
+                &update,
+                2,
+                false,
+            )
+            .unwrap();
+        store
+            .begin_activation("dev.asterlyn.example", "2.0.0", &update)
+            .unwrap();
+
+        let recovered = store
+            .mark_activation_failed("dev.asterlyn.example", "2.0.0", &update)
+            .unwrap();
+        let plugin = &recovered.plugins[0];
+        assert_eq!(plugin.pending_version, None);
+        assert_eq!(plugin.active_version.as_deref(), Some("1.0.0"));
+        assert_eq!(plugin.known_good_version.as_deref(), Some("1.0.0"));
+        assert_eq!(
+            plugin
+                .versions
+                .iter()
+                .find(|version| version.version == "2.0.0")
+                .unwrap()
+                .runtime_status,
+            PluginRuntimeStatus::Quarantined
+        );
+    }
+
+    #[test]
+    fn interrupted_attempt_is_quarantined_but_graceful_abandon_is_retryable() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let digest = format!("sha256:{}", "a".repeat(64));
+        store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "1.0.0",
+                &digest,
+                1,
+                false,
+            )
+            .unwrap();
+        store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &digest)
+            .unwrap();
+        let abandoned = store
+            .abandon_activation("dev.asterlyn.example", "1.0.0", &digest)
+            .unwrap();
+        assert_eq!(
+            abandoned.plugins[0].versions[0].runtime_status,
+            PluginRuntimeStatus::PendingRuntime
+        );
+        assert_eq!(
+            abandoned.plugins[0].pending_version.as_deref(),
+            Some("1.0.0")
+        );
+
+        store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &digest)
+            .unwrap();
+        let recovered = PluginInstallationStore::open(directory.path())
+            .unwrap()
+            .recover_interrupted_activations()
+            .unwrap();
+        assert_eq!(recovered.plugins[0].active_version, None);
+        assert_eq!(recovered.plugins[0].pending_version, None);
+        assert_eq!(
+            recovered.plugins[0].versions[0].runtime_status,
+            PluginRuntimeStatus::Quarantined
         );
     }
 
