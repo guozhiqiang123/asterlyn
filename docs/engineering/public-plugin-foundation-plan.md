@@ -151,6 +151,13 @@ Only after PPF5–PPF7 pass threat-model and recovery reviews, define a registry
 publisher identity, review/revocation policy, dependency policy, telemetry boundaries, and long-term
 SDK support windows.
 
+PPF5–PPF8 are now governed by
+[`ADR-0032`](../architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md) and
+the phased [`GitHub Release plugin marketplace plan`](github-release-plugin-marketplace-plan.md).
+They remain incomplete until that plan's MKT5–MKT8 isolation, recovery, first-party Release, and
+public-developer acceptance gates close; the decision and plan alone do not authorize external
+plugin execution.
+
 ## Acceptance matrix for this slice
 
 - **Functionality:** English/Chinese plugin metadata and settings are identical in meaning to the

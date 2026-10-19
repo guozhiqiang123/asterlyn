@@ -50,6 +50,12 @@ Every contract entry records:
 | `plugin.tool-operations` | static package declares typed parameter slots; plugin requests; host admits/executes | experimental-first-party | package manifest schema revision plus tool-operation protocol `1` | ADR-0031; fixed argument templates, narrow typed slots, workspace containment, explicit query/mutation intent, no shell/process handle |
 | `plugin.artifact-resolution` | plugin supplies ecosystem interpretation; host contains/inspects artifacts | experimental-first-party | additive Plugin SDK minor plus artifact protocol `1` | ADR-0031; task/session-bound workspace artifacts, bounded metadata, final APK authority, no arbitrary filesystem access |
 | `plugin.workspace-state` | host stores namespaced bytes; plugin owns schema/migration | proposed-first-party | persistence protocol `1` plus plugin-owned schema | ADR-0030; bounded non-secret preferences only, no repository files or transcripts |
+| `plugin.marketplace-source` | host/user configures repository; host discovers | proposed-public | source schema `1` | ADR-0032; exact public GitHub owner/repository, bounded local metadata, cached manual discovery |
+| `plugin.release-distribution` | plugin repository publishes; host verifies | proposed-public | installable package schema `2` | ADR-0032; stable GitHub Release, one bounded asset, GitHub and local SHA-256, static identity parity |
+| `plugin.package-admission` | package supplies static bytes; host validates | proposed-public | package schema `2` plus SDK/runtime/capability versions | ADR-0032; no execution before source, archive, manifest, integrity, license, compatibility, and permission validation |
+| `plugin.installation-lifecycle` | host owns; Settings requests | proposed-public | installation-index schema `1` | ADR-0032; immutable content-addressed packages, atomic pending/current/known-good/quarantine state, restart recovery |
+| `plugin.external-runtime` | plugin bundle runs; host supervises | proposed-public | plugin-host protocol `1` | ADR-0032; one sidecar process per plugin, no ambient authority, bounded typed capability messages, transactional contributions |
+| `host.plugin-restart` | host owns; package lifecycle consumes | proposed-host | restart transaction schema `1` | ADR-0032; cancel/drain, persist pending selection, exact relaunch, activation-attempt checkpoint, loop-safe rollback |
 
 `stable-first-party` means the contract is exercised across the independent Android/Gradle
 repository boundary but is not authorization for dynamic third-party loading. External admission

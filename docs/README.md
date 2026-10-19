@@ -42,6 +42,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0029-supervised-terminal-workspace.md`](architecture/decisions/0029-supervised-terminal-workspace.md) — bounded multi-PTY ownership, host Terminal tabs, independent task histories, and complete lifecycle cleanup.
 - [`architecture/decisions/0030-plugin-run-targets-and-android-workbench.md`](architecture/decisions/0030-plugin-run-targets-and-android-workbench.md) — generic plugin run/target/session contracts, bounded external-tool queries, and the host-rendered Android workbench.
 - [`architecture/decisions/0031-supervised-staged-plugin-run-sessions.md`](architecture/decisions/0031-supervised-staged-plugin-run-sessions.md) — staged plugin Run sessions, authoritative final-artifact identity, and typed declared tool operations.
+- [`architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md`](architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md) — direct GitHub Release plugin sources, static admission, immutable installation, isolated activation, restart recovery, and rollback.
 
 ## Delivery
 
@@ -89,6 +90,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/plugin-sdk-and-repository-rollout-plan.md`](engineering/plugin-sdk-and-repository-rollout-plan.md) — staged SDK extraction, minimal HierarchicalCollection/Tasks contract, repository split, artifact consumption, and remaining-tree migration.
 - [`engineering/hierarchical-collection-and-android-tasks-plan.md`](engineering/hierarchical-collection-and-android-tasks-plan.md) — phased shared tree abstraction, plugin collection wiring, Android/Gradle rollout, and FilesRecovery acceptance.
 - [`engineering/public-plugin-foundation-plan.md`](engineering/public-plugin-foundation-plan.md) — staged SDK, host, and Android/Gradle migration for self-contained localization, package identity guards, acceptance, and the deferred public-plugin lifecycle.
+- [`engineering/github-release-plugin-marketplace-plan.md`](engineering/github-release-plugin-marketplace-plan.md) — phased GitHub source catalog, Release discovery, safe package admission, isolated plugin host, Settings marketplace, restart, update, and rollback delivery.
 - [`engineering/host-presentation-system-plan.md`](engineering/host-presentation-system-plan.md) — phased shared presentation primitives, Tasks state and execution-dialog migration, plugin UI boundary, and local acceptance.
 - [`engineering/unpushed-head-commit-actions-plan.md`](engineering/unpushed-head-commit-actions-plan.md) — reviewed Undo/Drop actions for an unpublished latest commit, with exact native revalidation and no changelist-context emulation.
 - [`engineering/non-current-branch-sync-plan.md`](engineering/non-current-branch-sync-plan.md) — per-local-branch upstream divergence plus reviewed Update and Push without checking out the target branch.
