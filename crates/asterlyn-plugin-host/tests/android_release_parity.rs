@@ -18,8 +18,9 @@ use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 const PLUGIN_ID: &str = "dev.asterlyn.android-gradle";
-const PLUGIN_VERSION: &str = "0.5.4";
 const PACKAGE_ENV: &str = "ASTERLYN_ANDROID_PLUGIN_PACKAGE";
+const PLUGIN_VERSION_ENV: &str = "ASTERLYN_ANDROID_PLUGIN_VERSION";
+const HOST_VERSION_ENV: &str = "ASTERLYN_HOST_VERSION";
 
 #[derive(Default)]
 struct AndroidParityCapabilities;
@@ -89,9 +90,11 @@ impl CapabilityHandler for AndroidParityCapabilities {
 }
 
 #[test]
-#[ignore = "requires the released Android plugin package via ASTERLYN_ANDROID_PLUGIN_PACKAGE"]
+#[ignore = "requires the released Android plugin package and explicit plugin/host versions"]
 fn released_android_plugin_activates_with_first_party_parity() {
     let package_path = PathBuf::from(env::var_os(PACKAGE_ENV).expect(PACKAGE_ENV));
+    let plugin_version = env::var(PLUGIN_VERSION_ENV).expect(PLUGIN_VERSION_ENV);
+    let host_version = env::var(HOST_VERSION_ENV).expect(HOST_VERSION_ENV);
     let package = fs::read(&package_path).expect("read Android plugin package");
     let extracted_parent = TempDir::new().expect("extraction parent");
     let extracted = extracted_parent.path().join("android-plugin");
@@ -99,8 +102,8 @@ fn released_android_plugin_activates_with_first_party_parity() {
         &package,
         &AdmissionContext {
             repository: "guozhiqiang123/asterlyn-plugin-android-gradle",
-            release_version: PLUGIN_VERSION,
-            host_version: "0.1.11",
+            release_version: &plugin_version,
+            host_version: &host_version,
             sdk_major: 1,
             runtime_protocol: 1,
             supported_capabilities: SUPPORTED_CAPABILITIES,
@@ -110,7 +113,7 @@ fn released_android_plugin_activates_with_first_party_parity() {
     )
     .expect("admit and extract Android plugin package");
     assert_eq!(report.plugin_id, PLUGIN_ID);
-    assert_eq!(report.plugin_version, PLUGIN_VERSION);
+    assert_eq!(report.plugin_version, plugin_version);
 
     let helper = PathBuf::from(env!("CARGO_BIN_EXE_asterlyn-plugin-host"))
         .canonicalize()
