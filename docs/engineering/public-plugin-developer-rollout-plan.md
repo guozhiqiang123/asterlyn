@@ -109,8 +109,10 @@ package bytes. See the
 [`2026-10-19 public marketplace acceptance evidence`](../benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md).
 The native discovery resolver now covers offline and GitHub rate-limit fallback with bounded stale
 metadata, and the package/runtime suites prove hostile package rejection plus contribution-contract
-failure containment. The clean installed-app restart journey, deliberately failing public update,
-reinstall retention, and measured resource and accessibility results remain open.
+failure containment. The published arm64 `v0.1.12` host is installed with strict bundle, executable,
+version, liveness, and rendered-shell evidence plus a recoverable prior-install backup. The clean
+installed-app Marketplace interaction through restart, deliberately failing public update, reinstall
+retention, and measured resource and accessibility results remain open.
 
 1. Verify a clean installed host can add a second fixture repository, discover, inspect, install,
    restart, activate, and promote it without an open workspace.

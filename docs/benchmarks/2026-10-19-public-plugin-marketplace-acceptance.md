@@ -36,6 +36,26 @@ inspectors for all four target triples and the deterministic SDK artifact:
 The per-target checksum files, `plugin-sdk.sha256`, and aggregate `SHA256SUMS` agree with the GitHub
 asset digests.
 
+## Installed macOS baseline
+
+The published arm64 DMG, not a local rebuild, was downloaded and verified at
+`sha256:e96fdc00b251f7421676346dfbf61287bc804ce6256d929cc0995d1802fefe2e`. Its mounted application
+passed strict deep signature verification, reported `dev.asterlyn.desktop`, an ad-hoc signature,
+version `0.1.12`, and an arm64 executable. It then replaced `/Applications/Asterlyn.app` through the
+documented recoverable flow.
+
+- mounted and installed executable SHA-256:
+  `d88c6807fac22c974e175300318d01eca6b8068103cd59bc11adc823881e028c`;
+- installed version: `0.1.12`;
+- prior installation backup:
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261019-201227-v0.1.12-marketplace/Asterlyn.app`;
+- the installed executable rendered the native shell within the six-second smoke deadline and the
+  normal installed process remained running afterward.
+
+This closes artifact-to-installed-shell identity and liveness. It does not claim the remaining
+human Marketplace interaction journey through add source, install review, restart, and visible
+healthy promotion.
+
 ## Executed gates
 
 The Hello Release workflow completed in run `39247280631`. It performed a locked install, static
