@@ -43,6 +43,9 @@ export class PluginManagementBinding {
   private admissionReview: PluginPackageAdmissionReview | null = null;
   private installations: PluginInstallationSnapshot | null = null;
   private restarting = false;
+  private restartRequired = false;
+  private busyPlugin: string | null = null;
+  private confirmUninstallPlugin: string | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -73,6 +76,9 @@ export class PluginManagementBinding {
       admissionReview: this.admissionReview,
       installations: this.installations,
       restarting: this.restarting,
+      restartRequired: this.restartRequired,
+      busyPlugin: this.busyPlugin,
+      confirmUninstallPlugin: this.confirmUninstallPlugin,
     });
   }
 
@@ -163,6 +169,45 @@ export class PluginManagementBinding {
   }
 
   private bindMarketplace(): void {
+    this.root.querySelectorAll<HTMLInputElement>("[data-installed-plugin-enabled]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const pluginId = input.dataset.installedPluginEnabled;
+        if (pluginId) void this.mutateInstallation(
+          pluginId,
+          () => this.marketplace.setInstalledPluginEnabled(pluginId, input.checked),
+        );
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-rollback]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const pluginId = button.dataset.installedPluginRollback;
+        const version = button.dataset.pluginVersion;
+        const digest = button.dataset.packageDigest;
+        if (pluginId && version && digest) void this.mutateInstallation(
+          pluginId,
+          () => this.marketplace.selectInstalledPluginRollback(pluginId, version, digest),
+        );
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-uninstall]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.confirmUninstallPlugin = button.dataset.installedPluginUninstall ?? null;
+        this.options.render("[data-installed-plugin-uninstall-cancel]");
+      });
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-installed-plugin-uninstall-cancel]")?.addEventListener("click", () => {
+      const pluginId = this.confirmUninstallPlugin;
+      this.confirmUninstallPlugin = null;
+      this.options.render(pluginId ? `[data-installed-plugin-uninstall="${CSS.escape(pluginId)}"]` : undefined);
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-installed-plugin-uninstall-confirm]")?.addEventListener("click", (event) => {
+      const pluginId = (event.currentTarget as HTMLButtonElement).dataset.installedPluginUninstallConfirm;
+      if (pluginId) void this.mutateInstallation(
+        pluginId,
+        () => this.marketplace.uninstallInstalledPlugin(pluginId),
+        () => { this.confirmUninstallPlugin = null; },
+      );
+    });
     this.root.querySelector<HTMLButtonElement>("[data-plugin-source-add]")?.addEventListener("click", () => {
       this.sourceForm = { repository: "", name: "", description: "", editing: false };
       this.confirmDeleteRepository = null;
@@ -291,6 +336,28 @@ export class PluginManagementBinding {
       this.options.reportError(error);
     } finally {
       this.busyRepository = null;
+      if (this.options.visible()) this.options.render();
+    }
+  }
+
+  private async mutateInstallation(
+    pluginId: string,
+    operation: () => Promise<PluginInstallationSnapshot>,
+    completed: () => void = () => undefined,
+  ): Promise<void> {
+    if (this.busyPlugin !== null) return;
+    this.busyPlugin = pluginId;
+    this.marketplaceError = null;
+    if (this.options.visible()) this.options.render();
+    try {
+      this.installations = await operation();
+      this.restartRequired = true;
+      completed();
+    } catch (error) {
+      this.marketplaceError = errorMessage(error);
+      this.options.reportError(error);
+    } finally {
+      this.busyPlugin = null;
       if (this.options.visible()) this.options.render();
     }
   }

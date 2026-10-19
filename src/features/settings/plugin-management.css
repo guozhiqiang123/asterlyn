@@ -19,6 +19,69 @@
   color: var(--text-soft);
 }
 
+.plugin-installed-versions {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plugin-installed-versions li {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: var(--surface-inset);
+}
+
+.plugin-installed-versions li > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.plugin-installed-versions code {
+  color: var(--text-soft);
+  font-family: var(--editor-font-family);
+}
+
+.plugin-installed-versions small,
+.plugin-installed-uninstall-review span {
+  color: var(--text-muted);
+}
+
+.plugin-installed-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.plugin-installed-uninstall-review {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.plugin-installed-uninstall-review > div {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+
+.plugin-installed-uninstall-review strong {
+  color: var(--danger-text);
+}
+
+.plugin-installed-uninstall-review span {
+  font-size: calc(var(--ui-font-size, 13px) - 1px);
+}
+
 .plugin-management-tabs {
   display: flex;
   gap: 4px;

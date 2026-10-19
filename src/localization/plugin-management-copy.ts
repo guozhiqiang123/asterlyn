@@ -14,6 +14,7 @@ export const EN_US_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   marketplaceSecurityNote: "A GitHub Release is only a download source. Asterlyn verifies its repository identity, SHA-256, package structure, compatibility, license, permissions, and isolated runtime contract before installation.",
   inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", license: "License", pendingRuntimeNote: "The admitted package is stored immutably. Restart Asterlyn to activate it through the isolated runtime health check; it does not replace the current plugin before then.",
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required to apply plugin changes", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
+  enableInstalledPlugin: "Enable installed package", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin settings, trust decisions, and caches will be retained for a later reinstall.",
 };
 
 export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
@@ -30,4 +31,5 @@ export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   marketplaceSecurityNote: "GitHub Release 只负责提供下载来源。安装前，Asterlyn 还会校验仓库身份、SHA-256、包结构、兼容性、许可证、权限和隔离运行时契约。",
   inspectPackage: "审查安装包", inspectingPackage: "正在检查…", confirmAdmission: "准入安装包", admissionTitle: "审查插件安装包", permissions: "权限", capabilities: "能力", license: "许可证", pendingRuntimeNote: "准入后的安装包会进入不可变存储。重启 Asterlyn 后才会进入隔离运行时健康检查；在此之前不会替换当前插件。",
   admittedPackage: "已准入安装包", pendingRuntime: "等待隔离运行时", pendingRestart: "需要重启以应用插件变更", restartToApply: "重启 Asterlyn", restarting: "正在重启…",
+  enableInstalledPlugin: "启用已安装插件", knownGood: "已验证可用", quarantined: "已隔离", rollback: "回滚", uninstallPlugin: "卸载", confirmUninstallPlugin: "确定卸载此插件安装包吗？", uninstallKeepsData: "插件设置、信任记录和缓存会保留，重新安装后可继续使用。",
 };

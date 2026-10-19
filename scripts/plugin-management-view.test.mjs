@@ -13,6 +13,7 @@ const copy = {
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading sources…", noSources: "No sources.", notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ", marketplaceSecurityNote: "Packages are verified before installation.",
   inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", license: "License", pendingRuntimeNote: "Pending isolated runtime.",
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
+  enableInstalledPlugin: "Enable installed package", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin data is retained.",
 };
 
 const entry = {
@@ -125,6 +126,7 @@ test("installed plugins require a controlled restart before activation", () => {
   const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy, false, {
     tab: "installed", loading: false, error: null, busyRepository: null, form: null,
     confirmDeleteRepository: null, admissionReview: null, snapshot: null, restarting: false,
+    restartRequired: false, busyPlugin: null, confirmUninstallPlugin: null,
     installations: { schemaVersion: 1, generation: 3, recovered: false, plugins: [{
       pluginId: "dev.asterlyn.example", repository: "asterlyn/example", enabled: true,
       bundledFallback: false, activeVersion: null, knownGoodVersion: null, pendingVersion: "1.2.3",
@@ -134,4 +136,27 @@ test("installed plugins require a controlled restart before activation", () => {
   assert.match(html, /data-plugin-restart/u);
   assert.match(html, /Restart required/u);
   assert.match(html, /Restart Asterlyn/u);
+  assert.match(html, /data-installed-plugin-enabled/u);
+  assert.match(html, /data-installed-plugin-uninstall/u);
+});
+
+test("installed plugin history exposes exact rollback and explicit retained-data uninstall review", () => {
+  const digest = `sha256:${"a".repeat(64)}`;
+  const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy, false, {
+    tab: "installed", loading: false, error: null, busyRepository: null, form: null,
+    confirmDeleteRepository: null, admissionReview: null, snapshot: null, restarting: false,
+    restartRequired: false, busyPlugin: null, confirmUninstallPlugin: "dev.asterlyn.example",
+    installations: { schemaVersion: 1, generation: 4, recovered: false, plugins: [{
+      pluginId: "dev.asterlyn.example", repository: "asterlyn/example", enabled: true,
+      bundledFallback: false, activeVersion: "2.0.0", knownGoodVersion: "2.0.0", pendingVersion: null,
+      versions: [
+        { version: "1.0.0", packageDigest: digest, admittedAtEpochMs: 1, runtimeStatus: "knownGood" },
+        { version: "2.0.0", packageDigest: `sha256:${"b".repeat(64)}`, admittedAtEpochMs: 2, runtimeStatus: "knownGood" },
+      ],
+    }] },
+  });
+  assert.match(html, /data-installed-plugin-rollback="dev\.asterlyn\.example"/u);
+  assert.match(html, /data-package-digest="sha256:a{64}"/u);
+  assert.match(html, /data-installed-plugin-uninstall-confirm/u);
+  assert.match(html, /Plugin data is retained/u);
 });

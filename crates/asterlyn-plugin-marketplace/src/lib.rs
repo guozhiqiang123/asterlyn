@@ -239,7 +239,16 @@ impl PluginInstallationStore {
                     plugin.active_version = Some(version.into());
                     Ok(true)
                 }
-                PluginRuntimeStatus::Active | PluginRuntimeStatus::KnownGood => Ok(false),
+                PluginRuntimeStatus::Active => Ok(false),
+                PluginRuntimeStatus::KnownGood => {
+                    if plugin.pending_version.as_deref() == Some(version) {
+                        let changed = plugin.active_version.as_deref() != Some(version);
+                        plugin.active_version = Some(version.into());
+                        Ok(changed)
+                    } else {
+                        Ok(false)
+                    }
+                }
                 PluginRuntimeStatus::PendingRestart => Err(MarketplaceError::Conflict(
                     "plugin version requires restart before activation".into(),
                 )),
@@ -257,12 +266,19 @@ impl PluginInstallationStore {
         package_digest: &str,
     ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
         self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
-            if admitted.runtime_status == PluginRuntimeStatus::KnownGood
-                && plugin.active_version.as_deref() == Some(version)
-                && plugin.known_good_version.as_deref() == Some(version)
-                && plugin.pending_version.is_none()
-            {
-                return Ok(false);
+            if admitted.runtime_status == PluginRuntimeStatus::KnownGood {
+                if plugin.active_version.as_deref() != Some(version) {
+                    return Err(MarketplaceError::Conflict(
+                        "known-good activation does not match the active selection".into(),
+                    ));
+                }
+                let changed = plugin.known_good_version.as_deref() != Some(version)
+                    || plugin.pending_version.as_deref() == Some(version);
+                plugin.known_good_version = Some(version.into());
+                if plugin.pending_version.as_deref() == Some(version) {
+                    plugin.pending_version = None;
+                }
+                return Ok(changed);
             }
             if admitted.runtime_status != PluginRuntimeStatus::Active
                 || plugin.active_version.as_deref() != Some(version)
@@ -1722,6 +1738,21 @@ mod tests {
             .unwrap();
         assert_eq!(
             rollback.plugins[0].pending_version.as_deref(),
+            Some("1.0.0")
+        );
+        let activated = store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        assert_eq!(
+            activated.plugins[0].active_version.as_deref(),
+            Some("1.0.0")
+        );
+        let healthy = store
+            .promote_healthy("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        assert_eq!(healthy.plugins[0].pending_version, None);
+        assert_eq!(
+            healthy.plugins[0].known_good_version.as_deref(),
             Some("1.0.0")
         );
         let removed = store.remove_plugin("dev.asterlyn.example").unwrap();

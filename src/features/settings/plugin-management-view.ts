@@ -68,6 +68,13 @@ export interface PluginManagementCopy {
   readonly pendingRestart: string;
   readonly restartToApply: string;
   readonly restarting: string;
+  readonly enableInstalledPlugin: string;
+  readonly knownGood: string;
+  readonly quarantined: string;
+  readonly rollback: string;
+  readonly uninstallPlugin: string;
+  readonly confirmUninstallPlugin: string;
+  readonly uninstallKeepsData: string;
 }
 
 export interface PluginMarketplaceViewState {
@@ -81,6 +88,9 @@ export interface PluginMarketplaceViewState {
   readonly admissionReview: PluginPackageAdmissionReview | null;
   readonly installations: PluginInstallationSnapshot | null;
   readonly restarting: boolean;
+  readonly restartRequired: boolean;
+  readonly busyPlugin: string | null;
+  readonly confirmUninstallPlugin: string | null;
 }
 
 /** Renders host-owned plugin metadata; plugins contribute keys and values, never HTML. */
@@ -92,13 +102,17 @@ export function renderPluginManagementSection(
     tab: "installed", snapshot: null, loading: false, error: null,
     busyRepository: null, form: null, confirmDeleteRepository: null, admissionReview: null, installations: null,
     restarting: false,
+    restartRequired: false, busyPlugin: null, confirmUninstallPlugin: null,
   },
 ): string {
   const cards = snapshot.entries.map((entry) => renderPluginEntry(entry, copy)).join("");
-  const admitted = renderAdmittedPackages(marketplace.installations, copy);
+  const admitted = renderAdmittedPackages(marketplace, copy);
   const restart = renderPluginRestart(marketplace, copy);
+  const installedError = marketplace.error
+    ? `<div class="plugin-marketplace-error" role="alert">${escapeHtml(marketplace.error)}</div>`
+    : "";
   const content = marketplace.tab === "installed"
-    ? `<div class="plugin-management-list">${restart}${admitted}${cards || (!admitted ? `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>` : "")}</div>`
+    ? `<div class="plugin-management-list">${installedError}${restart}${admitted}${cards || (!admitted ? `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>` : "")}</div>`
     : renderMarketplace(marketplace, copy);
   return `<section class="settings-group plugin-management" data-plugin-management>
     <header><h2>${escapeHtml(copy.title)}</h2><p>${escapeHtml(copy.description)}</p></header>
@@ -107,24 +121,47 @@ export function renderPluginManagementSection(
   </section>`;
 }
 
-function renderAdmittedPackages(snapshot: PluginInstallationSnapshot | null, copy: PluginManagementCopy): string {
-  return snapshot?.plugins.map((plugin) => {
+function renderAdmittedPackages(state: PluginMarketplaceViewState, copy: PluginManagementCopy): string {
+  return state.installations?.plugins.map((plugin) => {
     const pending = plugin.pendingVersion;
-    const version = pending ? plugin.versions.find((candidate) => candidate.version === pending) : null;
+    const selected = pending ?? plugin.activeVersion;
+    const version = selected ? plugin.versions.find((candidate) => candidate.version === selected) : null;
+    const busy = state.busyPlugin === plugin.pluginId;
     const status = version?.runtimeStatus === "pendingRuntime"
       ? copy.pendingRuntime
       : version?.runtimeStatus === "pendingRestart"
         ? copy.pendingRestart
-        : version?.runtimeStatus ?? copy.inactive;
-    return `<article class="plugin-management-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(plugin.pluginId)}</h3><p><code>${escapeHtml(plugin.repository)}</code></p></div><span class="plugin-management-status">${escapeHtml(copy.admittedPackage)}</span></div><div class="plugin-management-meta"><span>${escapeHtml(copy.version)}: <code>${escapeHtml(pending ?? plugin.activeVersion ?? "—")}</code></span><span>${escapeHtml(status)}</span></div></article>`;
+        : versionStatus(version?.runtimeStatus, copy);
+    const versions = plugin.versions.map((candidate) => {
+      const rollback = candidate.runtimeStatus === "knownGood" && candidate.version !== plugin.activeVersion
+        ? `<button class="secondary-button" type="button" data-installed-plugin-rollback="${escapeAttribute(plugin.pluginId)}" data-plugin-version="${escapeAttribute(candidate.version)}" data-package-digest="${escapeAttribute(candidate.packageDigest)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.rollback)}</button>`
+        : "";
+      return `<li><span><code>${escapeHtml(candidate.version)}</code><small>${escapeHtml(versionStatus(candidate.runtimeStatus, copy))}</small></span>${rollback}</li>`;
+    }).join("");
+    const uninstallReview = state.confirmUninstallPlugin === plugin.pluginId
+      ? `<div class="plugin-installed-uninstall-review" role="alert"><div><strong>${escapeHtml(copy.confirmUninstallPlugin)}</strong><span>${escapeHtml(copy.uninstallKeepsData)}</span></div><button class="secondary-button" type="button" data-installed-plugin-uninstall-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-installed-plugin-uninstall-confirm="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`
+      : "";
+    return `<article class="plugin-management-card plugin-installed-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(plugin.pluginId)}</h3><p><code>${escapeHtml(plugin.repository)}</code></p></div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableInstalledPlugin)}</span>${renderToggle(`<input data-installed-plugin-enabled="${escapeAttribute(plugin.pluginId)}" type="checkbox" role="switch" ${plugin.enabled ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="${escapeAttribute(copy.enableInstalledPlugin)}" />`)}</div></div><div class="plugin-management-meta"><span>${escapeHtml(copy.admittedPackage)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(selected ?? "—")}</code></span><span>${escapeHtml(status)}</span></div><ul class="plugin-installed-versions">${versions}</ul><div class="plugin-installed-actions"><button class="danger-button" type="button" data-installed-plugin-uninstall="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>${uninstallReview}</article>`;
   }).join("") ?? "";
 }
 
+function versionStatus(status: string | undefined, copy: PluginManagementCopy): string {
+  switch (status) {
+    case "pendingRuntime": return copy.pendingRuntime;
+    case "pendingRestart": return copy.pendingRestart;
+    case "active": return copy.active;
+    case "knownGood": return copy.knownGood;
+    case "quarantined": return copy.quarantined;
+    default: return copy.inactive;
+  }
+}
+
 function renderPluginRestart(state: PluginMarketplaceViewState, copy: PluginManagementCopy): string {
-  const pending = state.installations?.plugins.some((plugin) => {
+  const pending = state.restartRequired || (state.installations?.plugins.some((plugin) => {
+    if (!plugin.enabled) return false;
     const version = plugin.versions.find((candidate) => candidate.version === plugin.pendingVersion);
-    return version?.runtimeStatus === "pendingRestart";
-  }) ?? false;
+    return version?.runtimeStatus === "pendingRestart" || version?.runtimeStatus === "knownGood";
+  }) ?? false);
   if (!pending) return "";
   return `<div class="plugin-restart-banner" role="status"><span>${escapeHtml(copy.pendingRestart)}</span><button class="primary-button" type="button" data-plugin-restart ${state.restarting ? "disabled" : ""}>${escapeHtml(state.restarting ? copy.restarting : copy.restartToApply)}</button></div>`;
 }
