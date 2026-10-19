@@ -26,6 +26,10 @@ build or test suite is not a substitute for this gate. If a published tag fails 
 creation, retain that tag as failed release evidence, land the correction on `main`, and publish a new
 patch version rather than moving the existing tag.
 
+Release SBOM validation derives its expected Rust manifest count from Cargo workspace metadata and
+adds the frontend manifest. Adding or removing a workspace crate must not require a second
+hard-coded package count in the workflow.
+
 ## Trust boundary
 
 - Workflow permissions are limited to repository-content read access.
@@ -70,7 +74,7 @@ The public package set is:
 - Windows x86_64: one unsigned NSIS installer. PowerShell must report `NotSigned`; an unexpected Authenticode signature fails the job.
 - macOS Apple Silicon and Intel: one DMG per architecture. `APPLE_SIGNING_IDENTITY=-` requests ad-hoc signing; `codesign --verify --deep --strict` must pass, `Signature=adhoc` must be present, and any certificate authority fails the job. No notarization request is made.
 
-Every target performs a bounded native-process smoke test and publishes a target-specific SHA-256 manifest. The publication job downloads all four target sets plus CycloneDX manifests for the frontend and five Rust packages, verifies every package against its originating manifest, emits one combined `SHA256SUMS`, and only then creates the GitHub Release. Release notes disclose Windows' unknown-publisher warning and macOS' unnotarized first-launch approval requirement in English and Chinese.
+Every target performs a bounded native-process smoke test and publishes a target-specific SHA-256 manifest. The publication job downloads all four target sets plus CycloneDX manifests for the frontend and every Cargo workspace package, verifies every package against its originating manifest, emits one combined `SHA256SUMS`, and only then creates the GitHub Release. Release notes disclose Windows' unknown-publisher warning and macOS' unnotarized first-launch approval requirement in English and Chinese.
 
 The only write authority is the tag-only `publish` job's ephemeral GitHub token. No Apple certificate, Apple account, Windows certificate, updater private key, or persistent checkout credential enters the workflow. A later move to Developer ID/notarization or Windows Authenticode is a policy change, not a secret-injection shortcut: update this document, the workflow assertions, user-facing release notes, and clean-machine acceptance evidence together.
 

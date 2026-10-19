@@ -111,7 +111,14 @@ jobs:
           cargo install cargo-cyclonedx --version 0.5.9 --locked
           cargo cyclonedx --format json --all --target all
           find crates src-tauri -type f -name '*.cdx.json' -exec cp '{}' release-sbom/ \;
-          expected=6
+          workspace_manifests=$(cargo metadata --locked --no-deps --format-version 1 | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk; });
+            process.stdin.on("end", () => {
+              process.stdout.write(String(JSON.parse(input).workspace_members.length));
+            });
+          ')
+          expected=$((workspace_manifests + 1))
           actual=$(find release-sbom -maxdepth 1 -type f -name '*.cdx.json' | wc -l | tr -d ' ')
           if [ "$actual" -ne "$expected" ]; then
             echo "Expected $expected CycloneDX manifests; found $actual." >&2
