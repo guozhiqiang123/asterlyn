@@ -77,11 +77,11 @@ APIs, or another plugin.
 
 ### MKT8C — SDK and inspector delivery
 
-Status: partially implemented. The deterministic SDK tarball and checksum are host Release
-artifacts, and the template/Android repositories pin their dependency graphs and run the canonical
-inspector. The host Release workflow now builds checksum-covered standalone inspectors for Linux,
-Windows, and both macOS architectures. Those inspector artifacts first become downloadable with
-`v0.1.12`; `v0.1.11` predates the canonical inspector and therefore cannot be an external-plugin
+Status: partially implemented. The immutable host `v0.1.12` Release now publishes the deterministic
+SDK tarball, its checksum, an aggregate checksum manifest, and checksum-covered standalone canonical
+inspectors for Linux, Windows, and both macOS architectures. The template, Hello, and Android
+repositories pin their dependency graphs and validate exact package bytes with that Release
+baseline. `v0.1.11` predates the canonical inspector and therefore cannot be an external-plugin
 baseline. Template and fixture workflows must pin `v0.1.12` or newer rather than silently building
 an inspector from a mutable branch. The explicit oldest/current installed-host fixture pair remains
 open.

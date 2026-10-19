@@ -19,6 +19,23 @@ inspection code.
 - Old failed Hello `v0.1.0` remains immutable evidence of the rejected pre-inspector host baseline;
   it was not retagged or overwritten.
 
+The host baseline is the immutable
+[`v0.1.12` Release](https://github.com/guozhiqiang123/asterlyn/releases/tag/v0.1.12),
+published by run `39247230836`. Its quality, dependency-evidence, SDK, Linux, Windows, macOS Intel,
+macOS Apple Silicon, and publication jobs all passed. The Release exposes checksum-covered canonical
+inspectors for all four target triples and the deterministic SDK artifact:
+
+| Host artifact | SHA-256 |
+| --- | --- |
+| `asterlyn-plugin-inspect-aarch64-apple-darwin` | `69171677d79f5d61594f1ee70e7c0b7b94624fe38ef3f8bf2dce1b047485292d` |
+| `asterlyn-plugin-inspect-x86_64-apple-darwin` | `01c8f9a8ccce2a566c435c0d9d145328e583fa95e42d39733fd06b464232a84f` |
+| `asterlyn-plugin-inspect-x86_64-pc-windows-msvc.exe` | `58f8dff7edd9e10297d2728ab993ae1fc346c244133c35a7ab78bbf9843305b6` |
+| `asterlyn-plugin-inspect-x86_64-unknown-linux-gnu` | `a28b307aaa6623c2f4d571aed567c350cec7b94e60d21b867ef241b7ebadc195` |
+| `asterlyn-plugin-sdk-1.8.0.tgz` | `2e53f631f7e344ed8e4a8071ef3ce2ce6a417b5c26dc61933f4e08171e5dc83c` |
+
+The per-target checksum files, `plugin-sdk.sha256`, and aggregate `SHA256SUMS` agree with the GitHub
+asset digests.
+
 ## Executed gates
 
 The Hello Release workflow completed in run `39247280631`. It performed a locked install, static
