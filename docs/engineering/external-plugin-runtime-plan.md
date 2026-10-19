@@ -72,6 +72,8 @@ The process supervisor additionally owns platform enforcement and wall-clock pol
 | diagnostic message | 4 KiB |
 | contributions per activation | 64 |
 | callbacks per contribution | 32 |
+| callbacks returned by one invocation | 64 |
+| projected runtime value depth | 32 |
 | in-flight calls per plugin | 64 |
 | activation wall time | 10 seconds |
 | ordinary request wall time | 30 seconds |
@@ -104,13 +106,13 @@ message.
 
 ### EPR2 — Embedded JavaScript plugin-host executable
 
-Status: engine foundation implemented on 2026-10-19. The standalone helper now completes framed
+Status: engine and supervision foundations implemented on 2026-10-19. The standalone helper now completes framed
 identity/activation/callback/shutdown sessions, evaluates self-contained ESM in Boa 0.21.1, blocks
 ambient desktop APIs, applies loop/recursion/stack limits, and registers contributions
 transactionally. The published Android `v0.5.4` artifact activates into its four expected
-contributions and serves snapshot/collection callbacks through protocol 1. Host capability request
-round trips, subscription events, deep callback values, parent-side supervision, and packaged
-helper delivery remain open; therefore EPR2 and MKT5 are not yet complete.
+contributions and serves snapshot/collection callbacks through protocol 1. The helper is packaged
+and supervised by the native parent. JavaScript capability proxies, subscription events, and deep
+callback values remain open; therefore EPR2 and MKT5 are not yet complete.
 
 1. Add `asterlyn-plugin-host` as a separately packaged executable using the shared protocol crate.
 2. Load only the admitted immutable entry file, parse it as an ECMAScript module, and validate its
@@ -124,6 +126,57 @@ helper delivery remain open; therefore EPR2 and MKT5 are not yet complete.
 
 Exit gate: a fixture plugin activates and serves callbacks solely through protocol 1, while hostile
 fixtures fail without changing host or workspace state.
+
+#### EPR2a — asynchronous capability proxy and remote values
+
+The activation context exposes only manifest-admitted capability objects. Every method returns a
+real JavaScript `Promise`; invoking it emits one `capabilityRequest` carrying the active plugin,
+workspace generation, capability name, operation, and JSON arguments. The parent remains the only
+implementation and authority. A capability result resolves the promise, while rejection,
+deadline, cancellation, stale workspace, or malformed data rejects it with a normalized error.
+The child must continue draining these requests after a synchronous `activate()` return so
+fire-and-forget initialization cannot become permanently pending.
+
+Invocation values use ordinary JSON plus one reserved object form:
+
+```json
+{
+  "$asterlynCallback": {
+    "handle": "session-local-opaque-id",
+    "operation": "apply"
+  }
+}
+```
+
+When a returned object or array contains a JavaScript function at any supported depth, the child
+registers the function with its containing object as the receiver and replaces it with this remote
+callback reference. The parent validates the reserved object exactly, rejects extra fields,
+duplicate handles, excessive depth/count, and invalid identifiers, and never evaluates handle or
+operation text. The reserved `$asterlynCallback` key cannot be used as ordinary plugin payload.
+Handles live only for the owning runtime session and are invalidated together on dispose, crash,
+workspace generation change, disable, update, or application exit.
+
+Implementation and commit order:
+
+1. Freeze the remote-value schema and hostile validation in Rust and TypeScript.
+2. Add Promise-backed capability calls to the child engine and prove parent round trips with a
+   fixture capability handler.
+3. Project nested callback functions into remote references and prove `apply`, `inspect`,
+   `deploy`, `launch`, and `dispose`-shaped results can be invoked without source evaluation.
+
+#### EPR2b — subscription listeners and events
+
+Subscriptions build on the same handle ownership model, but do not overload ordinary invocation
+results. The parent passes an explicit remote-listener reference when invoking `subscribe`; the
+child rehydrates only that reserved reference into a JavaScript function. Calling it emits a
+bounded `event` message for the owning subscription handle. Events are ordered per subscription,
+validated before renderer publication, and dropped after disposal. Backpressure overflow,
+malformed events, or events for unknown handles terminate the faulty plugin session. The returned
+subscription `dispose` function is projected as an EPR2a callback reference.
+
+EPR2b starts only after EPR2a tests pass because listener lifetime, event routing, and disposal all
+depend on the same session-local handle registry. It is a separate commit boundary and acceptance
+gate, not an implicit side effect of capability proxy work.
 
 ### EPR3 — Host supervisor and transactional contribution adapter
 
