@@ -973,7 +973,7 @@ export interface HistoryCopy {
   commitHistory: string;
   loadingOlderCommits: string;
   showingNewestLimit(count: string): string;
-  scrollForOlder: string;
+  loadOlderCommits: string;
   allHistoryLoaded(count: string, singular: boolean): string;
   noOlderCommits: string;
   olderCommitsFailed(detail: string): string;

@@ -17,13 +17,19 @@
 }
 
 .history-page-status button {
-  padding: 2px 7px;
+  min-height: 23px;
+  padding: 2px 9px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   background: var(--bg-elevated);
   color: var(--text-soft);
   cursor: pointer;
   font-size: 9px;
+}
+
+.history-page-status button:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .history-refresh-status {

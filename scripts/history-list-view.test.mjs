@@ -38,7 +38,7 @@ test("history list preserves paging and terminal status semantics", () => {
   const commits = [commit("only", [], [])];
   assert.match(
     renderHistoryList({ ...presentation(commits), hasMore: true }),
-    /Scroll to load older commits/,
+    /data-load-history-page>Load older commits</,
   );
   assert.match(
     renderHistoryList({ ...presentation(commits), pagingError: "network < unavailable" }),

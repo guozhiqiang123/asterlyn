@@ -509,7 +509,7 @@ export const ZH_CN = {
     expandLinearTitle: (count) => `展开 ${count} 个线性提交`, linearCommitsCollapsed: (count) => `已折叠 ${count} 个线性提交`,
     expand: "展开", gitRoot: (path) => `Git 根目录：${path}`, commitHistory: "提交历史",
     loadingOlderCommits: "正在加载更早的提交…", showingNewestLimit: (count) => `显示最新的 ${count} 个提交（会话上限）`,
-    scrollForOlder: "滚动以加载更早的提交", allHistoryLoaded: (count) => `已加载全部历史 · ${count} 个提交`,
+    loadOlderCommits: "加载更早的提交", allHistoryLoaded: (count) => `已加载全部历史 · ${count} 个提交`,
     noOlderCommits: "当前筛选条件下没有更早的提交。",
     olderCommitsFailed: (detail) => `无法加载更早的提交：${detail}`,
     historyRefreshFailed: (detail) => `无法刷新提交历史：${detail}`,

@@ -51,6 +51,7 @@ export interface HistoryListPresentation {
 export interface HistoryListActions {
   selectCommit(key: string, restoreFocus: boolean, extend: boolean, toggle: boolean): void;
   expandLinearHistory(firstKey: string | null): void;
+  loadOlder(): void;
   retryPaging(): void;
   scroll(host: HTMLElement): void;
 }
@@ -188,6 +189,10 @@ export class GitHistoryListView {
   private readonly handleClick = (event: Event): void => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target || !this.host?.contains(target)) return;
+    if (target.closest("[data-load-history-page]")) {
+      this.actions?.loadOlder();
+      return;
+    }
     if (target.closest("[data-retry-history-page]")) {
       this.actions?.retryPaging();
       return;
@@ -404,7 +409,7 @@ function renderPagingStatus(presentation: HistoryListPresentation): string {
     return `<div class="history-page-status">${escapeHtml(copy.showingNewestLimit(localization.number.format(HISTORY_ROW_LIMIT)))}</div>`;
   }
   if (presentation.hasMore) {
-    return `<div class="history-page-status muted">${escapeHtml(copy.scrollForOlder)}</div>`;
+    return `<div class="history-page-status muted"><button type="button" data-load-history-page>${escapeHtml(copy.loadOlderCommits)}</button></div>`;
   }
   const count = presentation.loadedCommits.length;
   return `<div class="history-page-status muted" title="${escapeAttribute(copy.noOlderCommits)}">${escapeHtml(copy.allHistoryLoaded(localization.number.format(count), count === 1))}</div>`;

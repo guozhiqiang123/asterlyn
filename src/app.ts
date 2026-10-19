@@ -4241,6 +4241,7 @@ export class AsterlynApp {
         this.renderHistoryPane();
         if (firstKey) this.focusHistoryCommit(firstKey);
       },
+      loadOlder: () => void this.historyReadRuntime.details.loadOlder(),
       retryPaging: () => {
         this.historyReadRuntime.details.retryPaging();
       },

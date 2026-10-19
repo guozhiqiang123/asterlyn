@@ -627,7 +627,7 @@ export const EN_US: LocaleCatalog = {
     expandLinearTitle: (count) => `Expand ${count} linear commits`, linearCommitsCollapsed: (count) => `${count} linear commits collapsed`,
     expand: "Expand", gitRoot: (path) => `Git root: ${path}`, commitHistory: "Commit history",
     loadingOlderCommits: "Loading older commits…", showingNewestLimit: (count) => `Showing the newest ${count} commits (session limit)`,
-    scrollForOlder: "Scroll to load older commits", allHistoryLoaded: (count, singular) => `All history loaded · ${count} ${singular ? "commit" : "commits"}`,
+    loadOlderCommits: "Load older commits", allHistoryLoaded: (count, singular) => `All history loaded · ${count} ${singular ? "commit" : "commits"}`,
     noOlderCommits: "No older commits are available for the current filters.",
     olderCommitsFailed: (detail) => `Older commits could not be loaded: ${detail}`,
     historyRefreshFailed: (detail) => `History could not be refreshed: ${detail}`,
