@@ -4,18 +4,22 @@ This package contains the public declarative types and constants used to author 
 It does not contain host implementation code and does not grant filesystem, process, network,
 credential, WebView, or shell access.
 
-The initial public baseline is SDK `1.8.0`, SDK major `1`. Runtime-installable packages additionally
+The initial public baseline was SDK `1.8.0`; the current additive contract is SDK `1.9.0`, SDK major `1`. Runtime-installable packages additionally
 use package schema `2` and plugin-host protocol `1`; those are independent compatibility axes.
+
+SDK `1.9.0` adds the declarative `androidSdkBuildTools` executable candidate. It does not expand the
+runtime API: the candidate remains package-authored, host-admitted, and resolved before process
+creation.
 
 ## Use
 
-Download `asterlyn-plugin-sdk-1.8.0.tgz` from an Asterlyn GitHub Release, retain its SHA-256, place it
+Download `asterlyn-plugin-sdk-1.9.0.tgz` from an Asterlyn GitHub Release, retain its SHA-256, place it
 under the plugin repository's `vendor/` directory, and pin it exactly:
 
 ```json
 {
   "dependencies": {
-    "@asterlyn/plugin-sdk": "file:vendor/asterlyn-plugin-sdk-1.8.0.tgz"
+    "@asterlyn/plugin-sdk": "file:vendor/asterlyn-plugin-sdk-1.9.0.tgz"
   }
 }
 ```

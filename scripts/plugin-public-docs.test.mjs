@@ -32,7 +32,7 @@ test("public guides pin independent version axes and immutable Release workflow"
   for (const guide of [developerGuide, capabilityGuide, migrationGuide]) {
     assert.match(guide, /0\.1\.12/);
   }
-  assert.match(developerGuide, /Plugin SDK: `1\.8\.0`/);
+  assert.match(developerGuide, /Plugin SDK: `1\.9\.0`/);
   assert.match(developerGuide, /Package schema: `2`/);
   assert.match(developerGuide, /Plugin-host protocol: `1`/);
   assert.match(developerGuide, /never .*replace Release bytes/is);

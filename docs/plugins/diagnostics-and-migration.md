@@ -1,6 +1,6 @@
 # Plugin diagnostics and migration
 
-Status: experimental public policy for Asterlyn `0.1.12` and Plugin SDK `1.8.0`.
+Status: experimental public policy for Asterlyn `0.1.12` and Plugin SDK `1.9.0`.
 
 ## Identify the failing phase
 

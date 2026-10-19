@@ -1,6 +1,6 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog for Asterlyn `0.1.12`, SDK `1.8.0`, package schema `2`, and
+Status: experimental public catalog for Asterlyn `0.1.12`, SDK `1.9.0`, package schema `2`, and
 plugin-host protocol `1`.
 
 ## Two declarations, one authority check
@@ -29,6 +29,11 @@ contributions remain available.
 | `executionTargets` | Contribute transient execution targets such as attached devices | `host.execution-targets.read` | Bounded metadata; target validity is rechecked before use |
 | `runConfigurations` | Contribute configuration metadata and staged run plans | No additional metadata permission; each task/tool phase needs its own admitted permission | The host never guesses an ambiguous configuration or target |
 | `notifications` | Publish semantic info/success/warning/error by localization key | `host.notifications.publish` | Host owns resolved text, source attribution, timing, accessibility and dismissal |
+
+SDK `1.9.0` adds the explicit `androidSdkBuildTools` executable candidate for tools such as `aapt`.
+It resolves only an executable with the declared filename from canonical Android SDK Build Tools
+directories. The existing `environment`, `workspaceProperty`, and `path` candidates keep their
+literal meanings; plugins cannot submit a path or argv dynamically at runtime.
 
 Capabilities not listed here are not available to installable packages. Host presentation primitives,
 dialogs, arbitrary panels, search internals, Git writes, credentials, terminals, sockets, WebViews,

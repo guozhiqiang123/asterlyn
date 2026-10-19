@@ -87,7 +87,7 @@ test("release artifact staging and aggregate verification reject incomplete sets
     const staged = run("scripts/release-artifacts.mjs", "stage", bundleRoot, assets, target, platform, inspector);
     assert.equal(staged.status, 0, staged.stderr);
   }
-  const sdkName = "asterlyn-plugin-sdk-1.8.0.tgz";
+  const sdkName = "asterlyn-plugin-sdk-1.9.0.tgz";
   const sdkBytes = "reviewed sdk artifact";
   writeFileSync(path.join(assets, sdkName), sdkBytes);
   writeFileSync(
@@ -106,7 +106,7 @@ test("release artifact staging and aggregate verification reject incomplete sets
   const sums = readFileSync(path.join(assets, "SHA256SUMS"), "utf8");
   assert.match(sums, /Asterlyn_0\.1\.0_x64-setup\.exe/);
   assert.match(sums, /asterlyn-frontend\.cdx\.json/);
-  assert.match(sums, /asterlyn-plugin-sdk-1\.8\.0\.tgz/);
+  assert.match(sums, /asterlyn-plugin-sdk-1\.9\.0\.tgz/);
   for (const [target, platform] of targets) {
     const suffix = platform === "windows" ? "\\.exe" : "";
     assert.match(sums, new RegExp(`asterlyn-plugin-inspect-${target}${suffix}`));

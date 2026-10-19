@@ -31,7 +31,7 @@ const manifest = {
 
 test("host adapter accepts the supported SDK major and preserves declarative metadata", () => {
   assert.equal(PLUGIN_SDK_MAJOR, 1);
-  assert.equal(PLUGIN_SDK_VERSION, "1.8.0");
+  assert.equal(PLUGIN_SDK_VERSION, "1.9.0");
   assert.equal(Object.isFrozen(SDK_PLUGIN_LOCALIZATION_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_NOTIFICATION_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_WORKSPACE_TOOL_LIMITS), true);
@@ -131,6 +131,19 @@ test("old plugin manifests remain compatible when optional 1.4 declarations are 
 test("host adapter preserves and freezes declarative task authorization", () => {
   const adapted = adaptPluginManifest({
     ...manifest,
+    localization: {
+      ...manifest.localization,
+      locales: {
+        ...manifest.localization.locales,
+        "en-US": {
+          ...manifest.localization.locales["en-US"],
+          "authorization.workspaceTrust.label": "Trust Gradle tasks in this workspace",
+          "authorization.workspaceTrust.description": "Allow reviewed Gradle tasks.",
+          "authorization.rememberTask.label": "Remember this task",
+          "authorization.rememberTask.description": "Ask again when the command changes.",
+        },
+      },
+    },
     taskAuthorization: {
       workspaceTrust: {
         id: "workspaceTrust",
