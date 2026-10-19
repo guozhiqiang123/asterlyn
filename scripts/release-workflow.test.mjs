@@ -46,6 +46,8 @@ test("release evidence includes smoke checks, checksums, and SBOMs", () => {
   assert.match(releaseWorkflow, /npm run plugin-sdk:pack/);
   assert.match(releaseWorkflow, /asterlyn-release-plugin-sdk/);
   assert.match(releaseWorkflow, /release-sdk\/\*\.tgz/);
+  assert.match(releaseWorkflow, /--bin asterlyn-plugin-inspect/);
+  assert.match(releaseWorkflow, /inspector_executable/);
 });
 
 test("pull-request preview packaging remains credential-free and ad-hoc", () => {
@@ -80,7 +82,9 @@ test("release artifact staging and aggregate verification reject incomplete sets
     const bundleRoot = path.join(fixture, target);
     mkdirSync(bundleRoot, { recursive: true });
     for (const filename of filenames) writeFileSync(path.join(bundleRoot, filename), `${target}:${filename}`);
-    const staged = run("scripts/release-artifacts.mjs", "stage", bundleRoot, assets, target, platform);
+    const inspector = path.join(fixture, `inspector-${target}${platform === "windows" ? ".exe" : ""}`);
+    writeFileSync(inspector, `inspector:${target}`);
+    const staged = run("scripts/release-artifacts.mjs", "stage", bundleRoot, assets, target, platform, inspector);
     assert.equal(staged.status, 0, staged.stderr);
   }
   const sdkName = "asterlyn-plugin-sdk-1.8.0.tgz";
@@ -103,6 +107,10 @@ test("release artifact staging and aggregate verification reject incomplete sets
   assert.match(sums, /Asterlyn_0\.1\.0_x64-setup\.exe/);
   assert.match(sums, /asterlyn-frontend\.cdx\.json/);
   assert.match(sums, /asterlyn-plugin-sdk-1\.8\.0\.tgz/);
+  for (const [target, platform] of targets) {
+    const suffix = platform === "windows" ? "\\.exe" : "";
+    assert.match(sums, new RegExp(`asterlyn-plugin-inspect-${target}${suffix}`));
+  }
 
   writeFileSync(path.join(assets, "Asterlyn_0.1.0_x64-setup.exe"), "tampered");
   const rejected = run(

@@ -117,6 +117,10 @@ runs Asterlyn's canonical native inspector against the exact Release bytes. Set 
 The provided Release workflow checks out the oldest compatible host tag only for its inspector. The
 plugin runtime and dependencies still build from the isolated plugin repository.
 
+Host Releases produced after this contract publish checksum-covered standalone inspector binaries
+named `asterlyn-plugin-inspect-<target>` (plus `.exe` on Windows). Until the first such Release is
+available, the template's pinned host-tag checkout is the reproducible fallback.
+
 ## Publish and add the source
 
 Push exactly one stable tag `v<version>`. The template workflow publishes exactly one matching

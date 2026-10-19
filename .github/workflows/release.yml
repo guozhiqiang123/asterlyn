@@ -184,6 +184,7 @@ jobs:
             bundles: appimage,deb,rpm
             bundle_root: target/x86_64-unknown-linux-gnu/release/bundle
             smoke_executable: target/x86_64-unknown-linux-gnu/release/asterlyn
+            inspector_executable: target/x86_64-unknown-linux-gnu/release/asterlyn-plugin-inspect
             release_platform: linux
             apple_signing_identity: ""
           - label: Windows x86_64
@@ -192,6 +193,7 @@ jobs:
             bundles: nsis
             bundle_root: target/x86_64-pc-windows-msvc/release/bundle
             smoke_executable: target/x86_64-pc-windows-msvc/release/asterlyn.exe
+            inspector_executable: target/x86_64-pc-windows-msvc/release/asterlyn-plugin-inspect.exe
             release_platform: windows
             apple_signing_identity: ""
           - label: macOS Apple Silicon
@@ -200,6 +202,7 @@ jobs:
             bundles: app,dmg
             bundle_root: target/aarch64-apple-darwin/release/bundle
             smoke_executable: target/aarch64-apple-darwin/release/bundle/macos/Asterlyn.app/Contents/MacOS/asterlyn
+            inspector_executable: target/aarch64-apple-darwin/release/asterlyn-plugin-inspect
             release_platform: macos
             apple_signing_identity: "-"
           - label: macOS Intel
@@ -208,6 +211,7 @@ jobs:
             bundles: app,dmg
             bundle_root: target/x86_64-apple-darwin/release/bundle
             smoke_executable: target/x86_64-apple-darwin/release/bundle/macos/Asterlyn.app/Contents/MacOS/asterlyn
+            inspector_executable: target/x86_64-apple-darwin/release/asterlyn-plugin-inspect
             release_platform: macos
             apple_signing_identity: "-"
 
@@ -251,6 +255,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ matrix.apple_signing_identity }}
         run: npm run tauri -- build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"
 
+      - name: Build standalone plugin inspector
+        run: cargo build --locked --release --target "${{ matrix.target }}" -p asterlyn-plugin-package --bin asterlyn-plugin-inspect
+
       - name: Verify ad-hoc macOS signature
         if: matrix.release_platform == 'macos'
         env:
@@ -286,7 +293,7 @@ jobs:
         run: node scripts/smoke-native-app.mjs "${{ matrix.smoke_executable }}"
 
       - name: Stage release assets and checksums
-        run: node scripts/release-artifacts.mjs stage "${{ matrix.bundle_root }}" release-assets "${{ matrix.target }}" "${{ matrix.release_platform }}"
+        run: node scripts/release-artifacts.mjs stage "${{ matrix.bundle_root }}" release-assets "${{ matrix.target }}" "${{ matrix.release_platform }}" "${{ matrix.inspector_executable }}"
 
       - name: Upload release assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

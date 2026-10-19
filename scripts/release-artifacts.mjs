@@ -12,24 +12,37 @@ if (command === "stage") {
 } else {
   throw new Error(
     "usage: node scripts/release-artifacts.mjs stage <bundle-root> <output-dir> <target> <platform>\n"
+      + "      [inspector-executable]\n"
       + "   or: node scripts/release-artifacts.mjs verify <asset-dir> <target>...",
   );
 }
 
-async function stage(bundleRootArgument, outputDirectoryArgument, target, platform) {
+async function stage(
+  bundleRootArgument,
+  outputDirectoryArgument,
+  target,
+  platform,
+  inspectorExecutableArgument,
+) {
   if (!bundleRootArgument || !outputDirectoryArgument || !target || !platform) {
     throw new Error("stage requires bundle-root, output-dir, target, and platform");
   }
   const bundleRoot = path.resolve(bundleRootArgument);
   const outputDirectory = path.resolve(outputDirectoryArgument);
-  const candidates = (await walk(bundleRoot)).filter((file) => isPlatformArtifact(file, platform));
-  validatePlatformSet(candidates, platform);
+  const platformCandidates = (await walk(bundleRoot)).filter((file) => isPlatformArtifact(file, platform));
+  validatePlatformSet(platformCandidates, platform);
+  const candidates = platformCandidates.map((source) => ({ source, basename: path.basename(source) }));
+  if (inspectorExecutableArgument) {
+    candidates.push({
+      source: path.resolve(inspectorExecutableArgument),
+      basename: `asterlyn-plugin-inspect-${target}${platform === "windows" ? ".exe" : ""}`,
+    });
+  }
   await mkdir(outputDirectory, { recursive: true });
 
   const basenames = new Set();
   const manifestLines = [];
-  for (const source of candidates.sort()) {
-    const basename = path.basename(source);
+  for (const { source, basename } of candidates.sort((left, right) => left.basename.localeCompare(right.basename))) {
     if (basenames.has(basename)) throw new Error(`duplicate release artifact name: ${basename}`);
     basenames.add(basename);
     const destination = path.join(outputDirectory, basename);
@@ -115,7 +128,8 @@ function validatePlatformSet(files, platform) {
 }
 
 function isDistributable(file) {
-  return [".AppImage", ".deb", ".dmg", ".exe", ".msi", ".rpm", ".tgz"].some((suffix) => file.endsWith(suffix));
+  return file.startsWith("asterlyn-plugin-inspect-")
+    || [".AppImage", ".deb", ".dmg", ".exe", ".msi", ".rpm", ".tgz"].some((suffix) => file.endsWith(suffix));
 }
 
 async function walk(directory) {

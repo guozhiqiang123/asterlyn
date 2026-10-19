@@ -79,8 +79,11 @@ APIs, or another plugin.
 
 Status: partially implemented. The deterministic SDK tarball and checksum are host Release
 artifacts, and the template/Android repositories pin their dependency graphs and run the canonical
-inspector. A standalone inspector artifact plus explicit oldest/current installed-host fixture pair
-remain open; the template therefore checks out the oldest compatible host tag in CI for inspection.
+inspector. The host Release workflow now builds checksum-covered standalone inspectors for Linux,
+Windows, and both macOS architectures. Those inspector artifacts first become downloadable with the
+next host Release; the existing `v0.1.11` baseline predates them, so the template still checks out
+that oldest compatible tag in CI. The explicit oldest/current installed-host fixture pair remains
+open.
 
 1. Make `@asterlyn/plugin-sdk` a publishable declarative package with no host implementation, plus
    license, repository metadata,
