@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.7.0" as const;
+export const PLUGIN_SDK_VERSION = "1.8.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -242,11 +242,48 @@ export interface SdkPluginManifest {
   readonly toolOperations?: readonly SdkToolOperationDeclaration[];
 }
 
-/** Static package metadata that can be inspected before executable plugin code is loaded. */
-export interface SdkPluginPackageManifest extends SdkPluginManifest {
+/** Build-time metadata for a plugin pinned into a host release. Not runtime-installable. */
+export interface SdkBundledPluginPackageManifest extends SdkPluginManifest {
   readonly schemaVersion: 1;
   readonly capabilities: readonly string[];
 }
+
+export interface SdkPluginHostCompatibility {
+  readonly minimum: string;
+  readonly maximumExclusive?: string;
+}
+
+export interface SdkPluginRuntimeDistribution {
+  readonly protocol: 1;
+  readonly entry: string;
+}
+
+export interface SdkPluginLicenseDistribution {
+  readonly expression: string;
+  readonly file: string;
+}
+
+/**
+ * Static schema-2 metadata for a GitHub Release package. The host validates this manifest and every
+ * integrity entry before extracting or executing the self-contained runtime artifact.
+ */
+export interface SdkInstallablePluginPackageManifest extends SdkPluginManifest {
+  readonly schemaVersion: 2;
+  readonly capabilities: readonly string[];
+  readonly permissions: readonly string[];
+  readonly distribution: {
+    readonly repository: string;
+    readonly runtime: SdkPluginRuntimeDistribution;
+    readonly hostCompatibility: SdkPluginHostCompatibility;
+    readonly license: SdkPluginLicenseDistribution;
+    readonly integrity: Readonly<Record<string, `sha256:${string}`>>;
+  };
+}
+
+/** Static package metadata that can be inspected before executable plugin code is loaded. */
+export type SdkPluginPackageManifest =
+  | SdkBundledPluginPackageManifest
+  | SdkInstallablePluginPackageManifest;
 
 export type SdkExecutionTargetStatus = "online" | "offline" | "unauthorized" | "unknown";
 export type SdkExecutionTargetProviderStatus = "loading" | "ready" | "unavailable" | "error";
