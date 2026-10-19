@@ -4,6 +4,7 @@ mod git_operations;
 mod git_recovery;
 mod plugin_cache;
 mod plugin_marketplace;
+mod plugin_marketplace_cleanup;
 mod plugin_process_query;
 mod plugin_runtime;
 pub(crate) use git_recovery::{

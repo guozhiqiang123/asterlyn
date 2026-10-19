@@ -27,6 +27,8 @@ use crate::application::{
     PendingPluginAdmission, PluginMarketplaceCoordinator, PluginProcessQueryManager, TaskManager,
 };
 
+use super::plugin_marketplace_cleanup::cleanup_marketplace_storage;
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PluginPackageAdmissionReview {
@@ -548,9 +550,15 @@ pub(crate) fn installed_package_root(
 pub(crate) fn recover_interrupted_plugin_activations(
     app: &tauri::AppHandle,
 ) -> Result<PluginInstallationSnapshot, String> {
-    installation_store(app)?
+    let store = installation_store(app)?;
+    store
         .recover_interrupted_activations()
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    let pruned = store
+        .prune_retained_versions(now_ms())
+        .map_err(|error| error.to_string())?;
+    cleanup_marketplace_storage(&marketplace_root(app)?, &pruned)?;
+    Ok(pruned)
 }
 
 pub(crate) fn abandon_plugin_activations(
