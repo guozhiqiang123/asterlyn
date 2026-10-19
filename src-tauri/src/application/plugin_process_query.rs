@@ -6,7 +6,7 @@ use asterlyn_task::encode_output;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -1073,6 +1073,7 @@ mod tests {
     use base64::Engine;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
 
     fn executable(root: &Path, name: &str, body: &str) -> PathBuf {
         let path = root.join(name);
