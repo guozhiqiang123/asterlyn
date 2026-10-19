@@ -11,7 +11,11 @@
     "PluginToolOperationResult": "./plugin-tool-operation",
     "PluginSourceSnapshot": "./plugin-marketplace",
     "PluginInstallationSnapshot": "./plugin-marketplace",
-    "PluginPackageAdmissionReview": "./plugin-marketplace"
+    "PluginPackageAdmissionReview": "./plugin-marketplace",
+    "InstalledPluginActivation": "./plugin-runtime",
+    "InstalledPluginRuntimeDiagnostics": "./plugin-runtime",
+    "PluginRuntimeTheme": "./plugin-runtime",
+    "PluginRuntimeValue": "./plugin-runtime"
   },
   "commands": [
     { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
@@ -26,6 +30,10 @@
     { "name": "prepare_plugin_install", "args": { "repository": "string" }, "result": "PluginPackageAdmissionReview", "validator": "pluginPackageAdmissionReview" },
     { "name": "confirm_plugin_install", "args": { "reviewToken": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
     { "name": "cancel_plugin_install", "args": { "reviewToken": "string" }, "result": "void", "validator": "void" },
+    { "name": "activate_installed_plugin_runtime", "args": { "pluginId": "string", "workspaceRoot": "string", "workspaceGeneration": "number", "evidence": "PluginRuntimeValue", "locale": "string", "theme": "PluginRuntimeTheme" }, "result": "InstalledPluginActivation", "validator": "installedPluginActivation" },
+    { "name": "invoke_installed_plugin_callback", "args": { "pluginId": "string", "callbackHandle": "string", "operation": "string", "payload": "PluginRuntimeValue" }, "result": "PluginRuntimeValue", "validator": "pluginRuntimeValue" },
+    { "name": "deactivate_installed_plugin_runtime", "args": { "pluginId": "string" }, "result": "void", "validator": "void" },
+    { "name": "read_installed_plugin_runtime_diagnostics", "args": { "pluginId": "string" }, "result": "InstalledPluginRuntimeDiagnostics", "validator": "installedPluginRuntimeDiagnostics" },
     { "name": "window_chrome_mode", "args": {}, "result": "WindowChromeMode", "validator": "windowChromeMode" },
     { "name": "is_last_project_window", "args": {}, "result": "boolean", "validator": "boolean" },
     { "name": "initial_repository", "args": {}, "result": "nullable:string", "validator": "nullableString" },

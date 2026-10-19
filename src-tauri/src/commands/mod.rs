@@ -5,6 +5,7 @@ mod git_recovery;
 mod plugin_cache;
 mod plugin_marketplace;
 mod plugin_process_query;
+mod plugin_runtime;
 pub(crate) use git_recovery::{
     list_git_worktree_recoveries, prepare_restore_changes, undo_git_worktree_recovery,
 };
@@ -19,6 +20,10 @@ pub(crate) use plugin_marketplace::{
 };
 pub(crate) use plugin_process_query::{
     cancel_plugin_tool_operation, execute_plugin_process_query, execute_plugin_tool_operation,
+};
+pub(crate) use plugin_runtime::{
+    activate_installed_plugin_runtime, deactivate_installed_plugin_runtime,
+    invoke_installed_plugin_callback, read_installed_plugin_runtime_diagnostics,
 };
 mod git_reads;
 mod image;

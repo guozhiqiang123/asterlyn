@@ -46,6 +46,36 @@ test("app update responses require coherent GitHub Release state", () => {
   );
 });
 
+test("external plugin runtime results validate transactional contributions", () => {
+  const activation = {
+    pluginId: "dev.asterlyn.fixture",
+    pluginVersion: "1.0.0",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "plugin-session-1",
+    contributions: [{
+      kind: "taskProvider",
+      id: "fixture-tasks",
+      payload: { label: "Fixture" },
+      callbacks: { snapshot: "callback-1" },
+    }],
+  };
+  assert.deepEqual(
+    validateDesktopResult("activate_installed_plugin_runtime", activation),
+    activation,
+  );
+  assert.throws(
+    () => validateDesktopResult("activate_installed_plugin_runtime", {
+      ...activation,
+      contributions: [...activation.contributions, activation.contributions[0]],
+    }),
+    /duplicate runtime contribution ID/u,
+  );
+  assert.throws(
+    () => validateDesktopResult("invoke_installed_plugin_callback", { value: Infinity }),
+    /runtime number must be finite/u,
+  );
+});
+
 test("historical file reads remain wired through the native command boundary", async () => {
   const [commands, restoreCommands, runtime, adapter] = await Promise.all([
     readFile(new URL("../src-tauri/src/commands/git_reads.rs", import.meta.url), "utf8"),

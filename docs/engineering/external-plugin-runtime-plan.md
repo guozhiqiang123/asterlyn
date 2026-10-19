@@ -138,6 +138,13 @@ renderer contribution projection, concrete capability handlers, subscription eve
 multi-platform process-tree evidence remain open, so admitted packages continue to report
 `pendingRuntime`.
 
+The host bridge now also supports an explicitly requested activation test for an enabled admitted
+version. It revalidates the extracted manifest, compatibility contract, complete file set, and
+every declared SHA-256 before starting the supervisor, then returns one strictly validated
+contribution batch and opaque callback handles over the desktop protocol. This path does not
+promote `pendingRuntime`, publish the batch into the live contribution registry, or replace the
+bundled fallback; those transitions remain gated on the capability/deep-callback work below.
+
 1. Resolve the packaged helper without accepting a renderer/plugin path; spawn it with piped
    protocol handles and no secrets in arguments or environment.
 2. Bind the child to the admitted plugin/version/digest and current workspace generation.

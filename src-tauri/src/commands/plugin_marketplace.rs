@@ -391,7 +391,7 @@ fn review_from(admission: &PendingPluginAdmission) -> PluginPackageAdmissionRevi
     }
 }
 
-fn admission_context<'a>(repository: &'a str, version: &'a str) -> AdmissionContext<'a> {
+pub(crate) fn admission_context<'a>(repository: &'a str, version: &'a str) -> AdmissionContext<'a> {
     AdmissionContext {
         repository,
         release_version: version,
@@ -407,17 +407,36 @@ fn store(app: &tauri::AppHandle) -> Result<PluginSourceStore, String> {
     PluginSourceStore::open(marketplace_root(app)?).map_err(|error| error.to_string())
 }
 
-fn installation_store(app: &tauri::AppHandle) -> Result<PluginInstallationStore, String> {
+pub(crate) fn installation_store(
+    app: &tauri::AppHandle,
+) -> Result<PluginInstallationStore, String> {
     PluginInstallationStore::open(marketplace_root(app)?.join("installation-state"))
         .map_err(|error| error.to_string())
 }
 
-fn marketplace_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+pub(crate) fn marketplace_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(app
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("resolve plugin marketplace location: {error}"))?
         .join("plugin-marketplace-v1"))
+}
+
+pub(crate) fn installed_package_root(
+    app: &tauri::AppHandle,
+    plugin_id: &str,
+    version: &str,
+    package_digest: &str,
+) -> Result<std::path::PathBuf, String> {
+    let digest = package_digest
+        .strip_prefix("sha256:")
+        .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .ok_or_else(|| "installed plugin digest is invalid".to_owned())?;
+    Ok(marketplace_root(app)?
+        .join("packages")
+        .join(plugin_id)
+        .join(version)
+        .join(digest))
 }
 
 fn discover_release(source: &PluginSource) -> PluginSourceCatalog {

@@ -5,6 +5,7 @@ import type { WorkspaceFingerprint, PluginTaskCacheDirtyReason, PluginTaskCacheR
 import type { PluginProcessQueryResult } from "./plugin-process-query";
 import type { PluginToolOperationParameters, PluginToolOperationResult } from "./plugin-tool-operation";
 import type { PluginSourceSnapshot, PluginInstallationSnapshot, PluginPackageAdmissionReview } from "./plugin-marketplace";
+import type { InstalledPluginActivation, InstalledPluginRuntimeDiagnostics, PluginRuntimeTheme, PluginRuntimeValue } from "./plugin-runtime";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 
@@ -21,6 +22,10 @@ export interface DesktopCommandMap {
   prepare_plugin_install: { args: { repository: string; }; result: PluginPackageAdmissionReview };
   confirm_plugin_install: { args: { reviewToken: string; }; result: PluginInstallationSnapshot };
   cancel_plugin_install: { args: { reviewToken: string; }; result: void };
+  activate_installed_plugin_runtime: { args: { pluginId: string; workspaceRoot: string; workspaceGeneration: number; evidence: PluginRuntimeValue; locale: string; theme: PluginRuntimeTheme; }; result: InstalledPluginActivation };
+  invoke_installed_plugin_callback: { args: { pluginId: string; callbackHandle: string; operation: string; payload: PluginRuntimeValue; }; result: PluginRuntimeValue };
+  deactivate_installed_plugin_runtime: { args: { pluginId: string; }; result: void };
+  read_installed_plugin_runtime_diagnostics: { args: { pluginId: string; }; result: InstalledPluginRuntimeDiagnostics };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   is_last_project_window: { args: Record<string, never>; result: boolean };
   initial_repository: { args: Record<string, never>; result: string | null };
@@ -162,6 +167,10 @@ export const DESKTOP_RESULT_VALIDATORS: {
   prepare_plugin_install: "pluginPackageAdmissionReview",
   confirm_plugin_install: "pluginInstallationSnapshot",
   cancel_plugin_install: "void",
+  activate_installed_plugin_runtime: "installedPluginActivation",
+  invoke_installed_plugin_callback: "pluginRuntimeValue",
+  deactivate_installed_plugin_runtime: "void",
+  read_installed_plugin_runtime_diagnostics: "installedPluginRuntimeDiagnostics",
   window_chrome_mode: "windowChromeMode",
   is_last_project_window: "boolean",
   initial_repository: "nullableString",

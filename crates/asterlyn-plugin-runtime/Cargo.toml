@@ -9,6 +9,7 @@ autotests = false
 [dependencies]
 asterlyn-plugin-runtime-protocol = { path = "../asterlyn-plugin-runtime-protocol" }
 libc.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]

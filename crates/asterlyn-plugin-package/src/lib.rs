@@ -200,6 +200,44 @@ pub fn inspect_package(
         .map_err(|error| AdmissionError::InvalidManifest(error.to_string()))?;
     validate_manifest(&manifest, context, &files)?;
 
+    Ok(report_from(manifest, &files))
+}
+
+/// Revalidates an immutable extracted package immediately before activation.
+///
+/// This deliberately repeats the manifest, compatibility, declared authority, path, and SHA-256
+/// checks performed at download admission. The installation directory is persistent local data,
+/// so admission alone is not sufficient authority to execute it in a later process.
+pub fn inspect_extracted_package(
+    root: &Path,
+    context: &AdmissionContext<'_>,
+) -> Result<AdmissionReport, AdmissionError> {
+    let root = root
+        .canonicalize()
+        .map_err(|error| storage_error("resolve extracted package", error))?;
+    if !root.is_dir() {
+        return Err(AdmissionError::Storage(
+            "extracted package root is not a directory".to_owned(),
+        ));
+    }
+    validate_repository(context.repository)?;
+    let files = read_extracted_files(&root)?;
+    let manifest_file = files
+        .get(MANIFEST_PATH)
+        .ok_or(AdmissionError::MissingManifest)?;
+    if manifest_file.bytes.len() > MAX_MANIFEST_BYTES {
+        return Err(AdmissionError::ManifestTooLarge);
+    }
+    let manifest: PackageManifest = serde_json::from_slice(&manifest_file.bytes)
+        .map_err(|error| AdmissionError::InvalidManifest(error.to_string()))?;
+    validate_manifest(&manifest, context, &files)?;
+    Ok(report_from(manifest, &files))
+}
+
+fn report_from(
+    manifest: PackageManifest,
+    files: &BTreeMap<String, ArchiveFile>,
+) -> AdmissionReport {
     let admitted_files = files
         .iter()
         .map(|(path, file)| AdmittedFile {
@@ -209,7 +247,7 @@ pub fn inspect_package(
         })
         .collect::<Vec<_>>();
     let expanded_bytes = admitted_files.iter().map(|file| file.size).sum();
-    Ok(AdmissionReport {
+    AdmissionReport {
         plugin_id: manifest.id,
         plugin_version: manifest.version,
         repository: manifest.distribution.repository,
@@ -219,7 +257,7 @@ pub fn inspect_package(
         permissions: manifest.permissions,
         files: admitted_files,
         expanded_bytes,
-    })
+    }
 }
 
 /// Expands a package only after the complete admission contract has succeeded.
@@ -330,6 +368,82 @@ fn read_archive(package_bytes: &[u8]) -> Result<BTreeMap<String, ArchiveFile>, A
                 sha256,
             },
         );
+    }
+    Ok(files)
+}
+
+fn read_extracted_files(root: &Path) -> Result<BTreeMap<String, ArchiveFile>, AdmissionError> {
+    let mut files = BTreeMap::new();
+    let mut identities = BTreeSet::new();
+    let mut pending = vec![root.to_path_buf()];
+    let mut entry_count = 0_usize;
+    let mut expanded_bytes = 0_u64;
+    while let Some(directory) = pending.pop() {
+        let entries = fs::read_dir(&directory)
+            .map_err(|error| storage_error("read extracted package directory", error))?;
+        for entry in entries {
+            let entry =
+                entry.map_err(|error| storage_error("read extracted package entry", error))?;
+            entry_count += 1;
+            if entry_count > MAX_ARCHIVE_ENTRIES {
+                return Err(AdmissionError::EntryLimit);
+            }
+            let file_type = entry
+                .file_type()
+                .map_err(|error| storage_error("inspect extracted package entry", error))?;
+            let path = entry.path();
+            if file_type.is_symlink() {
+                return Err(AdmissionError::UnsupportedEntry(
+                    path.to_string_lossy().into_owned(),
+                ));
+            }
+            if file_type.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|_| AdmissionError::InvalidPath(path.to_string_lossy().into_owned()))?;
+            let relative = relative.to_str().ok_or_else(|| {
+                AdmissionError::InvalidPath("non-UTF-8 extracted path".to_owned())
+            })?;
+            let relative = validate_archive_path(relative)?;
+            if !file_type.is_file() {
+                return Err(AdmissionError::UnsupportedEntry(relative));
+            }
+            let metadata = entry
+                .metadata()
+                .map_err(|error| storage_error("inspect extracted package file", error))?;
+            if metadata.len() > MAX_FILE_BYTES {
+                return Err(AdmissionError::FileTooLarge(relative));
+            }
+            expanded_bytes = expanded_bytes
+                .checked_add(metadata.len())
+                .ok_or(AdmissionError::ExpandedSizeLimit)?;
+            if expanded_bytes > MAX_EXPANDED_BYTES {
+                return Err(AdmissionError::ExpandedSizeLimit);
+            }
+            let identity = relative.to_lowercase();
+            if !identities.insert(identity) || files.contains_key(&relative) {
+                return Err(AdmissionError::DuplicatePath(relative));
+            }
+            let bytes = fs::read(&path)
+                .map_err(|error| storage_error("read extracted package file", error))?;
+            if bytes.len() as u64 != metadata.len() {
+                return Err(AdmissionError::Storage(format!(
+                    "extracted package file changed while reading: {relative}"
+                )));
+            }
+            let sha256 = format!("{:x}", Sha256::digest(&bytes));
+            files.insert(
+                relative,
+                ArchiveFile {
+                    bytes,
+                    size: metadata.len(),
+                    sha256,
+                },
+            );
+        }
     }
     Ok(files)
 }
@@ -674,6 +788,41 @@ mod tests {
             RUNTIME
         );
         assert!(extract_admitted_package(&valid_package(), &context(), &destination).is_err());
+    }
+
+    #[test]
+    fn revalidates_extracted_packages_and_rejects_local_tampering() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("admitted");
+        extract_admitted_package(&valid_package(), &context(), &destination).unwrap();
+        let report = inspect_extracted_package(&destination, &context()).unwrap();
+        assert_eq!(report.plugin_id, "dev.asterlyn.example");
+
+        fs::write(
+            destination.join("runtime/plugin.js"),
+            b"export const compromised = true;",
+        )
+        .unwrap();
+        assert!(
+            inspect_extracted_package(&destination, &context())
+                .unwrap_err()
+                .to_string()
+                .contains("SHA-256 mismatch")
+        );
+    }
+
+    #[test]
+    fn rejects_files_added_after_package_admission() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("admitted");
+        extract_admitted_package(&valid_package(), &context(), &destination).unwrap();
+        fs::write(destination.join("injected.js"), b"injected").unwrap();
+        assert!(
+            inspect_extracted_package(&destination, &context())
+                .unwrap_err()
+                .to_string()
+                .contains("integrity table must cover")
+        );
     }
 
     #[test]

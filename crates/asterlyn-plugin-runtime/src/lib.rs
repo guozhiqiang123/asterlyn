@@ -57,7 +57,8 @@ pub struct ActivatedPlugin {
     pub contributions: Vec<RuntimeContribution>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginDiagnostics {
     pub stderr: String,
     pub stderr_truncated: bool,

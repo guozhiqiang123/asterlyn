@@ -22,6 +22,11 @@ import {
   type TransportRecord,
 } from "./desktop-result-validation-primitives.ts";
 import { validatePluginInstallationSnapshot, validatePluginPackageAdmissionReview, validatePluginSourceSnapshot } from "./plugin-marketplace.ts";
+import {
+  validateInstalledPluginActivation,
+  validateInstalledPluginRuntimeDiagnostics,
+  validatePluginRuntimeValue,
+} from "./plugin-runtime.ts";
 
 export function validateDesktopResult<Command extends DesktopCommandName>(
   command: Command,
@@ -31,6 +36,9 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
   if (validator === "pluginSourceSnapshot") return validatePluginSourceSnapshot(value, command) as DesktopCommandMap[Command]["result"];
   if (validator === "pluginInstallationSnapshot") return validatePluginInstallationSnapshot(value, command) as DesktopCommandMap[Command]["result"];
   if (validator === "pluginPackageAdmissionReview") return validatePluginPackageAdmissionReview(value, command) as DesktopCommandMap[Command]["result"];
+  if (validator === "installedPluginActivation") return validateInstalledPluginActivation(value, command) as DesktopCommandMap[Command]["result"];
+  if (validator === "installedPluginRuntimeDiagnostics") return validateInstalledPluginRuntimeDiagnostics(value, command) as DesktopCommandMap[Command]["result"];
+  if (validator === "pluginRuntimeValue") return validatePluginRuntimeValue(value, command) as DesktopCommandMap[Command]["result"];
   if (validatePluginTaskCacheDesktopResult(validator, value)) return value as DesktopCommandMap[Command]["result"];
   if (validateTaskExecutionDesktopResult(validator, value, command)) return value as DesktopCommandMap[Command]["result"];
   switch (validator) {

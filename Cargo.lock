@@ -153,6 +153,7 @@ version = "0.1.0"
 dependencies = [
  "asterlyn-plugin-runtime-protocol",
  "libc",
+ "serde",
  "serde_json",
  "tempfile",
  "windows-sys 0.61.2",

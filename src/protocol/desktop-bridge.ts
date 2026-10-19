@@ -81,6 +81,7 @@ import type { PluginTaskCacheBridge } from "./plugin-task-cache.ts";
 import type { PluginProcessQueryBridge } from "./plugin-process-query.ts";
 import type { PluginToolOperationBridge } from "./plugin-tool-operation.ts";
 import type { PluginMarketplaceBridge } from "./plugin-marketplace.ts";
+import type { InstalledPluginRuntimeBridge } from "./plugin-runtime.ts";
 
 export type DirectoryChoice =
   | { kind: "selected"; path: string }
@@ -494,4 +495,4 @@ export interface GitOperationBridge {
   ): Promise<GitOperationMutationOutcome>;
 }
 
-export type DesktopBridge = AppUpdateBridge & DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge & TerminalBridge & TaskExecutionBridge & TaskArtifactBridge & PluginTaskCacheBridge & PluginProcessQueryBridge & PluginToolOperationBridge & PluginMarketplaceBridge;
+export type DesktopBridge = AppUpdateBridge & DesktopShellBridge & WorkspaceBridge & GitReadBridge & GitOperationBridge & TerminalBridge & TaskExecutionBridge & TaskArtifactBridge & PluginTaskCacheBridge & PluginProcessQueryBridge & PluginToolOperationBridge & PluginMarketplaceBridge & InstalledPluginRuntimeBridge;
