@@ -123,6 +123,8 @@ Commit boundary: staged downloader, admission transaction, storage/index, review
 
 ### MKT5 — Supervised external plugin host
 
+Detailed execution plan: [`external-plugin-runtime-plan.md`](external-plugin-runtime-plan.md).
+
 1. Add the packaged `asterlyn-plugin-host` sidecar with an embedded non-Node JavaScript runtime.
 2. Define protocol-1 framing, handshake, identity, activation, contribution, callback-handle,
    cancellation, diagnostics, and shutdown messages with strict byte/count/time bounds.
