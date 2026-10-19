@@ -3,10 +3,13 @@ use std::io::{self, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use asterlyn_plugin_host::{ExpectedRuntimeIdentity, PluginEngine};
+use asterlyn_plugin_host::{
+    CapabilityCall, CapabilityOutcome, ExpectedRuntimeIdentity, PluginEngine,
+};
 use asterlyn_plugin_runtime_protocol::{
-    ActivationReady, ExpectedPluginIdentity, Hello, OperationError, OperationResult,
-    PluginHostMessage, ProtocolEnvelope, RemoteFailure, ShutdownAck, read_frame, write_frame,
+    ActivationReady, CapabilityRequest, ExpectedPluginIdentity, Hello, OperationError,
+    OperationResult, PluginHostMessage, ProtocolEnvelope, RemoteFailure, ShutdownAck, read_frame,
+    write_frame,
 };
 
 struct HostConfig {
@@ -50,6 +53,7 @@ fn run(config: HostConfig) -> Result<(), String> {
     let mut writer = BufWriter::new(stdout.lock());
     let mut outgoing_sequence = 1_u64;
     let mut incoming_sequence = 0_u64;
+    let mut capability_sequence = 0_u64;
 
     send(
         &mut writer,
@@ -72,7 +76,28 @@ fn run(config: HostConfig) -> Result<(), String> {
         plugin_id: &hello.plugin_id,
         plugin_version: &hello.plugin_version,
     };
-    let (mut engine, ready) = match PluginEngine::activate(&entry, &expected, &activation) {
+    let activated = {
+        let mut exchange = |call: &CapabilityCall| {
+            exchange_capability(
+                call,
+                &activation.workspace_id,
+                activation.workspace_generation,
+                &mut capability_sequence,
+                &mut reader,
+                &mut writer,
+                &mut incoming_sequence,
+                &mut outgoing_sequence,
+            )
+        };
+        PluginEngine::activate_with_capabilities(
+            &entry,
+            &expected,
+            &activation,
+            &ack.capabilities,
+            &mut exchange,
+        )
+    };
+    let (mut engine, ready) = match activated {
         Ok(activated) => activated,
         Err(error) => {
             send(
@@ -98,28 +123,45 @@ fn run(config: HostConfig) -> Result<(), String> {
             return Err("host pipe closed without shutdown".to_owned());
         };
         match envelope.message {
-            PluginHostMessage::Invoke(request) => match engine.invoke(&request) {
-                Ok(payload) => send(
-                    &mut writer,
-                    &mut outgoing_sequence,
-                    PluginHostMessage::InvocationResult(OperationResult {
-                        request_id: request.request_id,
-                        payload,
-                    }),
-                )?,
-                Err(error) => send(
-                    &mut writer,
-                    &mut outgoing_sequence,
-                    PluginHostMessage::InvocationError(OperationError {
-                        request_id: request.request_id,
-                        error: RemoteFailure {
-                            code: "runtime.callback".to_owned(),
-                            message: bounded_error(&error.to_string()),
-                            retryable: false,
-                        },
-                    }),
-                )?,
-            },
+            PluginHostMessage::Invoke(request) => {
+                let result = {
+                    let mut exchange = |call: &CapabilityCall| {
+                        exchange_capability(
+                            call,
+                            &activation.workspace_id,
+                            activation.workspace_generation,
+                            &mut capability_sequence,
+                            &mut reader,
+                            &mut writer,
+                            &mut incoming_sequence,
+                            &mut outgoing_sequence,
+                        )
+                    };
+                    engine.invoke_with_capabilities(&request, &mut exchange)
+                };
+                match result {
+                    Ok(payload) => send(
+                        &mut writer,
+                        &mut outgoing_sequence,
+                        PluginHostMessage::InvocationResult(OperationResult {
+                            request_id: request.request_id,
+                            payload,
+                        }),
+                    )?,
+                    Err(error) => send(
+                        &mut writer,
+                        &mut outgoing_sequence,
+                        PluginHostMessage::InvocationError(OperationError {
+                            request_id: request.request_id,
+                            error: RemoteFailure {
+                                code: "runtime.callback".to_owned(),
+                                message: bounded_error(&error.to_string()),
+                                retryable: false,
+                            },
+                        }),
+                    )?,
+                }
+            }
             PluginHostMessage::Cancel(_) => {
                 // EPR2 callbacks are completed on the engine turn. The EPR3 supervisor owns
                 // cancellation of host capability requests once those can remain in flight.
@@ -136,6 +178,45 @@ fn run(config: HostConfig) -> Result<(), String> {
             }
             _ => return Err("message is invalid while plugin runtime is active".to_owned()),
         }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn exchange_capability(
+    call: &CapabilityCall,
+    workspace_id: &str,
+    workspace_generation: u64,
+    capability_sequence: &mut u64,
+    reader: &mut impl io::Read,
+    writer: &mut impl io::Write,
+    incoming_sequence: &mut u64,
+    outgoing_sequence: &mut u64,
+) -> Result<CapabilityOutcome, String> {
+    *capability_sequence = capability_sequence
+        .checked_add(1)
+        .ok_or_else(|| "capability request sequence overflow".to_owned())?;
+    let request_id = format!("capability-{capability_sequence}");
+    send(
+        writer,
+        outgoing_sequence,
+        PluginHostMessage::CapabilityRequest(CapabilityRequest {
+            request_id: request_id.clone(),
+            workspace_id: workspace_id.to_owned(),
+            workspace_generation,
+            capability: call.capability.clone(),
+            operation: call.operation.clone(),
+            payload: call.payload.clone(),
+        }),
+    )?;
+    let response = receive(reader, incoming_sequence)?;
+    match response.message {
+        PluginHostMessage::CapabilityResult(result) if result.request_id == request_id => {
+            Ok(CapabilityOutcome::Success(result.payload))
+        }
+        PluginHostMessage::CapabilityError(error) if error.request_id == request_id => {
+            Ok(CapabilityOutcome::Failure(error.error.message))
+        }
+        _ => Err("expected matching capability result from parent host".to_owned()),
     }
 }
 

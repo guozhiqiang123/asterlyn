@@ -7,8 +7,8 @@ use asterlyn_plugin_runtime_protocol::{
     Activate, ActivationReady, ContributionKind, Invoke, MAX_CONTRIBUTIONS, PluginHostMessage,
     ProtocolEnvelope, RuntimeContribution,
 };
-use boa_engine::builtins::promise::PromiseState;
-use boa_engine::gc::{Gc, GcRefCell};
+use boa_engine::builtins::promise::{PromiseState, ResolvingFunctions};
+use boa_engine::gc::{Finalize, Gc, GcRefCell, Trace};
 use boa_engine::object::builtins::JsPromise;
 use boa_engine::object::{JsObject, ObjectInitializer};
 use boa_engine::property::{Attribute, PropertyKey};
@@ -22,6 +22,17 @@ const LOOP_ITERATION_LIMIT: u64 = 5_000_000;
 const RECURSION_LIMIT: usize = 256;
 const STACK_SIZE_LIMIT: usize = 8 * 1024;
 const BACKTRACE_LIMIT: usize = 20;
+const MAX_CAPABILITY_REQUESTS_PER_TURN: usize = 64;
+
+const CAPABILITY_METHODS: &[(&str, &[&str])] = &[
+    (
+        "taskCache",
+        &["computeFingerprint", "read", "write", "markDirty"],
+    ),
+    ("notifications", &["publish"]),
+    ("processQueries", &["execute"]),
+    ("workspaceState", &["read", "write"]),
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpectedRuntimeIdentity<'a> {
@@ -35,6 +46,7 @@ pub enum PluginEngineError {
     JavaScript(String),
     Contract(String),
     Callback(String),
+    Capability(String),
 }
 
 impl fmt::Display for PluginEngineError {
@@ -48,6 +60,7 @@ impl fmt::Display for PluginEngineError {
                 write!(formatter, "plugin runtime contract rejected: {message}")
             }
             Self::Callback(message) => write!(formatter, "plugin callback failed: {message}"),
+            Self::Capability(message) => write!(formatter, "plugin capability failed: {message}"),
         }
     }
 }
@@ -60,9 +73,39 @@ struct RuntimeCallback {
     receiver: JsObject,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapabilityCall {
+    pub capability: String,
+    pub operation: String,
+    pub payload: JsonValue,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CapabilityOutcome {
+    Success(JsonValue),
+    Failure(String),
+}
+
+#[derive(Debug, Trace, Finalize)]
+struct PendingCapability {
+    #[unsafe_ignore_trace]
+    call: CapabilityCall,
+    resolvers: ResolvingFunctions,
+}
+
+#[derive(Debug, Trace, Finalize)]
+struct CapabilityBinding {
+    queue: Gc<GcRefCell<Vec<PendingCapability>>>,
+    #[unsafe_ignore_trace]
+    capability: String,
+    #[unsafe_ignore_trace]
+    operation: String,
+}
+
 pub struct PluginEngine {
     context: Context,
     callbacks: BTreeMap<String, RuntimeCallback>,
+    capability_queue: Gc<GcRefCell<Vec<PendingCapability>>>,
 }
 
 impl PluginEngine {
@@ -70,6 +113,21 @@ impl PluginEngine {
         entry: &Path,
         expected: &ExpectedRuntimeIdentity<'_>,
         activation: &Activate,
+    ) -> Result<(Self, ActivationReady), PluginEngineError> {
+        Self::activate_with_capabilities(entry, expected, activation, &[], &mut |call| {
+            Err(format!(
+                "capability exchange is unavailable for {}.{}",
+                call.capability, call.operation
+            ))
+        })
+    }
+
+    pub fn activate_with_capabilities(
+        entry: &Path,
+        expected: &ExpectedRuntimeIdentity<'_>,
+        activation: &Activate,
+        admitted_capabilities: &[String],
+        exchange: &mut impl FnMut(&CapabilityCall) -> Result<CapabilityOutcome, String>,
     ) -> Result<(Self, ActivationReady), PluginEngineError> {
         let source = read_bounded_source(entry)?;
         let mut context = Context::default();
@@ -98,12 +156,22 @@ impl PluginEngine {
 
         let plugin = find_plugin_export(&module, expected, &mut context)?;
         let captured = Gc::new(GcRefCell::new(Vec::<JsObject>::new()));
-        let activation_context =
-            build_activation_context(activation, captured.clone(), &mut context)?;
-        call_activate(&plugin, activation_context, &mut context)?;
-        context
-            .run_jobs()
-            .map_err(|error| js_error("drain activation jobs", error, &mut context))?;
+        let capability_queue = Gc::new(GcRefCell::new(Vec::<PendingCapability>::new()));
+        let activation_context = build_activation_context(
+            activation,
+            admitted_capabilities,
+            captured.clone(),
+            capability_queue.clone(),
+            &mut context,
+        )?;
+        call_activate(
+            &plugin,
+            activation_context,
+            &capability_queue,
+            exchange,
+            &mut context,
+        )?;
+        drain_capabilities(&capability_queue, exchange, &mut context)?;
 
         let contributions = captured.borrow().clone();
         let (contributions, callbacks) = project_contributions(&contributions, &mut context)?;
@@ -112,10 +180,30 @@ impl PluginEngine {
             .validate()
             .map_err(|error| PluginEngineError::Contract(error.to_string()))?;
 
-        Ok((Self { context, callbacks }, ready))
+        Ok((
+            Self {
+                context,
+                callbacks,
+                capability_queue,
+            },
+            ready,
+        ))
     }
 
     pub fn invoke(&mut self, request: &Invoke) -> Result<JsonValue, PluginEngineError> {
+        self.invoke_with_capabilities(request, &mut |call| {
+            Err(format!(
+                "capability exchange is unavailable for {}.{}",
+                call.capability, call.operation
+            ))
+        })
+    }
+
+    pub fn invoke_with_capabilities(
+        &mut self,
+        request: &Invoke,
+        exchange: &mut impl FnMut(&CapabilityCall) -> Result<CapabilityOutcome, String>,
+    ) -> Result<JsonValue, PluginEngineError> {
         ProtocolEnvelope::new(1, PluginHostMessage::Invoke(request.clone()))
             .validate()
             .map_err(|error| PluginEngineError::Callback(error.to_string()))?;
@@ -139,7 +227,7 @@ impl PluginEngine {
             .function
             .call(&callback.receiver.clone().into(), &args, &mut self.context)
             .map_err(|error| js_error("invoke callback", error, &mut self.context))?;
-        let value = settle_value(value, &mut self.context)?;
+        let value = settle_value(value, &self.capability_queue, exchange, &mut self.context)?;
         value
             .to_json(&mut self.context)
             .map_err(|error| js_error("serialize callback result", error, &mut self.context))
@@ -246,7 +334,9 @@ fn read_required_string(
 
 fn build_activation_context(
     activation: &Activate,
+    admitted_capabilities: &[String],
     captured: Gc<GcRefCell<Vec<JsObject>>>,
+    capability_queue: Gc<GcRefCell<Vec<PendingCapability>>>,
     context: &mut Context,
 ) -> Result<JsObject, PluginEngineError> {
     let identity = JsValue::from_json(
@@ -285,7 +375,22 @@ fn build_activation_context(
         captured,
     );
 
-    let activation_context = ObjectInitializer::new(context)
+    let capability_proxies = CAPABILITY_METHODS
+        .iter()
+        .filter(|(capability, _)| {
+            admitted_capabilities
+                .iter()
+                .any(|admitted| admitted == capability)
+        })
+        .map(|(capability, operations)| {
+            (
+                *capability,
+                build_capability_proxy(capability, operations, capability_queue.clone(), context),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut activation_context = ObjectInitializer::new(context);
+    activation_context
         .property(js_string!("identity"), identity, Attribute::READONLY)
         .property(js_string!("evidence"), evidence, Attribute::READONLY)
         .property(
@@ -293,14 +398,67 @@ fn build_activation_context(
             JsString::from(activation.locale.as_str()),
             Attribute::READONLY,
         )
-        .function(contribute, js_string!("contribute"), 1)
-        .build();
-    Ok(activation_context)
+        .function(contribute, js_string!("contribute"), 1);
+    for (capability, proxy) in capability_proxies {
+        activation_context.property(JsString::from(capability), proxy, Attribute::READONLY);
+    }
+    Ok(activation_context.build())
+}
+
+fn build_capability_proxy(
+    capability: &str,
+    operations: &[&str],
+    queue: Gc<GcRefCell<Vec<PendingCapability>>>,
+    context: &mut Context,
+) -> JsObject {
+    let mut proxy = ObjectInitializer::new(context);
+    for operation in operations {
+        let binding = CapabilityBinding {
+            queue: queue.clone(),
+            capability: capability.to_owned(),
+            operation: (*operation).to_owned(),
+        };
+        proxy.function(
+            NativeFunction::from_copy_closure_with_captures(
+                |_, arguments, binding, context| {
+                    if binding.queue.borrow().len() >= MAX_CAPABILITY_REQUESTS_PER_TURN {
+                        return Err(JsNativeError::range()
+                            .with_message("plugin capability request limit exceeded")
+                            .into());
+                    }
+                    let arguments = arguments
+                        .iter()
+                        .map(|argument| {
+                            argument
+                                .to_json(context)
+                                .map(|value| value.unwrap_or(JsonValue::Null))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let (promise, resolvers) = JsPromise::new_pending(context);
+                    binding.queue.borrow_mut().push(PendingCapability {
+                        call: CapabilityCall {
+                            capability: binding.capability.clone(),
+                            operation: binding.operation.clone(),
+                            payload: json!({ "arguments": arguments }),
+                        },
+                        resolvers,
+                    });
+                    Ok(promise.into())
+                },
+                binding,
+            ),
+            JsString::from(*operation),
+            0,
+        );
+    }
+    proxy.build()
 }
 
 fn call_activate(
     plugin: &JsObject,
     activation_context: JsObject,
+    capability_queue: &Gc<GcRefCell<Vec<PendingCapability>>>,
+    exchange: &mut impl FnMut(&CapabilityCall) -> Result<CapabilityOutcome, String>,
     context: &mut Context,
 ) -> Result<(), PluginEngineError> {
     let activate = plugin
@@ -318,7 +476,7 @@ fn call_activate(
             context,
         )
         .map_err(|error| js_error("activate plugin", error, context))?;
-    settle_value(value, context).map(|_| ())
+    settle_value(value, capability_queue, exchange, context).map(|_| ())
 }
 
 fn project_contributions(
@@ -427,26 +585,89 @@ fn invocation_arguments(
         .collect()
 }
 
-fn settle_value(value: JsValue, context: &mut Context) -> Result<JsValue, PluginEngineError> {
+fn settle_value(
+    value: JsValue,
+    capability_queue: &Gc<GcRefCell<Vec<PendingCapability>>>,
+    exchange: &mut impl FnMut(&CapabilityCall) -> Result<CapabilityOutcome, String>,
+    context: &mut Context,
+) -> Result<JsValue, PluginEngineError> {
     let Some(object) = value.as_object() else {
         return Ok(value);
     };
     let Ok(promise) = JsPromise::from_object(object) else {
         return Ok(value);
     };
-    context
-        .run_jobs()
-        .map_err(|error| js_error("drain promise jobs", error, context))?;
-    match promise.state() {
-        PromiseState::Fulfilled(value) => Ok(value),
-        PromiseState::Rejected(reason) => Err(PluginEngineError::JavaScript(format!(
-            "promise rejected: {}",
-            js_value_message(&reason, context)
-        ))),
-        PromiseState::Pending => Err(PluginEngineError::Contract(
-            "plugin promise remained pending without a host request".to_owned(),
-        )),
+    for _ in 0..=MAX_CAPABILITY_REQUESTS_PER_TURN {
+        context
+            .run_jobs()
+            .map_err(|error| js_error("drain promise jobs", error, context))?;
+        match promise.state() {
+            PromiseState::Fulfilled(value) => return Ok(value),
+            PromiseState::Rejected(reason) => {
+                return Err(PluginEngineError::JavaScript(format!(
+                    "promise rejected: {}",
+                    js_value_message(&reason, context)
+                )));
+            }
+            PromiseState::Pending => {}
+        }
+        if !drain_one_capability(capability_queue, exchange, context)? {
+            return Err(PluginEngineError::Contract(
+                "plugin promise remained pending without a host request".to_owned(),
+            ));
+        }
     }
+    Err(PluginEngineError::Capability(
+        "plugin capability request limit exceeded while settling promise".to_owned(),
+    ))
+}
+
+fn drain_capabilities(
+    capability_queue: &Gc<GcRefCell<Vec<PendingCapability>>>,
+    exchange: &mut impl FnMut(&CapabilityCall) -> Result<CapabilityOutcome, String>,
+    context: &mut Context,
+) -> Result<(), PluginEngineError> {
+    for _ in 0..=MAX_CAPABILITY_REQUESTS_PER_TURN {
+        context
+            .run_jobs()
+            .map_err(|error| js_error("drain capability jobs", error, context))?;
+        if !drain_one_capability(capability_queue, exchange, context)? {
+            return Ok(());
+        }
+    }
+    Err(PluginEngineError::Capability(
+        "plugin capability request limit exceeded during activation".to_owned(),
+    ))
+}
+
+fn drain_one_capability(
+    capability_queue: &Gc<GcRefCell<Vec<PendingCapability>>>,
+    exchange: &mut impl FnMut(&CapabilityCall) -> Result<CapabilityOutcome, String>,
+    context: &mut Context,
+) -> Result<bool, PluginEngineError> {
+    let pending = {
+        let mut queue = capability_queue.borrow_mut();
+        if queue.is_empty() {
+            return Ok(false);
+        }
+        queue.remove(0)
+    };
+    let outcome = exchange(&pending.call).map_err(PluginEngineError::Capability)?;
+    let (function, value) = match outcome {
+        CapabilityOutcome::Success(payload) => {
+            let value = JsValue::from_json(&payload, context)
+                .map_err(|error| js_error("convert capability result", error, context))?;
+            (pending.resolvers.resolve.clone(), value)
+        }
+        CapabilityOutcome::Failure(message) => (
+            pending.resolvers.reject.clone(),
+            JsString::from(message.as_str()).into(),
+        ),
+    };
+    function
+        .call(&JsValue::undefined(), &[value], context)
+        .map_err(|error| js_error("settle capability promise", error, context))?;
+    Ok(true)
 }
 
 fn js_error(operation: &str, error: JsError, _context: &mut Context) -> PluginEngineError {
@@ -538,6 +759,76 @@ mod tests {
             })
             .expect("invoke fixture");
         assert_eq!(result, json!({"echoed": "hello"}));
+    }
+
+    #[test]
+    fn capability_proxies_round_trip_during_activation_and_async_callbacks() {
+        let (_directory, entry) = write_fixture(
+            r#"
+            let restored = null;
+            export const FIXTURE = Object.freeze({
+              id: "dev.asterlyn.fixture",
+              version: "1.0.0",
+              activate(context) {
+                context.workspaceState.read("selected").then((value) => { restored = value; });
+                context.contribute({
+                  kind: "command",
+                  id: "fixture.query",
+                  async execute() {
+                    const result = await context.processQueries.execute("fixture.query");
+                    return { restored, result };
+                  },
+                });
+              },
+            });
+            "#,
+        );
+        let mut activation_calls = Vec::new();
+        let (mut engine, ready) = PluginEngine::activate_with_capabilities(
+            &entry,
+            &ExpectedRuntimeIdentity {
+                plugin_id: "dev.asterlyn.fixture",
+                plugin_version: "1.0.0",
+            },
+            &activation(),
+            &["workspaceState".to_owned(), "processQueries".to_owned()],
+            &mut |call| {
+                activation_calls.push(call.clone());
+                Ok(CapabilityOutcome::Success(json!("restored-id")))
+            },
+        )
+        .expect("activate fixture with capability proxy");
+        assert_eq!(activation_calls.len(), 1);
+        assert_eq!(activation_calls[0].capability, "workspaceState");
+        assert_eq!(activation_calls[0].operation, "read");
+        assert_eq!(
+            activation_calls[0].payload,
+            json!({"arguments": ["selected"]})
+        );
+
+        let callback = ready.contributions[0].callbacks["execute"].clone();
+        let mut callback_calls = Vec::new();
+        let result = engine
+            .invoke_with_capabilities(
+                &Invoke {
+                    request_id: "request-1".to_owned(),
+                    callback_handle: callback,
+                    operation: "execute".to_owned(),
+                    payload: json!({"arguments": []}),
+                },
+                &mut |call| {
+                    callback_calls.push(call.clone());
+                    Ok(CapabilityOutcome::Success(json!({"status": "succeeded"})))
+                },
+            )
+            .expect("invoke fixture with capability proxy");
+        assert_eq!(callback_calls.len(), 1);
+        assert_eq!(callback_calls[0].capability, "processQueries");
+        assert_eq!(callback_calls[0].operation, "execute");
+        assert_eq!(
+            result,
+            json!({"restored": "restored-id", "result": {"status": "succeeded"}})
+        );
     }
 
     #[test]

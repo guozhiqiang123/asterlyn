@@ -2,8 +2,8 @@ use std::fs;
 use std::process::{Command, Stdio};
 
 use asterlyn_plugin_runtime_protocol::{
-    Activate, HelloAck, HostTheme, Invoke, PluginHostMessage, ProtocolEnvelope, Shutdown,
-    ShutdownReason, read_frame, write_frame,
+    Activate, HelloAck, HostTheme, Invoke, OperationResult, PluginHostMessage, ProtocolEnvelope,
+    Shutdown, ShutdownReason, read_frame, write_frame,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -16,14 +16,19 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
     fs::write(
         runtime_directory.join("plugin.js"),
         r#"
+        let restored = null;
         export const FIXTURE = {
           id: "dev.asterlyn.fixture",
           version: "1.0.0",
-          activate(context) {
+          async activate(context) {
+            restored = await context.workspaceState.read("selected");
             context.contribute({
               kind: "command",
               id: "fixture.echo",
-              execute(value) { return { value, isolated: typeof process === "undefined" }; },
+              async execute(value) {
+                const query = await context.processQueries.execute("fixture.query");
+                return { value, restored, query, isolated: typeof process === "undefined" };
+              },
             });
           },
         };
@@ -63,7 +68,7 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
             1,
             PluginHostMessage::HelloAck(HelloAck {
                 session_id: "session-1".to_owned(),
-                capabilities: vec!["commands".to_owned()],
+                capabilities: vec!["processQueries".to_owned(), "workspaceState".to_owned()],
                 permissions: vec![],
             }),
         ),
@@ -86,9 +91,34 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
     )
     .expect("write activation");
 
-    let ready = read_frame(&mut output)
+    let activation_request = read_frame(&mut output)
         .expect("read activation")
         .expect("activation frame");
+    let PluginHostMessage::CapabilityRequest(activation_request) = activation_request.message
+    else {
+        panic!("expected activation capability request")
+    };
+    assert_eq!(activation_request.capability, "workspaceState");
+    assert_eq!(activation_request.operation, "read");
+    assert_eq!(
+        activation_request.payload,
+        json!({"arguments": ["selected"]})
+    );
+    write_frame(
+        &mut input,
+        &ProtocolEnvelope::new(
+            3,
+            PluginHostMessage::CapabilityResult(OperationResult {
+                request_id: activation_request.request_id,
+                payload: json!("restored-id"),
+            }),
+        ),
+    )
+    .expect("write activation capability result");
+
+    let ready = read_frame(&mut output)
+        .expect("read activation ready")
+        .expect("activation ready frame");
     let PluginHostMessage::ActivationReady(ready) = ready.message else {
         panic!("expected activationReady")
     };
@@ -98,7 +128,7 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
     write_frame(
         &mut input,
         &ProtocolEnvelope::new(
-            3,
+            4,
             PluginHostMessage::Invoke(Invoke {
                 request_id: "request-1".to_owned(),
                 callback_handle: callback,
@@ -108,18 +138,46 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
         ),
     )
     .expect("write invocation");
-    let result = read_frame(&mut output)
+    let callback_request = read_frame(&mut output)
         .expect("read result")
         .expect("result frame");
+    let PluginHostMessage::CapabilityRequest(callback_request) = callback_request.message else {
+        panic!("expected callback capability request")
+    };
+    assert_eq!(callback_request.capability, "processQueries");
+    assert_eq!(callback_request.operation, "execute");
+    write_frame(
+        &mut input,
+        &ProtocolEnvelope::new(
+            5,
+            PluginHostMessage::CapabilityResult(OperationResult {
+                request_id: callback_request.request_id,
+                payload: json!({"status": "succeeded"}),
+            }),
+        ),
+    )
+    .expect("write callback capability result");
+
+    let result = read_frame(&mut output)
+        .expect("read invocation result")
+        .expect("invocation result frame");
     let PluginHostMessage::InvocationResult(result) = result.message else {
         panic!("expected invocationResult")
     };
-    assert_eq!(result.payload, json!({"value": "hello", "isolated": true}));
+    assert_eq!(
+        result.payload,
+        json!({
+            "value": "hello",
+            "restored": "restored-id",
+            "query": {"status": "succeeded"},
+            "isolated": true
+        })
+    );
 
     write_frame(
         &mut input,
         &ProtocolEnvelope::new(
-            4,
+            6,
             PluginHostMessage::Shutdown(Shutdown {
                 reason: ShutdownReason::ApplicationExit,
             }),
