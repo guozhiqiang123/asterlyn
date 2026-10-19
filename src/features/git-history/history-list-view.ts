@@ -82,12 +82,14 @@ export class GitHistoryListView {
     host.addEventListener("click", this.handleClick);
     host.addEventListener("keydown", this.handleKeydown);
     host.addEventListener("scroll", this.handleScroll, { passive: true });
+    host.addEventListener("wheel", this.handleWheel, { passive: true });
   }
 
   unmount(): void {
     this.host?.removeEventListener("click", this.handleClick);
     this.host?.removeEventListener("keydown", this.handleKeydown);
     this.host?.removeEventListener("scroll", this.handleScroll);
+    this.host?.removeEventListener("wheel", this.handleWheel);
     this.host = null;
     this.actions = null;
     this.presentation = null;
@@ -245,6 +247,11 @@ export class GitHistoryListView {
       this.renderFrame = null;
       this.renderCurrentWindow();
     });
+  };
+
+  private readonly handleWheel = (event: WheelEvent): void => {
+    if (!this.host || event.deltaY <= 0) return;
+    this.actions?.scroll(this.host);
   };
 }
 

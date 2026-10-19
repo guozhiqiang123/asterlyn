@@ -109,6 +109,8 @@ test("virtual History updates preserve the native scrolling host", async () => {
   assert.match(source, /this\.projection = historyListProjection\(presentation\)/u);
   assert.match(source, /presentation\.hasMore \|\| this\.projection\.entries\.length > HISTORY_MOUNT_LIMIT/u);
   assert.match(source, /renderHistoryList\(this\.presentation, window, this\.projection\)/u);
+  assert.match(source, /addEventListener\("wheel", this\.handleWheel/u);
+  assert.match(source, /event\.deltaY <= 0/u);
   assert.doesNotMatch(source, /this\.host\.scrollTop\s*=\s*scrollTop/u);
   assert.doesNotMatch(source, /this\.host\.scrollLeft\s*=\s*scrollLeft/u);
 });
