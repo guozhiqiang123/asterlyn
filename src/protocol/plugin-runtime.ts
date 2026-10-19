@@ -9,6 +9,17 @@ export type PluginRuntimeValue =
   | readonly PluginRuntimeValue[]
   | { readonly [key: string]: PluginRuntimeValue };
 
+export interface PluginRuntimeCallbackReference {
+  readonly $asterlynCallback: {
+    readonly handle: string;
+    readonly operation: string;
+  };
+}
+
+const REMOTE_CALLBACK_MARKER = "$asterlynCallback";
+const MAX_RUNTIME_VALUE_DEPTH = 32;
+const MAX_CALLBACKS_PER_RESULT = 64;
+
 export type PluginRuntimeTheme = "light" | "dark" | "highContrast";
 export type ExternalPluginContributionKind =
   | "command"
@@ -81,7 +92,7 @@ export function validateInstalledPluginActivation(
     assertNonEmptyString(contribution.id, command, "contribution.id");
     assert(!ids.has(contribution.id), command, "duplicate runtime contribution ID");
     ids.add(contribution.id);
-    validateRuntimeValue(contribution.payload, command, 0);
+    validateRuntimeValue(contribution.payload, command, 0, false, new Set());
     assert(isRecord(contribution.callbacks), command, "contribution callbacks must be a record");
     assert(Object.keys(contribution.callbacks).length <= 32, command, "too many contribution callbacks");
     for (const [operation, handle] of Object.entries(contribution.callbacks)) {
@@ -119,12 +130,18 @@ export function validatePluginRuntimeValue(
   value: unknown,
   command: DesktopCommandName,
 ): PluginRuntimeValue {
-  validateRuntimeValue(value, command, 0);
+  validateRuntimeValue(value, command, 0, true, new Set());
   return value as PluginRuntimeValue;
 }
 
-function validateRuntimeValue(value: unknown, command: DesktopCommandName, depth: number): void {
-  assert(depth <= 32, command, "runtime value nesting is too deep");
+function validateRuntimeValue(
+  value: unknown,
+  command: DesktopCommandName,
+  depth: number,
+  allowRemoteCallbacks: boolean,
+  callbackHandles: Set<string>,
+): void {
+  assert(depth <= MAX_RUNTIME_VALUE_DEPTH, command, "runtime value nesting is too deep");
   if (value === null || typeof value === "boolean" || typeof value === "string") return;
   if (typeof value === "number") {
     assert(Number.isFinite(value), command, "runtime number must be finite");
@@ -132,16 +149,56 @@ function validateRuntimeValue(value: unknown, command: DesktopCommandName, depth
   }
   if (Array.isArray(value)) {
     assert(value.length <= 65_536, command, "runtime array is too large");
-    for (const item of value) validateRuntimeValue(item, command, depth + 1);
+    for (const item of value) {
+      validateRuntimeValue(item, command, depth + 1, allowRemoteCallbacks, callbackHandles);
+    }
     return;
   }
   assert(isRecord(value), command, "runtime value must be JSON-compatible");
   const entries = Object.entries(value);
   assert(entries.length <= 65_536, command, "runtime object is too large");
+  if (Object.hasOwn(value, REMOTE_CALLBACK_MARKER)) {
+    assert(allowRemoteCallbacks, command, "remote callback references are not allowed here");
+    assert(entries.length === 1, command, "remote callback reference must not have sibling fields");
+    const reference = record(value[REMOTE_CALLBACK_MARKER], command);
+    assert(
+      Object.keys(reference).length === 2 &&
+      Object.hasOwn(reference, "handle") &&
+      Object.hasOwn(reference, "operation"),
+      command,
+      "remote callback reference has an invalid shape",
+    );
+    assertRuntimeIdentifier(reference.handle, command, "remote callback handle", true);
+    assertRuntimeIdentifier(reference.operation, command, "remote callback operation", false);
+    assert(
+      callbackHandles.size < MAX_CALLBACKS_PER_RESULT,
+      command,
+      "too many remote callback references",
+    );
+    assert(!callbackHandles.has(reference.handle), command, "duplicate remote callback handle");
+    callbackHandles.add(reference.handle);
+    return;
+  }
   for (const [key, item] of entries) {
     assert(key.length <= 4_096, command, "runtime object key is too long");
-    validateRuntimeValue(item, command, depth + 1);
+    validateRuntimeValue(item, command, depth + 1, allowRemoteCallbacks, callbackHandles);
   }
+}
+
+function assertRuntimeIdentifier(
+  value: unknown,
+  command: DesktopCommandName,
+  field: string,
+  allowPathSeparators: boolean,
+): asserts value is string {
+  assert(
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 128 &&
+    (allowPathSeparators ? /^[A-Za-z0-9._:/-]+$/u : /^[A-Za-z0-9._-]+$/u).test(value),
+    command,
+    `${field} has an invalid format`,
+  );
 }
 
 function assertNonEmptyString(

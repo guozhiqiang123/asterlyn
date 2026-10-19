@@ -12,6 +12,9 @@ pub const MAX_IDENTIFIER_BYTES: usize = 128;
 pub const MAX_DIAGNOSTIC_BYTES: usize = 4 * 1024;
 pub const MAX_CONTRIBUTIONS: usize = 64;
 pub const MAX_CALLBACKS_PER_CONTRIBUTION: usize = 32;
+pub const MAX_CALLBACKS_PER_RESULT: usize = 64;
+pub const MAX_RUNTIME_VALUE_DEPTH: usize = 32;
+pub const REMOTE_CALLBACK_MARKER: &str = "$asterlynCallback";
 pub const MAX_LIST_ITEMS: usize = 64;
 const MAX_VERSION_BYTES: usize = 64;
 const MAX_RUNTIME_ENTRY_BYTES: usize = 512;
@@ -78,7 +81,8 @@ impl PluginHostMessage {
             Self::ActivationReady(message) => message.validate(),
             Self::ActivationFailed(message) => message.validate(),
             Self::Invoke(message) => message.validate(),
-            Self::InvocationResult(message) | Self::CapabilityResult(message) => message.validate(),
+            Self::InvocationResult(message) => message.validate(true),
+            Self::CapabilityResult(message) => message.validate(false),
             Self::InvocationError(message) | Self::CapabilityError(message) => message.validate(),
             Self::CapabilityRequest(message) => message.validate(),
             Self::Event(message) => message.validate(),
@@ -226,6 +230,7 @@ impl RuntimeContribution {
             validate_name("callback operation", operation)?;
             validate_identifier("callback handle", handle)?;
         }
+        validate_runtime_value(&self.payload, false)?;
         validate_json_size(
             "contribution payload",
             &self.payload,
@@ -257,6 +262,7 @@ impl Invoke {
         validate_identifier("requestId", &self.request_id)?;
         validate_identifier("callbackHandle", &self.callback_handle)?;
         validate_name("operation", &self.operation)?;
+        validate_runtime_value(&self.payload, false)?;
         validate_json_size("invoke payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
 }
@@ -283,6 +289,7 @@ impl CapabilityRequest {
         }
         validate_name("capability", &self.capability)?;
         validate_name("operation", &self.operation)?;
+        validate_runtime_value(&self.payload, false)?;
         validate_json_size("capability payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
 }
@@ -295,10 +302,24 @@ pub struct OperationResult {
 }
 
 impl OperationResult {
-    fn validate(&self) -> Result<(), ProtocolError> {
+    fn validate(&self, allow_remote_callbacks: bool) -> Result<(), ProtocolError> {
         validate_identifier("requestId", &self.request_id)?;
+        validate_runtime_value(&self.payload, allow_remote_callbacks)?;
         validate_json_size("result payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteCallbackReference {
+    pub handle: String,
+    pub operation: String,
+}
+
+pub fn remote_callback_value(handle: String, operation: String) -> JsonValue {
+    serde_json::json!({
+        REMOTE_CALLBACK_MARKER: RemoteCallbackReference { handle, operation }
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,6 +346,7 @@ pub struct Event {
 impl Event {
     fn validate(&self) -> Result<(), ProtocolError> {
         validate_identifier("subscriptionHandle", &self.subscription_handle)?;
+        validate_runtime_value(&self.payload, false)?;
         validate_json_size("event payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
 }
@@ -671,6 +693,79 @@ fn validate_json_size(
     Ok(())
 }
 
+fn validate_runtime_value(
+    value: &JsonValue,
+    allow_remote_callbacks: bool,
+) -> Result<(), ProtocolError> {
+    let mut callback_handles = BTreeSet::new();
+    validate_runtime_value_at_depth(value, allow_remote_callbacks, 0, &mut callback_handles)
+}
+
+fn validate_runtime_value_at_depth(
+    value: &JsonValue,
+    allow_remote_callbacks: bool,
+    depth: usize,
+    callback_handles: &mut BTreeSet<String>,
+) -> Result<(), ProtocolError> {
+    if depth > MAX_RUNTIME_VALUE_DEPTH {
+        return Err(ProtocolError::LimitExceeded("runtime value depth"));
+    }
+    match value {
+        JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) | JsonValue::String(_) => {
+            Ok(())
+        }
+        JsonValue::Array(items) => {
+            for item in items {
+                validate_runtime_value_at_depth(
+                    item,
+                    allow_remote_callbacks,
+                    depth + 1,
+                    callback_handles,
+                )?;
+            }
+            Ok(())
+        }
+        JsonValue::Object(object) => {
+            if let Some(reference) = object.get(REMOTE_CALLBACK_MARKER) {
+                if !allow_remote_callbacks {
+                    return Err(ProtocolError::InvalidField(
+                        "remote callback references are not allowed in this payload".to_owned(),
+                    ));
+                }
+                if object.len() != 1 {
+                    return Err(ProtocolError::InvalidField(
+                        "remote callback reference must not contain sibling fields".to_owned(),
+                    ));
+                }
+                let reference: RemoteCallbackReference = serde_json::from_value(reference.clone())
+                    .map_err(|error| {
+                        ProtocolError::InvalidField(format!(
+                            "remote callback reference is invalid: {error}"
+                        ))
+                    })?;
+                validate_identifier("remote callback handle", &reference.handle)?;
+                validate_name("remote callback operation", &reference.operation)?;
+                if callback_handles.len() >= MAX_CALLBACKS_PER_RESULT {
+                    return Err(ProtocolError::LimitExceeded("result callbacks"));
+                }
+                if !callback_handles.insert(reference.handle.clone()) {
+                    return Err(ProtocolError::DuplicateIdentifier(reference.handle));
+                }
+                return Ok(());
+            }
+            for item in object.values() {
+                validate_runtime_value_at_depth(
+                    item,
+                    allow_remote_callbacks,
+                    depth + 1,
+                    callback_handles,
+                )?;
+            }
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -863,6 +958,65 @@ mod tests {
         assert!(matches!(
             excessive_callbacks.validate(),
             Err(ProtocolError::LimitExceeded("contribution callbacks"))
+        ));
+    }
+
+    #[test]
+    fn invocation_results_accept_only_exact_bounded_remote_callback_references() {
+        let result = OperationResult {
+            request_id: "request-1".to_owned(),
+            payload: serde_json::json!({
+                "plan": {
+                    "apply": remote_callback_value("callback-9".to_owned(), "apply".to_owned())
+                }
+            }),
+        };
+        result.validate(true).expect("valid remote callback");
+        assert!(matches!(
+            result.validate(false),
+            Err(ProtocolError::InvalidField(message))
+                if message.contains("not allowed")
+        ));
+
+        let duplicate = OperationResult {
+            request_id: "request-2".to_owned(),
+            payload: serde_json::json!([
+                remote_callback_value("callback-9".to_owned(), "apply".to_owned()),
+                remote_callback_value("callback-9".to_owned(), "dispose".to_owned())
+            ]),
+        };
+        assert!(matches!(
+            duplicate.validate(true),
+            Err(ProtocolError::DuplicateIdentifier(identifier)) if identifier == "callback-9"
+        ));
+
+        let sibling = OperationResult {
+            request_id: "request-3".to_owned(),
+            payload: serde_json::json!({
+                REMOTE_CALLBACK_MARKER: { "handle": "callback-1", "operation": "apply" },
+                "unexpected": true
+            }),
+        };
+        assert!(matches!(
+            sibling.validate(true),
+            Err(ProtocolError::InvalidField(message))
+                if message.contains("sibling")
+        ));
+    }
+
+    #[test]
+    fn runtime_values_reject_excessive_nesting() {
+        let mut payload = JsonValue::Null;
+        for _ in 0..=MAX_RUNTIME_VALUE_DEPTH {
+            payload = serde_json::json!([payload]);
+        }
+        let result = OperationResult {
+            request_id: "request-1".to_owned(),
+            payload,
+        };
+        assert!(matches!(
+            result.validate(true),
+            Err(ProtocolError::LimitExceeded("runtime value depth"))
         ));
     }
 

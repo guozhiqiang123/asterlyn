@@ -74,6 +74,30 @@ test("external plugin runtime results validate transactional contributions", () 
     () => validateDesktopResult("invoke_installed_plugin_callback", { value: Infinity }),
     /runtime number must be finite/u,
   );
+  const callbackResult = {
+    request: { executable: "gradlew" },
+    apply: {
+      $asterlynCallback: { handle: "callback-2", operation: "apply" },
+    },
+  };
+  assert.deepEqual(
+    validateDesktopResult("invoke_installed_plugin_callback", callbackResult),
+    callbackResult,
+  );
+  assert.throws(
+    () => validateDesktopResult("invoke_installed_plugin_callback", {
+      $asterlynCallback: { handle: "callback-2", operation: "apply" },
+      extra: true,
+    }),
+    /must not have sibling fields/u,
+  );
+  assert.throws(
+    () => validateDesktopResult("invoke_installed_plugin_callback", [
+      { $asterlynCallback: { handle: "callback-2", operation: "apply" } },
+      { $asterlynCallback: { handle: "callback-2", operation: "dispose" } },
+    ]),
+    /duplicate remote callback handle/u,
+  );
 });
 
 test("historical file reads remain wired through the native command boundary", async () => {
