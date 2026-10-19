@@ -155,6 +155,17 @@ test("installed plugin manifests are identity-bound and structurally validated",
       "settings.compact": "Compact",
     } } },
     settings: [{ id: "mode", kind: "enum", labelKey: "settings.mode", defaultValue: "compact", options: [{ value: "compact", labelKey: "settings.compact" }] }],
+    processQueries: [{
+      id: "fixture.version", args: ["--version"], timeoutMs: 1_000, maxOutputBytes: 1_024,
+      executables: [{ type: "path", name: "fixture-tool" }],
+    }],
+    toolOperations: [{
+      id: "fixture.inspect", intent: "query",
+      args: [{ type: "literal", value: "inspect" }, { type: "parameter", name: "artifact" }],
+      parameters: [{ name: "artifact", kind: "workspaceArtifact", suffixes: [".apk"] }],
+      timeoutMs: 1_000, maxOutputBytes: 1_024,
+      executables: [{ type: "path", name: "fixture-tool" }],
+    }],
   };
   const snapshot = {
     schemaVersion: 1,
@@ -181,6 +192,16 @@ test("installed plugin manifests are identity-bound and structurally validated",
       manifests: [{ ...snapshot.manifests[0], error: "also failed" }],
     }),
     /data or a diagnostic/u,
+  );
+  assert.throws(
+    () => validateDesktopResult("list_installed_plugin_manifests", {
+      ...snapshot,
+      manifests: [{
+        ...snapshot.manifests[0],
+        manifest: { ...manifest, processQueries: [{ ...manifest.processQueries[0], executables: [] }] },
+      }],
+    }),
+    /executable/u,
   );
 });
 

@@ -8,6 +8,14 @@ use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod tool_authority;
+
+pub use tool_authority::{
+    ProcessExecutableCandidate, ProcessQuery, ToolOperation, ToolOperationArgument,
+    ToolOperationParameter,
+};
+use tool_authority::{validate_process_queries, validate_tool_operations};
+
 pub const PACKAGE_SCHEMA_VERSION: u32 = 2;
 pub const PACKAGE_ASSET_SUFFIX: &str = ".asterlyn-plugin.tgz";
 pub const MAX_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
@@ -84,6 +92,10 @@ pub struct AdmittedPluginManifest {
     pub task_authorization: Option<TaskAuthorization>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_tool: Option<WorkspaceTool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub process_queries: Vec<ProcessQuery>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tool_operations: Vec<ToolOperation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -166,6 +178,10 @@ struct PackageManifest {
     task_authorization: Option<TaskAuthorization>,
     #[serde(default)]
     workspace_tool: Option<WorkspaceTool>,
+    #[serde(default)]
+    process_queries: Vec<ProcessQuery>,
+    #[serde(default)]
+    tool_operations: Vec<ToolOperation>,
     capabilities: Vec<String>,
     #[serde(default)]
     permissions: Vec<String>,
@@ -362,6 +378,8 @@ fn report_from(
         settings: manifest.settings,
         task_authorization: manifest.task_authorization,
         workspace_tool: manifest.workspace_tool,
+        process_queries: manifest.process_queries,
+        tool_operations: manifest.tool_operations,
     };
     AdmissionReport {
         plugin_id: manifest.id,
@@ -656,7 +674,39 @@ fn validate_manifest(
         context.supported_permissions,
         "permission",
     )?;
+    require_declared_authority(
+        !manifest.process_queries.is_empty(),
+        &manifest.capabilities,
+        "processQueries",
+        &manifest.permissions,
+        "host.process.query",
+    )?;
+    require_declared_authority(
+        !manifest.tool_operations.is_empty(),
+        &manifest.capabilities,
+        "toolOperations",
+        &manifest.permissions,
+        "host.tool.execute",
+    )?;
     validate_integrity(&manifest.distribution.integrity, files)?;
+    Ok(())
+}
+
+fn require_declared_authority(
+    present: bool,
+    capabilities: &[String],
+    capability: &str,
+    permissions: &[String],
+    permission: &str,
+) -> Result<(), AdmissionError> {
+    if present
+        && (!capabilities.iter().any(|value| value == capability)
+            || !permissions.iter().any(|value| value == permission))
+    {
+        return Err(contract(format!(
+            "{capability} declarations require {permission}"
+        )));
+    }
     Ok(())
 }
 
@@ -795,6 +845,9 @@ fn validate_management_manifest(manifest: &PackageManifest) -> Result<(), Admiss
             return Err(contract("workspace tool default view is missing"));
         }
     }
+
+    validate_process_queries(&manifest.process_queries)?;
+    validate_tool_operations(&manifest.tool_operations)?;
 
     if referenced
         .into_iter()
@@ -1001,8 +1054,12 @@ mod tests {
             host_version: "0.1.11",
             sdk_major: 1,
             runtime_protocol: 1,
-            supported_capabilities: &["tasks"],
-            supported_permissions: &["host.tasks.execute"],
+            supported_capabilities: &["tasks", "processQueries", "toolOperations"],
+            supported_permissions: &[
+                "host.tasks.execute",
+                "host.process.query",
+                "host.tool.execute",
+            ],
         }
     }
 
@@ -1115,6 +1172,75 @@ mod tests {
             inspect_package(&package, &context()),
             Err(AdmissionError::Contract(message))
                 if message.contains("default is not an option")
+        ));
+    }
+
+    #[test]
+    fn projects_bounded_native_tool_authority() {
+        let declared = manifest(|value| {
+            value["capabilities"] = json!(["tasks", "processQueries", "toolOperations"]);
+            value["permissions"] = json!([
+                "host.tasks.execute",
+                "host.process.query",
+                "host.tool.execute"
+            ]);
+            value["processQueries"] = json!([{
+                "id": "fixture.version",
+                "args": ["--version"],
+                "timeoutMs": 1000,
+                "maxOutputBytes": 1024,
+                "executables": [{ "type": "path", "name": "fixture-tool" }]
+            }]);
+            value["toolOperations"] = json!([{
+                "id": "fixture.inspect",
+                "intent": "query",
+                "args": [
+                    { "type": "literal", "value": "inspect" },
+                    { "type": "parameter", "name": "artifact" }
+                ],
+                "parameters": [{
+                    "name": "artifact",
+                    "kind": "workspaceArtifact",
+                    "suffixes": [".apk"]
+                }],
+                "timeoutMs": 1000,
+                "maxOutputBytes": 1024,
+                "executables": [{ "type": "path", "name": "fixture-tool" }]
+            }]);
+        });
+        let package = archive(&[
+            (MANIFEST_PATH, &declared, EntryType::Regular),
+            ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+            ("LICENSE", LICENSE, EntryType::Regular),
+        ]);
+        let report = inspect_package(&package, &context()).unwrap();
+        assert_eq!(
+            report.management_manifest.process_queries[0].id,
+            "fixture.version"
+        );
+        assert_eq!(
+            report.management_manifest.tool_operations[0].id,
+            "fixture.inspect"
+        );
+
+        let undeclared_permission = manifest(|value| {
+            value["capabilities"] = json!(["tasks", "processQueries"]);
+            value["processQueries"] = json!([{
+                "id": "fixture.version",
+                "args": [],
+                "timeoutMs": 1000,
+                "maxOutputBytes": 1024,
+                "executables": [{ "type": "path", "name": "fixture-tool" }]
+            }]);
+        });
+        let package = archive(&[
+            (MANIFEST_PATH, &undeclared_permission, EntryType::Regular),
+            ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+            ("LICENSE", LICENSE, EntryType::Regular),
+        ]);
+        assert!(matches!(
+            inspect_package(&package, &context()),
+            Err(AdmissionError::Contract(message)) if message.contains("host.process.query")
         ));
     }
 

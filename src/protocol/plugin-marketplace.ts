@@ -229,6 +229,93 @@ function validateManagementManifest(value: unknown, entry: Record<string, unknow
     }
     assert(views.has(tool.defaultView), command, "installed workspace tool default view is missing");
   }
+  validateProcessQueries(manifest.processQueries, command);
+  validateToolOperations(manifest.toolOperations, command);
+}
+
+function validateProcessQueries(value: unknown, command: DesktopCommandName): void {
+  if (value === undefined) return;
+  assert(Array.isArray(value) && value.length <= 32, command, "invalid installed process queries");
+  const ids = new Set<string>();
+  for (const rawQuery of value) {
+    const query = record(rawQuery, command);
+    assert(validManifestText(query.id) && !ids.has(query.id), command, "invalid installed process query ID");
+    ids.add(query.id);
+    validateProcessLimits(query, command, 60_000);
+  }
+}
+
+function validateToolOperations(value: unknown, command: DesktopCommandName): void {
+  if (value === undefined) return;
+  assert(Array.isArray(value) && value.length <= 32, command, "invalid installed tool operations");
+  const ids = new Set<string>();
+  for (const rawOperation of value) {
+    const operation = record(rawOperation, command);
+    assert(validManifestText(operation.id) && !ids.has(operation.id), command, "invalid installed tool operation ID");
+    ids.add(operation.id);
+    assert(operation.intent === "query" || operation.intent === "mutation", command, "invalid installed tool operation intent");
+    assert(Array.isArray(operation.parameters) && operation.parameters.length <= 16, command, "invalid installed tool parameters");
+    const parameters = new Set<string>();
+    for (const rawParameter of operation.parameters) {
+      const parameter = record(rawParameter, command);
+      assert(validManifestText(parameter.name) && !parameters.has(parameter.name), command, "invalid installed tool parameter name");
+      parameters.add(parameter.name);
+      assert(["executionTargetId", "androidApplicationId", "androidComponent", "workspaceArtifact"].includes(String(parameter.kind)), command, "invalid installed tool parameter kind");
+      if (parameter.kind === "workspaceArtifact") {
+        assert(Array.isArray(parameter.suffixes) && parameter.suffixes.length > 0 && parameter.suffixes.length <= 8, command, "invalid installed artifact suffixes");
+        assert(parameter.suffixes.every((suffix) => typeof suffix === "string" && /^\.[a-z0-9]+$/u.test(suffix) && suffix.length <= 32), command, "invalid installed artifact suffix");
+      } else {
+        assert(parameter.suffixes === undefined, command, "unexpected installed tool parameter suffixes");
+      }
+    }
+    assert(Array.isArray(operation.args) && operation.args.length <= 64, command, "invalid installed tool arguments");
+    const referenced = new Set<string>();
+    for (const rawArgument of operation.args) {
+      const argument = record(rawArgument, command);
+      if (argument.type === "literal") {
+        assert(typeof argument.value === "string" && argument.value.length <= 1_024 && !argument.value.includes("\0"), command, "invalid installed tool literal");
+      } else {
+        assert(argument.type === "parameter" && typeof argument.name === "string" && parameters.has(argument.name), command, "invalid installed tool parameter reference");
+        referenced.add(argument.name);
+      }
+    }
+    assert(referenced.size === parameters.size, command, "unused installed tool parameter");
+    validateProcessLimits(operation, command, 300_000, false);
+  }
+}
+
+function validateProcessLimits(
+  declaration: Record<string, unknown>,
+  command: DesktopCommandName,
+  maximumTimeout: number,
+  validateArgs = true,
+): void {
+  if (validateArgs) {
+    assert(Array.isArray(declaration.args) && declaration.args.length <= 64, command, "invalid installed process arguments");
+    assert(declaration.args.every((argument) => typeof argument === "string" && argument.length <= 1_024 && !argument.includes("\0")), command, "invalid installed process argument");
+  }
+  assert(typeof declaration.timeoutMs === "number" && Number.isSafeInteger(declaration.timeoutMs) && declaration.timeoutMs > 0 && declaration.timeoutMs <= maximumTimeout, command, "invalid installed process timeout");
+  assert(typeof declaration.maxOutputBytes === "number" && Number.isSafeInteger(declaration.maxOutputBytes) && declaration.maxOutputBytes > 0 && declaration.maxOutputBytes <= 1_048_576, command, "invalid installed process output limit");
+  assert(Array.isArray(declaration.executables) && declaration.executables.length > 0, command, "missing installed process executable");
+  for (const rawCandidate of declaration.executables) {
+    const candidate = record(rawCandidate, command);
+    if (candidate.type === "environment") {
+      assert(typeof candidate.variable === "string" && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(candidate.variable), command, "invalid installed executable environment");
+      assert(validRelativePath(candidate.relativePath, 512), command, "invalid installed executable relative path");
+    } else if (candidate.type === "workspaceProperty") {
+      assert(validRelativePath(candidate.path, 256) && validManifestText(candidate.key) && validRelativePath(candidate.relativePath, 512), command, "invalid installed workspace executable");
+    } else if (candidate.type === "androidSdkBuildTools") {
+      assert(typeof candidate.name === "string" && validRelativePath(candidate.name, 128) && !candidate.name.includes("/"), command, "invalid installed Android SDK Build Tools executable");
+    } else {
+      assert(candidate.type === "path" && typeof candidate.name === "string" && validRelativePath(candidate.name, 128) && !candidate.name.includes("/"), command, "invalid installed PATH executable");
+    }
+  }
+}
+
+function validRelativePath(value: unknown, maximum: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= maximum &&
+    !value.includes("\0") && !value.includes("\\") && !value.startsWith("/") &&
+    value.split("/").every((part) => part.length > 0 && part !== "." && part !== "..");
 }
 
 function validManifestText(value: unknown): value is string {

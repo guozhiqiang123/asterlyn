@@ -116,6 +116,9 @@ function validateExecutables(pluginId: string, operationId: string, executables:
     } else if (candidate.type === "path") {
       if (!pathPart(candidate.name, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxPathNameLength)) throw invalidExecutable(pluginId, operationId);
       key = `path:${candidate.name}`;
+    } else if (candidate.type === "androidSdkBuildTools") {
+      if (!pathPart(candidate.name, SDK_PLUGIN_PROCESS_QUERY_LIMITS.maxPathNameLength)) throw invalidExecutable(pluginId, operationId);
+      key = `androidSdkBuildTools:${candidate.name}`;
     } else throw invalidExecutable(pluginId, operationId);
     if (candidates.has(key)) throw new Error(`Duplicate process executable: ${pluginId}.${operationId}`);
     candidates.add(key);

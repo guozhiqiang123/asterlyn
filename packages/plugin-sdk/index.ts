@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.8.0" as const;
+export const PLUGIN_SDK_VERSION = "1.9.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -108,6 +108,7 @@ export interface SdkPluginWorkspaceToolDescriptor {
 export type SdkProcessExecutableCandidate =
   | { readonly type: "environment"; readonly variable: string; readonly relativePath: string }
   | { readonly type: "workspaceProperty"; readonly path: string; readonly key: string; readonly relativePath: string }
+  | { readonly type: "androidSdkBuildTools"; readonly name: string }
   | { readonly type: "path"; readonly name: string };
 
 export interface SdkProcessQueryDeclaration {
