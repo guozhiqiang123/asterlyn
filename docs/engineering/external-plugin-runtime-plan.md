@@ -254,6 +254,14 @@ dispose. Bundled contributions remain the explicit fallback until healthy-start 
 
 ### EPR4 — First-party Android parity
 
+Status: automated Release-package parity gate implemented on 2026-10-19. The exact published
+Android `v0.5.4` asset is admitted, extracted, activated in the supervised process, and verified
+for its task, command, device, and run-configuration contributions. The gate exercises task-cache,
+workspace-state, process-query, renderer-compatible snapshots, and owner shutdown. It also exposed
+and closed the missing isolated `TextEncoder`/`TextDecoder` compatibility surface with a bounded
+UTF-8-only host implementation. Installed-app Run/terminal/tool-operation smoke and healthy-start
+promotion remain open.
+
 1. Activate the admitted Android Release package through the external runtime without a bundled
    source import.
 2. Map its declared task, execution-target, run-configuration, workspace-state, cache, process,

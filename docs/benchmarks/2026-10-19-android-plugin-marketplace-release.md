@@ -4,9 +4,9 @@
 
 This checkpoint uses the independently maintained Android/Gradle plugin as the first real online
 marketplace source. It verifies that the plugin repository publishes everything the host needs for
-Release discovery, static review, safe download, and MKT4 admission. It does not claim that an
-external plugin can already be activated: admitted packages remain `pendingRuntime` until MKT5–MKT7
-provide the isolated runtime, restart promotion, and rollback lifecycle.
+Release discovery, static review, safe download, MKT4 admission, and supervised EPR4 activation.
+Admitted packages still remain `pendingRuntime` until MKT7 provides healthy-start promotion and the
+rollback lifecycle.
 
 ## Published artifact
 
@@ -48,8 +48,23 @@ and atomic installation-index recovery.
 
 ## Result and remaining gate
 
-The first real GitHub source is complete through MKT4: it can be discovered, inspected, reviewed,
-downloaded, admitted, and stored without executing plugin code. The store must continue to label it
-`pendingRuntime`. A claim that the plugin is installed and runnable is blocked until MKT5–MKT7 add
-the supervised external runtime, restart coordination, healthy-start promotion, rollback, disable,
-and uninstall/fallback acceptance.
+The first real GitHub source is complete through MKT4 and has an EPR4 runtime checkpoint: it can be
+discovered, inspected, reviewed, downloaded, admitted, stored, and activated without importing its
+source into the renderer. The exact GitHub asset digest above was re-downloaded and passed the host
+Release parity test. The supervised process published exactly four expected contributions:
+
+- `gradle-tasks` task provider;
+- `refresh-gradle-tasks` command;
+- `android-devices` execution-target provider;
+- `android-run-configurations` run-configuration provider.
+
+The test also proved cache-miss recovery, workspace-state reads, bounded ADB output parsing, device
+selection, synchronous renderer snapshots, and complete owner shutdown. During this test the real
+package exposed a missing `TextEncoder`/`TextDecoder` runtime primitive; the host now supplies a
+UTF-8-only, non-streaming, native implementation whose internal functions are removed before plugin
+evaluation. Unicode, replacement, fatal decoding, BOM handling, and handle non-exposure are covered
+by host tests.
+
+The store must continue to label the package `pendingRuntime`. Installed-app Run/terminal/tool
+operation smoke, healthy-start promotion, rollback, disable, and uninstall/fallback acceptance are
+still required before the bundled fallback can be removed.

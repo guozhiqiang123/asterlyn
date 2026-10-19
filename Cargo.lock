@@ -119,10 +119,13 @@ dependencies = [
 name = "asterlyn-plugin-host"
 version = "0.1.0"
 dependencies = [
+ "asterlyn-plugin-package",
+ "asterlyn-plugin-runtime",
  "asterlyn-plugin-runtime-protocol",
  "boa_engine",
  "boa_gc",
  "serde_json",
+ "sha2",
  "tempfile",
 ]
 

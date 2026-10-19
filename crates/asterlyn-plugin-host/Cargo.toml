@@ -12,4 +12,7 @@ boa_gc = "=0.21.1"
 serde_json.workspace = true
 
 [dev-dependencies]
+asterlyn-plugin-package = { path = "../asterlyn-plugin-package" }
+asterlyn-plugin-runtime = { path = "../asterlyn-plugin-runtime" }
+sha2.workspace = true
 tempfile.workspace = true
