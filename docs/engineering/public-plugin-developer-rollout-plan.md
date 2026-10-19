@@ -66,7 +66,8 @@ APIs, or another plugin.
 
 ### MKT8C — SDK and inspector delivery
 
-1. Make `@asterlyn/plugin-sdk` a publishable types-only package with license, repository metadata,
+1. Make `@asterlyn/plugin-sdk` a publishable declarative package with no host implementation, plus
+   license, repository metadata,
    public README, and a deterministic `npm pack` artifact.
 2. Add the SDK tarball and canonical inspector availability to host release evidence. The template
    and first-party Android repository pin exact artifacts and retain their checksums.

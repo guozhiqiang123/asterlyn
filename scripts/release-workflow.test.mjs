@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -42,6 +43,9 @@ test("release evidence includes smoke checks, checksums, and SBOMs", () => {
   assert.match(releaseWorkflow, /cargo-cyclonedx --version 0\.5\.9 --locked/);
   assert.match(releaseWorkflow, /npm sbom --sbom-format cyclonedx/);
   assert.match(releaseArtifactsScript, /SHA256SUMS/);
+  assert.match(releaseWorkflow, /npm run plugin-sdk:pack/);
+  assert.match(releaseWorkflow, /asterlyn-release-plugin-sdk/);
+  assert.match(releaseWorkflow, /release-sdk\/\*\.tgz/);
 });
 
 test("pull-request preview packaging remains credential-free and ad-hoc", () => {
@@ -79,25 +83,33 @@ test("release artifact staging and aggregate verification reject incomplete sets
     const staged = run("scripts/release-artifacts.mjs", "stage", bundleRoot, assets, target, platform);
     assert.equal(staged.status, 0, staged.stderr);
   }
+  const sdkName = "asterlyn-plugin-sdk-1.8.0.tgz";
+  const sdkBytes = "reviewed sdk artifact";
+  writeFileSync(path.join(assets, sdkName), sdkBytes);
+  writeFileSync(
+    path.join(assets, "plugin-sdk.sha256"),
+    `${createHash("sha256").update(sdkBytes).digest("hex")}  ${sdkName}\n`,
+  );
   writeFileSync(path.join(assets, "asterlyn-frontend.cdx.json"), "{}");
 
   const verified = run(
     "scripts/release-artifacts.mjs",
     "verify",
     assets,
-    ...targets.map(([target]) => target),
+    ...targets.map(([target]) => target), "plugin-sdk",
   );
   assert.equal(verified.status, 0, verified.stderr);
   const sums = readFileSync(path.join(assets, "SHA256SUMS"), "utf8");
   assert.match(sums, /Asterlyn_0\.1\.0_x64-setup\.exe/);
   assert.match(sums, /asterlyn-frontend\.cdx\.json/);
+  assert.match(sums, /asterlyn-plugin-sdk-1\.8\.0\.tgz/);
 
   writeFileSync(path.join(assets, "Asterlyn_0.1.0_x64-setup.exe"), "tampered");
   const rejected = run(
     "scripts/release-artifacts.mjs",
     "verify",
     assets,
-    ...targets.map(([target]) => target),
+    ...targets.map(([target]) => target), "plugin-sdk",
   );
   assert.notEqual(rejected.status, 0);
   assert.match(rejected.stderr, /checksum mismatch/);

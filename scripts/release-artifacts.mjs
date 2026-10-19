@@ -115,7 +115,7 @@ function validatePlatformSet(files, platform) {
 }
 
 function isDistributable(file) {
-  return [".AppImage", ".deb", ".dmg", ".exe", ".msi", ".rpm"].some((suffix) => file.endsWith(suffix));
+  return [".AppImage", ".deb", ".dmg", ".exe", ".msi", ".rpm", ".tgz"].some((suffix) => file.endsWith(suffix));
 }
 
 async function walk(directory) {

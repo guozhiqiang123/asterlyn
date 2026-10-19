@@ -1,11 +1,22 @@
 {
   "name": "@asterlyn/plugin-sdk",
   "version": "1.8.0",
-  "private": true,
+  "description": "Types and declarative contracts for Asterlyn plugins",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guozhiqiang123/asterlyn.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "homepage": "https://github.com/guozhiqiang123/asterlyn/tree/main/packages/plugin-sdk",
+  "bugs": "https://github.com/guozhiqiang123/asterlyn/issues",
+  "sideEffects": false,
   "type": "module",
   "types": "./index.ts",
   "files": [
-    "index.ts"
+    "index.ts",
+    "README.md",
+    "LICENSE"
   ],
   "exports": {
     ".": "./index.ts"
