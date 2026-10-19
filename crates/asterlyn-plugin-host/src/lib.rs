@@ -4,12 +4,13 @@ use std::fs;
 use std::path::Path;
 
 use asterlyn_plugin_runtime_protocol::{
-    Activate, ActivationReady, ContributionKind, Invoke, MAX_CONTRIBUTIONS, PluginHostMessage,
-    ProtocolEnvelope, RuntimeContribution,
+    Activate, ActivationReady, ContributionKind, Invoke, MAX_CALLBACKS_PER_RESULT,
+    MAX_CONTRIBUTIONS, MAX_RUNTIME_VALUE_DEPTH, PluginHostMessage, ProtocolEnvelope,
+    RuntimeContribution, remote_callback_value,
 };
 use boa_engine::builtins::promise::{PromiseState, ResolvingFunctions};
 use boa_engine::gc::{Finalize, Gc, GcRefCell, Trace};
-use boa_engine::object::builtins::JsPromise;
+use boa_engine::object::builtins::{JsArray, JsPromise};
 use boa_engine::object::{JsObject, ObjectInitializer};
 use boa_engine::property::{Attribute, PropertyKey};
 use boa_engine::{
@@ -73,6 +74,12 @@ struct RuntimeCallback {
     receiver: JsObject,
 }
 
+type ContributionProjection = (
+    Vec<RuntimeContribution>,
+    BTreeMap<String, RuntimeCallback>,
+    u64,
+);
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CapabilityCall {
     pub capability: String,
@@ -105,6 +112,7 @@ struct CapabilityBinding {
 pub struct PluginEngine {
     context: Context,
     callbacks: BTreeMap<String, RuntimeCallback>,
+    next_callback_index: u64,
     capability_queue: Gc<GcRefCell<Vec<PendingCapability>>>,
 }
 
@@ -174,7 +182,8 @@ impl PluginEngine {
         drain_capabilities(&capability_queue, exchange, &mut context)?;
 
         let contributions = captured.borrow().clone();
-        let (contributions, callbacks) = project_contributions(&contributions, &mut context)?;
+        let (contributions, callbacks, next_callback_index) =
+            project_contributions(&contributions, &mut context)?;
         let ready = ActivationReady { contributions };
         ProtocolEnvelope::new(1, PluginHostMessage::ActivationReady(ready.clone()))
             .validate()
@@ -184,6 +193,7 @@ impl PluginEngine {
             Self {
                 context,
                 callbacks,
+                next_callback_index,
                 capability_queue,
             },
             ready,
@@ -222,16 +232,29 @@ impl PluginEngine {
                 callback.operation, request.operation
             )));
         }
+        let function = callback.function.clone();
+        let receiver = callback.receiver.clone();
         let args = invocation_arguments(&request.payload, &mut self.context)?;
-        let value = callback
-            .function
-            .call(&callback.receiver.clone().into(), &args, &mut self.context)
+        let value = function
+            .call(&receiver.clone().into(), &args, &mut self.context)
             .map_err(|error| js_error("invoke callback", error, &mut self.context))?;
         let value = settle_value(value, &self.capability_queue, exchange, &mut self.context)?;
-        value
-            .to_json(&mut self.context)
-            .map_err(|error| js_error("serialize callback result", error, &mut self.context))
-            .map(|value| value.unwrap_or(JsonValue::Null))
+        let mut projected_callbacks = BTreeMap::new();
+        let mut seen = Vec::new();
+        let mut projected_callback_count = 0;
+        let projected = project_runtime_value(
+            &value,
+            &receiver,
+            &request.operation,
+            &mut projected_callbacks,
+            &mut self.next_callback_index,
+            &mut projected_callback_count,
+            &mut seen,
+            0,
+            &mut self.context,
+        )?;
+        self.callbacks.extend(projected_callbacks);
+        Ok(projected)
     }
 
     pub fn callback_count(&self) -> usize {
@@ -482,7 +505,7 @@ fn call_activate(
 fn project_contributions(
     contributions: &[JsObject],
     context: &mut Context,
-) -> Result<(Vec<RuntimeContribution>, BTreeMap<String, RuntimeCallback>), PluginEngineError> {
+) -> Result<ContributionProjection, PluginEngineError> {
     let mut projected = Vec::with_capacity(contributions.len());
     let mut callbacks = BTreeMap::new();
     let mut callback_index = 0_u64;
@@ -562,7 +585,129 @@ fn project_contributions(
             callbacks: contribution_callbacks,
         });
     }
-    Ok((projected, callbacks))
+    Ok((projected, callbacks, callback_index))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn project_runtime_value(
+    value: &JsValue,
+    receiver: &JsObject,
+    operation: &str,
+    callbacks: &mut BTreeMap<String, RuntimeCallback>,
+    next_callback_index: &mut u64,
+    callback_count: &mut usize,
+    seen: &mut Vec<JsObject>,
+    depth: usize,
+    context: &mut Context,
+) -> Result<JsonValue, PluginEngineError> {
+    if depth > MAX_RUNTIME_VALUE_DEPTH {
+        return Err(PluginEngineError::Callback(
+            "callback result nesting is too deep".to_owned(),
+        ));
+    }
+    if let Some(function) = value.as_callable() {
+        if *callback_count >= MAX_CALLBACKS_PER_RESULT {
+            return Err(PluginEngineError::Callback(
+                "callback result contains too many functions".to_owned(),
+            ));
+        }
+        *next_callback_index = next_callback_index
+            .checked_add(1)
+            .ok_or_else(|| PluginEngineError::Callback("callback handle overflow".to_owned()))?;
+        *callback_count += 1;
+        let handle = format!("callback-{next_callback_index}");
+        callbacks.insert(
+            handle.clone(),
+            RuntimeCallback {
+                operation: operation.to_owned(),
+                function,
+                receiver: receiver.clone(),
+            },
+        );
+        return Ok(remote_callback_value(handle, operation.to_owned()));
+    }
+    let Some(object) = value.as_object() else {
+        return value
+            .to_json(context)
+            .map_err(|error| js_error("serialize callback result", error, context))
+            .map(|value| value.unwrap_or(JsonValue::Null));
+    };
+    if seen
+        .iter()
+        .any(|candidate| JsObject::equals(candidate, &object))
+    {
+        return Err(PluginEngineError::Callback(
+            "callback result contains a cyclic object".to_owned(),
+        ));
+    }
+    seen.push(object.clone());
+    let result = if object.is_array() {
+        let array = JsArray::from_object(object.clone())
+            .map_err(|error| js_error("read callback result array", error, context))?;
+        let length = array
+            .length(context)
+            .map_err(|error| js_error("read callback result array length", error, context))?;
+        let mut projected = Vec::with_capacity(length as usize);
+        for index in 0..length {
+            let item = array
+                .get(index, context)
+                .map_err(|error| js_error("read callback result array item", error, context))?;
+            projected.push(project_runtime_value(
+                &item,
+                &object,
+                operation,
+                callbacks,
+                next_callback_index,
+                callback_count,
+                seen,
+                depth + 1,
+                context,
+            )?);
+        }
+        Ok(JsonValue::Array(projected))
+    } else {
+        let mut projected = JsonMap::new();
+        for key in object
+            .own_property_keys(context)
+            .map_err(|error| js_error("enumerate callback result", error, context))?
+        {
+            let property = match &key {
+                PropertyKey::String(value) => value.to_std_string_escaped(),
+                PropertyKey::Index(value) => value.get().to_string(),
+                PropertyKey::Symbol(_) => {
+                    return Err(PluginEngineError::Callback(
+                        "callback result contains a symbol property".to_owned(),
+                    ));
+                }
+            };
+            if property == asterlyn_plugin_runtime_protocol::REMOTE_CALLBACK_MARKER {
+                return Err(PluginEngineError::Callback(
+                    "callback result uses the reserved remote callback marker".to_owned(),
+                ));
+            }
+            let item = object
+                .get(key, context)
+                .map_err(|error| js_error("read callback result property", error, context))?;
+            if item.is_undefined() {
+                continue;
+            }
+            let item = project_runtime_value(
+                &item,
+                &object,
+                &property,
+                callbacks,
+                next_callback_index,
+                callback_count,
+                seen,
+                depth + 1,
+                context,
+            )?;
+            projected.insert(property, item);
+        }
+        Ok(JsonValue::Object(projected))
+    };
+    seen.pop();
+    result
 }
 
 fn invocation_arguments(
@@ -829,6 +974,68 @@ mod tests {
             result,
             json!({"restored": "restored-id", "result": {"status": "succeeded"}})
         );
+    }
+
+    #[test]
+    fn invocation_results_project_nested_functions_as_session_callbacks() {
+        let (_directory, entry) = write_fixture(
+            r#"
+            export const FIXTURE = Object.freeze({
+              id: "dev.asterlyn.fixture",
+              version: "1.0.0",
+              activate(context) {
+                context.contribute({
+                  kind: "command",
+                  id: "fixture.plan",
+                  execute() {
+                    return {
+                      request: { executable: "gradlew" },
+                      prefix: "applied",
+                      apply(value) { return `${this.prefix}:${value}`; },
+                      staged: {
+                        inspect() { return { status: "succeeded" }; },
+                      },
+                    };
+                  },
+                });
+              },
+            });
+            "#,
+        );
+        let (mut engine, ready) = PluginEngine::activate(
+            &entry,
+            &ExpectedRuntimeIdentity {
+                plugin_id: "dev.asterlyn.fixture",
+                plugin_version: "1.0.0",
+            },
+            &activation(),
+        )
+        .expect("activate fixture");
+        let execute = ready.contributions[0].callbacks["execute"].clone();
+        let plan = engine
+            .invoke(&Invoke {
+                request_id: "request-1".to_owned(),
+                callback_handle: execute,
+                operation: "execute".to_owned(),
+                payload: json!({"arguments": []}),
+            })
+            .expect("project plan");
+        let apply = &plan["apply"][asterlyn_plugin_runtime_protocol::REMOTE_CALLBACK_MARKER];
+        assert_eq!(apply["operation"], "apply");
+        let inspect =
+            &plan["staged"]["inspect"][asterlyn_plugin_runtime_protocol::REMOTE_CALLBACK_MARKER];
+        assert_eq!(inspect["operation"], "inspect");
+        assert_eq!(engine.callback_count(), 3);
+
+        let applied = engine
+            .invoke(&Invoke {
+                request_id: "request-2".to_owned(),
+                callback_handle: apply["handle"].as_str().expect("apply handle").to_owned(),
+                operation: "apply".to_owned(),
+                payload: json!({"arguments": ["value"]}),
+            })
+            .expect("invoke projected apply callback");
+        assert_eq!(applied, json!("applied:value"));
     }
 
     #[test]

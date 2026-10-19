@@ -27,7 +27,14 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
               id: "fixture.echo",
               async execute(value) {
                 const query = await context.processQueries.execute("fixture.query");
-                return { value, restored, query, isolated: typeof process === "undefined" };
+                return {
+                  value,
+                  restored,
+                  query,
+                  isolated: typeof process === "undefined",
+                  prefix: "applied",
+                  apply(next) { return `${this.prefix}:${next}`; },
+                };
               },
             });
           },
@@ -164,20 +171,38 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
     let PluginHostMessage::InvocationResult(result) = result.message else {
         panic!("expected invocationResult")
     };
-    assert_eq!(
-        result.payload,
-        json!({
-            "value": "hello",
-            "restored": "restored-id",
-            "query": {"status": "succeeded"},
-            "isolated": true
-        })
-    );
+    assert_eq!(result.payload["value"], "hello");
+    assert_eq!(result.payload["restored"], "restored-id");
+    assert_eq!(result.payload["query"], json!({"status": "succeeded"}));
+    assert_eq!(result.payload["isolated"], true);
+    let apply = &result.payload["apply"]["$asterlynCallback"];
+    assert_eq!(apply["operation"], "apply");
 
     write_frame(
         &mut input,
         &ProtocolEnvelope::new(
             6,
+            PluginHostMessage::Invoke(Invoke {
+                request_id: "request-2".to_owned(),
+                callback_handle: apply["handle"].as_str().expect("apply handle").to_owned(),
+                operation: "apply".to_owned(),
+                payload: json!({"arguments": ["value"]}),
+            }),
+        ),
+    )
+    .expect("write projected callback invocation");
+    let applied = read_frame(&mut output)
+        .expect("read projected callback result")
+        .expect("projected callback result frame");
+    let PluginHostMessage::InvocationResult(applied) = applied.message else {
+        panic!("expected projected callback invocation result")
+    };
+    assert_eq!(applied.payload, json!("applied:value"));
+
+    write_frame(
+        &mut input,
+        &ProtocolEnvelope::new(
+            7,
             PluginHostMessage::Shutdown(Shutdown {
                 reason: ShutdownReason::ApplicationExit,
             }),
