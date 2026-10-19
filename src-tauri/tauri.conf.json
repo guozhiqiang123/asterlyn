@@ -4,9 +4,9 @@
   "version": "0.1.11",
   "identifier": "dev.asterlyn.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node scripts/prepare-plugin-host-sidecar.mjs && npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && node scripts/prepare-plugin-host-sidecar.mjs",
     "frontendDist": "../dist"
   },
   "app": {
@@ -17,6 +17,9 @@
   },
   "bundle": {
     "active": true,
+    "externalBin": [
+      "binaries/asterlyn-plugin-host"
+    ],
     "targets": "all",
     "category": "DeveloperTool",
     "shortDescription": "A lightweight developer workspace",

@@ -124,6 +124,13 @@ The memory helper launches only the supplied local binary and repository, waits 
 
 ## Packaging policy
 
+The Tauri build hooks compile `asterlyn-plugin-host` for the exact
+`TAURI_ENV_TARGET_TRIPLE` and atomically stage it under `src-tauri/binaries/` using Tauri's required
+target-suffixed sidecar name. Do not hand-copy, rename, download, or reuse a helper from another
+target/profile. `tauri build` then embeds the helper through `bundle.externalBin`; a missing helper
+must fail packaging instead of producing an application that advertises external plugins without
+their isolation boundary. Generated helper binaries are ignored by Git and must never be committed.
+
 ### Canonical macOS local acceptance flow
 
 The local macOS package is an unnotarized, ad-hoc-signed development artifact. A successful Tauri
