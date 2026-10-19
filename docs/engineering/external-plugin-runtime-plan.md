@@ -88,6 +88,10 @@ engine loop limit is defense in depth, not a substitute for the parent deadline 
 
 ### EPR1 — Runtime protocol and hostile framing fixtures
 
+Status: implemented on 2026-10-19. The shared crate owns protocol-1 message types, strict
+length-prefixed framing, identity and contribution validation, and hostile framing fixtures. It is
+kept independent from Tauri and the JavaScript engine.
+
 1. Add a dependency-light native protocol crate with protocol-1 messages, shared limits,
    length-prefixed framing, identity validation, activation transaction validation, and explicit
    protocol errors.
