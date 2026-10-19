@@ -1,5 +1,5 @@
 import type {
-  BundledPlugin,
+  PluginCatalogEntry,
   PluginToolOperationRequest,
   PluginToolOperationResult,
   PluginWorkspaceIdentity,
@@ -13,7 +13,7 @@ export interface PluginToolOperationExecutor {
 
 export function createPluginToolOperationExecutor(
   bridge: PluginToolOperationBridge | undefined,
-  plugin: BundledPlugin,
+  plugin: Pick<PluginCatalogEntry, "id" | "manifest">,
   identity: PluginWorkspaceIdentity,
 ): PluginToolOperationExecutor | undefined {
   const declarations = plugin.manifest.toolOperations;

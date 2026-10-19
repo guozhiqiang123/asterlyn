@@ -205,9 +205,17 @@ export class PluginCompositionRuntime {
 
   get managementSnapshot(): PluginManagementSnapshot { return this.management.snapshot; }
 
-  async plugin(pluginId: string): Promise<BundledPlugin | null> {
+  async plugin(pluginId: string): Promise<PluginCatalogEntry | null> {
+    const admitted = this.catalogManifests.get(pluginId);
+    if (admitted) return admitted;
     const plugins = await this.bundledPlugins();
-    return plugins.find((plugin) => plugin.id === pluginId) ?? null;
+    const plugin = plugins.find((candidate) => candidate.id === pluginId);
+    return plugin ? {
+      id: plugin.id,
+      version: plugin.version,
+      manifest: plugin.manifest,
+      origin: "bundled",
+    } : null;
   }
 
   subscribeManagement(listener: (snapshot: PluginManagementSnapshot) => void): () => void {

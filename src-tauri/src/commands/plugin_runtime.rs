@@ -9,7 +9,9 @@ use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, State, WebviewWindow};
 
-use crate::application::{ActiveWorkspaces, PluginMarketplaceCoordinator};
+use crate::application::{
+    ActiveWorkspaces, PluginMarketplaceCoordinator, PluginProcessQueryManager,
+};
 use crate::commands::plugin_marketplace::{
     admission_context, installation_store, installed_package_root,
 };
@@ -47,6 +49,7 @@ pub(crate) async fn activate_installed_plugin_runtime(
     app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
     marketplace: State<'_, PluginMarketplaceCoordinator>,
+    process_queries: State<'_, PluginProcessQueryManager>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) -> Result<InstalledPluginActivation, String> {
     if workspace_generation == 0 {
@@ -76,6 +79,7 @@ pub(crate) async fn activate_installed_plugin_runtime(
     );
     let owner = window.label().to_owned();
     let supervisor = supervisor.inner().clone();
+    let process_queries = process_queries.inner().clone();
     let selected_plugin_id = plugin_id.clone();
     let selected_version = selection.version.clone();
     let selected_digest = selection.package_digest.clone();
@@ -89,14 +93,22 @@ pub(crate) async fn activate_installed_plugin_runtime(
             if report.plugin_id != selected_plugin_id || report.plugin_version != selected_version {
                 return Err("installed plugin identity changed after admission".to_owned());
             }
-            supervisor
+            process_queries.admit_authority(
+                &owner,
+                &selected_plugin_id,
+                &selected_version,
+                &selected_digest,
+                &report.management_manifest.process_queries,
+                &report.management_manifest.tool_operations,
+            )?;
+            let activation = supervisor
                 .activate(PluginActivation {
-                    owner,
+                    owner: owner.clone(),
                     plugin_root,
                     identity: PluginRuntimeIdentity {
-                        plugin_id: selected_plugin_id,
-                        plugin_version: selected_version,
-                        package_digest: selected_digest,
+                        plugin_id: selected_plugin_id.clone(),
+                        plugin_version: selected_version.clone(),
+                        package_digest: selected_digest.clone(),
                         runtime_entry: report.runtime_entry,
                     },
                     capabilities: report.capabilities,
@@ -108,7 +120,11 @@ pub(crate) async fn activate_installed_plugin_runtime(
                     locale,
                     theme: parse_theme(&theme).map_err(|error| error.to_string())?,
                 })
-                .map_err(|error| error.to_string())
+                .map_err(|error| error.to_string());
+            if activation.is_err() {
+                process_queries.revoke_authority(&owner, &selected_plugin_id);
+            }
+            activation
         })
         .await
         .map_err(|error| format!("plugin activation worker could not complete: {error}"))
@@ -175,6 +191,7 @@ pub(crate) fn fail_installed_plugin_runtime_activation(
     window: WebviewWindow,
     app: tauri::AppHandle,
     marketplace: State<'_, PluginMarketplaceCoordinator>,
+    process_queries: State<'_, PluginProcessQueryManager>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) -> Result<PluginInstallationSnapshot, String> {
     supervisor
@@ -191,6 +208,7 @@ pub(crate) fn fail_installed_plugin_runtime_activation(
         &plugin_id,
         ShutdownReason::ProtocolViolation,
     );
+    process_queries.revoke_authority(window.label(), &plugin_id);
     marketplace.run(|| {
         installation_store(&app)?
             .mark_activation_failed(&plugin_id, &plugin_version, &package_digest)
@@ -208,6 +226,7 @@ pub(crate) fn abandon_installed_plugin_runtime_activation(
     window: WebviewWindow,
     app: tauri::AppHandle,
     marketplace: State<'_, PluginMarketplaceCoordinator>,
+    process_queries: State<'_, PluginProcessQueryManager>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) -> Result<PluginInstallationSnapshot, String> {
     supervisor
@@ -219,6 +238,7 @@ pub(crate) fn abandon_installed_plugin_runtime_activation(
             &session_id,
         )
         .map_err(|error| error.to_string())?;
+    process_queries.revoke_authority(window.label(), &plugin_id);
     marketplace.run(|| {
         installation_store(&app)?
             .abandon_activation(&plugin_id, &plugin_version, &package_digest)
@@ -269,8 +289,11 @@ pub(crate) async fn invoke_installed_plugin_callback(
 pub(crate) fn deactivate_installed_plugin_runtime(
     plugin_id: String,
     window: WebviewWindow,
+    process_queries: State<'_, PluginProcessQueryManager>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) {
+    process_queries.cancel_plugin(&plugin_id);
+    process_queries.revoke_authority(window.label(), &plugin_id);
     supervisor.stop_plugin(
         window.label(),
         &plugin_id,

@@ -1,5 +1,5 @@
 import type {
-  BundledPlugin,
+  PluginCatalogEntry,
   PluginRunRecoveryConfirmation,
 } from "../application/plugins/index.ts";
 import { resolvePluginMessageOrNull } from "../application/plugins/plugin-localization.ts";
@@ -7,7 +7,7 @@ import type { ApplicationConfirmationRequest } from "../shared/application-confi
 
 /** Resolves plugin-owned recovery copy only when a failed Run reaches this exceptional path. */
 export function confirmPluginRunRecovery(
-  plugin: BundledPlugin,
+  plugin: Pick<PluginCatalogEntry, "id" | "manifest">,
   locale: string,
   confirmation: PluginRunRecoveryConfirmation,
   confirm: (request: ApplicationConfirmationRequest) => Promise<boolean>,

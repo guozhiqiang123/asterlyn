@@ -143,10 +143,12 @@ impl CapabilityHandler for NativePluginCapabilityHandler {
             ("processQueries", "execute") => {
                 expect_count(arguments, 1)?;
                 let query_id = string_argument(&arguments[0], "query ID")?;
-                let result = self.app.state::<PluginProcessQueryManager>().execute(
+                let result = self.app.state::<PluginProcessQueryManager>().execute_exact(
                     context.owner,
                     &root,
                     context.plugin_id,
+                    context.plugin_version,
+                    context.package_digest,
                     query_id,
                 );
                 Ok(process_query_value(result))

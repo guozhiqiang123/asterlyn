@@ -148,6 +148,15 @@ test("installed plugin notifications resolve only through the admitted external 
       notice: "External operation completed.",
     } } },
     settings: [],
+    processQueries: [{
+      id: "fixture.query", args: [], timeoutMs: 1_000, maxOutputBytes: 1_024,
+      executables: [{ type: "path", name: "fixture-tool" }],
+    }],
+    toolOperations: [{
+      id: "fixture.operation", intent: "query", args: [], parameters: [],
+      timeoutMs: 1_000, maxOutputBytes: 1_024,
+      executables: [{ type: "path", name: "fixture-tool" }],
+    }],
   };
   const runtime = new PluginCompositionRuntime({
     registerCommand: () => () => undefined,
@@ -168,6 +177,10 @@ test("installed plugin notifications resolve only through the admitted external 
   });
   await runtime.activateWorkspace(identity);
   await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  const admitted = await runtime.plugin("fixture.external");
+  assert.equal(admitted?.origin, "installed");
+  assert.equal(admitted?.manifest.processQueries?.[0]?.id, "fixture.query");
+  assert.equal(admitted?.manifest.toolOperations?.[0]?.id, "fixture.operation");
   notifications({ pluginId: "fixture.external", kind: "success", messageKey: "notice" });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(published, [{ kind: "success", message: "External operation completed.", source: "plugin:fixture.external" }]);
