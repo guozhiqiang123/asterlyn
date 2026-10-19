@@ -79,7 +79,7 @@ The process supervisor additionally owns platform enforcement and wall-clock pol
 | captured stderr per session | 256 KiB |
 | JavaScript loop iterations per turn | 5,000,000 |
 | JavaScript recursion depth | 256 |
-| JavaScript stack budget | 512 KiB |
+| JavaScript VM stack entries per turn | 8,192 |
 
 Memory/CPU/process-tree enforcement must use platform-native supervision where available. An
 engine loop limit is defense in depth, not a substitute for the parent deadline and child kill.
@@ -103,6 +103,14 @@ Exit gate: arbitrary pipe bytes cannot cause unbounded allocation or produce an 
 message.
 
 ### EPR2 — Embedded JavaScript plugin-host executable
+
+Status: engine foundation implemented on 2026-10-19. The standalone helper now completes framed
+identity/activation/callback/shutdown sessions, evaluates self-contained ESM in Boa 0.21.1, blocks
+ambient desktop APIs, applies loop/recursion/stack limits, and registers contributions
+transactionally. The published Android `v0.5.4` artifact activates into its four expected
+contributions and serves snapshot/collection callbacks through protocol 1. Host capability request
+round trips, subscription events, deep callback values, parent-side supervision, and packaged
+helper delivery remain open; therefore EPR2 and MKT5 are not yet complete.
 
 1. Add `asterlyn-plugin-host` as a separately packaged executable using the shared protocol crate.
 2. Load only the admitted immutable entry file, parse it as an ECMAScript module, and validate its

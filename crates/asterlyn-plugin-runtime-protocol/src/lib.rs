@@ -150,6 +150,8 @@ pub struct Activate {
     pub session_id: String,
     pub workspace_id: String,
     pub workspace_generation: u64,
+    pub workspace_root: String,
+    pub evidence: JsonValue,
     pub locale: String,
     pub theme: HostTheme,
 }
@@ -163,6 +165,8 @@ impl Activate {
                 "workspaceGeneration must be greater than zero".to_owned(),
             ));
         }
+        validate_short_text("workspaceRoot", &self.workspace_root, 4 * 1024)?;
+        validate_json_size("activation evidence", &self.evidence, MAX_PAYLOAD_BYTES)?;
         validate_short_text("locale", &self.locale, 32)
     }
 }
