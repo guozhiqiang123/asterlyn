@@ -156,6 +156,35 @@ Exit gate: an independently installed plugin has localized identity and settings
 copy, notifications resolve through its admitted catalog, uninstall plus unrelated preference
 changes do not erase its data, and reinstall restores only values valid under the new manifest.
 
+### MKT8F — Package-owned native tool authority
+
+Status: planned on 2026-10-19 after MKT8E exposed the next bundled assumption. The public SDK
+already lets a package declare bounded `processQueries` and typed `toolOperations`, but the native
+executor still admits only an Android-specific table compiled into the host. A third-party package
+can therefore describe these capabilities yet cannot exercise them.
+
+1. Extend package admission to parse, bound, validate, and project process-query and tool-operation
+   declarations. Argument templates, parameter kinds and suffixes, executable candidates, timeout,
+   and output limits become immutable admitted data; renderer-provided declarations never grant
+   native authority.
+2. Register the exact admitted authority under plugin ID, version, and package digest before the
+   isolated runtime activates. Runtime capability calls resolve that exact identity. Host-rendered
+   Run operations resolve only the currently activated identity. Failed activation, disable,
+   uninstall, restart, and shutdown cancel work and revoke the associated authority.
+3. Resolve executables only through bounded declarative candidate kinds and canonical paths. Keep
+   environment, workspace-property, and `PATH` lookup generic; add any platform-tool locator as an
+   explicit SDK candidate rather than another plugin-ID branch.
+4. Retain the compiled Android table only as the bundled fallback. Once a package authority is
+   active it wins completely, so an external update cannot silently inherit undeclared authority
+   from the bundled copy.
+5. Project the same admitted declarations into the installed renderer catalog. Run recovery and
+   host-owned tool execution must use the external package's manifest even when no bundled plugin
+   with that ID exists.
+
+Exit gate: an independent fixture can execute one admitted query and one typed operation without a
+host source entry; undeclared IDs, wrong parameters, unsafe artifacts, stale package identities,
+and revoked plugins fail before process creation; the Android plugin passes through the same path.
+
 ## Canonical repository workflow
 
 1. Copy the template and choose an immutable plugin ID plus normalized GitHub repository identity.
@@ -189,6 +218,8 @@ changes do not erase its data, and reinstall restores only values valid under th
 4. Capability, diagnostics, source-add, and migration guides.
 5. First-party/fixture Release verification and installed acceptance evidence.
 6. Admitted manifest catalog, independent Settings integration, and reinstall-retention evidence.
+7. Package-owned native tool authority, exact-identity revocation, and independent execution
+   evidence.
 
 Each boundary must pass independently. Documentation may describe a later gate, but ordinary builds
 must not claim that gate complete until its executable evidence is committed.
