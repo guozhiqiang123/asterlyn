@@ -4,6 +4,7 @@ pub(crate) mod git_worktree_transactions;
 mod operation_supervisor;
 mod plugin_marketplace;
 mod plugin_process_query;
+mod plugin_runtime;
 pub(crate) mod plugin_task_cache;
 mod search_session;
 mod task;
@@ -29,6 +30,7 @@ pub(crate) use plugin_marketplace::{PendingPluginAdmission, PluginMarketplaceCoo
 pub(crate) use plugin_process_query::{
     PluginProcessQueryManager, PluginProcessQueryResult, PluginToolOperationResult,
 };
+pub(crate) use plugin_runtime::build_plugin_host_supervisor;
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
 pub(crate) use task::TaskManager;
 pub(crate) use task_artifacts::{TaskArtifactDiscovery, scan_task_artifacts};

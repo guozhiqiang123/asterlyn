@@ -50,10 +50,10 @@ use application::{
     WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
     WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
-    apply_authorized_replacement, exact_git_repository, execute_workspace_mutation_plan,
-    finalize_replacement, finalize_workspace_mutation_recovery, inspect_workspace_entry_inventory,
-    list_replacement_recoveries, load_ignored_project_directory, load_project_catalog,
-    load_workspace_mutation_recoveries, prepare_authorized_replacement,
+    apply_authorized_replacement, build_plugin_host_supervisor, exact_git_repository,
+    execute_workspace_mutation_plan, finalize_replacement, finalize_workspace_mutation_recovery,
+    inspect_workspace_entry_inventory, list_replacement_recoveries, load_ignored_project_directory,
+    load_project_catalog, load_workspace_mutation_recoveries, prepare_authorized_replacement,
     prepare_workspace_mutation_plan, read_session_text_file, reauthorize_session_file_for_read,
     resolve_workspace_entry, rollback_replacement, rollback_workspace_mutation_recovery,
     save_session_text_file, search_authorized_workspace_with_index,
@@ -64,6 +64,8 @@ use application::{
     save_authorized_text_file, search_authorized_workspace,
 };
 pub use application::{WORKSPACE_REPLACEMENT_LIMITS, WORKSPACE_SEARCH_LIMITS};
+use asterlyn_plugin_runtime::PluginHostSupervisor;
+use asterlyn_plugin_runtime_protocol::ShutdownReason;
 use commands::*;
 
 const COMMIT_LIMIT: usize = 150;
@@ -231,6 +233,9 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .setup(|app| {
+            let plugin_hosts = build_plugin_host_supervisor()
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            app.manage(plugin_hosts);
             build_project_window(app.handle(), "main", "Asterlyn")?;
             Ok(())
         })
@@ -241,6 +246,9 @@ pub fn run() {
                 window
                     .state::<PluginProcessQueryManager>()
                     .cancel_owner(window.label());
+                window
+                    .state::<PluginHostSupervisor>()
+                    .cancel_owner(window.label(), ShutdownReason::WindowClosed);
                 window.state::<ActiveWorkspaces>().remove(window.label());
                 window
                     .state::<WorkspaceWatchService>()
@@ -407,6 +415,8 @@ pub fn run() {
         if matches!(event, tauri::RunEvent::Exit) {
             app.state::<TaskManager>().cancel_all();
             app.state::<PluginProcessQueryManager>().cancel_all();
+            app.state::<PluginHostSupervisor>()
+                .cancel_all(ShutdownReason::ApplicationExit);
         }
     });
 }

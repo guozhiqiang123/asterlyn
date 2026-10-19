@@ -1,0 +1,26 @@
+[package]
+name = "asterlyn-plugin-runtime"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+autotests = false
+
+[dependencies]
+asterlyn-plugin-runtime-protocol = { path = "../asterlyn-plugin-runtime-protocol" }
+libc.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "asterlyn-plugin-runtime-fixture"
+path = "tests/fixture/main.rs"
+
+[[test]]
+name = "supervisor"
+path = "tests/supervisor.rs"

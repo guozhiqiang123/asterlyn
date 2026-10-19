@@ -127,6 +127,17 @@ fixtures fail without changing host or workspace state.
 
 ### EPR3 — Host supervisor and transactional contribution adapter
 
+Status: supervisor foundation implemented on 2026-10-19. The native parent now resolves only the
+packaged exact-target helper (or the compile-time development sidecar), clears its environment,
+creates one process group per plugin, enforces activation/request/shutdown deadlines, bounds
+protocol backpressure and stderr diagnostics, verifies the admitted identity and workspace
+generation, stages contributions until the complete activation succeeds, and removes every owned
+session on window/application exit. The capability dispatcher also denies undeclared capability
+names and stale workspace generations before calling a native handler. Marketplace selection,
+renderer contribution projection, concrete capability handlers, subscription events, and packaged
+multi-platform process-tree evidence remain open, so admitted packages continue to report
+`pendingRuntime`.
+
 1. Resolve the packaged helper without accepting a renderer/plugin path; spawn it with piped
    protocol handles and no secrets in arguments or environment.
 2. Bind the child to the admitted plugin/version/digest and current workspace generation.

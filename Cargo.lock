@@ -76,6 +76,8 @@ dependencies = [
  "asterlyn-git",
  "asterlyn-plugin-marketplace",
  "asterlyn-plugin-package",
+ "asterlyn-plugin-runtime",
+ "asterlyn-plugin-runtime-protocol",
  "asterlyn-task",
  "asterlyn-terminal",
  "asterlyn-workspace",
@@ -143,6 +145,17 @@ dependencies = [
  "spdx",
  "tar",
  "tempfile",
+]
+
+[[package]]
+name = "asterlyn-plugin-runtime"
+version = "0.1.0"
+dependencies = [
+ "asterlyn-plugin-runtime-protocol",
+ "libc",
+ "serde_json",
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
