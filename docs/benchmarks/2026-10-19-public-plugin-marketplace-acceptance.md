@@ -102,10 +102,36 @@ recovery, and bounded retention. Renderer-side activation also proves that a con
 the host contract is reported, marked failed through the runtime lifecycle bridge, removed from the
 registry, and its isolated process is stopped.
 
+## Installed manifest and preference acceptance
+
+The installed catalog now reads a bounded management-manifest projection from each immutable
+selected package. One invalid package produces one bounded entry diagnostic and cannot remove the
+other installed plugins from Settings. The renderer merges these admitted entries with bundled
+fallbacks by stable plugin ID, so independently installed plugins provide their own localized name,
+description, settings schema, task-authorization copy, workspace-tool metadata, and notification
+copy without requiring host source changes.
+
+The exact Android `v0.5.5` and Hello `v0.1.1` Release archives above were downloaded again and
+accepted by the updated inspector. Android projected both `en-US` and `zh-CN` localization plus its
+declared setting; Hello projected both locales and no settings. Focused desktop tests also prove:
+
+1. strict protocol validation of installed manifest identity and nested schema;
+2. admitted external localization is used for plugin notifications;
+3. an external manifest independently creates its Settings entry;
+4. lifecycle enablement remains only on the installed-package card rather than appearing as a
+   second conflicting preference switch; and
+5. uninstall or temporary absence retains bounded raw preferences privately, while reinstall
+   revalidates every value against the new manifest and restores only still-valid values.
+
+The implementation passed 43 focused renderer/protocol tests, 10 package-admission tests, the
+locked native marketplace/runtime suites, native compilation, TypeScript checking, formatting,
+and the real published-package inspection described above.
+
 ## Result and remaining gates
 
 The Release-to-admission, native installation-lifecycle, Release-to-runtime, stale-network fallback,
-and hostile-package rejection paths are proven. Remaining MKT8D evidence is deliberately separate:
-clean installed desktop UI through restart and healthy promotion, a deliberately failing public
-update, reinstall retention across the complete product path, cross-platform installed runtime
-cleanup, and measured keyboard/focus/ARIA plus resource behavior.
+host-rendered installed-manifest management, bounded preference retention, and hostile-package
+rejection paths are proven. Remaining MKT8D evidence is deliberately separate: clean installed
+desktop UI through restart and healthy promotion, a deliberately failing public update, reinstall
+retention across the complete product path, cross-platform installed runtime cleanup, and measured
+keyboard/focus/ARIA plus resource behavior.

@@ -128,11 +128,11 @@ fixtures or bundled fallback.
 
 ### MKT8E — Admitted manifest catalog and retained plugin preferences
 
-Status: planned on 2026-10-19 after installed-host acceptance exposed a contract gap. Schema-2
-packages already declare host-rendered identity, localization, settings, authorization, and
-workspace-tool metadata, but the native admission report currently retains only runtime identity,
-capabilities, permissions, and distribution data. The renderer therefore falls back to bundled
-metadata and cannot manage a genuinely independent plugin's settings.
+Status: implemented on 2026-10-19. Installed-host acceptance exposed a contract gap: schema-2
+packages already declared host-rendered identity, localization, settings, authorization, and
+workspace-tool metadata, but the native admission report retained only runtime identity,
+capabilities, permissions, and distribution data. Admission now projects and validates the bounded
+management manifest from the immutable selected package, and Settings consumes that projection.
 
 1. Extend package admission with a bounded, host-validated management-manifest projection. Read it
    again from the immutable selected package whenever the Installed catalog is requested; do not
