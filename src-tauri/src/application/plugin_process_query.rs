@@ -7,6 +7,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
