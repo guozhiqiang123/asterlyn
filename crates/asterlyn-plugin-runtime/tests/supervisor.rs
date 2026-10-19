@@ -46,6 +46,26 @@ fn activates_invokes_and_shuts_down_an_isolated_session() {
         .expect("activate");
     assert_eq!(activated.contributions.len(), 1);
     assert_eq!(supervisor.active_count(), 1);
+    supervisor
+        .assert_active_session(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "1.0.0",
+            &format!("sha256:{}", "a".repeat(64)),
+            &activated.session_id,
+        )
+        .expect("exact session health identity");
+    assert!(
+        supervisor
+            .assert_active_session(
+                "window-main",
+                "dev.asterlyn.fixture",
+                "1.0.0",
+                &format!("sha256:{}", "b".repeat(64)),
+                &activated.session_id,
+            )
+            .is_err()
+    );
     let payload = json!({"arguments": ["hello"]});
     let result = supervisor
         .invoke(

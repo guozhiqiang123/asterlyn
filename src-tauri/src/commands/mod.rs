@@ -14,16 +14,19 @@ pub(crate) use plugin_cache::{
     read_plugin_task_cache, write_plugin_task_cache,
 };
 pub(crate) use plugin_marketplace::{
-    cancel_plugin_install, confirm_plugin_install, list_plugin_installations, list_plugin_sources,
-    prepare_plugin_install, refresh_plugin_source, remove_plugin_source, set_plugin_source_enabled,
-    upsert_plugin_source,
+    abandon_plugin_activations, cancel_plugin_install, confirm_plugin_install,
+    list_plugin_installations, list_plugin_sources, prepare_plugin_install,
+    recover_interrupted_plugin_activations, refresh_plugin_source, remove_plugin_source,
+    set_plugin_source_enabled, upsert_plugin_source,
 };
 pub(crate) use plugin_process_query::{
     cancel_plugin_tool_operation, execute_plugin_process_query, execute_plugin_tool_operation,
 };
 pub(crate) use plugin_runtime::{
-    activate_installed_plugin_runtime, deactivate_installed_plugin_runtime,
-    invoke_installed_plugin_callback, read_installed_plugin_runtime_diagnostics,
+    abandon_installed_plugin_runtime_activation, activate_installed_plugin_runtime,
+    confirm_installed_plugin_runtime_healthy, deactivate_installed_plugin_runtime,
+    fail_installed_plugin_runtime_activation, invoke_installed_plugin_callback,
+    read_installed_plugin_runtime_diagnostics,
 };
 mod git_reads;
 mod image;

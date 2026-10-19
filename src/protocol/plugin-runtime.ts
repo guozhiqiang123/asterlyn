@@ -1,5 +1,6 @@
 import type { DesktopCommandName } from "./generated-desktop-protocol.ts";
 import { assert, isRecord, record } from "./desktop-result-validation-primitives.ts";
+import type { PluginInstallationSnapshot } from "./plugin-marketplace.ts";
 
 export type PluginRuntimeValue =
   | null
@@ -72,6 +73,9 @@ export interface InstalledPluginRuntimeBridge {
     locale: string,
     theme: PluginRuntimeTheme,
   ): Promise<InstalledPluginActivation>;
+  confirmHealthy(activation: InstalledPluginActivation): Promise<PluginInstallationSnapshot>;
+  failActivation(activation: InstalledPluginActivation): Promise<PluginInstallationSnapshot>;
+  abandonActivation(activation: InstalledPluginActivation): Promise<PluginInstallationSnapshot>;
   invoke(
     pluginId: string,
     callbackHandle: string,

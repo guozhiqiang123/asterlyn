@@ -23,6 +23,7 @@ import type {
 import type { SdkPluginContribution } from "../../packages/plugin-sdk/index.ts";
 
 const REMOTE_CALLBACK_MARKER = "$asterlynCallback";
+const HEALTH_CHECKPOINT_MS = 3_000;
 
 export interface ExternalPluginRuntimeOptions {
   readonly registry: PluginContributionRegistry;
@@ -32,16 +33,21 @@ export interface ExternalPluginRuntimeOptions {
   readonly theme?: () => PluginRuntimeTheme;
   readonly reportError: (error: unknown) => void;
   readonly notification?: (event: InstalledPluginNotificationEvent) => void | Promise<void>;
+  readonly healthCheckpointMs?: number;
 }
 
 interface ActiveExternalPlugin {
   readonly release: Disposable;
   readonly session: ExternalPluginSession;
+  readonly activation: InstalledPluginActivation;
+  healthTimer: ReturnType<typeof setTimeout> | null;
+  healthy: boolean;
 }
 
 /** Owns isolated installed-plugin sessions and publishes each contribution batch atomically. */
 export class ExternalPluginRuntime {
   private readonly options: ExternalPluginRuntimeOptions;
+  private readonly healthCheckpointMs: number;
   private readonly active = new Map<string, ActiveExternalPlugin>();
   private releaseEvents: (() => void) | null = null;
   private releaseNotifications: (() => void) | null = null;
@@ -51,6 +57,7 @@ export class ExternalPluginRuntime {
 
   constructor(options: ExternalPluginRuntimeOptions) {
     this.options = options;
+    this.healthCheckpointMs = options.healthCheckpointMs ?? HEALTH_CHECKPOINT_MS;
   }
 
   async activate(
@@ -102,6 +109,7 @@ export class ExternalPluginRuntime {
     let activation: InstalledPluginActivation | null = null;
     let session: ExternalPluginSession | null = null;
     let retained = false;
+    let failed = false;
     try {
       activation = await this.options.bridge.activate(
         plugin.pluginId,
@@ -123,11 +131,30 @@ export class ExternalPluginRuntime {
         { id: activation.pluginId, version: activation.pluginVersion },
         contributions,
       );
-      this.active.set(activation.pluginId, { release, session });
+      const entry: ActiveExternalPlugin = {
+        release,
+        session,
+        activation,
+        healthTimer: null,
+        healthy: false,
+      };
+      this.active.set(activation.pluginId, entry);
+      entry.healthTimer = setTimeout(() => {
+        void this.confirmHealthy(entry).catch(this.options.reportError);
+      }, this.healthCheckpointMs);
       retained = true;
       return true;
+    } catch (error) {
+      failed = true;
+      if (activation) {
+        await this.options.bridge.failActivation(activation).catch(this.options.reportError);
+      }
+      throw error;
     } finally {
       if (!retained) {
+        if (activation && !failed) {
+          await this.options.bridge.abandonActivation(activation).catch(this.options.reportError);
+        }
         await session?.dispose();
         await this.options.bridge.deactivate(plugin.pluginId).catch(this.options.reportError);
       }
@@ -138,9 +165,32 @@ export class ExternalPluginRuntime {
     const entries = [...this.active.entries()].reverse();
     this.active.clear();
     for (const [pluginId, entry] of entries) {
+      if (entry.healthTimer !== null) {
+        clearTimeout(entry.healthTimer);
+        entry.healthTimer = null;
+      }
+      if (!entry.healthy) {
+        await this.options.bridge.abandonActivation(entry.activation).catch(this.options.reportError);
+      }
       try { await entry.release.dispose(); } catch (error) { this.options.reportError(error); }
       await entry.session.dispose();
       await this.options.bridge.deactivate(pluginId).catch(this.options.reportError);
+    }
+  }
+
+  private async confirmHealthy(entry: ActiveExternalPlugin): Promise<void> {
+    entry.healthTimer = null;
+    if (this.disposed || this.active.get(entry.activation.pluginId) !== entry) return;
+    try {
+      await this.options.bridge.confirmHealthy(entry.activation);
+      entry.healthy = true;
+    } catch (error) {
+      this.active.delete(entry.activation.pluginId);
+      try { await entry.release.dispose(); } catch (releaseError) { this.options.reportError(releaseError); }
+      await this.options.bridge.failActivation(entry.activation).catch(this.options.reportError);
+      await entry.session.dispose();
+      await this.options.bridge.deactivate(entry.activation.pluginId).catch(this.options.reportError);
+      throw error;
     }
   }
 

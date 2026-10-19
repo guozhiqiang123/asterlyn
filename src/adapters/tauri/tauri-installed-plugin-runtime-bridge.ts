@@ -31,6 +31,24 @@ export const tauriInstalledPluginRuntimeBridge: InstalledPluginRuntimeBridge = {
     locale,
     theme,
   }),
+  confirmHealthy: (activation) => invoke("confirm_installed_plugin_runtime_healthy", {
+    pluginId: activation.pluginId,
+    pluginVersion: activation.pluginVersion,
+    packageDigest: activation.packageDigest,
+    sessionId: activation.sessionId,
+  }),
+  failActivation: (activation) => invoke("fail_installed_plugin_runtime_activation", {
+    pluginId: activation.pluginId,
+    pluginVersion: activation.pluginVersion,
+    packageDigest: activation.packageDigest,
+    sessionId: activation.sessionId,
+  }),
+  abandonActivation: (activation) => invoke("abandon_installed_plugin_runtime_activation", {
+    pluginId: activation.pluginId,
+    pluginVersion: activation.pluginVersion,
+    packageDigest: activation.packageDigest,
+    sessionId: activation.sessionId,
+  }),
   invoke: (
     pluginId: string,
     callbackHandle: string,

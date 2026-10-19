@@ -439,6 +439,22 @@ pub(crate) fn installed_package_root(
         .join(digest))
 }
 
+pub(crate) fn recover_interrupted_plugin_activations(
+    app: &tauri::AppHandle,
+) -> Result<PluginInstallationSnapshot, String> {
+    installation_store(app)?
+        .recover_interrupted_activations()
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn abandon_plugin_activations(
+    app: &tauri::AppHandle,
+) -> Result<PluginInstallationSnapshot, String> {
+    installation_store(app)?
+        .abandon_all_activations()
+        .map_err(|error| error.to_string())
+}
+
 fn discover_release(source: &PluginSource) -> PluginSourceCatalog {
     match request_latest_release(source) {
         Ok(HttpReleaseResponse {

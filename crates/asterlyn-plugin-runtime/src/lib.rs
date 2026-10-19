@@ -310,6 +310,27 @@ impl PluginHostSupervisor {
         self.session(owner, plugin_id)?.diagnostics()
     }
 
+    pub fn assert_active_session(
+        &self,
+        owner: &str,
+        plugin_id: &str,
+        plugin_version: &str,
+        package_digest: &str,
+        session_id: &str,
+    ) -> Result<(), PluginRuntimeError> {
+        let session = self.session(owner, plugin_id)?;
+        if session.identity.plugin_version != plugin_version
+            || session.identity.package_digest != package_digest
+            || session.session_id != session_id
+        {
+            return Err(PluginRuntimeError::InvalidConfiguration(
+                "plugin health checkpoint does not match the active session".to_owned(),
+            ));
+        }
+        session.diagnostics()?;
+        Ok(())
+    }
+
     pub fn stop_plugin(&self, owner: &str, plugin_id: &str, reason: ShutdownReason) {
         let key = SessionKey {
             owner: owner.to_owned(),

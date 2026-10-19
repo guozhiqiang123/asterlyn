@@ -361,6 +361,39 @@ impl PluginInstallationStore {
         }
     }
 
+    pub fn abandon_all_activations(&self) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        let snapshot = self.snapshot()?;
+        let mut plugins = snapshot.plugins;
+        let mut changed = false;
+        for plugin in &mut plugins {
+            let abandoned = plugin
+                .versions
+                .iter_mut()
+                .filter(|version| version.runtime_status == PluginRuntimeStatus::Active)
+                .map(|version| {
+                    version.runtime_status = PluginRuntimeStatus::PendingRuntime;
+                    version.version.clone()
+                })
+                .collect::<Vec<_>>();
+            if abandoned.is_empty() {
+                continue;
+            }
+            changed = true;
+            plugin.active_version = plugin.known_good_version.clone();
+            if plugin.pending_version.is_none() {
+                plugin.pending_version = abandoned.first().cloned();
+            }
+        }
+        if changed {
+            self.write(snapshot.generation + 1, plugins)
+        } else {
+            Ok(PluginInstallationSnapshot {
+                plugins,
+                ..snapshot
+            })
+        }
+    }
+
     fn mutate_exact_version(
         &self,
         plugin_id: &str,
@@ -1467,6 +1500,14 @@ mod tests {
             Some("1.0.0")
         );
 
+        store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &digest)
+            .unwrap();
+        let app_exit = store.abandon_all_activations().unwrap();
+        assert_eq!(
+            app_exit.plugins[0].versions[0].runtime_status,
+            PluginRuntimeStatus::PendingRuntime
+        );
         store
             .begin_activation("dev.asterlyn.example", "1.0.0", &digest)
             .unwrap();

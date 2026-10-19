@@ -6,6 +6,9 @@ function unavailable(): never {
 
 export const demoInstalledPluginRuntimeBridge: InstalledPluginRuntimeBridge = {
   activate: async () => unavailable(),
+  confirmHealthy: async () => unavailable(),
+  failActivation: async () => unavailable(),
+  abandonActivation: async () => unavailable(),
   invoke: async () => unavailable(),
   deactivate: async () => undefined,
   diagnostics: async () => unavailable(),

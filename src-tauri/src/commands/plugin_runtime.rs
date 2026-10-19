@@ -9,7 +9,7 @@ use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, State, WebviewWindow};
 
-use crate::application::ActiveWorkspaces;
+use crate::application::{ActiveWorkspaces, PluginMarketplaceCoordinator};
 use crate::commands::plugin_marketplace::{
     admission_context, installation_store, installed_package_root,
 };
@@ -46,6 +46,7 @@ pub(crate) async fn activate_installed_plugin_runtime(
     window: WebviewWindow,
     app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) -> Result<InstalledPluginActivation, String> {
     if workspace_generation == 0 {
@@ -54,16 +55,21 @@ pub(crate) async fn activate_installed_plugin_runtime(
     let root = active
         .resolve(window.label(), &workspace_root)
         .map_err(|error| error.to_string())?;
-    let snapshot = installation_store(&app)?
-        .snapshot()
-        .map_err(|error| error.to_string())?;
-    let selection = select_installed_plugin(&snapshot, &plugin_id)?;
-    let plugin_root = installed_package_root(
-        &app,
-        &plugin_id,
-        &selection.version,
-        &selection.package_digest,
-    )?;
+    let (selection, plugin_root) = marketplace.run(|| {
+        let store = installation_store(&app)?;
+        let snapshot = store.snapshot().map_err(|error| error.to_string())?;
+        let selection = select_installed_plugin(&snapshot, &plugin_id)?;
+        let plugin_root = installed_package_root(
+            &app,
+            &plugin_id,
+            &selection.version,
+            &selection.package_digest,
+        )?;
+        store
+            .begin_activation(&plugin_id, &selection.version, &selection.package_digest)
+            .map_err(|error| error.to_string())?;
+        Ok((selection, plugin_root))
+    })?;
     let workspace_id = format!(
         "workspace-{:x}",
         Sha256::digest(format!("{}\0{}", root.display(), workspace_generation).as_bytes())
@@ -74,7 +80,7 @@ pub(crate) async fn activate_installed_plugin_runtime(
     let selected_version = selection.version.clone();
     let selected_digest = selection.package_digest.clone();
     let selected_repository = selection.repository.clone();
-    let activated =
+    let activation_result =
         tauri::async_runtime::spawn_blocking(move || -> Result<ActivatedPlugin, String> {
             let context = admission_context(&selected_repository, &selected_version);
             let report = inspect_extracted_package(&plugin_root, &context).map_err(|error| {
@@ -105,13 +111,119 @@ pub(crate) async fn activate_installed_plugin_runtime(
                 .map_err(|error| error.to_string())
         })
         .await
-        .map_err(|error| format!("plugin activation worker could not complete: {error}"))??;
+        .map_err(|error| format!("plugin activation worker could not complete: {error}"))
+        .and_then(|result| result);
+    let activated = match activation_result {
+        Ok(activated) => activated,
+        Err(error) => {
+            let _ = marketplace.run(|| {
+                installation_store(&app)?
+                    .mark_activation_failed(
+                        &plugin_id,
+                        &selection.version,
+                        &selection.package_digest,
+                    )
+                    .map(|_| ())
+                    .map_err(|failure| failure.to_string())
+            });
+            return Err(error);
+        }
+    };
     Ok(project_activation(
         plugin_id,
         selection.version,
         selection.package_digest,
         activated,
     ))
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn confirm_installed_plugin_runtime_healthy(
+    plugin_id: String,
+    plugin_version: String,
+    package_digest: String,
+    session_id: String,
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    supervisor: State<'_, PluginHostSupervisor>,
+) -> Result<PluginInstallationSnapshot, String> {
+    supervisor
+        .assert_active_session(
+            window.label(),
+            &plugin_id,
+            &plugin_version,
+            &package_digest,
+            &session_id,
+        )
+        .map_err(|error| error.to_string())?;
+    marketplace.run(|| {
+        installation_store(&app)?
+            .promote_healthy(&plugin_id, &plugin_version, &package_digest)
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fail_installed_plugin_runtime_activation(
+    plugin_id: String,
+    plugin_version: String,
+    package_digest: String,
+    session_id: String,
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    supervisor: State<'_, PluginHostSupervisor>,
+) -> Result<PluginInstallationSnapshot, String> {
+    supervisor
+        .assert_active_session(
+            window.label(),
+            &plugin_id,
+            &plugin_version,
+            &package_digest,
+            &session_id,
+        )
+        .map_err(|error| error.to_string())?;
+    supervisor.stop_plugin(
+        window.label(),
+        &plugin_id,
+        ShutdownReason::ProtocolViolation,
+    );
+    marketplace.run(|| {
+        installation_store(&app)?
+            .mark_activation_failed(&plugin_id, &plugin_version, &package_digest)
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn abandon_installed_plugin_runtime_activation(
+    plugin_id: String,
+    plugin_version: String,
+    package_digest: String,
+    session_id: String,
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    supervisor: State<'_, PluginHostSupervisor>,
+) -> Result<PluginInstallationSnapshot, String> {
+    supervisor
+        .assert_active_session(
+            window.label(),
+            &plugin_id,
+            &plugin_version,
+            &package_digest,
+            &session_id,
+        )
+        .map_err(|error| error.to_string())?;
+    marketplace.run(|| {
+        installation_store(&app)?
+            .abandon_activation(&plugin_id, &plugin_version, &package_digest)
+            .map_err(|error| error.to_string())
+    })
 }
 
 #[tauri::command]

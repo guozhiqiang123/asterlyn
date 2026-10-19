@@ -23,6 +23,9 @@ export interface DesktopCommandMap {
   confirm_plugin_install: { args: { reviewToken: string; }; result: PluginInstallationSnapshot };
   cancel_plugin_install: { args: { reviewToken: string; }; result: void };
   activate_installed_plugin_runtime: { args: { pluginId: string; workspaceRoot: string; workspaceGeneration: number; evidence: PluginRuntimeValue; locale: string; theme: PluginRuntimeTheme; }; result: InstalledPluginActivation };
+  confirm_installed_plugin_runtime_healthy: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
+  fail_installed_plugin_runtime_activation: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
+  abandon_installed_plugin_runtime_activation: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
   invoke_installed_plugin_callback: { args: { pluginId: string; callbackHandle: string; operation: string; payload: PluginRuntimeValue; }; result: PluginRuntimeValue };
   deactivate_installed_plugin_runtime: { args: { pluginId: string; }; result: void };
   read_installed_plugin_runtime_diagnostics: { args: { pluginId: string; }; result: InstalledPluginRuntimeDiagnostics };
@@ -168,6 +171,9 @@ export const DESKTOP_RESULT_VALIDATORS: {
   confirm_plugin_install: "pluginInstallationSnapshot",
   cancel_plugin_install: "void",
   activate_installed_plugin_runtime: "installedPluginActivation",
+  confirm_installed_plugin_runtime_healthy: "pluginInstallationSnapshot",
+  fail_installed_plugin_runtime_activation: "pluginInstallationSnapshot",
+  abandon_installed_plugin_runtime_activation: "pluginInstallationSnapshot",
   invoke_installed_plugin_callback: "pluginRuntimeValue",
   deactivate_installed_plugin_runtime: "void",
   read_installed_plugin_runtime_diagnostics: "installedPluginRuntimeDiagnostics",

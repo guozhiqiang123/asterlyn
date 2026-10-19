@@ -65,6 +65,9 @@ test("activates admitted external contributions and removes them on deactivation
       throw new Error(`Unexpected callback: ${handle}`);
     },
     deactivate: async (id) => { calls.push(["deactivate", id]); },
+    confirmHealthy: async (activation) => { calls.push(["healthy", activation.sessionId]); return installation(); },
+    failActivation: async (activation) => { calls.push(["failed", activation.sessionId]); return installation(); },
+    abandonActivation: async (activation) => { calls.push(["abandoned", activation.sessionId]); return installation(); },
     diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
     subscribe: async (listener) => { eventListener = listener; return () => { eventListener = null; }; },
     subscribeNotifications: async (listener) => { notificationListener = listener; return () => { notificationListener = null; }; },
@@ -77,6 +80,7 @@ test("activates admitted external contributions and removes them on deactivation
     locale: () => "zh-CN",
     reportError: (error) => { throw error; },
     notification: (event) => { notifications.push(event); },
+    healthCheckpointMs: 0,
   });
 
   assert.deepEqual(await runtime.activate(identity, evidence, () => true), [pluginId]);
@@ -88,6 +92,8 @@ test("activates admitted external contributions and removes them on deactivation
   assert.deepEqual(notifications, [{ pluginId, kind: "success", messageKey: "run.completed" }]);
   assert.equal(typeof eventListener, "function");
   assert.deepEqual(calls[0].slice(0, 4), ["activate", pluginId, "/repo", 7]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.some((call) => call[0] === "healthy"), true);
 
   await runtime.deactivate();
   assert.equal(registry.get(`${pluginId}.fixture-command`), null);
@@ -126,6 +132,9 @@ test("refreshes cached task projections from isolated runtime events", async () 
       throw new Error(`Unexpected callback: ${handle}`);
     },
     deactivate: async () => undefined,
+    confirmHealthy: async () => installation(),
+    failActivation: async () => installation(),
+    abandonActivation: async () => installation(),
     diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
     subscribe: async (listener) => { runtimeEvent = listener; return () => undefined; },
     subscribeNotifications: async () => () => undefined,
@@ -161,6 +170,9 @@ test("skips disabled installations before starting a process", async () => {
       activate: async () => { activations += 1; throw new Error("must not activate"); },
       invoke: async () => null,
       deactivate: async () => undefined,
+      confirmHealthy: async () => installation(),
+      failActivation: async () => installation(),
+      abandonActivation: async () => installation(),
       diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
       subscribe: async () => () => undefined,
       subscribeNotifications: async () => () => undefined,

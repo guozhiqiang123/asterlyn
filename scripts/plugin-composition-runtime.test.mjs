@@ -153,6 +153,9 @@ function installation(pluginId) {
 function externalBridge(activation) {
   return {
     activate: async () => activation,
+    confirmHealthy: async () => installation(activation?.pluginId ?? "fixture"),
+    failActivation: async () => installation(activation?.pluginId ?? "fixture"),
+    abandonActivation: async () => installation(activation?.pluginId ?? "fixture"),
     invoke: async (_pluginId, handle) => {
       if (handle === "snapshot") return { status: "ready", tasks: [] };
       throw new Error(`Unexpected external callback: ${handle}`);

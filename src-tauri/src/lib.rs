@@ -233,6 +233,7 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .setup(|app| {
+            recover_interrupted_plugin_activations(app.handle()).map_err(std::io::Error::other)?;
             let plugin_hosts = build_plugin_host_supervisor(app.handle().clone())
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
             app.manage(plugin_hosts);
@@ -249,6 +250,9 @@ pub fn run() {
                 window
                     .state::<PluginHostSupervisor>()
                     .cancel_owner(window.label(), ShutdownReason::WindowClosed);
+                if window.state::<PluginHostSupervisor>().active_count() == 0 {
+                    let _ = abandon_plugin_activations(window.app_handle());
+                }
                 window.state::<ActiveWorkspaces>().remove(window.label());
                 window
                     .state::<WorkspaceWatchService>()
@@ -287,6 +291,9 @@ pub fn run() {
             confirm_plugin_install,
             cancel_plugin_install,
             activate_installed_plugin_runtime,
+            confirm_installed_plugin_runtime_healthy,
+            fail_installed_plugin_runtime_activation,
+            abandon_installed_plugin_runtime_activation,
             invoke_installed_plugin_callback,
             deactivate_installed_plugin_runtime,
             read_installed_plugin_runtime_diagnostics,
@@ -419,6 +426,7 @@ pub fn run() {
         if matches!(event, tauri::RunEvent::Exit) {
             app.state::<TaskManager>().cancel_all();
             app.state::<PluginProcessQueryManager>().cancel_all();
+            let _ = abandon_plugin_activations(app);
             app.state::<PluginHostSupervisor>()
                 .cancel_all(ShutdownReason::ApplicationExit);
         }
