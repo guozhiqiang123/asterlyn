@@ -23,14 +23,14 @@ under the plugin repository's `vendor/` directory, and pin it exactly:
 Import types and constants only from the package root:
 
 ```ts
-import {
-  PLUGIN_SDK_MAJOR,
-  type SdkPluginManifest,
-  type SdkPluginModule,
+import type {
+  SdkPluginActivationContext,
+  SdkPluginManifest,
+  SdkPluginModule,
 } from "@asterlyn/plugin-sdk";
 
 const manifest: SdkPluginManifest = {
-  sdkMajor: PLUGIN_SDK_MAJOR,
+  sdkMajor: 1,
   id: "dev.example.plugin",
   version: "1.0.0",
   nameKey: "name",
@@ -45,12 +45,12 @@ const manifest: SdkPluginManifest = {
 };
 
 export const plugin: SdkPluginModule = {
-  sdkMajor: PLUGIN_SDK_MAJOR,
+  sdkMajor: 1,
   id: "dev.example.plugin",
   version: "1.0.0",
   manifest,
   matches: () => true,
-  activate: ({ contribute }) => {
+  activate: ({ contribute }: SdkPluginActivationContext) => {
     const disposable = contribute({
       kind: "command",
       id: "hello",
@@ -69,6 +69,9 @@ are rejected before plugin code executes.
 
 See the host repository's [Plugin Release package
 contract](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/engineering/plugin-release-package-contract.md)
-and [public developer rollout
-plan](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/engineering/public-plugin-developer-rollout-plan.md)
-for packaging, Release, compatibility, diagnostics, and lifecycle rules.
+and public [developer
+guide](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/developer-guide.md),
+[capability catalog](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/capabilities-and-permissions.md),
+and [diagnostics and migration
+guide](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/diagnostics-and-migration.md)
+for packaging, Release, authority, compatibility, diagnostics, and lifecycle rules.

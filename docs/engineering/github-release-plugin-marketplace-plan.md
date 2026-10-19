@@ -123,6 +123,11 @@ Commit boundary: staged downloader, admission transaction, storage/index, review
 
 ### MKT5 — Supervised external plugin host
 
+Status: implemented on 2026-10-19 for protocol `1`, isolated activation, bounded capability routing,
+transactional contributions, lifecycle shutdown, and released Android package parity. Installed-app
+cross-platform resource measurements remain part of final MKT8 evidence rather than reopening the
+runtime authority boundary.
+
 Detailed execution plan: [`external-plugin-runtime-plan.md`](external-plugin-runtime-plan.md).
 
 1. Add the packaged `asterlyn-plugin-host` sidecar with an embedded non-Node JavaScript runtime.
@@ -144,6 +149,10 @@ third.
 
 ### MKT6 — Installed and Marketplace Settings experience
 
+Status: implemented on 2026-10-19 for source management, cached discovery, install review,
+Installed/Marketplace views, deep links, lifecycle controls, host-owned copy, and focused keyboard/
+focus/ARIA tests. Final installed assistive-technology evidence remains in MKT8.
+
 1. Split Settings → Plugins into host-owned `Installed` and `Marketplace` views.
 2. Marketplace renders source cards, manual refresh, cached/stale/error/rate-limit states, add/edit/
    remove source dialogs, Release details, and install/update entry points.
@@ -159,6 +168,10 @@ source, or a pending restart, and never accepts plugin markup.
 Commit boundary: Settings controller/view/binding/styles/localization and interaction tests.
 
 ### MKT7 — Restart, recovery, update, rollback, and uninstall
+
+Status: implemented on 2026-10-19. The lifecycle store supports pending/current/known-good/
+quarantine selection, restart checkpoints, interrupted-start recovery, enable/disable, exact
+rollback, uninstall/fallback, bounded cleanup, symlink rejection, and write-fault fixtures.
 
 1. Add a host restart coordinator that blocks new plugin work, cancels supervised operations,
    persists pending selection, relaunches the same installed app, and reports recovery on startup.
@@ -194,11 +207,13 @@ acceptance evidence.
 
 Status on 2026-10-19: the first-party Android plugin publishes a schema-2, self-contained package
 as GitHub Release `v0.5.4`. The real online Release passes source discovery, exact asset/digest
-binding, host package inspection, permission review data, and MKT4 admission/storage requirements.
-This closes the first-party packaging and online-admission portion only. Restart activation,
-healthy-start promotion, rollback, disable, and uninstall/fallback remain gated by MKT5–MKT7 and
-must not be presented as available. See
-[`2026-10-19-android-plugin-marketplace-release.md`](../benchmarks/2026-10-19-android-plugin-marketplace-release.md).
+binding, host package inspection, permission review data, and admission/storage requirements.
+MKT5–MKT7 now provide isolated activation, healthy-start promotion, rollback, disable, uninstall/
+fallback, restart recovery, bounded cleanup, and Installed UI controls. MKT8A–MKT8B add public
+documentation and an independently buildable template; MKT8C remains partial until the inspector
+ships standalone, and MKT8D remains open until a second fixture repository completes the clean
+installed-host and hostile-update acceptance matrix. Historical online-admission evidence remains
+in [`2026-10-19-android-plugin-marketplace-release.md`](../benchmarks/2026-10-19-android-plugin-marketplace-release.md).
 
 ## Dependency order and parallel work
 

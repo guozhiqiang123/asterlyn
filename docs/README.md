@@ -44,6 +44,13 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0031-supervised-staged-plugin-run-sessions.md`](architecture/decisions/0031-supervised-staged-plugin-run-sessions.md) — staged plugin Run sessions, authoritative final-artifact identity, and typed declared tool operations.
 - [`architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md`](architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md) — direct GitHub Release plugin sources, static admission, immutable installation, isolated activation, restart recovery, and rollback.
 
+## Plugin development
+
+- [`plugins/developer-guide.md`](plugins/developer-guide.md) — standalone template, manifest/runtime ownership, Release publication, source addition, lifecycle, and security boundary.
+- [`plugins/capabilities-and-permissions.md`](plugins/capabilities-and-permissions.md) — complete admitted authority catalog, operation mapping, resource limits, and failure behavior.
+- [`plugins/diagnostics-and-migration.md`](plugins/diagnostics-and-migration.md) — failure-phase diagnostics, compatibility axes, persisted-data migration, rollback, quarantine, and deprecation policy.
+- [`../templates/plugin-typescript`](../templates/plugin-typescript) — executable isolated TypeScript plugin repository template and pinned Release workflow.
+
 ## Delivery
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.

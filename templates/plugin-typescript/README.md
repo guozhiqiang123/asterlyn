@@ -22,3 +22,9 @@ publishes exactly the inspected package.
 Plugin code executes in Asterlyn's supervised plugin-host process. There is no DOM, Tauri, Node,
 filesystem, process, network, credential, or shell authority. Host operations are available only
 through manifest-admitted capabilities and permissions.
+
+Before adding host authority, read the public [developer
+guide](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/developer-guide.md),
+[capability catalog](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/capabilities-and-permissions.md),
+and [diagnostics and migration
+guide](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/diagnostics-and-migration.md).

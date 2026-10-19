@@ -36,6 +36,12 @@ derive one from another.
 
 ### MKT8A — Public contract and capability catalog
 
+Status: implemented on 2026-10-19. The public
+[`developer guide`](../plugins/developer-guide.md),
+[`capability and permission catalog`](../plugins/capabilities-and-permissions.md), and
+[`diagnostics and migration guide`](../plugins/diagnostics-and-migration.md) are protected by a
+native-whitelist drift test.
+
 1. Publish one developer guide covering repository identity, manifest ownership, localization,
    settings, contributions, Release discovery, install review, activation, diagnostics, rollback,
    and removal.
@@ -50,6 +56,11 @@ Exit gate: a developer can determine every admitted authority and every version 
 host implementation code.
 
 ### MKT8B — Executable TypeScript template
+
+Status: implemented on 2026-10-19 in [`templates/plugin-typescript`](../../templates/plugin-typescript).
+Host CI copies the template to a temporary directory, performs a locked clean install and dependency
+audit, type-checks/tests it, builds the package twice, proves byte-identical SHA-256, and runs the
+canonical native inspector over the exact artifact.
 
 1. Add a standalone template containing manifest, localized metadata, minimal runtime contribution,
    tests, deterministic bundling, integrity generation, canonical package inspection, and a pinned
@@ -66,6 +77,11 @@ APIs, or another plugin.
 
 ### MKT8C — SDK and inspector delivery
 
+Status: partially implemented. The deterministic SDK tarball and checksum are host Release
+artifacts, and the template/Android repositories pin their dependency graphs and run the canonical
+inspector. A standalone inspector artifact plus explicit oldest/current installed-host fixture pair
+remain open; the template therefore checks out the oldest compatible host tag in CI for inspection.
+
 1. Make `@asterlyn/plugin-sdk` a publishable declarative package with no host implementation, plus
    license, repository metadata,
    public README, and a deterministic `npm pack` artifact.
@@ -80,6 +96,10 @@ Exit gate: developers do not need an Asterlyn source checkout to consume SDK dec
 validate the package they publish.
 
 ### MKT8D — Installed acceptance and evidence
+
+Status: open. The next phase owns the independent second repository, clean installed-host journey,
+deliberately failing update, cross-platform package/runtime evidence, and measured resource and
+accessibility results.
 
 1. Verify a clean installed host can add a second fixture repository, discover, inspect, install,
    restart, activate, and promote it without an open workspace.

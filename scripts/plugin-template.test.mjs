@@ -28,8 +28,14 @@ test("template vendors the exact public SDK artifact and immutable dependency gr
   assert.equal(existsSync(path.join(templateRoot, artifact)), true);
   assert.equal(existsSync(path.join(templateRoot, "package-lock.json")), true);
   const expected = read("vendor/plugin-sdk.sha256").trim().split(/\s+/)[0];
-  const actual = createHash("sha256").update(readFileSync(path.join(templateRoot, artifact))).digest("hex");
+  const bytes = readFileSync(path.join(templateRoot, artifact));
+  const actual = createHash("sha256").update(bytes).digest("hex");
   assert.equal(actual, expected);
+  const packageLock = json("package-lock.json");
+  assert.equal(
+    packageLock.packages["node_modules/@asterlyn/plugin-sdk"].integrity,
+    `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
+  );
 });
 
 test("template release workflow pins the inspector baseline and publishing actions", () => {
