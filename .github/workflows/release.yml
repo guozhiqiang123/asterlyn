@@ -250,6 +250,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Test plugin process lifecycle on release host
+        run: cargo test --locked --target "${{ matrix.target }}" -p asterlyn-plugin-runtime
+
       - name: Build native release artifacts
         env:
           APPLE_SIGNING_IDENTITY: ${{ matrix.apple_signing_identity }}
