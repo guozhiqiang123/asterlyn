@@ -65,6 +65,55 @@ test("silently loading a plugin catalog preserves persisted preferences", () => 
   store.dispose();
 });
 
+test("temporarily absent plugin preferences survive unrelated commits and restore on reinstall", () => {
+  const storage = new MemoryStorage();
+  storage.value = JSON.stringify({
+    version: 1,
+    enabled: { "fixture.external": true },
+    settings: { "fixture.external": { mode: "detailed" } },
+  });
+  const external = settingManifest("fixture.external", "detailed");
+  const other = settingManifest("fixture.other", "compact");
+  const store = new PluginPreferenceStore(storage, [external], createSilentPluginPreferenceSync());
+  assert.equal(store.setting("fixture.external", "mode"), "detailed");
+  store.setManifests([other], false);
+  assert.equal(store.setSetting("fixture.other", "mode", "detailed"), true);
+  store.setManifests([external, other], false);
+  assert.equal(store.setting("fixture.external", "mode"), "detailed");
+  store.dispose();
+});
+
+test("independently installed manifests populate host-owned plugin settings without bundled code", async () => {
+  const manifest = { sdkMajor: 1, ...settingManifest("fixture.external", "compact") };
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    loadPlugins: async () => [],
+    pluginMarketplaceBridge: {
+      listPluginInstallations: async () => ({ schemaVersion: 1, generation: 4, recovered: false, plugins: [] }),
+      listInstalledPluginManifests: async () => ({
+        schemaVersion: 1,
+        generation: 4,
+        manifests: [{
+          pluginId: manifest.id,
+          pluginVersion: manifest.version,
+          packageDigest: `sha256:${"a".repeat(64)}`,
+          manifest,
+          error: null,
+        }],
+      }),
+    },
+  });
+  const snapshot = await runtime.loadManagementCatalog();
+  assert.equal(snapshot.entries.length, 1);
+  assert.equal(snapshot.entries[0].origin, "installed");
+  assert.equal(snapshot.entries[0].settingDescriptors[0].id, "mode");
+  assert.equal(snapshot.entries[0].settings.mode, "compact");
+  runtime.dispose();
+});
+
 test("management catalog is available without activating a workspace", async () => {
   const runtime = new PluginCompositionRuntime({
     registerCommand: () => () => undefined,
@@ -209,3 +258,29 @@ test("plugin runtime rejects a manifest whose identity differs from the descript
   );
   await runtime.dispose();
 });
+
+function settingManifest(id, defaultValue) {
+  return {
+    id,
+    version: "1.0.0",
+    nameKey: "name",
+    descriptionKey: "description",
+    localization: { defaultLocale: "en-US", locales: { "en-US": {
+      name: id,
+      description: `${id} description`,
+      "settings.mode": "Mode",
+      "settings.compact": "Compact",
+      "settings.detailed": "Detailed",
+    } } },
+    settings: [{
+      id: "mode",
+      kind: "enum",
+      labelKey: "settings.mode",
+      defaultValue,
+      options: [
+        { value: "compact", labelKey: "settings.compact" },
+        { value: "detailed", labelKey: "settings.detailed" },
+      ],
+    }],
+  };
+}

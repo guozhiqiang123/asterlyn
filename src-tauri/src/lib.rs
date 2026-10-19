@@ -287,6 +287,7 @@ pub fn run() {
             remove_plugin_source,
             refresh_plugin_source,
             list_plugin_installations,
+            list_installed_plugin_manifests,
             prepare_plugin_install,
             confirm_plugin_install,
             cancel_plugin_install,

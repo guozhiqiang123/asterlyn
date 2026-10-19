@@ -39,6 +39,10 @@ pub const SUPPORTED_PERMISSIONS: &[&str] = &[
 ];
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 const MANIFEST_PATH: &str = "manifest.json";
+const MAX_LOCALIZATION_CHARACTERS: usize = 262_144;
+const MAX_LOCALIZATION_VALUE_CHARACTERS: usize = 4_096;
+const MAX_SETTINGS: usize = 32;
+const MAX_SETTING_OPTIONS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdmissionContext<'a> {
@@ -61,8 +65,25 @@ pub struct AdmissionReport {
     pub license_expression: String,
     pub capabilities: Vec<String>,
     pub permissions: Vec<String>,
+    pub management_manifest: AdmittedPluginManifest,
     pub files: Vec<AdmittedFile>,
     pub expanded_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdmittedPluginManifest {
+    pub sdk_major: u32,
+    pub id: String,
+    pub version: String,
+    pub name_key: String,
+    pub description_key: String,
+    pub localization: PluginLocalization,
+    pub settings: Vec<PluginSetting>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_authorization: Option<TaskAuthorization>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_tool: Option<WorkspaceTool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -137,10 +158,94 @@ struct PackageManifest {
     sdk_major: u32,
     id: String,
     version: String,
+    name_key: String,
+    description_key: String,
+    localization: PluginLocalization,
+    settings: Vec<PluginSetting>,
+    #[serde(default)]
+    task_authorization: Option<TaskAuthorization>,
+    #[serde(default)]
+    workspace_tool: Option<WorkspaceTool>,
     capabilities: Vec<String>,
     #[serde(default)]
     permissions: Vec<String>,
     distribution: Distribution,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PluginLocalization {
+    pub default_locale: String,
+    pub locales: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PluginSetting {
+    pub id: String,
+    pub kind: String,
+    pub label_key: String,
+    #[serde(default)]
+    pub description_key: Option<String>,
+    pub default_value: PluginSettingValue,
+    #[serde(default)]
+    pub options: Option<Vec<PluginSettingOption>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PluginSettingValue {
+    Text(String),
+    Boolean(bool),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PluginSettingOption {
+    pub value: String,
+    pub label_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskAuthorization {
+    pub workspace_trust: WorkspaceTrust,
+    #[serde(default)]
+    pub task_confirmation: Option<TaskConfirmation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceTrust {
+    pub id: String,
+    pub label_key: String,
+    #[serde(default)]
+    pub description_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskConfirmation {
+    pub remember_label_key: String,
+    #[serde(default)]
+    pub remember_description_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceTool {
+    pub id: String,
+    pub title_key: String,
+    pub icon: String,
+    pub views: Vec<WorkspaceToolView>,
+    pub default_view: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceToolView {
+    pub id: String,
+    pub label_key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -247,6 +352,17 @@ fn report_from(
         })
         .collect::<Vec<_>>();
     let expanded_bytes = admitted_files.iter().map(|file| file.size).sum();
+    let management_manifest = AdmittedPluginManifest {
+        sdk_major: manifest.sdk_major,
+        id: manifest.id.clone(),
+        version: manifest.version.clone(),
+        name_key: manifest.name_key,
+        description_key: manifest.description_key,
+        localization: manifest.localization,
+        settings: manifest.settings,
+        task_authorization: manifest.task_authorization,
+        workspace_tool: manifest.workspace_tool,
+    };
     AdmissionReport {
         plugin_id: manifest.id,
         plugin_version: manifest.version,
@@ -255,6 +371,7 @@ fn report_from(
         license_expression: manifest.distribution.license.expression,
         capabilities: manifest.capabilities,
         permissions: manifest.permissions,
+        management_manifest,
         files: admitted_files,
         expanded_bytes,
     }
@@ -505,6 +622,7 @@ fn validate_manifest(
             "manifest version does not match the Release version",
         ));
     }
+    validate_management_manifest(manifest)?;
     validate_repository(&manifest.distribution.repository)?;
     if manifest.distribution.repository != context.repository {
         return Err(contract(
@@ -540,6 +658,171 @@ fn validate_manifest(
     )?;
     validate_integrity(&manifest.distribution.integrity, files)?;
     Ok(())
+}
+
+fn validate_management_manifest(manifest: &PackageManifest) -> Result<(), AdmissionError> {
+    validate_message_key(&manifest.name_key, "plugin name key")?;
+    validate_message_key(&manifest.description_key, "plugin description key")?;
+    let localization = &manifest.localization;
+    if localization.locales.is_empty() || localization.locales.len() > 16 {
+        return Err(contract("invalid plugin locale count"));
+    }
+    validate_locale(&localization.default_locale)?;
+    let default_messages = localization
+        .locales
+        .get(&localization.default_locale)
+        .ok_or_else(|| contract("plugin default locale is missing"))?;
+    let mut total_characters = 0_usize;
+    for (locale, messages) in &localization.locales {
+        validate_locale(locale)?;
+        if messages.len() > 512 {
+            return Err(contract("too many plugin localization messages"));
+        }
+        total_characters = total_characters.saturating_add(locale.chars().count());
+        for (key, value) in messages {
+            validate_message_key(key, "plugin localization key")?;
+            if value.is_empty()
+                || value.chars().count() > MAX_LOCALIZATION_VALUE_CHARACTERS
+                || value.chars().any(|character| {
+                    character.is_control() && !matches!(character, '\n' | '\r' | '\t')
+                })
+            {
+                return Err(contract("invalid plugin localization value"));
+            }
+            total_characters = total_characters
+                .saturating_add(key.chars().count())
+                .saturating_add(value.chars().count());
+            if total_characters > MAX_LOCALIZATION_CHARACTERS {
+                return Err(contract("plugin localization exceeds its size limit"));
+            }
+        }
+    }
+
+    let mut referenced = vec![
+        manifest.name_key.as_str(),
+        manifest.description_key.as_str(),
+    ];
+    let mut setting_ids = BTreeSet::new();
+    if manifest.settings.len() > MAX_SETTINGS {
+        return Err(contract("too many plugin settings"));
+    }
+    for setting in &manifest.settings {
+        validate_identifier(&setting.id, "plugin setting ID")?;
+        if !setting_ids.insert(setting.id.as_str()) {
+            return Err(contract("duplicate plugin setting ID"));
+        }
+        validate_message_key(&setting.label_key, "plugin setting label key")?;
+        referenced.push(&setting.label_key);
+        if let Some(key) = setting.description_key.as_deref() {
+            validate_message_key(key, "plugin setting description key")?;
+            referenced.push(key);
+        }
+        match (
+            setting.kind.as_str(),
+            &setting.default_value,
+            setting.options.as_deref(),
+        ) {
+            ("boolean", PluginSettingValue::Boolean(_), None | Some([])) => {}
+            ("enum", PluginSettingValue::Text(default), Some(options))
+                if !options.is_empty() && options.len() <= MAX_SETTING_OPTIONS =>
+            {
+                let mut values = BTreeSet::new();
+                for option in options {
+                    if option.value.is_empty()
+                        || option.value.chars().count() > 256
+                        || !values.insert(option.value.as_str())
+                    {
+                        return Err(contract("invalid plugin setting option"));
+                    }
+                    validate_message_key(&option.label_key, "plugin setting option label key")?;
+                    referenced.push(&option.label_key);
+                }
+                if !values.contains(default.as_str()) {
+                    return Err(contract("plugin setting default is not an option"));
+                }
+            }
+            _ => return Err(contract("invalid plugin setting declaration")),
+        }
+    }
+
+    if let Some(authorization) = &manifest.task_authorization {
+        let workspace = &authorization.workspace_trust;
+        validate_identifier(&workspace.id, "workspace trust ID")?;
+        if setting_ids.contains(workspace.id.as_str()) {
+            return Err(contract(
+                "workspace trust ID conflicts with a plugin setting",
+            ));
+        }
+        validate_message_key(&workspace.label_key, "workspace trust label key")?;
+        referenced.push(&workspace.label_key);
+        if let Some(key) = workspace.description_key.as_deref() {
+            validate_message_key(key, "workspace trust description key")?;
+            referenced.push(key);
+        }
+        if let Some(confirmation) = &authorization.task_confirmation {
+            validate_message_key(
+                &confirmation.remember_label_key,
+                "task confirmation label key",
+            )?;
+            referenced.push(&confirmation.remember_label_key);
+            if let Some(key) = confirmation.remember_description_key.as_deref() {
+                validate_message_key(key, "task confirmation description key")?;
+                referenced.push(key);
+            }
+        }
+    }
+
+    if let Some(tool) = &manifest.workspace_tool {
+        validate_identifier(&tool.id, "workspace tool ID")?;
+        validate_message_key(&tool.title_key, "workspace tool title key")?;
+        referenced.push(&tool.title_key);
+        if !matches!(tool.icon.as_str(), "device" | "list" | "puzzle")
+            || tool.views.is_empty()
+            || tool.views.len() > 16
+        {
+            return Err(contract("invalid plugin workspace tool"));
+        }
+        let mut view_ids = BTreeSet::new();
+        for view in &tool.views {
+            validate_identifier(&view.id, "workspace tool view ID")?;
+            if !view_ids.insert(view.id.as_str()) {
+                return Err(contract("duplicate workspace tool view ID"));
+            }
+            validate_message_key(&view.label_key, "workspace tool view label key")?;
+            referenced.push(&view.label_key);
+        }
+        if !view_ids.contains(tool.default_view.as_str()) {
+            return Err(contract("workspace tool default view is missing"));
+        }
+    }
+
+    if referenced
+        .into_iter()
+        .any(|key| !default_messages.contains_key(key))
+    {
+        return Err(contract(
+            "plugin default locale is missing a referenced message",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_locale(value: &str) -> Result<(), AdmissionError> {
+    if value.is_empty()
+        || value.len() > 35
+        || value.starts_with('-')
+        || value.ends_with('-')
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        return Err(contract("invalid plugin locale"));
+    }
+    Ok(())
+}
+
+fn validate_message_key(value: &str, kind: &str) -> Result<(), AdmissionError> {
+    validate_identifier(value, kind)
 }
 
 fn validate_host_compatibility(
@@ -783,11 +1066,56 @@ mod tests {
         let destination = directory.path().join("admitted");
         let report = extract_admitted_package(&valid_package(), &context(), &destination).unwrap();
         assert_eq!(report.plugin_id, "dev.asterlyn.example");
+        assert_eq!(report.management_manifest.name_key, "name");
+        assert_eq!(
+            report.management_manifest.localization.locales["en-US"]["name"],
+            "Example"
+        );
         assert_eq!(
             fs::read(destination.join("runtime/plugin.js")).unwrap(),
             RUNTIME
         );
         assert!(extract_admitted_package(&valid_package(), &context(), &destination).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_host_rendered_manifest_metadata() {
+        let missing_copy = manifest(|value| {
+            value["localization"]["locales"]["en-US"]
+                .as_object_mut()
+                .unwrap()
+                .remove("name");
+        });
+        let package = archive(&[
+            (MANIFEST_PATH, &missing_copy, EntryType::Regular),
+            ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+            ("LICENSE", LICENSE, EntryType::Regular),
+        ]);
+        assert!(matches!(
+            inspect_package(&package, &context()),
+            Err(AdmissionError::Contract(message))
+                if message.contains("referenced message")
+        ));
+
+        let invalid_setting = manifest(|value| {
+            value["settings"] = json!([{
+                "id": "mode",
+                "kind": "enum",
+                "labelKey": "name",
+                "defaultValue": "missing",
+                "options": [{ "value": "compact", "labelKey": "name" }]
+            }]);
+        });
+        let package = archive(&[
+            (MANIFEST_PATH, &invalid_setting, EntryType::Regular),
+            ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+            ("LICENSE", LICENSE, EntryType::Regular),
+        ]);
+        assert!(matches!(
+            inspect_package(&package, &context()),
+            Err(AdmissionError::Contract(message))
+                if message.contains("default is not an option")
+        ));
     }
 
     #[test]

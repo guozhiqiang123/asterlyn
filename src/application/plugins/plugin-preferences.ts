@@ -44,14 +44,15 @@ export interface PluginPreferenceChange {
 type Listener = (change: PluginPreferenceChange) => void;
 
 /**
- * Host-owned, bounded preferences for bundled plugins. Unknown plugin and setting keys are
- * intentionally discarded during every load so stale profile data cannot become an API.
+ * Host-owned, bounded plugin preferences. Temporarily absent plugin IDs remain in private storage
+ * for reinstall, but only values revalidated against the current admitted manifest are exposed.
  */
 export class PluginPreferenceStore {
   private readonly storage: PluginPreferenceStorage;
   private readonly sync: PluginPreferenceSyncPort;
   private readonly listeners = new Set<Listener>();
   private manifests = new Map<string, BundledPluginManifest>();
+  private retained: MutablePluginPreferenceSnapshot = mutableEmptySnapshot();
   private value: PluginPreferenceSnapshot;
   private disposed = false;
   private diagnosticsValue: readonly string[] = [];
@@ -85,7 +86,8 @@ export class PluginPreferenceStore {
     if (!notify) {
       const parsed = readStored(this.storage);
       this.diagnosticsValue = parsed.diagnostics;
-      this.value = freezeState(normalizeState(parsed.value, this.manifests));
+      this.retained = retainStoredState(parsed.value);
+      this.value = freezeState(normalizeState(this.retained, this.manifests));
       return false;
     }
     return this.reload();
@@ -128,7 +130,8 @@ export class PluginPreferenceStore {
     const previous = this.value;
     const parsed = readStored(this.storage);
     this.diagnosticsValue = parsed.diagnostics;
-    const next = normalizeState(parsed.value, this.manifests);
+    this.retained = retainStoredState(parsed.value);
+    const next = normalizeState(this.retained, this.manifests);
     if (sameState(previous, next)) return false;
     this.value = freezeState(next);
     this.emit({ source: "external", previous, preferences: this.value });
@@ -148,12 +151,14 @@ export class PluginPreferenceStore {
     if (sameState(this.value, normalized)) return false;
     const previous = this.value;
     try {
-      const serialized = JSON.stringify(normalized);
+      const retained = mergeRetainedState(this.retained, normalized, this.manifests);
+      const serialized = JSON.stringify(retained);
       if (serialized.length > MAX_SERIALIZED_BYTES) {
         this.diagnosticsValue = ["plugin preference storage is too large"];
         return false;
       }
       this.storage.setItem(PLUGIN_PREFERENCES_KEY, serialized);
+      this.retained = retained;
     } catch {
       this.diagnosticsValue = ["plugin preference storage is unavailable"];
       return false;
@@ -215,6 +220,10 @@ function emptySnapshot(): PluginPreferenceSnapshot {
   return Object.freeze({ version: PLUGIN_PREFERENCES_VERSION, enabled: Object.freeze({}), settings: Object.freeze({}) });
 }
 
+function mutableEmptySnapshot(): MutablePluginPreferenceSnapshot {
+  return { version: PLUGIN_PREFERENCES_VERSION, enabled: {}, settings: {} };
+}
+
 interface MutablePluginPreferenceSnapshot {
   version: typeof PLUGIN_PREFERENCES_VERSION;
   enabled: Record<string, boolean>;
@@ -249,6 +258,45 @@ function normalizeState(
     if (Object.keys(target).length > 0) settings[id] = target;
   }
   return { version: PLUGIN_PREFERENCES_VERSION, enabled, settings };
+}
+
+function retainStoredState(value: unknown): MutablePluginPreferenceSnapshot {
+  const source = isRecord(value) ? value : {};
+  const enabled: Record<string, boolean> = {};
+  const settings: Record<string, Record<string, PluginSettingValue>> = {};
+  const ids = new Set([
+    ...Object.keys(isRecord(source.enabled) ? source.enabled : {}),
+    ...Object.keys(isRecord(source.settings) ? source.settings : {}),
+  ]);
+  for (const id of [...ids].sort().slice(0, MAX_PLUGINS)) {
+    if (!validText(id)) continue;
+    if (isRecord(source.enabled) && typeof source.enabled[id] === "boolean") enabled[id] = source.enabled[id];
+    if (!isRecord(source.settings) || !isRecord(source.settings[id])) continue;
+    const retained: Record<string, PluginSettingValue> = {};
+    for (const [settingId, settingValue] of Object.entries(source.settings[id]).slice(0, MAX_SETTINGS_PER_PLUGIN)) {
+      if (!validText(settingId)) continue;
+      if (typeof settingValue === "boolean" || (typeof settingValue === "string" && settingValue.length <= MAX_TEXT)) {
+        retained[settingId] = settingValue;
+      }
+    }
+    if (Object.keys(retained).length > 0) settings[id] = retained;
+  }
+  return { version: PLUGIN_PREFERENCES_VERSION, enabled, settings };
+}
+
+function mergeRetainedState(
+  retained: MutablePluginPreferenceSnapshot,
+  visible: PluginPreferenceSnapshot,
+  manifests: ReadonlyMap<string, BundledPluginManifest>,
+): MutablePluginPreferenceSnapshot {
+  const merged = cloneState(retained);
+  for (const id of manifests.keys()) {
+    merged.enabled[id] = visible.enabled[id] ?? true;
+    const values = visible.settings[id];
+    if (values && Object.keys(values).length > 0) merged.settings[id] = { ...values };
+    else delete merged.settings[id];
+  }
+  return retainStoredState(merged);
 }
 
 function readStored(storage: PluginPreferenceStorage): { value: unknown; diagnostics: readonly string[] } {

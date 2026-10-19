@@ -1,5 +1,5 @@
 import type {
-  BundledPlugin,
+  PluginCatalogEntry,
   PluginActivationReport,
   PluginDiagnostic,
   PluginManagementEntry,
@@ -13,7 +13,7 @@ type Listener = (snapshot: PluginManagementSnapshot) => void;
 export class PluginManagementRuntime {
   private readonly preferences: PluginPreferenceStore;
   private readonly listeners = new Set<Listener>();
-  private plugins: readonly BundledPlugin[] = [];
+  private plugins: readonly PluginCatalogEntry[] = [];
   private matched = new Set<string>();
   private active = new Set<string>();
   private diagnostics = new Map<string, readonly PluginDiagnostic[]>();
@@ -34,7 +34,7 @@ export class PluginManagementRuntime {
     return () => this.listeners.delete(listener);
   }
 
-  setCatalog(plugins: readonly BundledPlugin[]): void {
+  setCatalog(plugins: readonly PluginCatalogEntry[]): void {
     this.plugins = [...plugins];
     this.publish();
   }
@@ -71,12 +71,13 @@ export class PluginManagementRuntime {
     const entries: PluginManagementEntry[] = this.plugins.map((plugin) => Object.freeze({
       id: plugin.id,
       version: plugin.version,
+      origin: plugin.origin,
       nameKey: plugin.manifest.nameKey,
       descriptionKey: plugin.manifest.descriptionKey,
       localization: plugin.manifest.localization,
       ...(plugin.manifest.workspaceTool === undefined ? {} : { workspaceTool: plugin.manifest.workspaceTool }),
       enabled: preferences.enabled[plugin.id] ?? true,
-      matched: this.matched.has(plugin.id),
+      matched: this.matched.has(plugin.id) || (plugin.origin === "installed" && this.active.has(plugin.id)),
       active: this.active.has(plugin.id),
       settingDescriptors: plugin.manifest.settings,
       settings: Object.freeze({ ...(preferences.settings[plugin.id] ?? {}) }),

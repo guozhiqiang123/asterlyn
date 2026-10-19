@@ -252,18 +252,22 @@ function renderPluginEntry(entry: PluginManagementEntry, copy: PluginManagementC
   const name = pluginMessage(entry, copy, entry.nameKey);
   const description = pluginMessage(entry, copy, entry.descriptionKey);
   const state = [
-    `<span class="plugin-management-status plugin-management-status-enabled" data-plugin-status="${entry.enabled ? "enabled" : "disabled"}" aria-label="${escapeAttribute(entry.enabled ? copy.enabled : copy.disabled)}">${escapeHtml(entry.enabled ? copy.enabled : copy.disabled)}</span>`,
+    entry.origin === "bundled" ? `<span class="plugin-management-status plugin-management-status-enabled" data-plugin-status="${entry.enabled ? "enabled" : "disabled"}" aria-label="${escapeAttribute(entry.enabled ? copy.enabled : copy.disabled)}">${escapeHtml(entry.enabled ? copy.enabled : copy.disabled)}</span>` : "",
     `<span class="plugin-management-status plugin-management-status-match" data-plugin-status="${entry.matched ? "matched" : "not-matched"}" aria-label="${escapeAttribute(entry.matched ? copy.matched : copy.notMatched)}">${escapeHtml(entry.matched ? copy.matched : copy.notMatched)}</span>`,
     `<span class="plugin-management-status plugin-management-status-active" data-plugin-status="${entry.active ? "active" : "inactive"}" aria-label="${escapeAttribute(entry.active ? copy.active : copy.inactive)}">${escapeHtml(entry.active ? copy.active : copy.inactive)}</span>`,
   ].join("");
+  const enableControl = entry.origin === "bundled"
+    ? `<label class="plugin-management-enabled"><input id="plugin-enabled-${escapeAttribute(entry.id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="enabled" type="checkbox" ${entry.enabled ? "checked" : ""} aria-label="${escapeAttribute(copy.enablePlugin)}" /><span>${escapeHtml(copy.enablePlugin)}</span></label>`
+    : "";
+  const origin = entry.origin === "installed" ? copy.admittedPackage : copy.builtIn;
   const diagnostics = entry.diagnostics.length > 0
     ? `<div class="plugin-management-diagnostics" role="alert"><strong>${escapeHtml(copy.diagnostics)}</strong><ul>${entry.diagnostics.slice(0, MAX_DIAGNOSTICS).map((diagnostic) => `<li>${escapeHtml(boundedDiagnostic(diagnostic.message))}</li>`).join("")}</ul></div>`
     : "";
   const settings = entry.settingDescriptors.map((descriptor) => renderSetting(entry, descriptor, copy)).join("");
   const authorization = renderWorkspaceTrust(entry, copy);
   return `<article class="plugin-management-card" data-plugin-id="${escapeAttribute(entry.id)}" tabindex="-1">
-    <div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3><p>${escapeHtml(description)}</p></div><label class="plugin-management-enabled"><input id="plugin-enabled-${escapeAttribute(entry.id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="enabled" type="checkbox" ${entry.enabled ? "checked" : ""} aria-label="${escapeAttribute(copy.enablePlugin)}" /><span>${escapeHtml(copy.enablePlugin)}</span></label></div>
-    <div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(copy.builtIn)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(entry.version)}</code></span>${state}</div>
+    <div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3><p>${escapeHtml(description)}</p></div>${enableControl}</div>
+    <div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(origin)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(entry.version)}</code></span>${state}</div>
     ${diagnostics}
     <div class="plugin-management-settings" data-plugin-settings="${escapeAttribute(entry.id)}"><h4>${escapeHtml(copy.settings)}</h4>${settings}${authorization}${!settings && !authorization ? `<p class="plugin-management-no-settings">${escapeHtml(copy.noSettings)}</p>` : ""}</div>
   </article>`;

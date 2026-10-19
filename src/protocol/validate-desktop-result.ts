@@ -21,7 +21,7 @@ import {
   arrays, assert, booleans, isRecord, nullableStrings, numbers, record, strings,
   type TransportRecord,
 } from "./desktop-result-validation-primitives.ts";
-import { validatePluginInstallationSnapshot, validatePluginPackageAdmissionReview, validatePluginSourceSnapshot } from "./plugin-marketplace.ts";
+import { validateInstalledPluginManifestSnapshot, validatePluginInstallationSnapshot, validatePluginPackageAdmissionReview, validatePluginSourceSnapshot } from "./plugin-marketplace.ts";
 import {
   validateInstalledPluginActivation,
   validateInstalledPluginRuntimeDiagnostics,
@@ -35,6 +35,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
   const validator = DESKTOP_RESULT_VALIDATORS[command];
   if (validator === "pluginSourceSnapshot") return validatePluginSourceSnapshot(value, command) as DesktopCommandMap[Command]["result"];
   if (validator === "pluginInstallationSnapshot") return validatePluginInstallationSnapshot(value, command) as DesktopCommandMap[Command]["result"];
+  if (validator === "installedPluginManifestSnapshot") return validateInstalledPluginManifestSnapshot(value, command) as DesktopCommandMap[Command]["result"];
   if (validator === "pluginPackageAdmissionReview") return validatePluginPackageAdmissionReview(value, command) as DesktopCommandMap[Command]["result"];
   if (validator === "installedPluginActivation") return validateInstalledPluginActivation(value, command) as DesktopCommandMap[Command]["result"];
   if (validator === "installedPluginRuntimeDiagnostics") return validateInstalledPluginRuntimeDiagnostics(value, command) as DesktopCommandMap[Command]["result"];

@@ -294,7 +294,12 @@ export class PluginManagementBinding {
     this.root.querySelector<HTMLButtonElement>("[data-plugin-admission-confirm]")?.addEventListener("click", () => {
       const review = this.admissionReview; if (!review || this.busyRepository) return;
       this.busyRepository = review.repository; this.options.render();
-      void this.marketplace.confirmPluginInstall(review.reviewToken).then((snapshot) => { this.installations = snapshot; this.admissionReview = null; this.tab = "installed"; })
+      void this.marketplace.confirmPluginInstall(review.reviewToken).then(async (snapshot) => {
+        this.installations = snapshot;
+        this.admissionReview = null;
+        this.tab = "installed";
+        await this.host.loadPluginManagement();
+      })
         .catch((error) => { this.marketplaceError = errorMessage(error); this.options.reportError(error); })
         .finally(() => { this.busyRepository = null; if (this.options.visible()) this.options.render(); });
     });
@@ -365,6 +370,7 @@ export class PluginManagementBinding {
     if (this.options.visible()) this.options.render();
     try {
       this.installations = await operation();
+      await this.host.loadPluginManagement();
       this.restartRequired = true;
       completed();
     } catch (error) {

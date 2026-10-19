@@ -8,8 +8,8 @@ use asterlyn_plugin_marketplace::{
     parse_github_release,
 };
 use asterlyn_plugin_package::{
-    AdmissionContext, SUPPORTED_CAPABILITIES, SUPPORTED_PERMISSIONS, extract_admitted_package,
-    inspect_package,
+    AdmissionContext, AdmittedPluginManifest, SUPPORTED_CAPABILITIES, SUPPORTED_PERMISSIONS,
+    extract_admitted_package, inspect_extracted_package, inspect_package,
 };
 use asterlyn_plugin_runtime::PluginHostSupervisor;
 use asterlyn_plugin_runtime_protocol::ShutdownReason;
@@ -44,6 +44,24 @@ pub(crate) struct PluginPackageAdmissionReview {
     capabilities: Vec<String>,
     permissions: Vec<String>,
     expanded_bytes: u64,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct InstalledPluginManifestSnapshot {
+    schema_version: u32,
+    generation: u64,
+    manifests: Vec<InstalledPluginManifestEntry>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstalledPluginManifestEntry {
+    plugin_id: String,
+    plugin_version: String,
+    package_digest: String,
+    manifest: Option<AdmittedPluginManifest>,
+    error: Option<String>,
 }
 
 #[tauri::command]
@@ -134,6 +152,66 @@ pub(crate) fn list_plugin_installations(
             .snapshot()
             .map_err(|error| error.to_string())
     })
+}
+
+#[tauri::command]
+pub(crate) fn list_installed_plugin_manifests(
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+) -> Result<InstalledPluginManifestSnapshot, String> {
+    marketplace.run(|| {
+        let snapshot = installation_store(&app)?
+            .snapshot()
+            .map_err(|error| error.to_string())?;
+        let manifests = snapshot
+            .plugins
+            .iter()
+            .filter_map(|plugin| {
+                let selected = plugin
+                    .pending_version
+                    .as_deref()
+                    .or(plugin.active_version.as_deref())
+                    .or(plugin.known_good_version.as_deref())?;
+                let version = plugin
+                    .versions
+                    .iter()
+                    .find(|candidate| candidate.version == selected)?;
+                let inspected = installed_package_root(
+                    &app,
+                    &plugin.plugin_id,
+                    &version.version,
+                    &version.package_digest,
+                )
+                .and_then(|root| {
+                    inspect_extracted_package(
+                        &root,
+                        &admission_context(&plugin.repository, &version.version),
+                    )
+                    .map_err(|error| error.to_string())
+                });
+                let (manifest, error) = match inspected {
+                    Ok(report) => (Some(report.management_manifest), None),
+                    Err(error) => (None, Some(bounded_manifest_error(error))),
+                };
+                Some(InstalledPluginManifestEntry {
+                    plugin_id: plugin.plugin_id.clone(),
+                    plugin_version: version.version.clone(),
+                    package_digest: version.package_digest.clone(),
+                    manifest,
+                    error,
+                })
+            })
+            .collect();
+        Ok(InstalledPluginManifestSnapshot {
+            schema_version: 1,
+            generation: snapshot.generation,
+            manifests,
+        })
+    })
+}
+
+fn bounded_manifest_error(error: String) -> String {
+    error.chars().take(512).collect()
 }
 
 #[tauri::command]

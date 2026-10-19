@@ -77,7 +77,7 @@ test("installed plugin contributions replace the matching bundled fallback", asy
     reportError: (error) => { throw error; },
     loadPlugins: async () => [plugin],
     installedPluginRuntimeBridge: bridge,
-    pluginMarketplaceBridge: { listPluginInstallations: async () => installation("fixture") },
+    pluginMarketplaceBridge: marketplace("fixture"),
   });
   await runtime.activateWorkspace(identity);
   await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
@@ -108,13 +108,69 @@ test("failed installed plugin activation falls back to bundled contributions", a
     reportError: (error) => { errors.push(error); },
     loadPlugins: async () => [plugin],
     installedPluginRuntimeBridge: bridge,
-    pluginMarketplaceBridge: { listPluginInstallations: async () => installation("fixture") },
+    pluginMarketplaceBridge: marketplace("fixture"),
   });
   await runtime.activateWorkspace(identity);
   await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
   assert.equal(bundledActivations, 1);
   assert.equal(providers[0].label, "Bundled");
   assert.equal(errors.length, 1);
+  runtime.dispose();
+});
+
+test("installed plugin notifications resolve only through the admitted external manifest", async () => {
+  let notifications;
+  const published = [];
+  const activation = {
+    pluginId: "fixture.external",
+    pluginVersion: "1.0.0",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "external-session",
+    contributions: [{
+      kind: "taskProvider", id: "tasks", payload: { label: "External" },
+      callbacks: { snapshot: "snapshot" },
+    }],
+  };
+  const bridge = externalBridge(activation);
+  bridge.subscribeNotifications = async (listener) => {
+    notifications = listener;
+    return () => undefined;
+  };
+  const manifest = {
+    sdkMajor: 1,
+    id: "fixture.external",
+    version: "1.0.0",
+    nameKey: "name",
+    descriptionKey: "description",
+    localization: { defaultLocale: "en-US", locales: { "en-US": {
+      name: "External",
+      description: "External plugin",
+      notice: "External operation completed.",
+    } } },
+    settings: [],
+  };
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    loadPlugins: async () => [],
+    installedPluginRuntimeBridge: bridge,
+    pluginMarketplaceBridge: {
+      listPluginInstallations: async () => installation("fixture.external"),
+      listInstalledPluginManifests: async () => ({
+        schemaVersion: 1,
+        generation: 1,
+        manifests: [{ pluginId: manifest.id, pluginVersion: manifest.version, packageDigest: activation.packageDigest, manifest, error: null }],
+      }),
+    },
+    notificationPublisher: { publish: (notification) => { published.push(notification); } },
+  });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  notifications({ pluginId: "fixture.external", kind: "success", messageKey: "notice" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(published, [{ kind: "success", message: "External operation completed.", source: "plugin:fixture.external" }]);
   runtime.dispose();
 });
 
@@ -147,6 +203,13 @@ function installation(pluginId) {
         admittedAtEpochMs: 1, runtimeStatus: "pendingRuntime",
       }],
     }],
+  };
+}
+
+function marketplace(pluginId) {
+  return {
+    listPluginInstallations: async () => installation(pluginId),
+    listInstalledPluginManifests: async () => ({ schemaVersion: 1, generation: 1, manifests: [] }),
   };
 }
 

@@ -78,6 +78,14 @@ export type PluginSettingsTargetResolution = PluginSettingsTarget | readonly Plu
 /** Immutable, host-rendered metadata for a bundled integration. */
 export type PluginLocalization = SdkPluginLocalization;
 export type BundledPluginManifest = Omit<SdkPluginManifest, "sdkMajor">;
+export type PluginCatalogOrigin = "bundled" | "installed";
+
+export interface PluginCatalogEntry {
+  readonly id: string;
+  readonly version: string;
+  readonly manifest: BundledPluginManifest;
+  readonly origin: PluginCatalogOrigin;
+}
 
 export interface PluginEvidenceSnapshot {
   readonly [key: string]: unknown;
@@ -199,6 +207,7 @@ export interface PluginActivationReport {
 export interface PluginManagementEntry {
   readonly id: string;
   readonly version: string;
+  readonly origin: PluginCatalogOrigin;
   readonly nameKey: string;
   readonly descriptionKey: string;
   readonly localization: PluginLocalization;

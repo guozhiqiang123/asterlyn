@@ -4,7 +4,7 @@ import type { WindowChromeMode } from "./window-chrome";
 import type { WorkspaceFingerprint, PluginTaskCacheDirtyReason, PluginTaskCacheReadResult, PluginTaskCacheMutationResult, PluginTaskCacheCleanupResult } from "./plugin-task-cache";
 import type { PluginProcessQueryResult } from "./plugin-process-query";
 import type { PluginToolOperationParameters, PluginToolOperationResult } from "./plugin-tool-operation";
-import type { PluginSourceSnapshot, PluginInstallationSnapshot, PluginPackageAdmissionReview } from "./plugin-marketplace";
+import type { PluginSourceSnapshot, PluginInstallationSnapshot, InstalledPluginManifestSnapshot, PluginPackageAdmissionReview } from "./plugin-marketplace";
 import type { InstalledPluginActivation, InstalledPluginRuntimeDiagnostics, PluginRuntimeTheme, PluginRuntimeValue } from "./plugin-runtime";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
@@ -19,6 +19,7 @@ export interface DesktopCommandMap {
   remove_plugin_source: { args: { repository: string; }; result: PluginSourceSnapshot };
   refresh_plugin_source: { args: { repository: string; }; result: PluginSourceSnapshot };
   list_plugin_installations: { args: Record<string, never>; result: PluginInstallationSnapshot };
+  list_installed_plugin_manifests: { args: Record<string, never>; result: InstalledPluginManifestSnapshot };
   prepare_plugin_install: { args: { repository: string; }; result: PluginPackageAdmissionReview };
   confirm_plugin_install: { args: { reviewToken: string; }; result: PluginInstallationSnapshot };
   cancel_plugin_install: { args: { reviewToken: string; }; result: void };
@@ -171,6 +172,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   remove_plugin_source: "pluginSourceSnapshot",
   refresh_plugin_source: "pluginSourceSnapshot",
   list_plugin_installations: "pluginInstallationSnapshot",
+  list_installed_plugin_manifests: "installedPluginManifestSnapshot",
   prepare_plugin_install: "pluginPackageAdmissionReview",
   confirm_plugin_install: "pluginInstallationSnapshot",
   cancel_plugin_install: "void",

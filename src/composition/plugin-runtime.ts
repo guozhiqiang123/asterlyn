@@ -7,6 +7,7 @@ import {
   createSilentPluginPreferenceSync,
   type PluginPreferenceStorage,
   type BundledPlugin,
+  type PluginCatalogEntry,
   type PluginDiagnostic,
   type PluginActivationReport,
   type PluginWorkspaceCatalogEvidence,
@@ -16,6 +17,7 @@ import {
   type PluginSettingValue,
   type PluginSettingsTargetResolution,
 } from "../application/plugins/index.ts";
+import { adaptPluginManifest } from "../application/plugins/plugin-sdk-adapter.ts";
 import { resolvePluginMessageOrNull } from "../application/plugins/plugin-localization.ts";
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
@@ -59,7 +61,7 @@ export interface PluginCompositionRuntimeOptions {
   readonly processQueryBridge?: PluginProcessQueryBridge;
   readonly workspaceStateStorage?: PluginWorkspaceStateStorage;
   readonly installedPluginRuntimeBridge?: InstalledPluginRuntimeBridge;
-  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations">;
+  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests">;
   readonly locale?: () => string;
   readonly mutationBlocked?: () => boolean;
 }
@@ -70,7 +72,9 @@ export class PluginCompositionRuntime {
   private readonly contributions: PluginContributionRuntime;
   private readonly external: ExternalPluginRuntime | null;
   private readonly loadPlugins: () => Promise<readonly BundledPlugin[]>;
+  private readonly marketplace: Pick<PluginMarketplaceBridge, "listInstalledPluginManifests"> | null;
   private readonly reportError: (error: unknown) => void;
+  private catalogManifests = new Map<string, PluginCatalogEntry>();
   readonly preferences: PluginPreferenceStore;
   readonly management: PluginManagementRuntime;
   private identity: PluginWorkspaceIdentity | null = null;
@@ -83,6 +87,7 @@ export class PluginCompositionRuntime {
 
   constructor(options: PluginCompositionRuntimeOptions) {
     this.reportError = options.reportError;
+    this.marketplace = options.pluginMarketplaceBridge ?? null;
     this.runtime = new PluginRuntime(
       undefined,
       options.reportDiagnostic,
@@ -113,7 +118,7 @@ export class PluginCompositionRuntime {
           reportError: options.reportError,
           notification: async (event) => {
             if (!options.notificationPublisher) return;
-            const plugin = (await this.bundledPlugins()).find((candidate) => candidate.id === event.pluginId);
+            const plugin = this.catalogManifests.get(event.pluginId);
             const message = plugin === undefined
               ? null
               : resolvePluginMessageOrNull(
@@ -174,8 +179,10 @@ export class PluginCompositionRuntime {
     if (!this.matches(identity) || this.disposed) return;
     const plugins = await this.bundledPlugins();
     if (!this.matches(identity) || this.disposed) return;
-    this.preferences.setManifests(plugins.map((plugin) => plugin.manifest), false);
-    this.management.setCatalog(plugins);
+    const catalog = await this.managementCatalog(plugins);
+    if (!this.matches(identity) || this.disposed) return;
+    this.preferences.setManifests(catalog.map((plugin) => plugin.manifest), false);
+    this.management.setCatalog(catalog);
     this.evidence = evidence;
     const evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
     if (evidenceKey === this.evidenceKey) return;
@@ -189,8 +196,10 @@ export class PluginCompositionRuntime {
     if (this.disposed) return this.management.snapshot;
     const plugins = await this.bundledPlugins();
     if (this.disposed) return this.management.snapshot;
-    this.preferences.setManifests(plugins.map((plugin) => plugin.manifest), false);
-    this.management.setCatalog(plugins);
+    const catalog = await this.managementCatalog(plugins);
+    if (this.disposed) return this.management.snapshot;
+    this.preferences.setManifests(catalog.map((plugin) => plugin.manifest), false);
+    this.management.setCatalog(catalog);
     return this.management.snapshot;
   }
 
@@ -262,7 +271,10 @@ export class PluginCompositionRuntime {
     if (!identity || !evidence || this.disposed) return;
     const plugins = await this.bundledPlugins();
     if (!this.matches(identity) || this.disposed) return;
-    this.management.setCatalog(plugins);
+    const catalog = await this.managementCatalog(plugins);
+    if (!this.matches(identity) || this.disposed) return;
+    this.preferences.setManifests(catalog.map((plugin) => plugin.manifest), false);
+    this.management.setCatalog(catalog);
     this.management.setMatched(matchingPluginIds(identity, evidence, plugins));
     const report = await this.activatePlugins(identity, evidence, plugins);
     if (this.matches(identity) && !this.disposed) {
@@ -299,6 +311,40 @@ export class PluginCompositionRuntime {
       ...report,
       activated: Object.freeze([...externalActivated, ...report.activated]),
     });
+  }
+
+  private async managementCatalog(plugins: readonly BundledPlugin[]): Promise<readonly PluginCatalogEntry[]> {
+    const merged = new Map<string, PluginCatalogEntry>(plugins.map((plugin) => [plugin.id, {
+      id: plugin.id,
+      version: plugin.version,
+      manifest: plugin.manifest,
+      origin: "bundled",
+    }]));
+    if (this.marketplace) {
+      try {
+        const snapshot = await this.marketplace.listInstalledPluginManifests();
+        for (const entry of snapshot.manifests) {
+          if (!entry.manifest) {
+            this.reportError(new Error(entry.error ?? `Installed plugin manifest is unavailable: ${entry.pluginId}`));
+            continue;
+          }
+          try {
+            merged.set(entry.pluginId, {
+              id: entry.pluginId,
+              version: entry.pluginVersion,
+              manifest: adaptPluginManifest(entry.manifest),
+              origin: "installed",
+            });
+          } catch (error) {
+            this.reportError(error);
+          }
+        }
+      } catch (error) {
+        this.reportError(error);
+      }
+    }
+    this.catalogManifests = merged;
+    return Object.freeze([...merged.values()]);
   }
 }
 

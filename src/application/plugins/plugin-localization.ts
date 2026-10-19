@@ -9,7 +9,7 @@ const DISALLOWED_CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u;
 
 /** Validates untrusted plugin copy and returns a detached immutable catalog. */
 export function validateAndFreezePluginLocalization(
-  manifest: Pick<SdkPluginManifest, "id" | "nameKey" | "descriptionKey" | "localization" | "settings" | "workspaceTool">,
+  manifest: Pick<SdkPluginManifest, "id" | "nameKey" | "descriptionKey" | "localization" | "settings" | "workspaceTool" | "taskAuthorization">,
 ): SdkPluginLocalization {
   const source = manifest.localization;
   if (!isPlainRecord(source) || typeof source.defaultLocale !== "string" || !isPlainRecord(source.locales)) {
@@ -83,7 +83,7 @@ export function resolvePluginMessageOrNull(
 }
 
 function referencedMessageKeys(
-  manifest: Pick<SdkPluginManifest, "nameKey" | "descriptionKey" | "settings" | "workspaceTool">,
+  manifest: Pick<SdkPluginManifest, "nameKey" | "descriptionKey" | "settings" | "workspaceTool" | "taskAuthorization">,
 ): readonly string[] {
   const keys = [manifest.nameKey, manifest.descriptionKey];
   if (manifest.workspaceTool !== undefined) {
@@ -94,6 +94,19 @@ function referencedMessageKeys(
     keys.push(setting.labelKey);
     if (setting.descriptionKey !== undefined) keys.push(setting.descriptionKey);
     for (const option of setting.options ?? []) keys.push(option.labelKey);
+  }
+  const authorization = manifest.taskAuthorization;
+  if (authorization !== undefined) {
+    keys.push(authorization.workspaceTrust.labelKey);
+    if (authorization.workspaceTrust.descriptionKey !== undefined) {
+      keys.push(authorization.workspaceTrust.descriptionKey);
+    }
+    if (authorization.taskConfirmation !== undefined) {
+      keys.push(authorization.taskConfirmation.rememberLabelKey);
+      if (authorization.taskConfirmation.rememberDescriptionKey !== undefined) {
+        keys.push(authorization.taskConfirmation.rememberDescriptionKey);
+      }
+    }
   }
   return keys;
 }

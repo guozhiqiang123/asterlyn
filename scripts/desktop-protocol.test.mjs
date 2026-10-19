@@ -141,6 +141,49 @@ test("external plugin notification events reject untrusted presentation text", (
   );
 });
 
+test("installed plugin manifests are identity-bound and structurally validated", () => {
+  const manifest = {
+    sdkMajor: 1,
+    id: "dev.asterlyn.fixture",
+    version: "1.0.0",
+    nameKey: "name",
+    descriptionKey: "description",
+    localization: { defaultLocale: "en-US", locales: { "en-US": {
+      name: "Fixture",
+      description: "Fixture plugin",
+      "settings.mode": "Mode",
+      "settings.compact": "Compact",
+    } } },
+    settings: [{ id: "mode", kind: "enum", labelKey: "settings.mode", defaultValue: "compact", options: [{ value: "compact", labelKey: "settings.compact" }] }],
+  };
+  const snapshot = {
+    schemaVersion: 1,
+    generation: 2,
+    manifests: [{
+      pluginId: manifest.id,
+      pluginVersion: manifest.version,
+      packageDigest: `sha256:${"a".repeat(64)}`,
+      manifest,
+      error: null,
+    }],
+  };
+  assert.deepEqual(validateDesktopResult("list_installed_plugin_manifests", snapshot), snapshot);
+  assert.throws(
+    () => validateDesktopResult("list_installed_plugin_manifests", {
+      ...snapshot,
+      manifests: [{ ...snapshot.manifests[0], pluginVersion: "2.0.0" }],
+    }),
+    /identity mismatch/u,
+  );
+  assert.throws(
+    () => validateDesktopResult("list_installed_plugin_manifests", {
+      ...snapshot,
+      manifests: [{ ...snapshot.manifests[0], error: "also failed" }],
+    }),
+    /data or a diagnostic/u,
+  );
+});
+
 test("historical file reads remain wired through the native command boundary", async () => {
   const [commands, restoreCommands, runtime, adapter] = await Promise.all([
     readFile(new URL("../src-tauri/src/commands/git_reads.rs", import.meta.url), "utf8"),

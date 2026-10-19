@@ -20,7 +20,7 @@ const copy = {
 };
 
 const entry = {
-  id: "dev.asterlyn.android-gradle", version: "0.1.0", nameKey: "name",
+  id: "dev.asterlyn.android-gradle", version: "0.1.0", origin: "bundled", nameKey: "name",
   descriptionKey: "description", enabled: true, matched: false, active: false,
   localization: { defaultLocale: "en-US", locales: {
     "en-US": { name: "Android / Gradle", description: "Gradle tooling.", "settings.taskPresentation.label": "Task presentation", "settings.taskPresentation.description": "Choose the task tree.", "settings.taskPresentation.allTasksTree": "All tasks tree", "settings.taskPresentation.quickActionsTree": "Quick actions tree", "authorization.workspaceTrust.label": "Trust this workspace", "authorization.workspaceTrust.description": "Allow this plugin to run reviewed Gradle tasks." },
@@ -54,6 +54,16 @@ test("plugin management renders localized metadata and declarative settings with
   assert.match(html, /data-plugin-management-tab="installed"[^>]*tabindex="0"/u);
   assert.match(html, /data-plugin-management-tab="marketplace"[^>]*tabindex="-1"/u);
   assert.doesNotMatch(html, /<script|\son[a-z]+\s*=|<iframe/i);
+});
+
+test("installed manifest settings do not render a second conflicting enable switch", () => {
+  const html = renderPluginManagementSection(
+    { schemaVersion: 1, entries: [{ ...entry, origin: "installed" }] },
+    copy,
+  );
+  assert.match(html, /Admitted package/u);
+  assert.match(html, /data-plugin-setting="taskPresentation"/u);
+  assert.doesNotMatch(html, /id="plugin-enabled-dev\.asterlyn\.android-gradle"/u);
 });
 
 test("plugin management tabs support the standard two-tab keyboard model", () => {

@@ -16,10 +16,11 @@ pub(crate) use plugin_cache::{
 };
 pub(crate) use plugin_marketplace::{
     abandon_plugin_activations, cancel_plugin_install, confirm_plugin_install,
-    list_plugin_installations, list_plugin_sources, prepare_plugin_install,
-    recover_interrupted_plugin_activations, refresh_plugin_source, remove_plugin_source,
-    restart_for_plugin_changes, select_installed_plugin_rollback, set_installed_plugin_enabled,
-    set_plugin_source_enabled, uninstall_installed_plugin, upsert_plugin_source,
+    list_installed_plugin_manifests, list_plugin_installations, list_plugin_sources,
+    prepare_plugin_install, recover_interrupted_plugin_activations, refresh_plugin_source,
+    remove_plugin_source, restart_for_plugin_changes, select_installed_plugin_rollback,
+    set_installed_plugin_enabled, set_plugin_source_enabled, uninstall_installed_plugin,
+    upsert_plugin_source,
 };
 pub(crate) use plugin_process_query::{
     cancel_plugin_tool_operation, execute_plugin_process_query, execute_plugin_tool_operation,
