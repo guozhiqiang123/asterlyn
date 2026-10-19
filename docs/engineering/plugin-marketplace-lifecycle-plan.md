@@ -37,7 +37,9 @@ versions may retain `knownGood` evidence, but the pointer identifies the rollbac
 
 ## State transitions
 
-1. Admission stores immutable bytes and selects the version as `pendingRuntime`.
+1. Admission stores immutable bytes and selects the version as `pendingRestart`. A controlled app
+   restart advances it to `pendingRuntime`; the process that admitted the package cannot activate
+   the new bytes.
 2. Native activation atomically changes the selected exact version/digest to `active` before it
    reinspects or launches the package. This persisted `active` state is the activation-attempt
    marker.
@@ -61,8 +63,9 @@ or mismatched version/digest/session identities.
   is committed through the restart coordinator when a currently active version would be replaced.
 - Restart first blocks new plugin work, cancels supervised plugin operations, records a clean
   handoff, and relaunches the same installed application.
-- Disable stops active sessions before persisting disabled state. Re-enable never clears
-  quarantine.
+- Disable stops active sessions before persisting disabled state. An unfinished health attempt is
+  returned to `pendingRuntime`. Re-enable selects the last active/known-good version for the next
+  controlled restart and never clears quarantine.
 - Rollback is an exact reviewed selection of an existing known-good version and requires restart
   when another version is active.
 - Uninstall presents the exact versions to remove. Active removal requires restart. Settings and

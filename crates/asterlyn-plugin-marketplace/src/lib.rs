@@ -411,6 +411,82 @@ impl PluginInstallationStore {
         }
     }
 
+    pub fn set_plugin_enabled(
+        &self,
+        plugin_id: &str,
+        enabled: bool,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        let snapshot = self.snapshot()?;
+        let mut plugins = snapshot.plugins;
+        let plugin = plugins
+            .iter_mut()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+            .ok_or_else(|| MarketplaceError::NotFound(plugin_id.into()))?;
+        if plugin.enabled == enabled {
+            return Ok(PluginInstallationSnapshot {
+                plugins,
+                ..snapshot
+            });
+        }
+        if !enabled {
+            let abandoned = plugin
+                .versions
+                .iter_mut()
+                .filter(|version| version.runtime_status == PluginRuntimeStatus::Active)
+                .map(|version| {
+                    version.runtime_status = PluginRuntimeStatus::PendingRuntime;
+                    version.version.clone()
+                })
+                .collect::<Vec<_>>();
+            plugin.active_version = plugin.known_good_version.clone();
+            if plugin.pending_version.is_none() {
+                plugin.pending_version = abandoned.first().cloned();
+            }
+        } else if plugin.pending_version.is_none() {
+            plugin.pending_version = plugin
+                .active_version
+                .clone()
+                .or_else(|| plugin.known_good_version.clone());
+        }
+        plugin.enabled = enabled;
+        self.write(snapshot.generation + 1, plugins)
+    }
+
+    pub fn select_rollback(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
+            if admitted.runtime_status != PluginRuntimeStatus::KnownGood {
+                return Err(MarketplaceError::Conflict(
+                    "rollback requires a known-good plugin version".into(),
+                ));
+            }
+            if plugin.active_version.as_deref() == Some(version) && plugin.pending_version.is_none()
+            {
+                return Ok(false);
+            }
+            plugin.pending_version = Some(version.into());
+            Ok(true)
+        })
+    }
+
+    pub fn remove_plugin(
+        &self,
+        plugin_id: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        let snapshot = self.snapshot()?;
+        let mut plugins = snapshot.plugins;
+        let previous_len = plugins.len();
+        plugins.retain(|plugin| plugin.plugin_id != plugin_id);
+        if plugins.len() == previous_len {
+            return Err(MarketplaceError::NotFound(plugin_id.into()));
+        }
+        self.write(snapshot.generation + 1, plugins)
+    }
+
     fn mutate_exact_version(
         &self,
         plugin_id: &str,
@@ -1554,6 +1630,103 @@ mod tests {
             recovered.plugins[0].versions[0].runtime_status,
             PluginRuntimeStatus::Quarantined
         );
+    }
+
+    #[test]
+    fn disable_abandons_active_health_attempt_and_reenable_requests_restart() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let digest = format!("sha256:{}", "a".repeat(64));
+        store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "1.0.0",
+                &digest,
+                1,
+                false,
+            )
+            .unwrap();
+        store.recover_interrupted_activations().unwrap();
+        store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &digest)
+            .unwrap();
+
+        let disabled = store
+            .set_plugin_enabled("dev.asterlyn.example", false)
+            .unwrap();
+        let plugin = &disabled.plugins[0];
+        assert!(!plugin.enabled);
+        assert_eq!(plugin.active_version, None);
+        assert_eq!(plugin.pending_version.as_deref(), Some("1.0.0"));
+        assert_eq!(
+            plugin.versions[0].runtime_status,
+            PluginRuntimeStatus::PendingRuntime
+        );
+        let enabled = store
+            .set_plugin_enabled("dev.asterlyn.example", true)
+            .unwrap();
+        assert!(enabled.plugins[0].enabled);
+        assert_eq!(enabled.plugins[0].pending_version.as_deref(), Some("1.0.0"));
+    }
+
+    #[test]
+    fn rollback_requires_exact_known_good_identity_and_uninstall_is_atomic() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let first = format!("sha256:{}", "a".repeat(64));
+        let update = format!("sha256:{}", "b".repeat(64));
+        store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "1.0.0",
+                &first,
+                1,
+                false,
+            )
+            .unwrap();
+        store.recover_interrupted_activations().unwrap();
+        store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        store
+            .promote_healthy("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        store
+            .record_admitted(
+                "dev.asterlyn.example",
+                "asterlyn/example",
+                "2.0.0",
+                &update,
+                2,
+                false,
+            )
+            .unwrap();
+        assert!(
+            store
+                .select_rollback("dev.asterlyn.example", "2.0.0", &update)
+                .is_err()
+        );
+        assert!(
+            store
+                .select_rollback(
+                    "dev.asterlyn.example",
+                    "1.0.0",
+                    &format!("sha256:{}", "c".repeat(64)),
+                )
+                .is_err()
+        );
+        let rollback = store
+            .select_rollback("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        assert_eq!(
+            rollback.plugins[0].pending_version.as_deref(),
+            Some("1.0.0")
+        );
+        let removed = store.remove_plugin("dev.asterlyn.example").unwrap();
+        assert!(removed.plugins.is_empty());
+        assert!(store.remove_plugin("dev.asterlyn.example").is_err());
     }
 
     #[test]
