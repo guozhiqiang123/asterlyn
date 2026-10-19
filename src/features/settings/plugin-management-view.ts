@@ -5,6 +5,7 @@ import type {
   PluginSettingValue,
 } from "../../application/plugins/plugin-types.ts";
 import { renderSelectControl } from "../../shared/select-control.ts";
+import type { PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
 
 export interface PluginManagementCopy {
   readonly locale: string;
@@ -25,6 +26,45 @@ export interface PluginManagementCopy {
   readonly noPlugins: string;
   readonly loadingPlugins: string;
   readonly invalidSetting: string;
+  readonly installedTab: string;
+  readonly marketplaceTab: string;
+  readonly marketplaceDescription: string;
+  readonly addSource: string;
+  readonly editSource: string;
+  readonly deleteSource: string;
+  readonly confirmDeleteSource: string;
+  readonly cancel: string;
+  readonly save: string;
+  readonly repository: string;
+  readonly sourceName: string;
+  readonly sourceDescription: string;
+  readonly sourceRepositoryPlaceholder: string;
+  readonly sourceNamePlaceholder: string;
+  readonly sourceDescriptionPlaceholder: string;
+  readonly officialSource: string;
+  readonly customSource: string;
+  readonly enableSource: string;
+  readonly refreshSource: string;
+  readonly refreshingSource: string;
+  readonly loadingMarketplace: string;
+  readonly noSources: string;
+  readonly notChecked: string;
+  readonly releaseAvailable: string;
+  readonly noRelease: string;
+  readonly staleRelease: string;
+  readonly packageLabel: string;
+  readonly checkedLabel: string;
+  readonly marketplaceSecurityNote: string;
+}
+
+export interface PluginMarketplaceViewState {
+  readonly tab: "installed" | "marketplace";
+  readonly snapshot: PluginSourceSnapshot | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly busyRepository: string | null;
+  readonly form: { readonly repository: string; readonly name: string; readonly description: string; readonly editing: boolean } | null;
+  readonly confirmDeleteRepository: string | null;
 }
 
 /** Renders host-owned plugin metadata; plugins contribute keys and values, never HTML. */
@@ -32,12 +72,73 @@ export function renderPluginManagementSection(
   snapshot: PluginManagementSnapshot,
   copy: PluginManagementCopy,
   loading = false,
+  marketplace: PluginMarketplaceViewState = {
+    tab: "installed", snapshot: null, loading: false, error: null,
+    busyRepository: null, form: null, confirmDeleteRepository: null,
+  },
 ): string {
   const cards = snapshot.entries.map((entry) => renderPluginEntry(entry, copy)).join("");
+  const content = marketplace.tab === "installed"
+    ? `<div class="plugin-management-list">${cards || `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>`}</div>`
+    : renderMarketplace(marketplace, copy);
   return `<section class="settings-group plugin-management" data-plugin-management>
     <header><h2>${escapeHtml(copy.title)}</h2><p>${escapeHtml(copy.description)}</p></header>
-    <div class="plugin-management-list">${cards || `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>`}</div>
+    <div class="plugin-management-tabs" role="tablist" aria-label="${escapeAttribute(copy.title)}"><button type="button" role="tab" data-plugin-management-tab="installed" aria-selected="${marketplace.tab === "installed"}">${escapeHtml(copy.installedTab)}</button><button type="button" role="tab" data-plugin-management-tab="marketplace" aria-selected="${marketplace.tab === "marketplace"}">${escapeHtml(copy.marketplaceTab)}</button></div>
+    ${content}
   </section>`;
+}
+
+function renderMarketplace(state: PluginMarketplaceViewState, copy: PluginManagementCopy): string {
+  const form = state.form ? renderSourceForm(state.form, copy, state.busyRepository !== null) : "";
+  const error = state.error
+    ? `<div class="plugin-marketplace-error" role="alert">${escapeHtml(state.error)}</div>`
+    : "";
+  const sources = state.snapshot?.sources.map((source) => renderSourceCard(source, state, copy)).join("") ?? "";
+  const empty = !sources
+    ? `<p class="plugin-management-empty" role="status">${escapeHtml(state.loading ? copy.loadingMarketplace : copy.noSources)}</p>`
+    : "";
+  return `<div class="plugin-marketplace" data-plugin-marketplace><div class="plugin-marketplace-toolbar"><div><strong>${escapeHtml(copy.marketplaceTab)}</strong><span>${escapeHtml(copy.marketplaceDescription)}</span></div><button class="primary-button" type="button" data-plugin-source-add ${state.busyRepository ? "disabled" : ""}>${escapeHtml(copy.addSource)}</button></div>${error}${form}<div class="plugin-marketplace-list">${sources}${empty}</div><p class="plugin-marketplace-security-note">${escapeHtml(copy.marketplaceSecurityNote)}</p></div>`;
+}
+
+function renderSourceForm(
+  form: NonNullable<PluginMarketplaceViewState["form"]>,
+  copy: PluginManagementCopy,
+  busy: boolean,
+): string {
+  return `<form class="plugin-source-form" data-plugin-source-form><h3>${escapeHtml(form.editing ? copy.editSource : copy.addSource)}</h3><label><span>${escapeHtml(copy.repository)}</span><input name="repository" value="${escapeAttribute(form.repository)}" placeholder="${escapeAttribute(copy.sourceRepositoryPlaceholder)}" autocomplete="off" spellcheck="false" ${form.editing || busy ? "disabled" : ""}></label><label><span>${escapeHtml(copy.sourceName)}</span><input name="name" value="${escapeAttribute(form.name)}" placeholder="${escapeAttribute(copy.sourceNamePlaceholder)}" autocomplete="off" ${busy ? "disabled" : ""}></label><label><span>${escapeHtml(copy.sourceDescription)}</span><textarea name="description" placeholder="${escapeAttribute(copy.sourceDescriptionPlaceholder)}" ${busy ? "disabled" : ""}>${escapeHtml(form.description)}</textarea></label><div class="plugin-source-form-actions"><button class="secondary-button" type="button" data-plugin-source-form-cancel ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="submit" ${busy ? "disabled" : ""}>${escapeHtml(copy.save)}</button></div></form>`;
+}
+
+function renderSourceCard(
+  source: NonNullable<PluginSourceSnapshot["sources"]>[number],
+  state: PluginMarketplaceViewState,
+  copy: PluginManagementCopy,
+): string {
+  const busy = state.busyRepository === source.repository;
+  const catalog = source.catalog;
+  const catalogStatus = !catalog
+    ? copy.notChecked
+    : catalog.version
+      ? `${copy.releaseAvailable}: v${catalog.version}${catalog.stale ? ` · ${copy.staleRelease}` : ""}`
+      : catalog.status === "noRelease" ? copy.noRelease : catalog.error ?? copy.notChecked;
+  const packageDetail = catalog?.assetName && catalog.assetSizeBytes
+    ? `<span><b>${escapeHtml(copy.packageLabel)}</b>${escapeHtml(catalog.assetName)} · ${escapeHtml(formatBytes(catalog.assetSizeBytes))}</span>`
+    : "";
+  const checked = catalog
+    ? `<span><b>${escapeHtml(copy.checkedLabel)}</b>${escapeHtml(new Date(catalog.checkedAtEpochMs).toLocaleString(copy.locale))}</span>`
+    : "";
+  const catalogError = catalog?.error
+    ? `<p class="plugin-source-error" role="status">${escapeHtml(catalog.error)}</p>`
+    : "";
+  const deleteReview = state.confirmDeleteRepository === source.repository
+    ? `<div class="plugin-source-delete-review" role="alert"><span>${escapeHtml(copy.confirmDeleteSource)}</span><button class="secondary-button" type="button" data-plugin-source-delete-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-plugin-source-delete-confirm="${escapeAttribute(source.repository)}">${escapeHtml(copy.deleteSource)}</button></div>`
+    : "";
+  const customActions = source.builtIn ? "" : `<button class="secondary-button" type="button" data-plugin-source-edit="${escapeAttribute(source.repository)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.editSource)}</button><button class="secondary-button" type="button" data-plugin-source-delete="${escapeAttribute(source.repository)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.deleteSource)}</button>`;
+  return `<article class="plugin-management-card plugin-source-card" data-plugin-source="${escapeAttribute(source.repository)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(source.name)}</h3><p>${escapeHtml(source.description)}</p></div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableSource)}</span>${renderToggle(`<input data-plugin-source-enabled="${escapeAttribute(source.repository)}" type="checkbox" role="switch" ${source.enabled ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="${escapeAttribute(copy.enableSource)}" />`)}</div></div><div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(source.builtIn ? copy.officialSource : copy.customSource)}</span><span><code>${escapeHtml(source.repository)}</code></span><span>${escapeHtml(catalogStatus)}</span></div>${catalogError}<div class="plugin-source-release">${packageDetail}${checked}</div><div class="plugin-source-actions"><button class="primary-button" type="button" data-plugin-source-refresh="${escapeAttribute(source.repository)}" ${busy || !source.enabled ? "disabled" : ""}>${escapeHtml(busy ? copy.refreshingSource : copy.refreshSource)}</button>${customActions}</div>${deleteReview}</article>`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function renderPluginEntry(entry: PluginManagementEntry, copy: PluginManagementCopy): string {

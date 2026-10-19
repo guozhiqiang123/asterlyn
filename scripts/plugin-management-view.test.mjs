@@ -8,6 +8,9 @@ const copy = {
   title: "Plugins", description: "Manage integrations.", builtIn: "Built-in", enablePlugin: "Enable plugin", enabled: "Enabled", disabled: "Disabled",
   matched: "Detected", notMatched: "Not detected", active: "Active", inactive: "Inactive", version: "Version",
   diagnostics: "Diagnostic", settings: "Plugin settings", noSettings: "No settings.", noPlugins: "No plugins.", loadingPlugins: "Loading plugins…", invalidSetting: "Unavailable.",
+  installedTab: "Installed", marketplaceTab: "Marketplace", marketplaceDescription: "Discover plugins.", addSource: "Add source", editSource: "Edit source", deleteSource: "Remove source", confirmDeleteSource: "Remove this source?", cancel: "Cancel", save: "Save",
+  repository: "GitHub repository", sourceName: "Display name", sourceDescription: "Description", sourceRepositoryPlaceholder: "owner/repository", sourceNamePlaceholder: "Plugin name", sourceDescriptionPlaceholder: "Description",
+  officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading sources…", noSources: "No sources.", notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ", marketplaceSecurityNote: "Packages are verified before installation.",
 };
 
 const entry = {
@@ -77,4 +80,26 @@ test("plugin management renders an empty catalog without a workspace", () => {
   const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy);
   assert.match(html, /No plugins\./);
   assert.match(html, /data-plugin-management/);
+});
+
+test("plugin marketplace renders configured Release sources as host-owned controls", () => {
+  const html = renderPluginManagementSection(
+    { schemaVersion: 1, entries: [entry] },
+    copy,
+    false,
+    {
+      tab: "marketplace", loading: false, error: null, busyRepository: null, form: null,
+      confirmDeleteRepository: null,
+      snapshot: { schemaVersion: 1, generation: 2, recovered: false, sources: [{
+        repository: "asterlyn/example", name: "Example", description: "Example tools", builtIn: false, enabled: true,
+        catalog: { status: "available", checkedAtEpochMs: 1, stale: false, version: "1.2.3", releaseUrl: "https://github.com/asterlyn/example/releases/tag/v1.2.3", assetName: "example.asterlyn-plugin.tgz", assetSizeBytes: 1234, digest: `sha256:${"a".repeat(64)}`, error: null, rateLimitResetEpochMs: null, etag: null, lastModified: null },
+      }] },
+    },
+  );
+  assert.match(html, /data-plugin-marketplace/u);
+  assert.match(html, /data-plugin-source="asterlyn\/example"/u);
+  assert.match(html, /Release available: v1\.2\.3/u);
+  assert.match(html, /data-plugin-source-refresh="asterlyn\/example"/u);
+  assert.match(html, /data-plugin-source-delete="asterlyn\/example"/u);
+  assert.doesNotMatch(html, /<script|on[a-z]+=/iu);
 });
