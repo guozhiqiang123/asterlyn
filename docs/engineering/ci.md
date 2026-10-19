@@ -20,6 +20,12 @@ addition to Git-core tests. The Windows packaging job also runs `asterlyn-worksp
 before bundling, including the stable Win32 opened-file identity checks used by reviewed workspace
 mutations.
 
+Before creating a stable `v*.*.*` tag, the release candidate must pass the same locked all-target
+lint command used by CI: `cargo clippy --workspace --locked --all-targets -- -D warnings`. A passing
+build or test suite is not a substitute for this gate. If a published tag fails before GitHub Release
+creation, retain that tag as failed release evidence, land the correction on `main`, and publish a new
+patch version rather than moving the existing tag.
+
 ## Trust boundary
 
 - Workflow permissions are limited to repository-content read access.
