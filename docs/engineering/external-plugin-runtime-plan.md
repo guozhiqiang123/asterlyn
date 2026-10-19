@@ -175,6 +175,8 @@ or replacing the workspace removes every contribution, subscription, request, an
 - Desktop packaging must build the helper for the exact target triple and include it through the
   native bundle configuration; development must not silently fall back to a globally installed
   executable.
+- Preview and release quality jobs must prepare the exact-target debug sidecar before any Rust
+  workspace test or lint command that evaluates the Tauri bundle configuration.
 - Host startup verifies that the resolved helper is inside the installed application, is a regular
   file, and matches the version/protocol expected by the host build.
 - CI exercises the helper handshake and shutdown from packaged macOS, Windows, and Linux artifacts.

@@ -86,3 +86,14 @@ test("Tauri packages only the prepared host-owned plugin helper", () => {
   assert.match(configuration.build.beforeBuildCommand, /prepare-plugin-host-sidecar\.mjs/u);
   assert.match(configuration.build.beforeDevCommand, /prepare-plugin-host-sidecar\.mjs/u);
 });
+
+test("quality and release gates prepare the sidecar before Rust workspace tests", () => {
+  for (const workflow of ["package-preview.yml", "release.yml"]) {
+    const source = readFileSync(new URL(`../.github/workflows/${workflow}`, import.meta.url), "utf8");
+    const prepare = source.indexOf("name: Prepare plugin host sidecar");
+    const testWorkspace = source.indexOf("name: Test Rust workspace");
+    assert.notEqual(prepare, -1, `${workflow} must prepare the plugin host sidecar`);
+    assert.ok(prepare < testWorkspace, `${workflow} must prepare the sidecar before Rust tests`);
+    assert.match(source.slice(prepare, testWorkspace), /TAURI_ENV_DEBUG:\s*["']true["']/u);
+  }
+});

@@ -72,6 +72,11 @@ jobs:
       - name: Install desktop test dependencies
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Prepare plugin host sidecar
+        env:
+          TAURI_ENV_DEBUG: "true"
+        run: node scripts/prepare-plugin-host-sidecar.mjs
+
       - name: Test Rust workspace
         run: cargo test --workspace --locked
 
