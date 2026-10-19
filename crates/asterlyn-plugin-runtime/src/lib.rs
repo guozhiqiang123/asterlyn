@@ -79,6 +79,7 @@ pub struct CapabilityContext<'a> {
     pub package_digest: &'a str,
     pub workspace_id: &'a str,
     pub workspace_generation: u64,
+    pub workspace_root: &'a str,
     pub admitted_permissions: &'a BTreeSet<String>,
 }
 
@@ -168,6 +169,7 @@ struct ManagedSession {
     session_id: String,
     workspace_id: String,
     workspace_generation: u64,
+    workspace_root: String,
     admitted_capabilities: BTreeSet<String>,
     admitted_permissions: BTreeSet<String>,
     contributions: Vec<RuntimeContribution>,
@@ -462,6 +464,7 @@ impl ManagedSession {
         let receiver = spawn_protocol_reader(stdout);
         spawn_stderr_reader(stderr, diagnostics.clone());
 
+        let workspace_root = activation.workspace_root;
         let mut session = Self {
             key: SessionKey {
                 owner: activation.owner,
@@ -471,6 +474,7 @@ impl ManagedSession {
             session_id,
             workspace_id: activation.workspace_id,
             workspace_generation: activation.workspace_generation,
+            workspace_root: workspace_root.clone(),
             admitted_capabilities: activation.capabilities.into_iter().collect(),
             admitted_permissions: activation.permissions.into_iter().collect(),
             contributions: Vec::new(),
@@ -490,7 +494,7 @@ impl ManagedSession {
 
         let startup = session.establish(
             activation.evidence,
-            activation.workspace_root,
+            workspace_root,
             activation.locale,
             activation.theme,
         );
@@ -676,6 +680,7 @@ impl ManagedSession {
                     package_digest: &self.identity.package_digest,
                     workspace_id: &self.workspace_id,
                     workspace_generation: self.workspace_generation,
+                    workspace_root: &self.workspace_root,
                     admitted_permissions: &self.admitted_permissions,
                 },
                 &request,

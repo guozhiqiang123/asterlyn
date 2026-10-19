@@ -233,7 +233,7 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .setup(|app| {
-            let plugin_hosts = build_plugin_host_supervisor()
+            let plugin_hosts = build_plugin_host_supervisor(app.handle().clone())
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
             app.manage(plugin_hosts);
             build_project_window(app.handle(), "main", "Asterlyn")?;
