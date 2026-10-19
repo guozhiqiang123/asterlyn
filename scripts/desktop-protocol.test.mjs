@@ -5,6 +5,7 @@ import test from "node:test";
 import { generateDesktopProtocol } from "./generate-desktop-protocol.mjs";
 import { validateDesktopResult } from "../src/protocol/validate-desktop-result.ts";
 import {
+  parseInstalledPluginNotificationEvent,
   parseInstalledPluginRuntimeEvent,
   pluginRuntimeListenerValue,
 } from "../src/protocol/plugin-runtime.ts";
@@ -120,6 +121,23 @@ test("external plugin runtime listener and event values are strictly bounded", (
       payload: { $asterlynCallback: { handle: "callback-1", operation: "apply" } },
     }),
     /remote callback references are not allowed/u,
+  );
+});
+
+test("external plugin notification events reject untrusted presentation text", () => {
+  const event = {
+    pluginId: "dev.asterlyn.fixture",
+    kind: "success",
+    messageKey: "run.completed",
+  };
+  assert.deepEqual(parseInstalledPluginNotificationEvent(event), event);
+  assert.throws(
+    () => parseInstalledPluginNotificationEvent({ ...event, kind: "fatal" }),
+    /notification kind is invalid/u,
+  );
+  assert.throws(
+    () => parseInstalledPluginNotificationEvent({ ...event, messageKey: "raw message!" }),
+    /notification message key is invalid/u,
   );
 });
 

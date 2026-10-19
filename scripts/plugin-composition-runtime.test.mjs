@@ -50,6 +50,74 @@ test("plugin-scoped evidence keys preserve activation across unrelated generated
   runtime.dispose();
 });
 
+test("installed plugin contributions replace the matching bundled fallback", async () => {
+  let bundledActivations = 0;
+  let providers = [];
+  const plugin = fixturePlugin("fixture", (context) => {
+    bundledActivations += 1;
+    context.contribute({
+      kind: "provider", id: "tasks", label: "Bundled",
+      snapshot: () => ({ status: "ready", tasks: [] }),
+    });
+  });
+  const bridge = externalBridge({
+    pluginId: "fixture",
+    pluginVersion: "1.0.0",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "external-session",
+    contributions: [{
+      kind: "taskProvider", id: "tasks", payload: { label: "External" },
+      callbacks: { snapshot: "snapshot" },
+    }],
+  });
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, next) => { providers = [...next]; },
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    loadPlugins: async () => [plugin],
+    installedPluginRuntimeBridge: bridge,
+    pluginMarketplaceBridge: { listPluginInstallations: async () => installation("fixture") },
+  });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  assert.equal(bundledActivations, 0);
+  assert.equal(runtime.contributionRegistry.get("fixture.tasks")?.pluginVersion, "1.0.0");
+  assert.equal(providers[0].label, "External");
+  assert.equal(runtime.managementSnapshot.entries[0].active, true);
+  runtime.dispose();
+});
+
+test("failed installed plugin activation falls back to bundled contributions", async () => {
+  let bundledActivations = 0;
+  let providers = [];
+  const errors = [];
+  const plugin = fixturePlugin("fixture", (context) => {
+    bundledActivations += 1;
+    context.contribute({
+      kind: "provider", id: "tasks", label: "Bundled",
+      snapshot: () => ({ status: "ready", tasks: [] }),
+    });
+  });
+  const bridge = externalBridge(null);
+  bridge.activate = async () => { throw new Error("isolated runtime failed"); };
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: (_identity, next) => { providers = [...next]; },
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { errors.push(error); },
+    loadPlugins: async () => [plugin],
+    installedPluginRuntimeBridge: bridge,
+    pluginMarketplaceBridge: { listPluginInstallations: async () => installation("fixture") },
+  });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  assert.equal(bundledActivations, 1);
+  assert.equal(providers[0].label, "Bundled");
+  assert.equal(errors.length, 1);
+  runtime.dispose();
+});
+
 function fixturePlugin(id, activate, evidenceKey) {
   return {
     id,
@@ -65,5 +133,33 @@ function fixturePlugin(id, activate, evidenceKey) {
     matches: () => true,
     ...(evidenceKey ? { evidenceKey } : {}),
     activate,
+  };
+}
+
+function installation(pluginId) {
+  return {
+    schemaVersion: 1, generation: 1, recovered: false,
+    plugins: [{
+      pluginId, repository: "asterlyn/plugin-fixture", enabled: true, bundledFallback: true,
+      activeVersion: null, knownGoodVersion: null, pendingVersion: "1.0.0",
+      versions: [{
+        version: "1.0.0", packageDigest: `sha256:${"a".repeat(64)}`,
+        admittedAtEpochMs: 1, runtimeStatus: "pendingRuntime",
+      }],
+    }],
+  };
+}
+
+function externalBridge(activation) {
+  return {
+    activate: async () => activation,
+    invoke: async (_pluginId, handle) => {
+      if (handle === "snapshot") return { status: "ready", tasks: [] };
+      throw new Error(`Unexpected external callback: ${handle}`);
+    },
+    deactivate: async () => undefined,
+    diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
+    subscribe: async () => () => undefined,
+    subscribeNotifications: async () => () => undefined,
   };
 }

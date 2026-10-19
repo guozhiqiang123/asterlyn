@@ -186,23 +186,24 @@ gate, not an implicit side effect of capability proxy work.
 
 ### EPR3 — Host supervisor and transactional contribution adapter
 
-Status: supervisor foundation implemented on 2026-10-19. The native parent now resolves only the
+Status: host supervisor and live renderer transaction implemented on 2026-10-19. The native parent now resolves only the
 packaged exact-target helper (or the compile-time development sidecar), clears its environment,
 creates one process group per plugin, enforces activation/request/shutdown deadlines, bounds
 protocol backpressure and stderr diagnostics, verifies the admitted identity and workspace
 generation, stages contributions until the complete activation succeeds, and removes every owned
-session on window/application exit. The capability dispatcher also denies undeclared capability
-names and stale workspace generations before calling a native handler. Marketplace selection,
-renderer contribution projection, concrete capability handlers, subscription events, and packaged
-multi-platform process-tree evidence remain open, so admitted packages continue to report
-`pendingRuntime`.
+session on window/application exit. The capability dispatcher denies undeclared capability names
+and stale workspace generations before calling a native handler. The window runtime now selects
+eligible admitted installations, projects their callbacks and subscriptions into the existing
+contribution registry as one atomic batch, and retains bundled contributions only as a per-plugin
+fallback. Packaged multi-platform process-tree evidence and healthy-start promotion remain open,
+so admitted packages continue to report `pendingRuntime`.
 
-The host bridge now also supports an explicitly requested activation test for an enabled admitted
+The host bridge also supports an explicitly requested activation test for an enabled admitted
 version. It revalidates the extracted manifest, compatibility contract, complete file set, and
 every declared SHA-256 before starting the supervisor, then returns one strictly validated
-contribution batch and opaque callback handles over the desktop protocol. This path does not
-promote `pendingRuntime`, publish the batch into the live contribution registry, or replace the
-bundled fallback; those transitions remain gated on the capability/deep-callback work below.
+contribution batch and opaque callback handles over the desktop protocol. A successful workspace
+activation publishes that complete batch into the live registry and suppresses only the matching
+bundled fallback for the session; it still does not promote `pendingRuntime` before MKT7.
 
 1. Resolve the packaged helper without accepting a renderer/plugin path; spawn it with piped
    protocol handles and no secrets in arguments or environment.
@@ -217,6 +218,8 @@ Exit gate: one plugin crash cannot blank core UI, Settings, or another plugin, a
 process survives its owner.
 
 #### EPR3a — native capability handlers
+
+Status: implemented on 2026-10-19.
 
 The first EPR3 delivery connects the isolated capability requests to host-owned implementations
 without exposing a bridge, path resolver, process handle, or storage object to plugin JavaScript.
@@ -240,6 +243,8 @@ its task cache exclusively through the isolated protocol, while hostile capabili
 no process, storage, notification, or workspace side effect.
 
 #### EPR3b — renderer contribution transaction
+
+Status: implemented on 2026-10-19.
 
 After EPR3a, a window-owned external-runtime adapter activates eligible installed packages and
 converts the returned data/callback references into the same validated contribution interfaces as
@@ -270,8 +275,9 @@ or replacing the workspace removes every contribution, subscription, request, an
 - Host startup verifies that the resolved helper is inside the installed application, is a regular
   file, and matches the version/protocol expected by the host build.
 - CI exercises the helper handshake and shutdown from packaged macOS, Windows, and Linux artifacts.
-- Marketplace install remains labelled `pending runtime` until EPR3 exists. External enablement and
-  automatic selection remain unavailable until EPR4 plus MKT7 recovery evidence exists.
+- Marketplace installs remain labelled `pending runtime` until EPR4 parity plus MKT7 healthy-start
+  and rollback evidence exists. Runtime selection is live, but it cannot promote or delete the
+  bundled fallback before that gate.
 
 ## Required acceptance evidence
 

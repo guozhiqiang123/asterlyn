@@ -34,6 +34,8 @@ import { resolvePluginMessage } from "../application/plugins/plugin-localization
 import type { PluginToolOperationBridge } from "../protocol/plugin-tool-operation.ts";
 import { PluginRunSessionRuntime, type PluginRunSessionRuntimeOptions, type PluginRunTerminalStatus } from "./plugin-run-session-runtime.ts";
 import type { ApplicationConfirmationRequest } from "../shared/application-confirmation-dialog.ts";
+import type { InstalledPluginRuntimeBridge } from "../protocol/plugin-runtime.ts";
+import type { PluginMarketplaceBridge } from "../protocol/plugin-marketplace.ts";
 
 export interface PluginTasksRuntimeOptions {
   readonly copy: () => TasksCopy;
@@ -51,6 +53,8 @@ export interface PluginTasksRuntimeOptions {
   readonly notificationPublisher?: HostNotificationPublisher;
   readonly processQueryBridge?: PluginProcessQueryBridge;
   readonly toolOperationBridge?: PluginToolOperationBridge;
+  readonly installedPluginRuntimeBridge?: InstalledPluginRuntimeBridge;
+  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations">;
   readonly availabilityChanged?: (available: boolean) => void;
   readonly identityChanged?: () => void;
 }
@@ -140,6 +144,8 @@ export class PluginTasksRuntime {
       notificationPublisher: options.notificationPublisher,
       processQueryBridge: options.processQueryBridge,
       workspaceStateStorage: options.recentTaskStorage,
+      installedPluginRuntimeBridge: options.installedPluginRuntimeBridge,
+      pluginMarketplaceBridge: options.pluginMarketplaceBridge,
       locale: options.locale,
       mutationBlocked: () => this.runSession.busy,
     });

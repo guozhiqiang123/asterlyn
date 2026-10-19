@@ -8,6 +8,7 @@ import {
   type PluginPreferenceStorage,
   type BundledPlugin,
   type PluginDiagnostic,
+  type PluginActivationReport,
   type PluginWorkspaceCatalogEvidence,
   type PluginWorkspaceIdentity,
   type PluginWorkspaceInvalidation,
@@ -15,6 +16,7 @@ import {
   type PluginSettingValue,
   type PluginSettingsTargetResolution,
 } from "../application/plugins/index.ts";
+import { resolvePluginMessageOrNull } from "../application/plugins/plugin-localization.ts";
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type { TaskProviderProjection } from "../features/tasks/index.ts";
 import type { PluginTaskExecutionResult, PluginTaskRefreshPlan, PluginTaskRunPlan } from "../application/plugins/plugin-types.ts";
@@ -26,6 +28,9 @@ import type { HostNotificationPublisher } from "../application/notifications/ind
 import { createPluginNotificationCapability } from "./plugin-notification-capability.ts";
 import type { PluginProcessQueryBridge } from "../protocol/plugin-process-query.ts";
 import type { PluginWorkspaceStateStorage } from "./plugin-workspace-state-capability.ts";
+import type { InstalledPluginRuntimeBridge } from "../protocol/plugin-runtime.ts";
+import type { PluginMarketplaceBridge } from "../protocol/plugin-marketplace.ts";
+import { ExternalPluginRuntime } from "./external-plugin-runtime.ts";
 
 export interface PluginCompositionRuntimeOptions {
   readonly registerCommand: (descriptor: CommandDescriptor) => () => void;
@@ -53,6 +58,8 @@ export interface PluginCompositionRuntimeOptions {
   readonly notificationPublisher?: HostNotificationPublisher;
   readonly processQueryBridge?: PluginProcessQueryBridge;
   readonly workspaceStateStorage?: PluginWorkspaceStateStorage;
+  readonly installedPluginRuntimeBridge?: InstalledPluginRuntimeBridge;
+  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations">;
   readonly locale?: () => string;
   readonly mutationBlocked?: () => boolean;
 }
@@ -61,7 +68,9 @@ export interface PluginCompositionRuntimeOptions {
 export class PluginCompositionRuntime {
   private readonly runtime: PluginRuntime;
   private readonly contributions: PluginContributionRuntime;
+  private readonly external: ExternalPluginRuntime | null;
   private readonly loadPlugins: () => Promise<readonly BundledPlugin[]>;
+  private readonly reportError: (error: unknown) => void;
   readonly preferences: PluginPreferenceStore;
   readonly management: PluginManagementRuntime;
   private identity: PluginWorkspaceIdentity | null = null;
@@ -73,6 +82,7 @@ export class PluginCompositionRuntime {
   private disposed = false;
 
   constructor(options: PluginCompositionRuntimeOptions) {
+    this.reportError = options.reportError;
     this.runtime = new PluginRuntime(
       undefined,
       options.reportDiagnostic,
@@ -94,6 +104,34 @@ export class PluginCompositionRuntime {
         .createPluginWorkspaceStateCapability(options.workspaceStateStorage, plugin, identity),
     );
     this.contributions = new PluginContributionRuntime(this.runtime.contributions, options);
+    this.external = options.installedPluginRuntimeBridge && options.pluginMarketplaceBridge
+      ? new ExternalPluginRuntime({
+          registry: this.runtime.contributions,
+          bridge: options.installedPluginRuntimeBridge,
+          marketplace: options.pluginMarketplaceBridge,
+          locale: options.locale ?? (() => "en-US"),
+          reportError: options.reportError,
+          notification: async (event) => {
+            if (!options.notificationPublisher) return;
+            const plugin = (await this.bundledPlugins()).find((candidate) => candidate.id === event.pluginId);
+            const message = plugin === undefined
+              ? null
+              : resolvePluginMessageOrNull(
+                  plugin.manifest.localization,
+                  options.locale?.() ?? "en-US",
+                  event.messageKey,
+                );
+            if (message === null) {
+              throw new Error(`Unknown external plugin notification message key: ${event.pluginId}.${event.messageKey}`);
+            }
+            options.notificationPublisher.publish({
+              kind: event.kind,
+              message,
+              source: `plugin:${event.pluginId}`,
+            });
+          },
+        })
+      : null;
     this.preferences = options.preferenceStore ?? new PluginPreferenceStore(
       defaultPluginPreferenceStorage(),
       [],
@@ -126,6 +164,7 @@ export class PluginCompositionRuntime {
     this.management.setMatched([]);
     this.management.setActivation(null);
     await this.runtime.deactivate();
+    await this.external?.deactivate();
   }
 
   async updateWorkspaceEvidence(
@@ -141,8 +180,7 @@ export class PluginCompositionRuntime {
     const evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
     if (evidenceKey === this.evidenceKey) return;
     this.management.setMatched(matchingPluginIds(identity, evidence, plugins));
-    const enabled = plugins.filter((plugin) => this.preferences.isEnabled(plugin.id));
-    const report = await this.runtime.activate(identity, evidence, enabled);
+    const report = await this.activatePlugins(identity, evidence, plugins);
     this.management.setActivation(report);
     if (this.matches(identity) && !this.disposed) this.evidenceKey = evidenceKey;
   }
@@ -205,6 +243,7 @@ export class PluginCompositionRuntime {
     this.management.dispose();
     this.preferences.dispose();
     this.contributions.dispose();
+    void this.external?.dispose();
     void this.runtime.dispose();
   }
 
@@ -225,15 +264,41 @@ export class PluginCompositionRuntime {
     if (!this.matches(identity) || this.disposed) return;
     this.management.setCatalog(plugins);
     this.management.setMatched(matchingPluginIds(identity, evidence, plugins));
-    const report = await this.runtime.activate(
-      identity,
-      evidence,
-      plugins.filter((plugin) => this.preferences.isEnabled(plugin.id)),
-    );
+    const report = await this.activatePlugins(identity, evidence, plugins);
     if (this.matches(identity) && !this.disposed) {
       this.evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
       this.management.setActivation(report);
     }
+  }
+
+  private async activatePlugins(
+    identity: PluginWorkspaceIdentity,
+    evidence: PluginWorkspaceCatalogEvidence,
+    plugins: readonly BundledPlugin[],
+  ): Promise<PluginActivationReport> {
+    await this.runtime.deactivate();
+    let externalActivated: readonly string[] = [];
+    if (this.external) {
+      try {
+        externalActivated = await this.external.activate(
+          identity,
+          evidence,
+          (pluginId) => this.preferences.isEnabled(pluginId),
+        );
+      } catch (error) {
+        this.reportError(error);
+        await this.external.deactivate();
+      }
+    }
+    const externalIds = new Set(externalActivated);
+    const bundled = plugins.filter((plugin) =>
+      this.preferences.isEnabled(plugin.id) && !externalIds.has(plugin.id)
+    );
+    const report = await this.runtime.activate(identity, evidence, bundled);
+    return Object.freeze({
+      ...report,
+      activated: Object.freeze([...externalActivated, ...report.activated]),
+    });
   }
 }
 

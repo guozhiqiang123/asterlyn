@@ -54,7 +54,14 @@ export interface InstalledPluginRuntimeEvent {
   readonly payload: PluginRuntimeValue;
 }
 
+export interface InstalledPluginNotificationEvent {
+  readonly pluginId: string;
+  readonly kind: "info" | "success" | "warning" | "error";
+  readonly messageKey: string;
+}
+
 export const PLUGIN_RUNTIME_EVENT = "asterlyn://plugin-runtime-event";
+export const PLUGIN_NOTIFICATION_EVENT = "asterlyn://plugin-notification";
 
 export interface InstalledPluginRuntimeBridge {
   activate(
@@ -74,6 +81,9 @@ export interface InstalledPluginRuntimeBridge {
   deactivate(pluginId: string): Promise<void>;
   diagnostics(pluginId: string): Promise<InstalledPluginRuntimeDiagnostics>;
   subscribe(listener: (event: InstalledPluginRuntimeEvent) => void): Promise<() => void>;
+  subscribeNotifications(
+    listener: (event: InstalledPluginNotificationEvent) => void,
+  ): Promise<() => void>;
 }
 
 export function validateInstalledPluginActivation(
@@ -160,6 +170,29 @@ export function parseInstalledPluginRuntimeEvent(value: unknown): InstalledPlugi
   assertRuntimeIdentifier(event.subscriptionHandle, command, "subscription handle", true);
   validateRuntimeValue(event.payload, command, 0, false, new Set());
   return value as InstalledPluginRuntimeEvent;
+}
+
+export function parseInstalledPluginNotificationEvent(
+  value: unknown,
+): InstalledPluginNotificationEvent {
+  const command = "invoke_installed_plugin_callback";
+  const event = record(value, command);
+  assertRuntimeIdentifier(event.pluginId, command, "plugin ID", true);
+  assert(
+    event.kind === "info" || event.kind === "success" ||
+    event.kind === "warning" || event.kind === "error",
+    command,
+    "plugin notification kind is invalid",
+  );
+  assert(
+    typeof event.messageKey === "string" &&
+    event.messageKey.length > 0 &&
+    event.messageKey.length <= 128 &&
+    /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/u.test(event.messageKey),
+    command,
+    "plugin notification message key is invalid",
+  );
+  return value as InstalledPluginNotificationEvent;
 }
 
 function validateRuntimeValue(

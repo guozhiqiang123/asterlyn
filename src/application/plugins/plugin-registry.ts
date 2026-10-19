@@ -73,6 +73,50 @@ export class PluginContributionRegistry {
     };
   }
 
+  registerExternalBatch(
+    plugin: Pick<BundledPlugin, "id" | "version">,
+    contributions: readonly PluginContribution[],
+  ): Disposable {
+    validatePluginId(plugin.id);
+    validatePluginVersion(plugin.version);
+    const entries = contributions.map((contribution) => {
+      validateContribution(contribution);
+      return {
+        qualifiedId: qualifyContributionId(plugin.id, contribution.id),
+        contribution,
+      };
+    });
+    const ids = new Set<string>();
+    for (const entry of entries) {
+      if (ids.has(entry.qualifiedId) || this.contributions.has(entry.qualifiedId)) {
+        throw new PluginContributionError(
+          "duplicate-contribution",
+          `Duplicate contribution ID: ${entry.qualifiedId}`,
+        );
+      }
+      ids.add(entry.qualifiedId);
+    }
+    for (const entry of entries) {
+      this.contributions.set(entry.qualifiedId, {
+        ...entry.contribution,
+        pluginId: plugin.id,
+        pluginVersion: plugin.version,
+        qualifiedId: entry.qualifiedId,
+      });
+    }
+    if (entries.length > 0) this.emit();
+    let registered = true;
+    return {
+      dispose: () => {
+        if (!registered) return;
+        registered = false;
+        let changed = false;
+        for (const entry of entries) changed = this.contributions.delete(entry.qualifiedId) || changed;
+        if (changed) this.emit();
+      },
+    };
+  }
+
   get(qualifiedId: string): RegisteredPluginContribution | null {
     return this.contributions.get(qualifiedId) ?? null;
   }

@@ -10,4 +10,5 @@ export const demoInstalledPluginRuntimeBridge: InstalledPluginRuntimeBridge = {
   deactivate: async () => undefined,
   diagnostics: async () => unavailable(),
   subscribe: async () => () => undefined,
+  subscribeNotifications: async () => () => undefined,
 };

@@ -94,7 +94,7 @@ export function adaptSdkPluginModule(module: SdkPluginModule): BundledPlugin {
     ...(context.notifications === undefined ? {} : { notifications: context.notifications }),
     ...(context.processQueries === undefined ? {} : { processQueries: context.processQueries }),
     ...(context.workspaceState === undefined ? {} : { workspaceState: context.workspaceState }),
-    contribute: (contribution) => context.contribute(adaptContribution(contribution)),
+    contribute: (contribution) => context.contribute(adaptSdkContribution(contribution)),
   });
   const adaptMatchContext = (context: PluginMatchContext): SdkPluginMatchContext => ({
     identity: adaptPluginWorkspaceIdentity(context.identity),
@@ -157,7 +157,7 @@ function catalogValues(value: Record<string, unknown>): Readonly<Record<string, 
   };
 }
 
-function adaptContribution(contribution: SdkPluginContribution): PluginContribution {
+export function adaptSdkContribution(contribution: SdkPluginContribution): PluginContribution {
   if (contribution.kind === "command") return contribution;
   if (contribution.kind === "execution-target-provider") {
     return {

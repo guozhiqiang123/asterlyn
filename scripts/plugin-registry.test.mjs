@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PluginRuntime, qualifyContributionId, validatePluginId, validatePluginVersion, validateWorkspaceIdentity } from "../src/application/plugins/plugin-registry.ts";
+import { PluginContributionRegistry, PluginRuntime, qualifyContributionId, validatePluginId, validatePluginVersion, validateWorkspaceIdentity } from "../src/application/plugins/plugin-registry.ts";
 
 const identity = { root: "/repo", generation: 1 };
 const provider = (id, label = id) => ({
@@ -20,6 +20,32 @@ test("validates strict plugin, version, and contribution IDs", () => {
   assert.throws(() => validateWorkspaceIdentity({ root: "  ", generation: 0 }), /Invalid workspace root/);
   assert.throws(() => validateWorkspaceIdentity({ root: "/repo", generation: -1 }), /Invalid workspace generation/);
   assert.throws(() => validateWorkspaceIdentity({ root: "/repo", generation: 1.5 }), /Invalid workspace generation/);
+});
+
+test("registers external contribution batches atomically and releases them as one unit", () => {
+  const registry = new PluginContributionRegistry();
+  const observed = [];
+  const releaseObserver = registry.subscribe(() => observed.push(registry.list().length));
+  const release = registry.registerExternalBatch(
+    { id: "external", version: "1.0.0" },
+    [provider("tasks"), provider("quick-actions")],
+  );
+  assert.deepEqual(registry.list().map((entry) => entry.qualifiedId), [
+    "external.tasks",
+    "external.quick-actions",
+  ]);
+  assert.throws(
+    () => registry.registerExternalBatch(
+      { id: "external", version: "1.0.1" },
+      [provider("new"), provider("tasks")],
+    ),
+    /Duplicate contribution ID/u,
+  );
+  assert.equal(registry.get("external.new"), null);
+  release.dispose();
+  release.dispose();
+  releaseObserver();
+  assert.deepEqual(observed, [2, 0]);
 });
 
 test("activates matching plugins in declared order and namespaces contributions", async () => {
