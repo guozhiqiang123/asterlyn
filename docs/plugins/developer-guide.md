@@ -24,6 +24,12 @@ Copy [`templates/plugin-typescript`](../../templates/plugin-typescript) into a n
 copy is intentionally standalone: production dependencies resolve from the vendored Plugin SDK
 tarball, never from a sibling Asterlyn checkout.
 
+The vendored tarball is the exact checksum-covered SDK asset from the matching host Release, not a
+locally repacked equivalent. Archive bytes can differ across npm versions even when their extracted
+files are identical, so host publication verifies the committed canonical archive against the SDK
+source and republishes those exact bytes. Plugin repositories must retain that archive and its
+lockfile integrity unchanged.
+
 Before the first Release:
 
 1. Choose a permanent reverse-domain plugin ID. Changing it later creates a different installed

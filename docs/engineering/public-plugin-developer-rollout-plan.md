@@ -68,6 +68,8 @@ canonical native inspector over the exact artifact.
    GitHub Release workflow.
 2. The template consumes the exact SDK tarball from `vendor/`; a host script refreshes that tarball
    from `packages/plugin-sdk` without creating a path dependency in the resulting repository.
+   Release publication verifies every extracted canonical file against the reviewed SDK source and
+   uploads the committed archive bytes, avoiding npm-version-dependent repacking drift.
 3. Template verification runs from a copied temporary directory so hidden host imports and
    undeclared local paths fail.
 4. Generated archives contain only `manifest.json`, `LICENSE`, and the declared runtime files.

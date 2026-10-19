@@ -31,7 +31,7 @@ test("public Plugin SDK pack exposes only the reviewed types and metadata", asyn
   );
 });
 
-test("Plugin SDK packer emits one deterministic artifact with a matching checksum", async () => {
+test("Plugin SDK packer emits the reviewed canonical artifact with a matching checksum", async () => {
   const output = await mkdtemp(path.join(tmpdir(), "asterlyn-plugin-sdk-"));
   const packed = spawnSync(
     process.execPath,
@@ -42,6 +42,12 @@ test("Plugin SDK packer emits one deterministic artifact with a matching checksu
   const summary = JSON.parse(packed.stdout);
   assert.equal(summary.artifact, "asterlyn-plugin-sdk-1.9.0.tgz");
   const bytes = await readFile(path.join(output, summary.artifact));
+  const canonical = await readFile(path.join(
+    repositoryRoot,
+    "templates/plugin-typescript/vendor",
+    summary.artifact,
+  ));
+  assert.deepEqual(bytes, canonical);
   assert.equal(createHash("sha256").update(bytes).digest("hex"), summary.sha256);
   assert.equal(
     await readFile(path.join(output, "plugin-sdk.sha256"), "utf8"),
