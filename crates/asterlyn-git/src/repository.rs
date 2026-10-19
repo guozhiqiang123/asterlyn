@@ -14,19 +14,20 @@ use crate::credential::{
     ssh_identity_configured, validate_credential_field,
 };
 use crate::error::{GitError, RemoteFailureKind};
+#[cfg(test)]
+use crate::model::HistoryPath;
 use crate::model::{
     BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
     BranchMutationSourceKind, ChangeKind, CommitComparisonDetails, CommitComparisonDiffResult,
     CommitComparisonRelation, CommitDetails, CommitDiffResult, CommitFileChange, CommitFileVersion,
     CommitSummary, DiffResult, FileChange, GitBlameResult, GitResetMode, GitResetPlan,
-    GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryPath, HistoryQuery,
-    HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode,
-    PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus,
-    RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest,
-    RemoteSummary, RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot,
-    RepositorySnapshot, SelectedCommitResult, StashCatalog, StashEntry, StashMutationKind,
-    StashMutationRequest, TagMutationKind, TagMutationRequest, TrackedChangeScan, UntrackedScan,
-    UntrackedState, WorkingDiffBaseVersion,
+    GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryQuery, HistoryRef,
+    ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview,
+    PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteBranchDeletionTarget,
+    RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, RemoteSummary, RemoteTransport,
+    RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult,
+    StashCatalog, StashEntry, StashMutationKind, StashMutationRequest, TagMutationKind,
+    TagMutationRequest, TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
@@ -36,6 +37,7 @@ use crate::remote_failure::parse_remote_ref_failures;
 
 mod commit_details;
 mod head_commit_mutation;
+mod history_query;
 mod remote_branch_sync;
 pub use remote_branch_sync::BranchPushTarget;
 mod stash_creation;
@@ -677,73 +679,14 @@ impl GitRepository {
             .saturating_add(page_size)
             .saturating_add(1)
             .min(MAX_HISTORY_SESSION + 1);
-        let roots = self.discovered_roots()?;
-        validate_query_roots(query, &roots)?;
-        let selected_roots: HashSet<&str> =
-            query.repository_ids.iter().map(String::as_str).collect();
-        let eligible_roots: Vec<_> = roots
-            .into_iter()
-            .filter(|root| {
-                let repository_id = root.descriptor.id.as_str();
-                (selected_roots.is_empty() || selected_roots.contains(repository_id))
-                    && query
-                        .start_commit
-                        .as_ref()
-                        .is_none_or(|start| start.repository_id == repository_id)
-                    && (query.refs.is_empty()
-                        || query
-                            .refs
-                            .iter()
-                            .any(|reference| reference.repository_id == repository_id))
-                    && (query.paths.is_empty()
-                        || query
-                            .paths
-                            .iter()
-                            .any(|path| path.repository_id == repository_id))
-            })
-            .collect();
+        let eligible_roots = self.history_query_roots(query)?;
         let single_root = eligible_roots.len() == 1;
         let mut histories = Vec::new();
 
         for root in eligible_roots {
-            let repository_id = root.descriptor.id.as_str();
-            let refs: Vec<&HistoryRef> = query
-                .refs
-                .iter()
-                .filter(|reference| reference.repository_id == repository_id)
-                .collect();
-            let paths: Vec<&HistoryPath> = query
-                .paths
-                .iter()
-                .filter(|path| path.repository_id == repository_id)
-                .collect();
-            let selectors = if let Some(start) = &query.start_commit {
-                root.repository.first_parent(&start.oid)?;
-                vec![start.oid.clone()]
-            } else if query.refs.is_empty() {
-                root.repository.history_tip_oids()?
-            } else {
-                let mut oids = Vec::with_capacity(refs.len());
-                for selected in refs {
-                    let reference = validate_history_ref(&selected.full_name)?;
-                    if !root.repository.ref_is_valid(reference)? {
-                        return Err(GitError::InvalidInput {
-                            field: "history refs".to_string(),
-                            message: "select only existing refs from their owning repository"
-                                .to_string(),
-                        });
-                    }
-                    oids.push(root.repository.resolve_history_ref(reference)?);
-                }
-                oids.sort_unstable();
-                oids.dedup();
-                oids
-            };
-            if selectors.is_empty() {
+            if root.selectors.is_empty() {
                 continue;
             }
-            let path_values: Vec<String> =
-                paths.into_iter().map(|path| path.path.clone()).collect();
             let root_offset = if single_root { offset } else { 0 };
             let root_limit = if single_root {
                 page_size.saturating_add(1)
@@ -752,13 +695,13 @@ impl GitRepository {
             };
             let mut commits = root.repository.run_commit_history_query(
                 "query commit history",
-                selectors.iter().map(OsString::from).collect(),
+                root.selectors.iter().map(OsString::from).collect(),
                 query,
-                &path_values,
+                &root.paths,
                 root_offset,
                 root_limit,
             )?;
-            scope_commits(&mut commits, repository_id);
+            scope_commits(&mut commits, &root.repository_id);
             histories.push(commits);
         }
         let page_offset = if single_root { 0 } else { offset };
@@ -858,27 +801,7 @@ impl GitRepository {
                 offset.min(MAX_HISTORY_SESSION)
             )));
         }
-        if query.first_parent {
-            arguments.push(OsString::from("--first-parent"));
-        }
-        if query.exclude_merges {
-            arguments.push(OsString::from("--no-merges"));
-        }
-        if let Some(since_epoch) = query.since_epoch {
-            arguments.push(OsString::from(format!("--since=@{since_epoch}")));
-        }
-        let mut author_emails = query.author_emails.clone();
-        if query.current_author {
-            author_emails.push(self.current_author_email()?);
-        }
-        author_emails.sort_unstable();
-        author_emails.dedup();
-        for email in author_emails {
-            arguments.push(OsString::from(format!(
-                "--author=<{}>",
-                escape_git_regexp(&email)
-            )));
-        }
+        self.append_history_query_filters(&mut arguments, query)?;
         arguments.extend(selectors);
         arguments.push(OsString::from("--"));
         for path in paths {
@@ -7297,14 +7220,12 @@ mod tests {
             assert!(multi_ref.iter().any(|commit| &commit.oid == oid));
         }
 
+        let grace_query = HistoryQuery {
+            author_emails: vec!["grace@example.invalid".to_string()],
+            ..HistoryQuery::default()
+        };
         let grace = repository
-            .query_commit_history(
-                &HistoryQuery {
-                    author_emails: vec!["grace@example.invalid".to_string()],
-                    ..HistoryQuery::default()
-                },
-                50,
-            )
+            .query_commit_history(&grace_query, 50)
             .expect("author history loads");
         assert_eq!(
             grace
@@ -7312,6 +7233,12 @@ mod tests {
                 .map(|commit| commit.subject.as_str())
                 .collect::<Vec<_>>(),
             ["Side by Grace"]
+        );
+        assert_eq!(
+            repository
+                .query_commit_history_count(&grace_query)
+                .expect("filtered author count loads"),
+            grace.len()
         );
 
         git(
@@ -7481,6 +7408,9 @@ mod tests {
         let last = repository
             .query_commit_history_page(&query, 6, 3)
             .expect("last page loads");
+        let total = repository
+            .query_commit_history_count(&query)
+            .expect("history count loads");
 
         assert_eq!(first.offset, 0);
         assert_eq!(first.commits.len(), 3);
@@ -7499,6 +7429,7 @@ mod tests {
             .map(|commit| commit.oid.as_str())
             .collect();
         assert_eq!(oids.len(), 7);
+        assert_eq!(total, 7);
 
         assert!(
             repository
@@ -7727,6 +7658,12 @@ mod tests {
         assert!(snapshot.branches.iter().any(|branch| {
             branch.repository_id == "modules/library" && branch.full_name == "refs/heads/main"
         }));
+        assert_eq!(
+            repository
+                .query_commit_history_count(&HistoryQuery::default())
+                .expect("multi-root history count loads"),
+            snapshot.commits.len()
+        );
 
         let child_history = repository
             .query_commit_history(

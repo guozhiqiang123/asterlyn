@@ -283,6 +283,7 @@ pub fn run() {
             resize_terminal,
             close_terminal,
             read_tracked_changes,
+            read_history_count,
             read_history_page,
             scan_untracked,
             cancel_untracked_scan,

@@ -33,6 +33,8 @@ export const tauriGitReadBridge: GitReadBridge = {
     invokeDesktopCommand<TrackedChangeScan>("read_tracked_changes", { repositoryRoot }),
   readHistoryPage: (repositoryRoot, query, offset, limit) =>
     invokeDesktopCommand<HistoryPage>("read_history_page", { repositoryRoot, query, offset, limit }),
+  readHistoryCount: (repositoryRoot, query) =>
+    invokeDesktopCommand<number>("read_history_count", { repositoryRoot, query }),
   scanUntracked: (repositoryRoot, scanId) =>
     invokeDesktopCommand<UntrackedScan>("scan_untracked", { repositoryRoot, scanId }),
   cancelUntrackedScan: (scanId) =>

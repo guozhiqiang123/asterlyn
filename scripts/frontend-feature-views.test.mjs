@@ -11,7 +11,7 @@ import {
   renderCommitFolderDetail,
 } from "../src/features/git-history/git-detail-view.ts";
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
-import { renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
+import { historyCountPresentation, renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
 import {
   actionableEmptyState,
   contentHeading,
@@ -674,6 +674,41 @@ test("history navigation owns filter menus and list host presentation", () => {
   assert.match(html, /Up to aaaaaaaaaa/);
   assert.match(html, /data-history-clear-filter="branch"/);
   assert.match(html, /data-history-clear-all/);
+  const clearAll = html.match(/<button[^>]*data-history-clear-all[^>]*>[\s\S]*?<\/button>/u)?.[0] ?? "";
+  assert.match(clearAll, /<svg/u);
+  assert.doesNotMatch(clearAll, />Clear</u);
+  assert.ok(html.indexOf('id="history-count"') < html.indexOf("data-history-clear-all"));
+});
+
+test("history text search alone exposes the clear-all icon", () => {
+  const snapshot = repositorySnapshot();
+  const html = renderHistoryNavigation({
+    snapshot,
+    files: [], filesLoading: false, filesError: null, filesTruncated: false,
+    presentation: {
+      status: "ready", error: null, loadedCommits: [], commits: [], textError: null,
+      selectedCommit: null, collapseLinear: false, bridgeOmittedParents: false,
+      repositoryRoots: snapshot.repositoryRoots, branches: snapshot.branches,
+      loadingMore: false, pagingError: null, hasMore: false,
+    },
+    query: "fix parser", caseSensitive: false, regularExpression: false,
+    refs: new Map(), startCommit: null, authorEmails: new Set(), currentAuthor: false,
+    datePreset: "all", paths: new Map(), repositoryIds: new Set(), recentPaths: [],
+    order: "topological", firstParent: false, excludeMerges: false, collapseLinear: false,
+    filterMenu: null, branchSubmenu: null, favoriteRefs: new Map(), recentRefs: [],
+  });
+  assert.match(html, /data-history-clear-all/u);
+});
+
+test("history count uses the full structural total and keeps text matching local", () => {
+  assert.deepEqual(historyCountPresentation(150, 150, 842, ""), {
+    displayed: 842,
+    titleTotal: 842,
+  });
+  assert.deepEqual(historyCountPresentation(3, 150, 842, "parser"), {
+    displayed: 3,
+    titleTotal: 150,
+  });
 });
 
 test("history dialogs and commit details render without the application shell", () => {

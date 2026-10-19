@@ -255,6 +255,7 @@ export class HistoryFilterController {
   }
 
   clearAllFilters(): void {
+    this.value.historyQuery = "";
     this.install(defaultHistoryQuery());
     this.closeMenus();
   }

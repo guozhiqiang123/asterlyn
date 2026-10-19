@@ -124,6 +124,10 @@ test("desktop response validation rejects malformed command payloads", () => {
     () => validateDesktopResult("read_history_page", { commits: [], offset: "0", hasMore: false }),
     /offset must be a number/,
   );
+  assert.throws(
+    () => validateDesktopResult("read_history_count", -1),
+    /non-negative safe history count/,
+  );
 });
 
 test("desktop response validation accepts representative valid payloads", () => {
@@ -211,6 +215,7 @@ test("desktop response validation accepts representative valid payloads", () => 
     { protocolVersion: 1, sessionId: "terminal-1", shell: "bash", cwd: "/repo" },
   );
   assert.equal(validateDesktopResult("close_terminal", true), true);
+  assert.equal(validateDesktopResult("read_history_count", 123), 123);
   assert.equal(validateDesktopResult("cancel_remote_operation", null), null);
   const commitDetails = {
     repositoryId: ".",

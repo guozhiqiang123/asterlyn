@@ -157,7 +157,7 @@ test("history filter chips clear only their owned query dimension", () => {
   assert.equal(controller.query().repositoryIds.length, 0);
 });
 
-test("clearing all History filters resets every query dimension but keeps text search", () => {
+test("clearing all History filters also clears text search", () => {
   const controller = new HistoryFilterController(memoryStorage());
   controller.setTextQuery("fix parser");
   controller.install({
@@ -173,7 +173,7 @@ test("clearing all History filters resets every query dimension but keeps text s
     repositoryIds: [], refs: [], startCommit: null, authorEmails: [], currentAuthor: false,
     sinceEpoch: null, paths: [], firstParent: false, excludeMerges: false, order: "topological",
   });
-  assert.equal(controller.state.historyQuery, "fix parser");
+  assert.equal(controller.state.historyQuery, "");
   assert.equal(controller.state.historyFilterMenu, null);
 });
 

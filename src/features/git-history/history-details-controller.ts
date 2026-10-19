@@ -25,6 +25,7 @@ import {
   replaceHistoryPage,
 } from "./history-paging.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
+import { LatestHistoryCount } from "./history-total-count.ts";
 
 export const HISTORY_PAGE_SIZE = 150;
 export const HISTORY_SCROLL_THRESHOLD = 72;
@@ -54,6 +55,7 @@ export interface GitHistoryDetailsState {
   readonly nextOffset: number;
   readonly loadingMore: boolean;
   readonly refreshing: boolean;
+  readonly totalCount: number | null;
   readonly pagingError: string | null;
   readonly pagingRetry: HistoryPagingRetry;
   readonly details: CommitDetails | null;
@@ -63,6 +65,7 @@ export interface GitHistoryDetailsState {
 }
 
 export interface HistoryDetailsGateway {
+  readHistoryCount(root: string, query: HistoryQuery): Promise<number>;
   readHistoryPage(
     root: string,
     query: HistoryQuery,
@@ -89,6 +92,8 @@ export interface HistoryDetailsChange {
     | "refresh-start"
     | "refresh-complete"
     | "refresh-error"
+    | "count-complete"
+    | "count-error"
     | "tag-decoration"
     | "selection"
     | "details-start"
@@ -127,6 +132,7 @@ export class GitHistoryDetailsController {
   private readonly rowLimit: number;
   private readonly scrollThreshold: number;
   private readonly detailsCache: RecentValueCache<CommitDetails>;
+  private readonly historyCount: LatestHistoryCount;
   private messages: HistoryControllerMessages;
   private pageSequence = 0;
   private detailsSequence = 0;
@@ -135,6 +141,7 @@ export class GitHistoryDetailsController {
 
   constructor(gateway: HistoryDetailsGateway, options: GitHistoryDetailsControllerOptions) {
     this.gateway = gateway;
+    this.historyCount = new LatestHistoryCount((root, query) => gateway.readHistoryCount(root, query));
     this.pageSize = options.pageSize ?? HISTORY_PAGE_SIZE;
     this.rowLimit = options.rowLimit;
     this.scrollThreshold = options.scrollThreshold ?? HISTORY_SCROLL_THRESHOLD;
@@ -151,6 +158,7 @@ export class GitHistoryDetailsController {
       nextOffset: 0,
       loadingMore: false,
       refreshing: false,
+      totalCount: null,
       pagingError: null,
       pagingRetry: null,
       details: null,
@@ -246,6 +254,7 @@ export class GitHistoryDetailsController {
       nextOffset: commits.length,
       loadingMore: false,
       refreshing: false,
+      totalCount: null,
       pagingError: null,
       pagingRetry: null,
       ...(selectionChanged || referencesChanged ? emptyDetails() : {}),
@@ -257,6 +266,7 @@ export class GitHistoryDetailsController {
       selectionChanged,
       detailsChanged: selectionChanged || referencesChanged,
     });
+    this.requestTotalCount(root, normalizedQuery, this.value.history.generation);
   }
 
   applyTagMutation(request: TagMutationRequest): void {
@@ -303,6 +313,7 @@ export class GitHistoryDetailsController {
       selectionChanged,
       detailsChanged: true,
     });
+    this.requestTotalCount(root, normalized, pending.state.generation);
     void this.completeInitialQuery(pending.request);
   }
 
@@ -459,6 +470,7 @@ export class GitHistoryDetailsController {
       pagingRetry: null,
     };
     this.emit({ reason: "refresh-start", statusChanged: true });
+    this.requestTotalCount(root, query, generation);
 
     try {
       const page = await this.gateway.readHistoryPage(root, query, 0, limit);
@@ -636,6 +648,14 @@ export class GitHistoryDetailsController {
     }
   }
 
+  private requestTotalCount(root: string, query: HistoryQuery, generation: number): void {
+    const queryKey = historyQueryKey(query);
+    this.historyCount.request(root, query, () => !this.disposed && generation === this.value.history.generation && root === this.value.history.root && queryKey === historyQueryKey(this.value.query), (count) => {
+      this.value = { ...this.value, totalCount: count };
+      this.emit({ reason: count === null ? "count-error" : "count-complete", statusChanged: true });
+    });
+  }
+
   private selectedCommitSummary(): CommitSummary | null {
     const selected = this.value.selectedCommit;
     return selected
@@ -686,6 +706,7 @@ export class GitHistoryDetailsController {
 
   private invalidateRequests(): void {
     this.pageSequence += 1;
+    this.historyCount.invalidate();
     this.detailsSequence += 1;
   }
 
@@ -722,6 +743,7 @@ function emptyPaging(): Pick<
   | "nextOffset"
   | "loadingMore"
   | "refreshing"
+  | "totalCount"
   | "pagingError"
   | "pagingRetry"
 > {
@@ -730,6 +752,7 @@ function emptyPaging(): Pick<
     nextOffset: 0,
     loadingMore: false,
     refreshing: false,
+    totalCount: null,
     pagingError: null,
     pagingRetry: null,
   };

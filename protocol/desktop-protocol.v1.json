@@ -46,6 +46,7 @@
     { "name": "read_tracked_changes", "args": { "repositoryRoot": "string" }, "result": "TrackedChangeScan", "validator": "trackedChangeScan" },
     { "name": "open_repository_window", "args": { "path": "string" }, "result": "ProjectWindowOpenResult", "validator": "projectWindowOpenResult" },
     { "name": "read_history_page", "args": { "repositoryRoot": "string", "query": "HistoryQuery", "offset": "number", "limit": "number" }, "result": "HistoryPage", "validator": "historyPage" },
+    { "name": "read_history_count", "args": { "repositoryRoot": "string", "query": "HistoryQuery" }, "result": "number", "validator": "historyCount" },
     { "name": "scan_untracked", "args": { "repositoryRoot": "string", "scanId": "string" }, "result": "UntrackedScan", "validator": "untrackedScan" },
     { "name": "cancel_untracked_scan", "args": { "scanId": "string" }, "result": "void", "validator": "void" },
     { "name": "read_diff", "args": { "repositoryRoot": "string", "path": "string", "staged": "boolean" }, "result": "DiffResult", "validator": "diffResult" },

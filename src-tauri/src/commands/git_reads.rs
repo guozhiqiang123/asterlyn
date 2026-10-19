@@ -30,6 +30,20 @@ pub(crate) async fn read_history_page(
 }
 
 #[tauri::command]
+pub(crate) async fn read_history_count(
+    repository_root: String,
+    query: HistoryQuery,
+    window: tauri::WebviewWindow,
+    active_workspaces: State<'_, ActiveWorkspaces>,
+) -> Result<usize, GitError> {
+    let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    run_blocking("read history count", move || {
+        GitRepository::open(root)?.query_commit_history_count(&query)
+    })
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn scan_untracked(
     repository_root: String,
     scan_id: String,

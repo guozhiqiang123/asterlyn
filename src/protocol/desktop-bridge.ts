@@ -223,6 +223,7 @@ export interface GitReadBridge {
     offset: number,
     limit: number,
   ): Promise<HistoryPage>;
+  readHistoryCount(repositoryRoot: string, query: HistoryQuery): Promise<number>;
   scanUntracked(repositoryRoot: string, scanId: string): Promise<UntrackedScan>;
   cancelUntrackedScan(scanId: string): Promise<void>;
   readDiff(repositoryRoot: string, path: string, staged: boolean): Promise<DiffResult>;

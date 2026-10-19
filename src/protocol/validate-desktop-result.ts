@@ -413,6 +413,13 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       booleans(result, command, "hasMore");
       break;
     }
+    case "historyCount":
+      assert(
+        typeof value === "number" && Number.isSafeInteger(value) && value >= 0,
+        command,
+        "expected a non-negative safe history count",
+      );
+      break;
     case "diffResult": {
       const result = record(value, command);
       strings(result, command, "path", "patch");

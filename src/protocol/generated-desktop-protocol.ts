@@ -43,6 +43,7 @@ export interface DesktopCommandMap {
   read_tracked_changes: { args: { repositoryRoot: string; }; result: Model.TrackedChangeScan };
   open_repository_window: { args: { path: string; }; result: Model.ProjectWindowOpenResult };
   read_history_page: { args: { repositoryRoot: string; query: Model.HistoryQuery; offset: number; limit: number; }; result: Model.HistoryPage };
+  read_history_count: { args: { repositoryRoot: string; query: Model.HistoryQuery; }; result: number };
   scan_untracked: { args: { repositoryRoot: string; scanId: string; }; result: Model.UntrackedScan };
   cancel_untracked_scan: { args: { scanId: string; }; result: void };
   read_diff: { args: { repositoryRoot: string; path: string; staged: boolean; }; result: Model.DiffResult };
@@ -174,6 +175,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_tracked_changes: "trackedChangeScan",
   open_repository_window: "projectWindowOpenResult",
   read_history_page: "historyPage",
+  read_history_count: "historyCount",
   scan_untracked: "untrackedScan",
   cancel_untracked_scan: "void",
   read_diff: "diffResult",

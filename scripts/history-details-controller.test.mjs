@@ -35,6 +35,27 @@ test("latest history query owns completion and rejects stale responses", async (
   assert.equal(controller.state.selectedCommit, commitKey(commit("second")));
 });
 
+test("latest history query also owns the repository-wide total count", async () => {
+  const firstCount = deferred();
+  const secondCount = deferred();
+  const counts = [firstCount.promise, secondCount.promise];
+  const gateway = gatewayWithHistory([
+    Promise.resolve(page([commit("first")], 0, false)),
+    Promise.resolve(page([commit("second")], 0, false)),
+  ]);
+  gateway.readHistoryCount = () => counts.shift();
+  const controller = createController(gateway);
+  const query = defaultHistoryQuery();
+
+  controller.loadQuery("/workspace", { ...query, refs: [{ repositoryId: ".", fullName: "refs/heads/first" }] });
+  controller.loadQuery("/workspace", { ...query, refs: [{ repositoryId: ".", fullName: "refs/heads/second" }] });
+  firstCount.resolve(99);
+  secondCount.resolve(7);
+  await settle();
+
+  assert.equal(controller.state.totalCount, 7);
+});
+
 test("paging preserves selection and refresh drops details only when selection disappears", async () => {
   const historyResponses = [
     Promise.resolve(page([commit("b"), commit("c")], 2, false)),
@@ -123,6 +144,9 @@ test("commit detail cache avoids native reads and late detail responses are igno
   const detailB = deferred();
   const detailCalls = [];
   const gateway = {
+    async readHistoryCount() {
+      return 2;
+    },
     async readHistoryPage() {
       throw new Error("history not expected");
     },
@@ -154,6 +178,9 @@ test("commit detail cache avoids native reads and late detail responses are igno
 test("branch reference changes invalidate cached commit containment", async () => {
   let reads = 0;
   const gateway = {
+    async readHistoryCount() {
+      return 1;
+    },
     async readHistoryPage() {
       throw new Error("history not expected");
     },
@@ -225,6 +252,9 @@ function createController(gateway) {
 function gatewayWithHistory(responses) {
   let index = 0;
   return {
+    async readHistoryCount() {
+      return 7;
+    },
     readHistoryPage() {
       const response = responses[index++];
       if (!response) throw new Error("unexpected history request");

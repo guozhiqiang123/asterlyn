@@ -68,15 +68,29 @@ export interface HistoryScopePresentation {
   readonly title: string;
 }
 
+export function historyCountPresentation(
+  filteredCount: number,
+  loadedCount: number,
+  totalCount: number | null,
+  textQuery: string,
+): { displayed: number; titleTotal: number } {
+  const localTextFilter = textQuery.trim().length > 0;
+  const structuredTotal = totalCount ?? loadedCount;
+  return {
+    displayed: localTextFilter ? filteredCount : structuredTotal,
+    titleTotal: localTextFilter ? loadedCount : structuredTotal,
+  };
+}
+
 export function renderHistoryNavigation(model: HistoryNavigationViewModel): string {
   const copy = (model.localization ?? DEFAULT_LOCALIZATION).catalog.history;
   const scope = historyScope(model);
-  const clearAll = historyHasActiveFilters(model) ? `<button class="history-mode-button history-filter-clear-all" type="button" data-history-clear-all aria-label="${escapeAttribute(copy.clearAllFilters)}" title="${escapeAttribute(copy.clearAllFilters)}">${escapeHtml(copy.clear)}</button>` : "";
-  return `<div class="history-navigation"><div class="history-toolbar"><div class="history-search-control"><label class="history-filter" for="history-filter">${icon("search", 14)}<input id="history-filter" type="search" value="${escapeAttribute(model.query)}" placeholder="${escapeAttribute(copy.textOrHash)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.filterCommitHistory)}" /></label><button class="history-mode-button ${model.regularExpression ? "active" : ""}" type="button" data-history-text-mode="regex" aria-pressed="${model.regularExpression}" title="${escapeAttribute(copy.useRegularExpression)}">.*</button><button class="history-mode-button ${model.caseSensitive ? "active" : ""}" type="button" data-history-text-mode="case" aria-pressed="${model.caseSensitive}" title="${escapeAttribute(copy.matchCase)}">Cc</button></div><div class="history-filter-strip" aria-label="${escapeAttribute(copy.queryFilters)}">${historyFilterButton(model, "branch", scope.label, model.refs.size > 0 || model.startCommit !== null, scope.title)}${historyFilterButton(model, "user", historyUserLabel(model), model.currentAuthor || model.authorEmails.size > 0, copy.filterByAuthor)}${historyFilterButton(model, "date", historyDateLabel(model), model.datePreset !== "all", copy.filterByDate)}${historyFilterButton(model, "paths", historyPathLabel(model), model.paths.size > 0 || model.repositoryIds.size > 0, copy.filterByPathsOrRoots)}${historyFilterButton(model, "graph", "", model.order !== "topological" || model.firstParent || model.excludeMerges, copy.graphOptions, "sort")}${clearAll}</div><span class="compact-count" id="history-count">0</span><span class="history-refresh-status" id="history-refresh-status" role="status"></span>${renderHistoryFilterPopover(model)}</div><div class="history-results" id="history-results" tabindex="-1" aria-live="polite">${renderHistoryList(model.presentation)}</div></div>`;
+  const clearAll = historyHasActiveFilters(model) ? `<button class="history-filter-button history-filter-clear-all" type="button" data-history-clear-all aria-label="${escapeAttribute(copy.clearAllFilters)}" title="${escapeAttribute(copy.clearAllFilters)}">${icon("close", 13)}</button>` : "";
+  return `<div class="history-navigation"><div class="history-toolbar"><div class="history-search-control"><label class="history-filter" for="history-filter">${icon("search", 14)}<input id="history-filter" type="search" value="${escapeAttribute(model.query)}" placeholder="${escapeAttribute(copy.textOrHash)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(copy.filterCommitHistory)}" /></label><button class="history-mode-button ${model.regularExpression ? "active" : ""}" type="button" data-history-text-mode="regex" aria-pressed="${model.regularExpression}" title="${escapeAttribute(copy.useRegularExpression)}">.*</button><button class="history-mode-button ${model.caseSensitive ? "active" : ""}" type="button" data-history-text-mode="case" aria-pressed="${model.caseSensitive}" title="${escapeAttribute(copy.matchCase)}">Cc</button></div><div class="history-filter-strip" aria-label="${escapeAttribute(copy.queryFilters)}">${historyFilterButton(model, "branch", scope.label, model.refs.size > 0 || model.startCommit !== null, scope.title)}${historyFilterButton(model, "user", historyUserLabel(model), model.currentAuthor || model.authorEmails.size > 0, copy.filterByAuthor)}${historyFilterButton(model, "date", historyDateLabel(model), model.datePreset !== "all", copy.filterByDate)}${historyFilterButton(model, "paths", historyPathLabel(model), model.paths.size > 0 || model.repositoryIds.size > 0, copy.filterByPathsOrRoots)}${historyFilterButton(model, "graph", "", model.order !== "topological" || model.firstParent || model.excludeMerges, copy.graphOptions, "sort")}</div><span class="history-refresh-status" id="history-refresh-status" role="status"></span><span class="compact-count" id="history-count">0</span>${clearAll}${renderHistoryFilterPopover(model)}</div><div class="history-results" id="history-results" tabindex="-1" aria-live="polite">${renderHistoryList(model.presentation)}</div></div>`;
 }
 
 export function historyHasActiveFilters(model: HistoryNavigationViewModel): boolean {
-  return model.refs.size > 0 || model.startCommit !== null || model.authorEmails.size > 0 ||
+  return model.query.trim().length > 0 || model.refs.size > 0 || model.startCommit !== null || model.authorEmails.size > 0 ||
     model.currentAuthor || model.datePreset !== "all" || model.paths.size > 0 ||
     model.repositoryIds.size > 0 || model.order !== "topological" || model.firstParent ||
     model.excludeMerges;

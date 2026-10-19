@@ -13,6 +13,7 @@ test("Git History read runtime owns controller notifications and disposal", asyn
   const runtime = new GitHistoryReadRuntime(
     {
       details: {
+        readHistoryCount: async () => 0,
         readHistoryPage: () => history,
         readCommitDetails: async () => {
           throw new Error("not expected");

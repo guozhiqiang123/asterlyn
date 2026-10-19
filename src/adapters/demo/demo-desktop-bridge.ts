@@ -13,6 +13,7 @@ import { demoWorkingTreeOutcome } from "./demo-working-tree-outcome.ts";
 import { demoWorkspaceReplacementDiff } from "./demo-workspace-replacement-diff.ts";
 import { demoSystemFileClipboardBridge } from "./demo-system-file-clipboard-bridge.ts";
 import { demoTaskArtifactBridge } from "./demo-task-artifact-bridge.ts";
+import { createDemoHistoryReadBridge } from "./demo-history-read-bridge.ts";
 import { demoPluginTaskCacheBridge } from "./demo-plugin-task-cache-bridge.ts";
 import { demoPluginProcessQueryBridge } from "./demo-plugin-process-query-bridge.ts";
 import { demoPluginToolOperationBridge } from "./demo-plugin-tool-operation-bridge.ts";
@@ -20,7 +21,6 @@ import { demoCreateStash, demoExecuteStashMutation, demoStashCatalog, demoStashD
 import {
   demoCommitDetails,
   demoCommitDiff,
-  demoQueryHistory,
   demoCreateBranch,
   demoExecuteBranchMutation,
   demoExecuteTagMutation,
@@ -45,7 +45,7 @@ import type {
   FileChange, FileRestoreApplyResult, FileRestoreRecoverySummary, RestoreChangesPlan,
   GitWorktreeRecovery, GitConflictContent, GitBlameResult, GitOperationAction,
   GitOperationKind, GitOperationMutationOutcome, GitOperationPlan, GitOperationSnapshot,
-  GitResetMode, GitResetPlan, HistoryQuery, HistoryPage,
+  GitResetMode, GitResetPlan,
   ImageDiffPreview, ImagePreview,
   ProjectFileList, ProjectWindowMatch,
   ProjectWindowOpenResult, OpenedProject,
@@ -148,6 +148,7 @@ interface DemoCommitFileRestoreRecovery extends DemoCommitFileRestorePlan {
   repositoryRoot: string;
 }
 const demoBridge: DesktopBridge = {
+  ...createDemoHistoryReadBridge(() => browserSnapshot),
   ...demoSystemFileClipboardBridge,
   ...demoTaskExecutionBridge,
   ...demoTaskArtifactBridge,
@@ -269,29 +270,6 @@ const demoBridge: DesktopBridge = {
       throw new Error("Opening another application window requires the desktop build.");
     }
     return invoke<ProjectWindowOpenResult>("open_repository_window", { path });
-  },
-
-  async readHistoryPage(
-    repositoryRoot: string,
-    query: HistoryQuery,
-    offset: number,
-    limit: number,
-  ): Promise<HistoryPage> {
-    if (!isTauri) {
-      await demoDelay(180);
-      const commits = demoQueryHistory(browserSnapshot, query);
-      return {
-        commits: commits.slice(offset, offset + limit),
-        offset,
-        hasMore: commits.length > offset + limit,
-      };
-    }
-    return invoke<HistoryPage>("read_history_page", {
-      repositoryRoot,
-      query,
-      offset,
-      limit,
-    });
   },
 
   async scanUntracked(

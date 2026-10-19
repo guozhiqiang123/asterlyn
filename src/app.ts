@@ -18,7 +18,7 @@ import {
   type HistoryListPresentation,
 } from "./features/git-history/history-list-view";
 import {
-  historyScope,
+  historyCountPresentation, historyScope,
   renderHistoryNavigation as renderHistoryNavigationView,
   type HistoryFilterMenu,
   type HistoryNavigationViewModel,
@@ -684,8 +684,8 @@ export class AsterlynApp {
     this.historyReadRuntime = new GitHistoryReadRuntime(
       {
         details: {
-          readHistoryPage: (repositoryRoot, query, offset, limit) =>
-            bridge.readHistoryPage(repositoryRoot, query, offset, limit),
+          readHistoryCount: (repositoryRoot, query) => bridge.readHistoryCount(repositoryRoot, query),
+          readHistoryPage: (repositoryRoot, query, offset, limit) => bridge.readHistoryPage(repositoryRoot, query, offset, limit),
           readCommitDetails: (repositoryRoot, repositoryId, oid) =>
             bridge.readCommitDetails(repositoryRoot, repositoryId, oid),
         },
@@ -5368,16 +5368,16 @@ export class AsterlynApp {
   }
 
   private renderHistoryCount(filteredCount: number): void {
-    const count = this.query("#history-count");
+    const count = this.query("#history-count"), totals = historyCountPresentation(filteredCount, this.historyState.history.commits.length, this.historyState.totalCount, this.gitHistoryPresentationRuntime.filterState.historyQuery);
     count.textContent =
       this.historyState.history.status === "loading"
         ? "…"
         : this.historyState.history.status === "error"
           ? "!"
-          : filteredCount.toString();
+          : this.localization.number.format(totals.displayed);
     count.title = this.localization.catalog.history.countOfCommits(
       this.localization.number.format(filteredCount),
-      this.localization.number.format(this.historyState.history.commits.length),
+      this.localization.number.format(totals.titleTotal),
       historyScope(this.historyNavigationViewModel()).label,
     );
     const refresh = this.root.querySelector<HTMLElement>("#history-refresh-status");

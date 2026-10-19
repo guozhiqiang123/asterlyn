@@ -159,6 +159,15 @@
   gap: 2px;
 }
 
+.history-filter-clear-all {
+  width: 25px;
+  padding: 0;
+}
+
+.history-toolbar > .compact-count {
+  margin-left: auto;
+}
+
 .history-filter-chip {
   display: inline-flex;
   overflow: hidden;
