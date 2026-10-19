@@ -15,8 +15,7 @@ pub(crate) fn cleanup_marketplace_storage(
     root: &Path,
     snapshot: &PluginInstallationSnapshot,
 ) -> Result<PluginMarketplaceCleanupReport, String> {
-    let mut report = PluginMarketplaceCleanupReport::default();
-    report.staging_entries = remove_children(&root.join("staging"))?;
+    let staging_entries = remove_children(&root.join("staging"))?;
 
     let referenced = snapshot
         .plugins
@@ -37,9 +36,11 @@ pub(crate) fn cleanup_marketplace_storage(
         .collect::<BTreeSet<_>>();
     let (package_entries, restored_tombstones) =
         cleanup_packages(&root.join("packages"), &referenced)?;
-    report.package_entries = package_entries;
-    report.restored_tombstones = restored_tombstones;
-    Ok(report)
+    Ok(PluginMarketplaceCleanupReport {
+        staging_entries,
+        package_entries,
+        restored_tombstones,
+    })
 }
 
 fn cleanup_packages(
