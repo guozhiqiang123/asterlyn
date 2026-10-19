@@ -823,3 +823,55 @@ fn hidden_command(program: &str) -> Command {
     command.creation_flags(CREATE_NO_WINDOW);
     command
 }
+
+#[cfg(test)]
+mod live_release_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires live public GitHub Releases and network access"]
+    fn public_fixture_releases_are_discoverable_downloadable_and_admitted() {
+        for (repository, version, plugin_id) in [
+            (
+                "guozhiqiang123/asterlyn-plugin-hello",
+                "0.1.1",
+                "dev.asterlyn.hello",
+            ),
+            (
+                "guozhiqiang123/asterlyn-plugin-android-gradle",
+                "0.5.5",
+                "dev.asterlyn.android-gradle",
+            ),
+        ] {
+            let source = PluginSource {
+                repository: repository.to_owned(),
+                name: plugin_id.to_owned(),
+                description: "live marketplace acceptance fixture".to_owned(),
+                built_in: false,
+                enabled: true,
+                catalog: None,
+            };
+            let catalog = discover_release(&source);
+            assert_eq!(
+                catalog.status,
+                PluginSourceCatalogStatus::Available,
+                "{repository}: {:?}",
+                catalog.error
+            );
+            assert_eq!(catalog.version.as_deref(), Some(version));
+            assert!(!catalog.stale);
+            let staging = tempfile::tempdir().expect("live Release staging");
+            let admission = download_and_inspect(
+                ReleaseBinding::from_catalog(repository, 1, &catalog)
+                    .expect("bind discovered Release"),
+                staging.path().to_owned(),
+            )
+            .unwrap_or_else(|error| panic!("admit {repository}: {error}"));
+            assert_eq!(admission.repository, repository);
+            assert_eq!(admission.version, version);
+            assert_eq!(admission.report.plugin_id, plugin_id);
+            assert_eq!(admission.report.plugin_version, version);
+            assert_eq!(admission.digest, catalog.digest.expect("Release digest"));
+        }
+    }
+}

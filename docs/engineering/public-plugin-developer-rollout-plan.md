@@ -101,9 +101,14 @@ validate the package they publish.
 
 ### MKT8D — Installed acceptance and evidence
 
-Status: open. The next phase owns the independent second repository, clean installed-host journey,
-deliberately failing update, cross-platform package/runtime evidence, and measured resource and
-accessibility results.
+Status: partially implemented. The independent Hello repository and first-party Android repository
+publish immutable packages that pass the pinned host inspector and supervised runtime parity tests.
+The host's ignored live acceptance test now discovers both repositories through the same GitHub
+latest-Release path used by the product, downloads the exact digest-bound assets, and admits their
+package bytes. See the
+[`2026-10-19 public marketplace acceptance evidence`](../benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md).
+The clean installed-app restart journey, deliberately failing update, offline/rate-limit evidence,
+and measured resource and accessibility results remain open.
 
 1. Verify a clean installed host can add a second fixture repository, discover, inspect, install,
    restart, activate, and promote it without an open workspace.
