@@ -7,12 +7,22 @@ use asterlyn_plugin_runtime::{
 use asterlyn_plugin_runtime_protocol::{HostTheme, ShutdownReason};
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
-use tauri::{State, WebviewWindow};
+use tauri::{Emitter, State, WebviewWindow};
 
 use crate::application::ActiveWorkspaces;
 use crate::commands::plugin_marketplace::{
     admission_context, installation_store, installed_package_root,
 };
+
+const PLUGIN_RUNTIME_EVENT: &str = "asterlyn://plugin-runtime-event";
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstalledPluginRuntimeEvent {
+    plugin_id: String,
+    subscription_handle: String,
+    payload: JsonValue,
+}
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,12 +125,32 @@ pub(crate) async fn invoke_installed_plugin_callback(
 ) -> Result<JsonValue, String> {
     let owner = window.label().to_owned();
     let supervisor = supervisor.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        supervisor.invoke(&owner, &plugin_id, &callback_handle, &operation, payload)
+    let runtime_plugin_id = plugin_id.clone();
+    let invocation = tauri::async_runtime::spawn_blocking(move || {
+        supervisor.invoke_with_events(
+            &owner,
+            &runtime_plugin_id,
+            &callback_handle,
+            &operation,
+            payload,
+        )
     })
     .await
     .map_err(|error| format!("plugin callback worker could not complete: {error}"))?
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    for event in invocation.events {
+        window
+            .emit(
+                PLUGIN_RUNTIME_EVENT,
+                InstalledPluginRuntimeEvent {
+                    plugin_id: plugin_id.clone(),
+                    subscription_handle: event.subscription_handle,
+                    payload: event.payload,
+                },
+            )
+            .map_err(|error| format!("publish plugin runtime event: {error}"))?;
+    }
+    Ok(invocation.payload)
 }
 
 #[tauri::command]

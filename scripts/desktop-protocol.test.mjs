@@ -4,6 +4,10 @@ import test from "node:test";
 
 import { generateDesktopProtocol } from "./generate-desktop-protocol.mjs";
 import { validateDesktopResult } from "../src/protocol/validate-desktop-result.ts";
+import {
+  parseInstalledPluginRuntimeEvent,
+  pluginRuntimeListenerValue,
+} from "../src/protocol/plugin-runtime.ts";
 
 test("generated desktop command types match the versioned protocol schema", async () => {
   const generated = await readFile(
@@ -97,6 +101,25 @@ test("external plugin runtime results validate transactional contributions", () 
       { $asterlynCallback: { handle: "callback-2", operation: "dispose" } },
     ]),
     /duplicate remote callback handle/u,
+  );
+});
+
+test("external plugin runtime listener and event values are strictly bounded", () => {
+  assert.deepEqual(pluginRuntimeListenerValue("subscription-1"), {
+    $asterlynListener: { subscriptionHandle: "subscription-1" },
+  });
+  const event = {
+    pluginId: "dev.asterlyn.fixture",
+    subscriptionHandle: "subscription-1",
+    payload: { arguments: [{ revision: 1 }] },
+  };
+  assert.deepEqual(parseInstalledPluginRuntimeEvent(event), event);
+  assert.throws(
+    () => parseInstalledPluginRuntimeEvent({
+      ...event,
+      payload: { $asterlynCallback: { handle: "callback-1", operation: "apply" } },
+    }),
+    /remote callback references are not allowed/u,
   );
 });
 

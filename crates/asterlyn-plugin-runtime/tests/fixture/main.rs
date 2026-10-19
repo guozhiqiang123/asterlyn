@@ -9,8 +9,8 @@ use std::process::ExitCode;
 use std::process::{Command, Stdio};
 
 use asterlyn_plugin_runtime_protocol::{
-    ActivationReady, ContributionKind, Hello, OperationResult, PluginHostMessage, ProtocolEnvelope,
-    RuntimeContribution, ShutdownAck, read_frame, write_frame,
+    ActivationReady, ContributionKind, Event, Hello, OperationResult, PluginHostMessage,
+    ProtocolEnvelope, RuntimeContribution, ShutdownAck, read_frame, write_frame,
 };
 use serde_json::json;
 
@@ -68,9 +68,12 @@ fn run() -> Result<(), String> {
                 kind: ContributionKind::Command,
                 id: "fixture.echo".to_owned(),
                 payload: json!({"label": "Echo"}),
-                callbacks: [("execute".to_owned(), "callback-1".to_owned())]
-                    .into_iter()
-                    .collect(),
+                callbacks: [
+                    ("execute".to_owned(), "callback-1".to_owned()),
+                    ("subscribe".to_owned(), "callback-2".to_owned()),
+                ]
+                .into_iter()
+                .collect(),
             }],
         }),
     )?;
@@ -95,14 +98,29 @@ fn run() -> Result<(), String> {
     loop {
         let envelope = receive(&mut reader)?;
         match envelope.message {
-            PluginHostMessage::Invoke(request) => send(
-                &mut writer,
-                &mut sequence,
-                PluginHostMessage::InvocationResult(OperationResult {
-                    request_id: request.request_id,
-                    payload: request.payload,
-                }),
-            )?,
+            PluginHostMessage::Invoke(request) => {
+                let payload = if request.operation == "subscribe" {
+                    send(
+                        &mut writer,
+                        &mut sequence,
+                        PluginHostMessage::Event(Event {
+                            subscription_handle: "subscription-1".to_owned(),
+                            payload: json!({"arguments": [{"revision": 1}]}),
+                        }),
+                    )?;
+                    serde_json::Value::Null
+                } else {
+                    request.payload
+                };
+                send(
+                    &mut writer,
+                    &mut sequence,
+                    PluginHostMessage::InvocationResult(OperationResult {
+                        request_id: request.request_id,
+                        payload,
+                    }),
+                )?
+            }
             PluginHostMessage::Shutdown(_) => {
                 send(
                     &mut writer,

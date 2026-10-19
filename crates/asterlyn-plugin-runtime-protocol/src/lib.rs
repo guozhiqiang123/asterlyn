@@ -15,6 +15,7 @@ pub const MAX_CALLBACKS_PER_CONTRIBUTION: usize = 32;
 pub const MAX_CALLBACKS_PER_RESULT: usize = 64;
 pub const MAX_RUNTIME_VALUE_DEPTH: usize = 32;
 pub const REMOTE_CALLBACK_MARKER: &str = "$asterlynCallback";
+pub const REMOTE_LISTENER_MARKER: &str = "$asterlynListener";
 pub const MAX_LIST_ITEMS: usize = 64;
 const MAX_VERSION_BYTES: usize = 64;
 const MAX_RUNTIME_ENTRY_BYTES: usize = 512;
@@ -230,7 +231,7 @@ impl RuntimeContribution {
             validate_name("callback operation", operation)?;
             validate_identifier("callback handle", handle)?;
         }
-        validate_runtime_value(&self.payload, false)?;
+        validate_runtime_value(&self.payload, false, false)?;
         validate_json_size(
             "contribution payload",
             &self.payload,
@@ -262,7 +263,7 @@ impl Invoke {
         validate_identifier("requestId", &self.request_id)?;
         validate_identifier("callbackHandle", &self.callback_handle)?;
         validate_name("operation", &self.operation)?;
-        validate_runtime_value(&self.payload, false)?;
+        validate_runtime_value(&self.payload, false, true)?;
         validate_json_size("invoke payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
 }
@@ -289,7 +290,7 @@ impl CapabilityRequest {
         }
         validate_name("capability", &self.capability)?;
         validate_name("operation", &self.operation)?;
-        validate_runtime_value(&self.payload, false)?;
+        validate_runtime_value(&self.payload, false, false)?;
         validate_json_size("capability payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
 }
@@ -304,7 +305,7 @@ pub struct OperationResult {
 impl OperationResult {
     fn validate(&self, allow_remote_callbacks: bool) -> Result<(), ProtocolError> {
         validate_identifier("requestId", &self.request_id)?;
-        validate_runtime_value(&self.payload, allow_remote_callbacks)?;
+        validate_runtime_value(&self.payload, allow_remote_callbacks, false)?;
         validate_json_size("result payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
 }
@@ -319,6 +320,18 @@ pub struct RemoteCallbackReference {
 pub fn remote_callback_value(handle: String, operation: String) -> JsonValue {
     serde_json::json!({
         REMOTE_CALLBACK_MARKER: RemoteCallbackReference { handle, operation }
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteListenerReference {
+    pub subscription_handle: String,
+}
+
+pub fn remote_listener_value(subscription_handle: String) -> JsonValue {
+    serde_json::json!({
+        REMOTE_LISTENER_MARKER: RemoteListenerReference { subscription_handle }
     })
 }
 
@@ -346,7 +359,7 @@ pub struct Event {
 impl Event {
     fn validate(&self) -> Result<(), ProtocolError> {
         validate_identifier("subscriptionHandle", &self.subscription_handle)?;
-        validate_runtime_value(&self.payload, false)?;
+        validate_runtime_value(&self.payload, false, false)?;
         validate_json_size("event payload", &self.payload, MAX_PAYLOAD_BYTES)
     }
 }
@@ -696,16 +709,27 @@ fn validate_json_size(
 fn validate_runtime_value(
     value: &JsonValue,
     allow_remote_callbacks: bool,
+    allow_remote_listeners: bool,
 ) -> Result<(), ProtocolError> {
     let mut callback_handles = BTreeSet::new();
-    validate_runtime_value_at_depth(value, allow_remote_callbacks, 0, &mut callback_handles)
+    let mut listener_handles = BTreeSet::new();
+    validate_runtime_value_at_depth(
+        value,
+        allow_remote_callbacks,
+        allow_remote_listeners,
+        0,
+        &mut callback_handles,
+        &mut listener_handles,
+    )
 }
 
 fn validate_runtime_value_at_depth(
     value: &JsonValue,
     allow_remote_callbacks: bool,
+    allow_remote_listeners: bool,
     depth: usize,
     callback_handles: &mut BTreeSet<String>,
+    listener_handles: &mut BTreeSet<String>,
 ) -> Result<(), ProtocolError> {
     if depth > MAX_RUNTIME_VALUE_DEPTH {
         return Err(ProtocolError::LimitExceeded("runtime value depth"));
@@ -719,8 +743,10 @@ fn validate_runtime_value_at_depth(
                 validate_runtime_value_at_depth(
                     item,
                     allow_remote_callbacks,
+                    allow_remote_listeners,
                     depth + 1,
                     callback_handles,
+                    listener_handles,
                 )?;
             }
             Ok(())
@@ -753,12 +779,39 @@ fn validate_runtime_value_at_depth(
                 }
                 return Ok(());
             }
+            if let Some(reference) = object.get(REMOTE_LISTENER_MARKER) {
+                if !allow_remote_listeners {
+                    return Err(ProtocolError::InvalidField(
+                        "remote listener references are not allowed in this payload".to_owned(),
+                    ));
+                }
+                if object.len() != 1 {
+                    return Err(ProtocolError::InvalidField(
+                        "remote listener reference must not contain sibling fields".to_owned(),
+                    ));
+                }
+                let reference: RemoteListenerReference = serde_json::from_value(reference.clone())
+                    .map_err(|error| {
+                        ProtocolError::InvalidField(format!(
+                            "remote listener reference is invalid: {error}"
+                        ))
+                    })?;
+                validate_identifier("remote listener handle", &reference.subscription_handle)?;
+                if !listener_handles.insert(reference.subscription_handle.clone()) {
+                    return Err(ProtocolError::DuplicateIdentifier(
+                        reference.subscription_handle,
+                    ));
+                }
+                return Ok(());
+            }
             for item in object.values() {
                 validate_runtime_value_at_depth(
                     item,
                     allow_remote_callbacks,
+                    allow_remote_listeners,
                     depth + 1,
                     callback_handles,
+                    listener_handles,
                 )?;
             }
             Ok(())
@@ -1017,6 +1070,28 @@ mod tests {
         assert!(matches!(
             result.validate(true),
             Err(ProtocolError::LimitExceeded("runtime value depth"))
+        ));
+    }
+
+    #[test]
+    fn invoke_arguments_accept_only_exact_remote_listener_references() {
+        let request = Invoke {
+            request_id: "request-1".to_owned(),
+            callback_handle: "callback-1".to_owned(),
+            operation: "subscribe".to_owned(),
+            payload: serde_json::json!({
+                "arguments": [remote_listener_value("subscription-1".to_owned())]
+            }),
+        };
+        request.validate().expect("valid listener reference");
+
+        let event = Event {
+            subscription_handle: "subscription-1".to_owned(),
+            payload: remote_listener_value("subscription-2".to_owned()),
+        };
+        assert!(matches!(
+            event.validate(),
+            Err(ProtocolError::InvalidField(message)) if message.contains("not allowed")
         ));
     }
 

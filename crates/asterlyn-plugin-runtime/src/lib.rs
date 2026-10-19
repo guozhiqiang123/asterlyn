@@ -10,7 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use asterlyn_plugin_runtime_protocol::{
-    Activate, CapabilityRequest, ExpectedPluginIdentity, HelloAck, HostTheme, Invoke,
+    Activate, CapabilityRequest, Event, ExpectedPluginIdentity, HelloAck, HostTheme, Invoke,
     OperationError, OperationResult, PluginHostMessage, ProtocolEnvelope, RemoteFailure,
     RuntimeContribution, Shutdown, ShutdownReason, read_frame, write_frame,
 };
@@ -55,6 +55,12 @@ pub struct PluginActivation {
 pub struct ActivatedPlugin {
     pub session_id: String,
     pub contributions: Vec<RuntimeContribution>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PluginInvocation {
+    pub payload: JsonValue,
+    pub events: Vec<Event>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -265,6 +271,18 @@ impl PluginHostSupervisor {
         operation: &str,
         payload: JsonValue,
     ) -> Result<JsonValue, PluginRuntimeError> {
+        self.invoke_with_events(owner, plugin_id, callback_handle, operation, payload)
+            .map(|invocation| invocation.payload)
+    }
+
+    pub fn invoke_with_events(
+        &self,
+        owner: &str,
+        plugin_id: &str,
+        callback_handle: &str,
+        operation: &str,
+        payload: JsonValue,
+    ) -> Result<PluginInvocation, PluginRuntimeError> {
         let session = self.session(owner, plugin_id)?;
         let result = session.invoke(callback_handle, operation, payload);
         if matches!(
@@ -554,7 +572,7 @@ impl ManagedSession {
         callback_handle: &str,
         operation: &str,
         payload: JsonValue,
-    ) -> Result<JsonValue, PluginRuntimeError> {
+    ) -> Result<PluginInvocation, PluginRuntimeError> {
         if self.stopping.load(Ordering::Acquire) {
             return Err(PluginRuntimeError::NotActive(
                 self.identity.plugin_id.clone(),
@@ -585,7 +603,7 @@ impl ManagedSession {
         callback_handle: &str,
         operation: &str,
         payload: JsonValue,
-    ) -> Result<JsonValue, PluginRuntimeError> {
+    ) -> Result<PluginInvocation, PluginRuntimeError> {
         let _gate = lock(&self.request_gate, "plugin request gate")?;
         let request_number = self.request_sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let request_id = format!("request-{request_number}");
@@ -596,16 +614,28 @@ impl ManagedSession {
             payload,
         }))?;
         let deadline = Instant::now() + REQUEST_TIMEOUT;
+        let mut events = Vec::new();
         loop {
             let envelope = self.receive_until(deadline, "callback invocation")?;
             match envelope.message {
                 PluginHostMessage::InvocationResult(result) if result.request_id == request_id => {
-                    return Ok(result.payload);
+                    return Ok(PluginInvocation {
+                        payload: result.payload,
+                        events,
+                    });
                 }
                 PluginHostMessage::InvocationError(error) if error.request_id == request_id => {
                     return Err(PluginRuntimeError::Remote(error.error));
                 }
                 PluginHostMessage::CapabilityRequest(request) => self.answer_capability(request)?,
+                PluginHostMessage::Event(event) => {
+                    if events.len() >= 64 {
+                        return Err(PluginRuntimeError::Protocol(
+                            "plugin runtime event limit exceeded".to_owned(),
+                        ));
+                    }
+                    events.push(event);
+                }
                 PluginHostMessage::Diagnostic(diagnostic) => {
                     self.record_protocol_diagnostic(format!(
                         "{:?} {}: {}",

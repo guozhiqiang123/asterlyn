@@ -106,13 +106,15 @@ message.
 
 ### EPR2 — Embedded JavaScript plugin-host executable
 
-Status: engine and supervision foundations implemented on 2026-10-19. The standalone helper now completes framed
+Status: completed on 2026-10-19. The standalone helper now completes framed
 identity/activation/callback/shutdown sessions, evaluates self-contained ESM in Boa 0.21.1, blocks
 ambient desktop APIs, applies loop/recursion/stack limits, and registers contributions
 transactionally. The published Android `v0.5.4` artifact activates into its four expected
-contributions and serves snapshot/collection callbacks through protocol 1. The helper is packaged
-and supervised by the native parent. JavaScript capability proxies, subscription events, and deep
-callback values remain open; therefore EPR2 and MKT5 are not yet complete.
+contributions and serves Promise-backed host capabilities, recursively projected callback values,
+and bounded subscription events through protocol 1. The helper is packaged and supervised by the
+native parent; runtime events cross the desktop boundary through one strictly parsed,
+window-scoped channel. Concrete native capability handlers and live contribution publication now
+remain under EPR3/EPR4 rather than the JavaScript engine boundary.
 
 1. Add `asterlyn-plugin-host` as a separately packaged executable using the shared protocol crate.
 2. Load only the admitted immutable entry file, parse it as an ECMAScript module, and validate its
@@ -128,6 +130,8 @@ Exit gate: a fixture plugin activates and serves callbacks solely through protoc
 fixtures fail without changing host or workspace state.
 
 #### EPR2a — asynchronous capability proxy and remote values
+
+Status: implemented on 2026-10-19.
 
 The activation context exposes only manifest-admitted capability objects. Every method returns a
 real JavaScript `Promise`; invoking it emits one `capabilityRequest` carrying the active plugin,
@@ -165,6 +169,8 @@ Implementation and commit order:
    `deploy`, `launch`, and `dispose`-shaped results can be invoked without source evaluation.
 
 #### EPR2b — subscription listeners and events
+
+Status: implemented on 2026-10-19.
 
 Subscriptions build on the same handle ownership model, but do not overload ordinary invocation
 results. The parent passes an explicit remote-listener reference when invoking `subscribe`; the

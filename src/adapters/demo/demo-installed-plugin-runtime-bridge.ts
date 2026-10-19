@@ -9,4 +9,5 @@ export const demoInstalledPluginRuntimeBridge: InstalledPluginRuntimeBridge = {
   invoke: async () => unavailable(),
   deactivate: async () => undefined,
   diagnostics: async () => unavailable(),
+  subscribe: async () => () => undefined,
 };

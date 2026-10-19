@@ -36,6 +36,10 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
                   apply(next) { return `${this.prefix}:${next}`; },
                 };
               },
+              subscribe(listener) {
+                listener({ revision: 1 });
+                return { dispose() { return "disposed"; } };
+              },
             });
           },
         };
@@ -203,6 +207,42 @@ fn helper_completes_handshake_activation_callback_and_shutdown() {
         &mut input,
         &ProtocolEnvelope::new(
             7,
+            PluginHostMessage::Invoke(Invoke {
+                request_id: "request-3".to_owned(),
+                callback_handle: ready.contributions[0].callbacks["subscribe"].clone(),
+                operation: "subscribe".to_owned(),
+                payload: json!({
+                    "arguments": [asterlyn_plugin_runtime_protocol::remote_listener_value(
+                        "subscription-1".to_owned()
+                    )]
+                }),
+            }),
+        ),
+    )
+    .expect("write subscription invocation");
+    let event = read_frame(&mut output)
+        .expect("read subscription event")
+        .expect("subscription event frame");
+    let PluginHostMessage::Event(event) = event.message else {
+        panic!("expected subscription event")
+    };
+    assert_eq!(event.subscription_handle, "subscription-1");
+    assert_eq!(event.payload, json!({"arguments": [{"revision": 1}]}));
+    let subscription = read_frame(&mut output)
+        .expect("read subscription result")
+        .expect("subscription result frame");
+    let PluginHostMessage::InvocationResult(subscription) = subscription.message else {
+        panic!("expected subscription result")
+    };
+    assert_eq!(
+        subscription.payload["dispose"]["$asterlynCallback"]["operation"],
+        "dispose"
+    );
+
+    write_frame(
+        &mut input,
+        &ProtocolEnvelope::new(
+            8,
             PluginHostMessage::Shutdown(Shutdown {
                 reason: ShutdownReason::ApplicationExit,
             }),

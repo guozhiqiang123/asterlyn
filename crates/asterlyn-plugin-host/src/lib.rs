@@ -4,9 +4,10 @@ use std::fs;
 use std::path::Path;
 
 use asterlyn_plugin_runtime_protocol::{
-    Activate, ActivationReady, ContributionKind, Invoke, MAX_CALLBACKS_PER_RESULT,
+    Activate, ActivationReady, ContributionKind, Event, Invoke, MAX_CALLBACKS_PER_RESULT,
     MAX_CONTRIBUTIONS, MAX_RUNTIME_VALUE_DEPTH, PluginHostMessage, ProtocolEnvelope,
-    RuntimeContribution, remote_callback_value,
+    REMOTE_CALLBACK_MARKER, REMOTE_LISTENER_MARKER, RemoteListenerReference, RuntimeContribution,
+    remote_callback_value,
 };
 use boa_engine::builtins::promise::{PromiseState, ResolvingFunctions};
 use boa_engine::gc::{Finalize, Gc, GcRefCell, Trace};
@@ -24,6 +25,7 @@ const RECURSION_LIMIT: usize = 256;
 const STACK_SIZE_LIMIT: usize = 8 * 1024;
 const BACKTRACE_LIMIT: usize = 20;
 const MAX_CAPABILITY_REQUESTS_PER_TURN: usize = 64;
+const MAX_EVENTS_PER_TURN: usize = 64;
 
 const CAPABILITY_METHODS: &[(&str, &[&str])] = &[
     (
@@ -109,11 +111,25 @@ struct CapabilityBinding {
     operation: String,
 }
 
+#[derive(Debug, Trace, Finalize)]
+struct PendingEvent {
+    #[unsafe_ignore_trace]
+    event: Event,
+}
+
+#[derive(Debug, Trace, Finalize)]
+struct ListenerBinding {
+    queue: Gc<GcRefCell<Vec<PendingEvent>>>,
+    #[unsafe_ignore_trace]
+    subscription_handle: String,
+}
+
 pub struct PluginEngine {
     context: Context,
     callbacks: BTreeMap<String, RuntimeCallback>,
     next_callback_index: u64,
     capability_queue: Gc<GcRefCell<Vec<PendingCapability>>>,
+    event_queue: Gc<GcRefCell<Vec<PendingEvent>>>,
 }
 
 impl PluginEngine {
@@ -165,6 +181,7 @@ impl PluginEngine {
         let plugin = find_plugin_export(&module, expected, &mut context)?;
         let captured = Gc::new(GcRefCell::new(Vec::<JsObject>::new()));
         let capability_queue = Gc::new(GcRefCell::new(Vec::<PendingCapability>::new()));
+        let event_queue = Gc::new(GcRefCell::new(Vec::<PendingEvent>::new()));
         let activation_context = build_activation_context(
             activation,
             admitted_capabilities,
@@ -195,6 +212,7 @@ impl PluginEngine {
                 callbacks,
                 next_callback_index,
                 capability_queue,
+                event_queue,
             },
             ready,
         ))
@@ -234,7 +252,12 @@ impl PluginEngine {
         }
         let function = callback.function.clone();
         let receiver = callback.receiver.clone();
-        let args = invocation_arguments(&request.payload, &mut self.context)?;
+        self.event_queue.borrow_mut().clear();
+        let args = invocation_arguments(
+            &request.payload,
+            self.event_queue.clone(),
+            &mut self.context,
+        )?;
         let value = function
             .call(&receiver.clone().into(), &args, &mut self.context)
             .map_err(|error| js_error("invoke callback", error, &mut self.context))?;
@@ -259,6 +282,13 @@ impl PluginEngine {
 
     pub fn callback_count(&self) -> usize {
         self.callbacks.len()
+    }
+
+    pub fn take_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut *self.event_queue.borrow_mut())
+            .into_iter()
+            .map(|pending| pending.event.clone())
+            .collect()
     }
 }
 
@@ -680,9 +710,9 @@ fn project_runtime_value(
                     ));
                 }
             };
-            if property == asterlyn_plugin_runtime_protocol::REMOTE_CALLBACK_MARKER {
+            if property == REMOTE_CALLBACK_MARKER || property == REMOTE_LISTENER_MARKER {
                 return Err(PluginEngineError::Callback(
-                    "callback result uses the reserved remote callback marker".to_owned(),
+                    "callback result uses a reserved remote value marker".to_owned(),
                 ));
             }
             let item = object
@@ -712,6 +742,7 @@ fn project_runtime_value(
 
 fn invocation_arguments(
     payload: &JsonValue,
+    event_queue: Gc<GcRefCell<Vec<PendingEvent>>>,
     context: &mut Context,
 ) -> Result<Vec<JsValue>, PluginEngineError> {
     let arguments = payload
@@ -723,11 +754,80 @@ fn invocation_arguments(
         })?;
     arguments
         .iter()
-        .map(|argument| {
-            JsValue::from_json(argument, context)
-                .map_err(|error| js_error("convert callback argument", error, context))
-        })
+        .map(|argument| invocation_value(argument, event_queue.clone(), context))
         .collect()
+}
+
+fn invocation_value(
+    value: &JsonValue,
+    event_queue: Gc<GcRefCell<Vec<PendingEvent>>>,
+    context: &mut Context,
+) -> Result<JsValue, PluginEngineError> {
+    match value {
+        JsonValue::Array(items) => {
+            let items = items
+                .iter()
+                .map(|item| invocation_value(item, event_queue.clone(), context))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(JsArray::from_iter(items, context).into())
+        }
+        JsonValue::Object(object) => {
+            if let Some(reference) = object.get(REMOTE_LISTENER_MARKER) {
+                let reference: RemoteListenerReference = serde_json::from_value(reference.clone())
+                    .map_err(|error| {
+                        PluginEngineError::Callback(format!(
+                            "invalid remote listener reference: {error}"
+                        ))
+                    })?;
+                let listener = NativeFunction::from_copy_closure_with_captures(
+                    |_, arguments, binding, context| {
+                        if binding.queue.borrow().len() >= MAX_EVENTS_PER_TURN {
+                            return Err(JsNativeError::range()
+                                .with_message("plugin subscription event limit exceeded")
+                                .into());
+                        }
+                        let arguments = arguments
+                            .iter()
+                            .map(|argument| {
+                                argument
+                                    .to_json(context)
+                                    .map(|value| value.unwrap_or(JsonValue::Null))
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        binding.queue.borrow_mut().push(PendingEvent {
+                            event: Event {
+                                subscription_handle: binding.subscription_handle.clone(),
+                                payload: json!({ "arguments": arguments }),
+                            },
+                        });
+                        Ok(JsValue::undefined())
+                    },
+                    ListenerBinding {
+                        queue: event_queue,
+                        subscription_handle: reference.subscription_handle,
+                    },
+                );
+                Ok(listener.to_js_function(context.realm()).into())
+            } else {
+                let properties = object
+                    .iter()
+                    .map(|(key, item)| {
+                        Ok((
+                            key.clone(),
+                            invocation_value(item, event_queue.clone(), context)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, PluginEngineError>>()?;
+                let mut projected = ObjectInitializer::new(context);
+                for (key, item) in properties {
+                    projected.property(JsString::from(key.as_str()), item, Attribute::all());
+                }
+                Ok(projected.build().into())
+            }
+        }
+        _ => JsValue::from_json(value, context)
+            .map_err(|error| js_error("convert callback argument", error, context)),
+    }
 }
 
 fn settle_value(
@@ -1036,6 +1136,69 @@ mod tests {
             })
             .expect("invoke projected apply callback");
         assert_eq!(applied, json!("applied:value"));
+    }
+
+    #[test]
+    fn subscription_listener_rehydrates_and_emits_bounded_events() {
+        let (_directory, entry) = write_fixture(
+            r#"
+            export const FIXTURE = Object.freeze({
+              id: "dev.asterlyn.fixture",
+              version: "1.0.0",
+              activate(context) {
+                context.contribute({
+                  kind: "provider",
+                  id: "fixture.events",
+                  subscribe(listener) {
+                    listener({ revision: 1 });
+                    return { dispose() { return "disposed"; } };
+                  },
+                });
+              },
+            });
+            "#,
+        );
+        let (mut engine, ready) = PluginEngine::activate(
+            &entry,
+            &ExpectedRuntimeIdentity {
+                plugin_id: "dev.asterlyn.fixture",
+                plugin_version: "1.0.0",
+            },
+            &activation(),
+        )
+        .expect("activate fixture");
+        let subscribe = ready.contributions[0].callbacks["subscribe"].clone();
+        let disposable = engine
+            .invoke(&Invoke {
+                request_id: "request-1".to_owned(),
+                callback_handle: subscribe,
+                operation: "subscribe".to_owned(),
+                payload: json!({
+                    "arguments": [asterlyn_plugin_runtime_protocol::remote_listener_value(
+                        "subscription-1".to_owned()
+                    )]
+                }),
+            })
+            .expect("subscribe fixture listener");
+        let events = engine.take_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].subscription_handle, "subscription-1");
+        assert_eq!(events[0].payload, json!({"arguments": [{"revision": 1}]}));
+
+        let dispose =
+            &disposable["dispose"][asterlyn_plugin_runtime_protocol::REMOTE_CALLBACK_MARKER];
+        let disposed = engine
+            .invoke(&Invoke {
+                request_id: "request-2".to_owned(),
+                callback_handle: dispose["handle"]
+                    .as_str()
+                    .expect("dispose handle")
+                    .to_owned(),
+                operation: "dispose".to_owned(),
+                payload: json!({"arguments": []}),
+            })
+            .expect("dispose subscription");
+        assert_eq!(disposed, json!("disposed"));
     }
 
     #[test]

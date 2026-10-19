@@ -58,6 +58,22 @@ fn activates_invokes_and_shuts_down_an_isolated_session() {
         .expect("invoke");
     assert_eq!(result, payload);
 
+    let subscribed = supervisor
+        .invoke_with_events(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "callback-2",
+            "subscribe",
+            json!({"arguments": [{"$asterlynListener": {"subscriptionHandle": "subscription-1"}}]}),
+        )
+        .expect("subscribe");
+    assert_eq!(subscribed.events.len(), 1);
+    assert_eq!(subscribed.events[0].subscription_handle, "subscription-1");
+    assert_eq!(
+        subscribed.events[0].payload,
+        json!({"arguments": [{"revision": 1}]})
+    );
+
     supervisor.cancel_owner("window-main", ShutdownReason::WindowClosed);
     assert_eq!(supervisor.active_count(), 0);
 }

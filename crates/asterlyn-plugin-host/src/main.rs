@@ -139,6 +139,13 @@ fn run(config: HostConfig) -> Result<(), String> {
                     };
                     engine.invoke_with_capabilities(&request, &mut exchange)
                 };
+                for event in engine.take_events() {
+                    send(
+                        &mut writer,
+                        &mut outgoing_sequence,
+                        PluginHostMessage::Event(event),
+                    )?;
+                }
                 match result {
                     Ok(payload) => send(
                         &mut writer,

@@ -48,6 +48,14 @@ export interface InstalledPluginRuntimeDiagnostics {
   readonly protocolDiagnostics: readonly string[];
 }
 
+export interface InstalledPluginRuntimeEvent {
+  readonly pluginId: string;
+  readonly subscriptionHandle: string;
+  readonly payload: PluginRuntimeValue;
+}
+
+export const PLUGIN_RUNTIME_EVENT = "asterlyn://plugin-runtime-event";
+
 export interface InstalledPluginRuntimeBridge {
   activate(
     pluginId: string,
@@ -65,6 +73,7 @@ export interface InstalledPluginRuntimeBridge {
   ): Promise<PluginRuntimeValue>;
   deactivate(pluginId: string): Promise<void>;
   diagnostics(pluginId: string): Promise<InstalledPluginRuntimeDiagnostics>;
+  subscribe(listener: (event: InstalledPluginRuntimeEvent) => void): Promise<() => void>;
 }
 
 export function validateInstalledPluginActivation(
@@ -132,6 +141,25 @@ export function validatePluginRuntimeValue(
 ): PluginRuntimeValue {
   validateRuntimeValue(value, command, 0, true, new Set());
   return value as PluginRuntimeValue;
+}
+
+export function pluginRuntimeListenerValue(subscriptionHandle: string): PluginRuntimeValue {
+  assertRuntimeIdentifier(
+    subscriptionHandle,
+    "invoke_installed_plugin_callback",
+    "remote listener handle",
+    true,
+  );
+  return { $asterlynListener: { subscriptionHandle } };
+}
+
+export function parseInstalledPluginRuntimeEvent(value: unknown): InstalledPluginRuntimeEvent {
+  const command = "invoke_installed_plugin_callback";
+  const event = record(value, command);
+  assertRuntimeIdentifier(event.pluginId, command, "plugin ID", true);
+  assertRuntimeIdentifier(event.subscriptionHandle, command, "subscription handle", true);
+  validateRuntimeValue(event.payload, command, 0, false, new Set());
+  return value as InstalledPluginRuntimeEvent;
 }
 
 function validateRuntimeValue(
