@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   accessibilitySnapshotIsReady,
+  confirmWindowsProcessStopped,
   createRepositoryFixture,
   isolatedDesktopEnvironment,
   smokeProcess,
@@ -110,4 +111,28 @@ test("isolates desktop persistence without replacing the user home", () => {
   assert.equal(environment.XDG_CONFIG_HOME, "/tmp/asterlyn-profile/config");
   assert.equal(environment.XDG_DATA_HOME, "/tmp/asterlyn-profile/data");
   assert.equal(environment.XDG_STATE_HOME, "/tmp/asterlyn-profile/state");
+});
+
+test("accepts a taskkill race only after the native process has exited", async () => {
+  await confirmWindowsProcessStopped(
+    {
+      code: 255,
+      signal: null,
+      stdout: "",
+      stderr: "There is no running instance of the task.",
+    },
+    Promise.resolve({ code: 0, signal: null }),
+    20,
+  );
+});
+
+test("rejects Windows cleanup when the native process remains alive", async () => {
+  await assert.rejects(
+    confirmWindowsProcessStopped(
+      { code: 255, signal: null, stdout: "", stderr: "Access denied." },
+      new Promise(() => {}),
+      5,
+    ),
+    /native process remained alive.*Access denied/su,
+  );
 });

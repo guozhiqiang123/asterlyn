@@ -236,9 +236,13 @@ async function stopProcessTree(child, exited, shutdownGraceMs) {
   }
 
   if (process.platform === "win32") {
-    await runCommand("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-      acceptedExitCodes: new Set([0, 128]),
+    const taskkillResult = await runCommand("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+      // taskkill may return 255 when the process exits between our liveness check and
+      // tree termination. The authoritative check below still requires the child exit.
+      acceptedExitCodes: new Set([0, 128, 255]),
     });
+    await confirmWindowsProcessStopped(taskkillResult, exited, shutdownGraceMs);
+    return;
   } else {
     signalProcessGroup(child.pid, "SIGTERM");
   }
@@ -251,6 +255,21 @@ async function stopProcessTree(child, exited, shutdownGraceMs) {
     signalProcessGroup(child.pid, "SIGKILL");
     await exited;
   }
+}
+
+export async function confirmWindowsProcessStopped(taskkillResult, exited, shutdownGraceMs) {
+  const stopped = await Promise.race([
+    exited.then(() => true),
+    delay(shutdownGraceMs).then(() => false),
+  ]);
+  if (stopped) return;
+
+  const commandOutput = (taskkillResult.stderr || taskkillResult.stdout).trim();
+  const details = [
+    `taskkill returned code ${taskkillResult.code ?? "none"}, but the native process remained alive after ${shutdownGraceMs} ms.`,
+  ];
+  if (commandOutput) details.push(commandOutput);
+  throw new Error(details.join("\n"));
 }
 
 function signalProcessGroup(pid, signal) {
