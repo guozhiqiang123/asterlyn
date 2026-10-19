@@ -570,7 +570,14 @@ pub(crate) fn abandon_plugin_activations(
 }
 
 fn discover_release(source: &PluginSource) -> PluginSourceCatalog {
-    match request_latest_release(source) {
+    resolve_release_result(source, request_latest_release(source))
+}
+
+fn resolve_release_result(
+    source: &PluginSource,
+    response: Result<HttpReleaseResponse, String>,
+) -> PluginSourceCatalog {
+    match response {
         Ok(HttpReleaseResponse {
             status: 200,
             body,
@@ -825,9 +832,68 @@ fn hidden_command(program: &str) -> Command {
 }
 
 #[cfg(test)]
-mod live_release_tests {
+mod tests {
     use super::*;
     use asterlyn_plugin_marketplace::PluginRuntimeStatus;
+
+    #[test]
+    fn offline_and_rate_limited_discovery_preserve_only_stale_bound_release_metadata() {
+        let source = source_with_cached_release();
+
+        let offline = resolve_release_result(&source, Err("network unavailable".to_owned()));
+        assert_eq!(offline.status, PluginSourceCatalogStatus::Error);
+        assert!(offline.stale);
+        assert_eq!(offline.version.as_deref(), Some("1.2.3"));
+        assert_eq!(
+            offline.asset_download_url.as_deref(),
+            Some(
+                "https://github.com/asterlyn/example/releases/download/v1.2.3/example-1.2.3.asterlyn-plugin.tgz"
+            )
+        );
+        assert_eq!(offline.error.as_deref(), Some("network unavailable"));
+        assert_eq!(offline.rate_limit_reset_epoch_ms, None);
+
+        let reset = 9_876_000;
+        let limited = resolve_release_result(
+            &source,
+            Ok(HttpReleaseResponse {
+                status: 403,
+                body: Vec::new(),
+                etag: None,
+                last_modified: None,
+                rate_limit_remaining: Some(0),
+                rate_limit_reset_epoch_ms: Some(reset),
+            }),
+        );
+        assert_eq!(limited.status, PluginSourceCatalogStatus::RateLimited);
+        assert!(limited.stale);
+        assert_eq!(limited.version.as_deref(), Some("1.2.3"));
+        assert_eq!(limited.rate_limit_reset_epoch_ms, Some(reset));
+        assert!(
+            limited
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("rate limit"))
+        );
+    }
+
+    #[test]
+    fn unavailable_discovery_without_a_cached_release_never_invents_installable_metadata() {
+        let source = PluginSource {
+            repository: "asterlyn/example".to_owned(),
+            name: "Example".to_owned(),
+            description: "Fixture".to_owned(),
+            built_in: false,
+            enabled: true,
+            catalog: None,
+        };
+        let catalog = resolve_release_result(&source, Err("offline".to_owned()));
+        assert_eq!(catalog.status, PluginSourceCatalogStatus::Error);
+        assert!(!catalog.stale);
+        assert_eq!(catalog.version, None);
+        assert_eq!(catalog.asset_download_url, None);
+        assert_eq!(catalog.digest, None);
+    }
 
     #[test]
     #[ignore = "requires live public GitHub Releases and network access"]
@@ -952,5 +1018,34 @@ mod live_release_tests {
             })
             .map(|candidate| candidate.runtime_status)
             .expect("installed runtime status")
+    }
+
+    fn source_with_cached_release() -> PluginSource {
+        PluginSource {
+            repository: "asterlyn/example".to_owned(),
+            name: "Example".to_owned(),
+            description: "Fixture".to_owned(),
+            built_in: false,
+            enabled: true,
+            catalog: Some(PluginSourceCatalog {
+                status: PluginSourceCatalogStatus::Available,
+                checked_at_epoch_ms: 1,
+                stale: false,
+                version: Some("1.2.3".to_owned()),
+                release_url: Some(
+                    "https://github.com/asterlyn/example/releases/tag/v1.2.3".to_owned(),
+                ),
+                asset_name: Some("example-1.2.3.asterlyn-plugin.tgz".to_owned()),
+                asset_download_url: Some(
+                    "https://github.com/asterlyn/example/releases/download/v1.2.3/example-1.2.3.asterlyn-plugin.tgz".to_owned(),
+                ),
+                asset_size_bytes: Some(1_234),
+                digest: Some(format!("sha256:{}", "a".repeat(64))),
+                error: None,
+                rate_limit_reset_epoch_ms: None,
+                etag: Some("fixture-etag".to_owned()),
+                last_modified: Some("fixture-last-modified".to_owned()),
+            }),
+        }
     }
 }

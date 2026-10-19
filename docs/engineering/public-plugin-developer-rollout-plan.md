@@ -107,8 +107,10 @@ The host's ignored live acceptance test now discovers both repositories through 
 latest-Release path used by the product, downloads the exact digest-bound assets, and admits their
 package bytes. See the
 [`2026-10-19 public marketplace acceptance evidence`](../benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md).
-The clean installed-app restart journey, deliberately failing update, offline/rate-limit evidence,
-and measured resource and accessibility results remain open.
+The native discovery resolver now covers offline and GitHub rate-limit fallback with bounded stale
+metadata, and the package/runtime suites prove hostile package rejection plus contribution-contract
+failure containment. The clean installed-app restart journey, deliberately failing public update,
+reinstall retention, and measured resource and accessibility results remain open.
 
 1. Verify a clean installed host can add a second fixture repository, discover, inspect, install,
    restart, activate, and promote it without an open workspace.

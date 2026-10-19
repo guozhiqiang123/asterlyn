@@ -49,10 +49,26 @@ It passed for both repositories using the same production functions that:
 7. cross the restart gate, begin activation, promote the exact version to known-good, disable it,
    and atomically uninstall it from the lifecycle index.
 
+The production discovery resolver was also exercised without network access. A transport failure
+and a GitHub `403` with zero remaining requests preserve the previous complete Release binding as
+explicitly stale metadata, retain the rate-limit reset time, and do not expose an install action.
+The same failures without a previous complete binding retain no version, URL, digest, or other
+installable metadata. This is covered by the native `discovery_` tests rather than by changing the
+machine's real network state.
+
+The package admission suite passed all nine hostile-input gates: malformed gzip, parent/Windows
+paths, links, case-colliding paths, digest mismatch, unknown authority, missing license text,
+post-admission file injection, and extracted-package tampering all fail before execution. The
+marketplace lifecycle suite passed all fourteen unit/integration gates, including interrupted-start
+recovery, failed-update quarantine, exact known-good rollback, atomic uninstall, corrupt-generation
+recovery, and bounded retention. Renderer-side activation also proves that a contribution violating
+the host contract is reported, marked failed through the runtime lifecycle bridge, removed from the
+registry, and its isolated process is stopped.
+
 ## Result and remaining gates
 
-The Release-to-admission, native installation-lifecycle, and Release-to-runtime paths are proven
-with real public bytes. Remaining MKT8D evidence is deliberately separate: clean installed desktop
-UI through restart and healthy promotion, stale/offline/rate-limit behavior, hostile package
-rejection, failed-update quarantine and rollback, reinstall retention, cross-platform installed
-runtime cleanup, and measured keyboard/focus/ARIA plus resource behavior.
+The Release-to-admission, native installation-lifecycle, Release-to-runtime, stale-network fallback,
+and hostile-package rejection paths are proven. Remaining MKT8D evidence is deliberately separate:
+clean installed desktop UI through restart and healthy promotion, a deliberately failing public
+update, reinstall retention across the complete product path, cross-platform installed runtime
+cleanup, and measured keyboard/focus/ARIA plus resource behavior.

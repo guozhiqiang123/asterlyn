@@ -185,3 +185,59 @@ test("skips disabled installations before starting a process", async () => {
   assert.equal(activations, 0);
   await runtime.dispose();
 });
+
+test("quarantines an activation whose projected contribution violates the host contract", async () => {
+  const registry = new PluginContributionRegistry();
+  const calls = [];
+  const errors = [];
+  const activation = {
+    pluginId,
+    pluginVersion: "1.2.3",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "session-invalid",
+    contributions: [{
+      kind: "command",
+      id: "invalid-command",
+      payload: {},
+      callbacks: { title: "title", detail: "detail", execute: "execute" },
+    }],
+  };
+  const runtime = new ExternalPluginRuntime({
+    registry,
+    bridge: {
+      activate: async () => activation,
+      invoke: async (_pluginId, handle) => {
+        if (handle === "title") return "";
+        if (handle === "detail") return "Invalid contribution";
+        return null;
+      },
+      deactivate: async (id) => { calls.push(["deactivate", id]); },
+      confirmHealthy: async () => installation(),
+      failActivation: async (failed) => {
+        calls.push(["failed", failed.sessionId]);
+        return installation();
+      },
+      abandonActivation: async (abandoned) => {
+        calls.push(["abandoned", abandoned.sessionId]);
+        return installation();
+      },
+      diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
+      subscribe: async () => () => undefined,
+      subscribeNotifications: async () => () => undefined,
+    },
+    marketplace: { listPluginInstallations: async () => installation() },
+    locale: () => "en-US",
+    reportError: (error) => { errors.push(error); },
+    healthCheckpointMs: 0,
+  });
+
+  assert.deepEqual(await runtime.activate(identity, evidence, () => true), []);
+  assert.equal(registry.get(`${pluginId}.invalid-command`), null);
+  assert.deepEqual(calls, [
+    ["failed", "session-invalid"],
+    ["deactivate", pluginId],
+  ]);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /bounded non-empty text/u);
+  await runtime.dispose();
+});
