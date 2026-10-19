@@ -827,6 +827,7 @@ fn hidden_command(program: &str) -> Command {
 #[cfg(test)]
 mod live_release_tests {
     use super::*;
+    use asterlyn_plugin_marketplace::PluginRuntimeStatus;
 
     #[test]
     #[ignore = "requires live public GitHub Releases and network access"]
@@ -872,6 +873,84 @@ mod live_release_tests {
             assert_eq!(admission.report.plugin_id, plugin_id);
             assert_eq!(admission.report.plugin_version, version);
             assert_eq!(admission.digest, catalog.digest.expect("Release digest"));
+
+            let installed = tempfile::tempdir().expect("installed package root");
+            let package = fs::read(&admission.staging_path).expect("read staged package");
+            extract_admitted_package(
+                &package,
+                &admission_context(repository, version),
+                &installed.path().join("package"),
+            )
+            .expect("extract admitted package");
+            let lifecycle = PluginInstallationStore::open(installed.path().join("state"))
+                .expect("installation lifecycle store");
+            let recorded = lifecycle
+                .record_admitted(
+                    plugin_id,
+                    repository,
+                    version,
+                    &admission.digest,
+                    now_ms(),
+                    false,
+                )
+                .expect("record admitted Release");
+            assert_eq!(
+                runtime_status(&recorded, plugin_id, version),
+                PluginRuntimeStatus::PendingRestart
+            );
+            let restarted = lifecycle
+                .recover_interrupted_activations()
+                .expect("cross restart boundary");
+            assert_eq!(
+                runtime_status(&restarted, plugin_id, version),
+                PluginRuntimeStatus::PendingRuntime
+            );
+            let active = lifecycle
+                .begin_activation(plugin_id, version, &admission.digest)
+                .expect("begin installed runtime activation");
+            assert_eq!(
+                runtime_status(&active, plugin_id, version),
+                PluginRuntimeStatus::Active
+            );
+            let healthy = lifecycle
+                .promote_healthy(plugin_id, version, &admission.digest)
+                .expect("promote healthy installed runtime");
+            assert_eq!(
+                runtime_status(&healthy, plugin_id, version),
+                PluginRuntimeStatus::KnownGood
+            );
+            assert_eq!(
+                healthy.plugins[0].known_good_version.as_deref(),
+                Some(version)
+            );
+            assert_eq!(healthy.plugins[0].pending_version, None);
+            let disabled = lifecycle
+                .set_plugin_enabled(plugin_id, false)
+                .expect("disable installed plugin");
+            assert!(!disabled.plugins[0].enabled);
+            let removed = lifecycle
+                .remove_plugin(plugin_id)
+                .expect("uninstall installed plugin");
+            assert!(removed.plugins.is_empty());
         }
+    }
+
+    fn runtime_status(
+        snapshot: &PluginInstallationSnapshot,
+        plugin_id: &str,
+        version: &str,
+    ) -> PluginRuntimeStatus {
+        snapshot
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == plugin_id)
+            .and_then(|plugin| {
+                plugin
+                    .versions
+                    .iter()
+                    .find(|candidate| candidate.version == version)
+            })
+            .map(|candidate| candidate.runtime_status)
+            .expect("installed runtime status")
     }
 }

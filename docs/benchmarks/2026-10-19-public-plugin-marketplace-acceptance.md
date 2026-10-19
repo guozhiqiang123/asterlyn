@@ -43,12 +43,16 @@ It passed for both repositories using the same production functions that:
 3. download the exact asset under the product's size, timeout, redirect, and HTTPS restrictions;
 4. compare downloaded size and digest to the discovered Release binding; and
 5. run the schema, repository, version, host range, SDK, runtime protocol, integrity, capability,
-   permission, path, expansion, and license admission checks over the downloaded bytes.
+   permission, path, expansion, and license admission checks over the downloaded bytes;
+6. extract each admitted package into an immutable installation directory and persist the exact
+   repository/version/digest identity; and
+7. cross the restart gate, begin activation, promote the exact version to known-good, disable it,
+   and atomically uninstall it from the lifecycle index.
 
 ## Result and remaining gates
 
-The Release-to-admission and Release-to-runtime paths are proven with real public bytes. Remaining
-MKT8D evidence is deliberately separate: clean installed desktop UI through restart and healthy
-promotion, stale/offline/rate-limit behavior, hostile package rejection, failed-update quarantine
-and rollback, uninstall/reinstall retention, cross-platform installed runtime cleanup, and measured
-keyboard/focus/ARIA plus resource behavior.
+The Release-to-admission, native installation-lifecycle, and Release-to-runtime paths are proven
+with real public bytes. Remaining MKT8D evidence is deliberately separate: clean installed desktop
+UI through restart and healthy promotion, stale/offline/rate-limit behavior, hostile package
+rejection, failed-update quarantine and rollback, reinstall retention, cross-platform installed
+runtime cleanup, and measured keyboard/focus/ARIA plus resource behavior.
