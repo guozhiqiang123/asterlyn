@@ -160,12 +160,10 @@ impl PluginProcessQueryManager {
             return result(
                 plugin_id,
                 query_id,
-                PluginProcessQueryStatus::Unavailable,
-                None,
-                false,
-                Vec::new(),
-                Vec::new(),
-                Some("process query is not admitted by the bundled plugin catalog".into()),
+                CollectedOutput::with_error(
+                    PluginProcessQueryStatus::Unavailable,
+                    "process query is not admitted by the bundled plugin catalog",
+                ),
             );
         };
         let executable = match resolve_executable(root, query.executable) {
@@ -174,12 +172,7 @@ impl PluginProcessQueryManager {
                 return result(
                     plugin_id,
                     query_id,
-                    PluginProcessQueryStatus::Unavailable,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some(error),
+                    CollectedOutput::with_error(PluginProcessQueryStatus::Unavailable, error),
                 );
             }
         };
@@ -208,12 +201,7 @@ impl PluginProcessQueryManager {
                 return result(
                     plugin_id,
                     query_id,
-                    PluginProcessQueryStatus::Crashed,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some(error),
+                    CollectedOutput::with_error(PluginProcessQueryStatus::Crashed, error),
                 );
             }
         };
@@ -228,12 +216,10 @@ impl PluginProcessQueryManager {
                     return result(
                         plugin_id,
                         query_id,
-                        PluginProcessQueryStatus::Crashed,
-                        None,
-                        false,
-                        Vec::new(),
-                        Vec::new(),
-                        Some("process query registry lock was poisoned".into()),
+                        CollectedOutput::with_error(
+                            PluginProcessQueryStatus::Crashed,
+                            "process query registry lock was poisoned",
+                        ),
                     );
                 }
             };
@@ -247,12 +233,10 @@ impl PluginProcessQueryManager {
                 return result(
                     plugin_id,
                     query_id,
-                    PluginProcessQueryStatus::Failed,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some("too many process queries are active for this window".into()),
+                    CollectedOutput::with_error(
+                        PluginProcessQueryStatus::Failed,
+                        "too many process queries are active for this window",
+                    ),
                 );
             }
             running.insert(
@@ -272,25 +256,11 @@ impl PluginProcessQueryManager {
             running.remove(&key);
         }
         match collected {
-            Ok(output) => result(
-                plugin_id,
-                query_id,
-                output.status,
-                output.exit_code,
-                output.truncated,
-                output.stdout,
-                output.stderr,
-                output.error,
-            ),
+            Ok(output) => result(plugin_id, query_id, output),
             Err(error) => result(
                 plugin_id,
                 query_id,
-                PluginProcessQueryStatus::Crashed,
-                None,
-                false,
-                Vec::new(),
-                Vec::new(),
-                Some(error),
+                CollectedOutput::with_error(PluginProcessQueryStatus::Crashed, error),
             ),
         }
     }
@@ -313,12 +283,10 @@ impl PluginProcessQueryManager {
                 plugin_id,
                 request_id,
                 operation_id,
-                PluginProcessQueryStatus::Failed,
-                None,
-                false,
-                Vec::new(),
-                Vec::new(),
-                Some("invalid tool-operation request identity".into()),
+                CollectedOutput::with_error(
+                    PluginProcessQueryStatus::Failed,
+                    "invalid tool-operation request identity",
+                ),
             );
         }
         let Some(operation) = admitted_tool_operation(plugin_id, operation_id) else {
@@ -326,12 +294,10 @@ impl PluginProcessQueryManager {
                 plugin_id,
                 request_id,
                 operation_id,
-                PluginProcessQueryStatus::Failed,
-                None,
-                false,
-                Vec::new(),
-                Vec::new(),
-                Some("tool operation is not admitted by the bundled plugin catalog".into()),
+                CollectedOutput::with_error(
+                    PluginProcessQueryStatus::Failed,
+                    "tool operation is not admitted by the bundled plugin catalog",
+                ),
             );
         };
         let args = match operation.resolve_arguments(root, parameters) {
@@ -341,12 +307,7 @@ impl PluginProcessQueryManager {
                     plugin_id,
                     request_id,
                     operation_id,
-                    PluginProcessQueryStatus::Failed,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some(error),
+                    CollectedOutput::with_error(PluginProcessQueryStatus::Failed, error),
                 );
             }
         };
@@ -357,12 +318,7 @@ impl PluginProcessQueryManager {
                     plugin_id,
                     request_id,
                     operation_id,
-                    PluginProcessQueryStatus::Failed,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some(error),
+                    CollectedOutput::with_error(PluginProcessQueryStatus::Failed, error),
                 );
             }
         };
@@ -380,12 +336,7 @@ impl PluginProcessQueryManager {
                     plugin_id,
                     request_id,
                     operation_id,
-                    PluginProcessQueryStatus::Crashed,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some(error),
+                    CollectedOutput::with_error(PluginProcessQueryStatus::Crashed, error),
                 );
             }
         };
@@ -401,12 +352,10 @@ impl PluginProcessQueryManager {
                         plugin_id,
                         request_id,
                         operation_id,
-                        PluginProcessQueryStatus::Crashed,
-                        None,
-                        false,
-                        Vec::new(),
-                        Vec::new(),
-                        Some("tool-operation registry lock was poisoned".into()),
+                        CollectedOutput::with_error(
+                            PluginProcessQueryStatus::Crashed,
+                            "tool-operation registry lock was poisoned",
+                        ),
                     );
                 }
             };
@@ -418,12 +367,10 @@ impl PluginProcessQueryManager {
                     plugin_id,
                     request_id,
                     operation_id,
-                    PluginProcessQueryStatus::Failed,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some("tool-operation request is already active".into()),
+                    CollectedOutput::with_error(
+                        PluginProcessQueryStatus::Failed,
+                        "tool-operation request is already active",
+                    ),
                 );
             }
             if running
@@ -437,12 +384,10 @@ impl PluginProcessQueryManager {
                     plugin_id,
                     request_id,
                     operation_id,
-                    PluginProcessQueryStatus::Failed,
-                    None,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                    Some("too many plugin tool operations are active for this window".into()),
+                    CollectedOutput::with_error(
+                        PluginProcessQueryStatus::Failed,
+                        "too many plugin tool operations are active for this window",
+                    ),
                 );
             }
             running.insert(
@@ -466,27 +411,12 @@ impl PluginProcessQueryManager {
             running.remove(&key);
         }
         match collected {
-            Ok(output) => tool_result(
-                plugin_id,
-                request_id,
-                operation_id,
-                output.status,
-                output.exit_code,
-                output.truncated,
-                output.stdout,
-                output.stderr,
-                output.error,
-            ),
+            Ok(output) => tool_result(plugin_id, request_id, operation_id, output),
             Err(error) => tool_result(
                 plugin_id,
                 request_id,
                 operation_id,
-                PluginProcessQueryStatus::Crashed,
-                None,
-                false,
-                Vec::new(),
-                Vec::new(),
-                Some(error),
+                CollectedOutput::with_error(PluginProcessQueryStatus::Crashed, error),
             ),
         }
     }
@@ -884,6 +814,19 @@ struct CollectedOutput {
     error: Option<String>,
 }
 
+impl CollectedOutput {
+    fn with_error(status: PluginProcessQueryStatus, error: impl Into<String>) -> Self {
+        Self {
+            status,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+            truncated: false,
+            exit_code: None,
+            error: Some(error.into()),
+        }
+    }
+}
+
 fn collect_query(
     child: Arc<Mutex<Option<Child>>>,
     cancelled: Arc<AtomicBool>,
@@ -936,12 +879,11 @@ fn collect_query(
         drop(guard);
         std::thread::sleep(Duration::from_millis(25));
     };
-    if status.is_none() {
-        if let Ok(mut guard) = child.lock()
-            && let Some(value) = guard.as_mut()
-        {
-            let _ = value.wait();
-        }
+    if status.is_none()
+        && let Ok(mut guard) = child.lock()
+        && let Some(value) = guard.as_mut()
+    {
+        let _ = value.wait();
     }
     let stdout = join_output(stdout_handle)?;
     let stderr = join_output(stderr_handle)?;
@@ -1034,16 +976,15 @@ fn terminate(pid: u32, child: &Arc<Mutex<Option<Child>>>) {
     }
 }
 
-fn result(
-    plugin_id: &str,
-    query_id: &str,
-    status: PluginProcessQueryStatus,
-    exit_code: Option<i32>,
-    truncated: bool,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    error: Option<String>,
-) -> PluginProcessQueryResult {
+fn result(plugin_id: &str, query_id: &str, output: CollectedOutput) -> PluginProcessQueryResult {
+    let CollectedOutput {
+        status,
+        stdout,
+        stderr,
+        truncated,
+        exit_code,
+        error,
+    } = output;
     PluginProcessQueryResult {
         protocol_version: PROTOCOL_VERSION,
         plugin_id: plugin_id.to_string(),
@@ -1061,13 +1002,16 @@ fn tool_result(
     plugin_id: &str,
     request_id: &str,
     operation_id: &str,
-    status: PluginProcessQueryStatus,
-    exit_code: Option<i32>,
-    truncated: bool,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    error: Option<String>,
+    output: CollectedOutput,
 ) -> PluginToolOperationResult {
+    let CollectedOutput {
+        status,
+        stdout,
+        stderr,
+        truncated,
+        exit_code,
+        error,
+    } = output;
     PluginToolOperationResult {
         protocol_version: PROTOCOL_VERSION,
         plugin_id: plugin_id.to_string(),

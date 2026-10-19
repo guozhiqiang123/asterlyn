@@ -27,6 +27,8 @@ pub(crate) async fn execute_plugin_process_query(
 }
 
 #[tauri::command]
+// Tauri maps these stable top-level parameters directly from the generated IPC contract.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_plugin_tool_operation(
     workspace_root: String,
     plugin_id: String,
