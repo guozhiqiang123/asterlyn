@@ -124,6 +124,59 @@ The memory helper launches only the supplied local binary and repository, waits 
 
 ## Packaging policy
 
+### Canonical macOS local acceptance flow
+
+The local macOS package is an unnotarized, ad-hoc-signed development artifact. A successful Tauri
+compile is not sufficient evidence: depending on the local toolchain, the executable may retain only
+its Mach-O linker signature while `Info.plist` and bundle resources remain unsealed. That incomplete
+state typically reports a generated identifier such as `asterlyn-<hash>`, `Info.plist=not bound`, or
+`Sealed Resources=none`; it must never be archived or installed.
+
+Run this sequence in order after the task's required checks pass:
+
+```bash
+npm run check
+npm run test:scripts
+npm run build
+
+APPLE_SIGNING_IDENTITY=- npm run tauri -- build --bundles app
+codesign --force --deep --sign - --options runtime target/release/bundle/macos/Asterlyn.app
+codesign --verify --deep --strict target/release/bundle/macos/Asterlyn.app
+codesign -dvv target/release/bundle/macos/Asterlyn.app
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+  target/release/bundle/macos/Asterlyn.app/Contents/Info.plist
+
+npm run test:native:rendered
+ASTERLYN_PACKAGE_VERSION=x.y.z
+ditto -c -k --sequesterRsrc --keepParent \
+  target/release/bundle/macos/Asterlyn.app \
+  "target/release/bundle/macos/Asterlyn-${ASTERLYN_PACKAGE_VERSION}-macos.app.zip"
+shasum -a 256 "target/release/bundle/macos/Asterlyn-${ASTERLYN_PACKAGE_VERSION}-macos.app.zip"
+```
+
+The explicit `codesign --force --deep --sign - --options runtime` step is mandatory for local
+acceptance even when `APPLE_SIGNING_IDENTITY=-` was supplied to Tauri. It deterministically seals the
+final `.app` after bundling and avoids treating a linker-only executable signature as a signed
+application bundle. The strict verification must pass, and inspection must report all of:
+
+- `Identifier=dev.asterlyn.desktop`;
+- `Signature=adhoc`;
+- a sealed-resources record rather than `Sealed Resources=none`;
+- the expected application version from `Info.plist`.
+
+Archive only after those checks. A DMG created before the final bundle signature is stale because it
+contains the pre-signing `.app`; do not install or publish it. A workflow that needs a DMG must make
+Tauri perform ad-hoc signing before DMG construction and must mount the finished image and run the
+same strict verification against the contained `.app`.
+
+For local replacement, stop the running installed app, retain the previous
+`/Applications/Asterlyn.app` at a recoverable backup location, copy the verified bundle into
+`/Applications`, then repeat `codesign --verify --deep --strict`. Compare the installed executable
+byte-for-byte with the accepted bundle, launch it, and verify the running process plus the installed
+`CFBundleShortVersionString`. Any copy, signature, identity, version, or byte comparison failure must
+restore the previous app and stop; never repair the installed copy in place or fall back to an older
+build silently.
+
 - Every completed local project task ends with a fresh native acceptance package for its build host after its required checks pass. On Linux, build Debian:
 
   ```bash
@@ -131,11 +184,13 @@ The memory helper launches only the supplied local binary and repository, waits 
   sha256sum target/release/bundle/deb/*.deb
   ```
 
-  On macOS, use `npm run tauri -- build --bundles app`, then archive the `.app` with
-  `ditto -c -k --sequesterRsrc --keepParent` and hash that exact archive. This is macOS acceptance,
-  not a substitute for the Linux gate. Windows uses its native bundle target.
+  On macOS, follow the canonical flow above; signing, strict verification, native smoke, archive,
+  and hashing are one ordered acceptance transaction. This is macOS acceptance, not a substitute
+  for the Linux gate. Windows uses its native bundle target.
 
-  Report the exact package path, byte size, and SHA-256 digest for manual acceptance. This local package does not imply a remote push, release publication, signing, or cross-platform acceptance.
+  Report the exact package path, byte size, and SHA-256 digest for manual acceptance. Local ad-hoc
+  signing proves bundle integrity only; it does not imply a remote push, release publication,
+  certificate-backed signing, notarization, or cross-platform acceptance.
 - After a local Asterlyn bug fix passes its checks, replace the existing installed app with the freshly built native bundle. Codex verifies the bundle and performs the installation. If the app is running, stop it before replacement and relaunch it afterward; the user has authorized this without a separate shutdown confirmation. Verify that the installed bundle matches the accepted build. Never install an older bundle when the current build fails.
 - Build release artifacts independently on Windows, macOS, and Linux rather than cross-packaging a webview shell from one OS.
 - The preview matrix and its trust boundary are documented in [`ci.md`](ci.md).
