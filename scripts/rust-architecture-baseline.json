@@ -2,6 +2,11 @@
   "version": 1,
   "sourceReviewThreshold": 1500,
   "sourceOwnership": {
+    "crates/asterlyn-plugin-marketplace/src/lib.rs": {
+      "owner": "plugin source, admission, and installed lifecycle persistence domain",
+      "maximumLines": 2100,
+      "disposition": "MKT7 reviewed lifecycle boundary; extract installation persistence before adding another marketplace domain"
+    },
     "crates/asterlyn-git/src/operation.rs": {
       "owner": "reviewed and recoverable Git operation domain",
       "maximumLines": 2232,

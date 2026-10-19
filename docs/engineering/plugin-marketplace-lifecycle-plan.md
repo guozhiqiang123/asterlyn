@@ -99,14 +99,32 @@ or mismatched version/digest/session identities.
 
 ### MKT7D — Cleanup and fault injection
 
-- Remove abandoned staging data and bound immutable/quarantine retention by count and age.
+- On startup, recover the installation index before reading packages. A missing or corrupt current
+  generation falls back to the previous valid generation; a stale `next` generation is never
+  promoted implicitly. The recovered generation is republished atomically before activation.
+- Remove abandoned download staging, extraction staging, uninstall tombstones, and immutable
+  package directories that are not referenced by the recovered installation index.
+- Every plugin retains all versions named by `pendingVersion`, `activeVersion`, or
+  `knownGoodVersion`. Outside those protected pointers, retain at most three quarantined versions
+  admitted during the last 30 days, then the newest known-good history, with a hard ceiling of
+  eight retained versions per plugin. Cleanup never removes plugin settings, trust decisions, task
+  caches, or other plugin-owned data.
 - Inject failure at every index write, package reinspection, launch, handshake, projection,
   promotion, restart, rollback, and removal boundary.
+
+The cleanup order is index-first and bytes-second: persist a pruned, valid generation, derive the
+exact set of referenced `(pluginId, version, digest)` package directories from that generation, and
+only then delete unreferenced bytes. This keeps a crash on either side of cleanup resolvable to a
+complete old-good or new-good generation.
 
 ## Acceptance gates
 
 - The installation index always resolves to old-good or new-good after interruption; it never
   exposes a half-installed active package.
+- A crash between `current -> previous` and `next -> current`, a corrupt current generation, and a
+  stale `next` file all recover without losing the last valid installation selection.
+- Repeated startup cleanup is idempotent, never follows package-store symlinks, and leaves every
+  package referenced by the surviving index present.
 - A deliberately broken update is quarantined and the prior known-good version activates on the
   next attempt.
 - A healthy first install is promoted only after the exact session survives the checkpoint.
