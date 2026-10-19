@@ -12,31 +12,31 @@ inspection code.
 | Plugin | Release | Asset | GitHub digest | Bytes |
 | --- | --- | --- | --- | ---: |
 | Hello | `v0.1.1` | `dev.asterlyn.hello-0.1.1.asterlyn-plugin.tgz` | `sha256:1fe3c0104950236cb4cf9b36f4b77a1d3a1fdb72cbd66c85079ff8f48505d74d` | 1,780 |
-| Android | `v0.5.5` | `asterlyn-plugin-android-gradle-0.5.5.asterlyn-plugin.tgz` | `sha256:cc268ae877b666823c949638a57123f273baaee0667a74b39550b56d6e446522` | 21,643 |
+| Android | `v0.5.7` | `asterlyn-plugin-android-gradle-0.5.7.asterlyn-plugin.tgz` | `sha256:ce078cb09e7b282db6b4bb076bbd38a7fd08cbd58194bf2195b0802c422909c1` | 21,685 |
 
 - Hello Release: <https://github.com/guozhiqiang123/asterlyn-plugin-hello/releases/tag/v0.1.1>
-- Android Release: <https://github.com/guozhiqiang123/asterlyn-plugin-android-gradle/releases/tag/v0.5.5>
+- Android Release: <https://github.com/guozhiqiang123/asterlyn-plugin-android-gradle/releases/tag/v0.5.7>
 - Old failed Hello `v0.1.0` remains immutable evidence of the rejected pre-inspector host baseline;
   it was not retagged or overwritten.
 
-The host baseline is the immutable
-[`v0.1.12` Release](https://github.com/guozhiqiang123/asterlyn/releases/tag/v0.1.12),
-published by run `39247230836`. Its quality, dependency-evidence, SDK, Linux, Windows, macOS Intel,
+The current host baseline is the immutable
+[`v0.1.13` Release](https://github.com/guozhiqiang123/asterlyn/releases/tag/v0.1.13),
+published by run `39265351453`. Its quality, dependency-evidence, SDK, Linux, Windows, macOS Intel,
 macOS Apple Silicon, and publication jobs all passed. The Release exposes checksum-covered canonical
 inspectors for all four target triples and the deterministic SDK artifact:
 
 | Host artifact | SHA-256 |
 | --- | --- |
-| `asterlyn-plugin-inspect-aarch64-apple-darwin` | `69171677d79f5d61594f1ee70e7c0b7b94624fe38ef3f8bf2dce1b047485292d` |
-| `asterlyn-plugin-inspect-x86_64-apple-darwin` | `01c8f9a8ccce2a566c435c0d9d145328e583fa95e42d39733fd06b464232a84f` |
-| `asterlyn-plugin-inspect-x86_64-pc-windows-msvc.exe` | `58f8dff7edd9e10297d2728ab993ae1fc346c244133c35a7ab78bbf9843305b6` |
-| `asterlyn-plugin-inspect-x86_64-unknown-linux-gnu` | `a28b307aaa6623c2f4d571aed567c350cec7b94e60d21b867ef241b7ebadc195` |
-| `asterlyn-plugin-sdk-1.8.0.tgz` | `2e53f631f7e344ed8e4a8071ef3ce2ce6a417b5c26dc61933f4e08171e5dc83c` |
+| `asterlyn-plugin-inspect-aarch64-apple-darwin` | `93f52aa537429383f23017d9c274f0ffdd90e3120fc8c6fac069754d054cce16` |
+| `asterlyn-plugin-inspect-x86_64-apple-darwin` | `aa4a71c248c8240aed43859b6007ad70313b06a4c5b0fe4cb6fe3644ca492cd9` |
+| `asterlyn-plugin-inspect-x86_64-pc-windows-msvc.exe` | `dc325af086a85f6573b2d2099c1c0d9ad4f0cae38b0d6fbd79ef713cbb971ae3` |
+| `asterlyn-plugin-inspect-x86_64-unknown-linux-gnu` | `79d09d9203ee3bd991885b78f9adb0bd455d1d51ee436ca4d2d7b0be481e22ce` |
+| `asterlyn-plugin-sdk-1.9.0.tgz` | `ec9320f7966e882c2f6079b08e20c8d42801a1cfc8adb0ba3c03df3b1459876e` |
 
 The per-target checksum files, `plugin-sdk.sha256`, and aggregate `SHA256SUMS` agree with the GitHub
 asset digests.
 
-## Installed macOS baseline
+## Historical installed macOS baseline
 
 The published arm64 DMG, not a local rebuild, was downloaded and verified at
 `sha256:e96fdc00b251f7421676346dfbf61287bc804ce6256d929cc0995d1802fefe2e`. Its mounted application
@@ -62,9 +62,12 @@ The Hello Release workflow completed in run `39247280631`. It performed a locked
 package inspection against the pinned Asterlyn `v0.1.12` source, activation in the supervised
 plugin-host process, command callback invocation, disposal, and Release publication.
 
-The Android Release workflow completed in run `39247280676`. It ran all 62 plugin tests, built the
-self-contained runtime, inspected the exact package, activated task/device/run contributions in the
-supervised plugin-host process, disposed the runtime, and published the Release asset.
+The Android `v0.5.7` Release workflow completed in run `39269680042`. It ran all 62 plugin tests,
+built the self-contained runtime, validated the exact package against Asterlyn `v0.1.13`, activated
+task/device/run contributions in the supervised plugin-host process, disposed the runtime, ran the
+SDK 1.9 canonical inspector, and published the Release asset. The earlier immutable `v0.5.6`
+workflow used the old `v0.1.12` inspector, which could not prove package-owned tool authority; it is
+retained as transitional evidence and was not retagged.
 
 The host live acceptance test was executed with:
 
@@ -111,7 +114,7 @@ fallbacks by stable plugin ID, so independently installed plugins provide their 
 description, settings schema, task-authorization copy, workspace-tool metadata, and notification
 copy without requiring host source changes.
 
-The exact Android `v0.5.5` and Hello `v0.1.1` Release archives above were downloaded again and
+The exact Android `v0.5.7` and Hello `v0.1.1` Release archives above were downloaded again and
 accepted by the updated inspector. Android projected both `en-US` and `zh-CN` localization plus its
 declared setting; Hello projected both locales and no settings. Focused desktop tests also prove:
 
@@ -123,15 +126,35 @@ declared setting; Hello projected both locales and no settings. Focused desktop 
 5. uninstall or temporary absence retains bounded raw preferences privately, while reinstall
    revalidates every value against the new manifest and restores only still-valid values.
 
-The implementation passed 43 focused renderer/protocol tests, 10 package-admission tests, the
+The implementation passed 43 focused renderer/protocol tests, all 11 package-admission tests, the
 locked native marketplace/runtime suites, native compilation, TypeScript checking, formatting,
 and the real published-package inspection described above.
+
+## Package-owned native tool authority
+
+SDK 1.9 package admission now projects bounded process-query and typed tool-operation declarations
+from the immutable package. Before activation, the host registers that authority under the exact
+window owner, plugin ID, version, and package digest. Activation failure, disable, uninstall,
+restart recovery, window disposal, and application shutdown revoke it. An admitted external
+package wins completely over the bundled fallback, so it cannot inherit an executable, query, or
+operation that its own manifest omitted.
+
+Focused native tests execute one declared query and one typed operation for a fixture with no host
+catalog entry, reject wrong owners and stale identities, prove revocation before process creation,
+and prove that an active external Android package cannot fall back to undeclared bundled authority.
+The Android `v0.5.7` package declares and passes this same SDK 1.9 path.
+
+The first live acceptance attempt encountered a local LibreSSL handshake interruption while calling
+`api.github.com`, before Release metadata was available. The immediate retry passed in 8.34 seconds
+for both public repositories and completed discovery, digest-bound download, admission, extraction,
+restart recovery, activation, healthy promotion, disable, and uninstall. The transport failure is
+therefore recorded as network evidence rather than a package-admission failure.
 
 ## Result and remaining gates
 
 The Release-to-admission, native installation-lifecycle, Release-to-runtime, stale-network fallback,
-host-rendered installed-manifest management, bounded preference retention, and hostile-package
-rejection paths are proven. Remaining MKT8D evidence is deliberately separate: clean installed
-desktop UI through restart and healthy promotion, a deliberately failing public update, reinstall
-retention across the complete product path, cross-platform installed runtime cleanup, and measured
-keyboard/focus/ARIA plus resource behavior.
+host-rendered installed-manifest management, bounded preference retention, package-owned native tool
+authority, and hostile-package rejection paths are proven. Remaining MKT8D evidence is deliberately
+separate: clean installed desktop UI through restart and healthy promotion, a deliberately failing
+public update, reinstall retention across the complete product path, cross-platform installed
+runtime cleanup, and measured keyboard/focus/ARIA plus resource behavior.

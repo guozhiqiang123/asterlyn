@@ -984,7 +984,7 @@ mod tests {
             ),
             (
                 "guozhiqiang123/asterlyn-plugin-android-gradle",
-                "0.5.5",
+                "0.5.7",
                 "dev.asterlyn.android-gradle",
             ),
         ] {

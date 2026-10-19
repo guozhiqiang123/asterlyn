@@ -80,18 +80,19 @@ APIs, or another plugin.
 
 ### MKT8C — SDK and inspector delivery
 
-Status: partially implemented. The immutable host `v0.1.12` Release now publishes the deterministic
-SDK tarball, its checksum, an aggregate checksum manifest, and checksum-covered standalone canonical
-inspectors for Linux, Windows, and both macOS architectures. The template, Hello, and Android
-repositories pin their dependency graphs and validate exact package bytes with that Release
-baseline. `v0.1.11` predates the canonical inspector and therefore cannot be an external-plugin
-baseline. Template and fixture workflows must pin `v0.1.12` or newer rather than silently building
-an inspector from a mutable branch. The explicit oldest/current installed-host fixture pair remains
-open.
+Status: implemented for the published SDK path. The immutable host `v0.1.12` Release remains the
+oldest SDK 1.8 external-runtime baseline. The immutable `v0.1.13` Release, published by run
+`39265351453`, adds SDK 1.9 and checksum-covered standalone canonical inspectors for Linux, Windows,
+and both macOS architectures. The current template and Android repository consume the exact
+published SDK bytes and pin `v0.1.13`; Hello remains the independent SDK 1.8 compatibility fixture.
+`v0.1.11` predates the canonical inspector and cannot be an external-plugin baseline. Release
+publication now verifies every extracted canonical SDK file against the reviewed source before
+uploading the committed archive, so npm-version-dependent recompression cannot change public bytes.
+The explicit oldest/current installed-host UI fixture pair remains part of MKT8D.
 
 1. Make `@asterlyn/plugin-sdk` a publishable declarative package with no host implementation, plus
    license, repository metadata,
-   public README, and a deterministic `npm pack` artifact.
+   public README, and one deterministic canonical archive.
 2. Add the SDK tarball and canonical inspector availability to host release evidence. The template
    and first-party Android repository pin exact artifacts and retain their checksums.
 3. Run current-host and oldest-supported-host admission fixtures against the same generated package.
@@ -104,18 +105,20 @@ validate the package they publish.
 
 ### MKT8D — Installed acceptance and evidence
 
-Status: partially implemented. The independent Hello repository and first-party Android repository
-publish immutable packages that pass the pinned host inspector and supervised runtime parity tests.
+Status: partially implemented. The independent Hello `v0.1.1` repository and first-party Android
+`v0.5.7` repository publish immutable packages that pass their pinned host inspectors and
+supervised runtime parity tests.
 The host's ignored live acceptance test now discovers both repositories through the same GitHub
 latest-Release path used by the product, downloads the exact digest-bound assets, and admits their
 package bytes. See the
 [`2026-10-19 public marketplace acceptance evidence`](../benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md).
 The native discovery resolver now covers offline and GitHub rate-limit fallback with bounded stale
 metadata, and the package/runtime suites prove hostile package rejection plus contribution-contract
-failure containment. The published arm64 `v0.1.12` host is installed with strict bundle, executable,
-version, liveness, and rendered-shell evidence plus a recoverable prior-install backup. The clean
-installed-app Marketplace interaction through restart, deliberately failing public update, reinstall
-retention, and measured resource and accessibility results remain open.
+failure containment. The current `v0.1.13` Release passed all four platform packaging jobs; the
+published arm64 `v0.1.12` host remains the historical installed baseline with strict bundle,
+executable, version, liveness, and rendered-shell evidence plus a recoverable prior-install backup.
+The clean installed-app Marketplace interaction through restart, deliberately failing public
+update, reinstall retention, and measured resource and accessibility results remain open.
 
 1. Verify a clean installed host can add a second fixture repository, discover, inspect, install,
    restart, activate, and promote it without an open workspace.
@@ -162,9 +165,15 @@ changes do not erase its data, and reinstall restores only values valid under th
 ### MKT8F — Package-owned native tool authority
 
 Status: implemented on 2026-10-19 after MKT8E exposed the next bundled assumption. The public SDK
-already lets a package declare bounded `processQueries` and typed `toolOperations`, but the native
-executor still admits only an Android-specific table compiled into the host. A third-party package
-can therefore describe these capabilities yet cannot exercise them.
+already let a package declare bounded `processQueries` and typed `toolOperations`, while the native
+executor still admitted only an Android-specific table compiled into the host. The completed slice
+turns those package declarations into exact-identity native authority.
+
+The shipped implementation is in Asterlyn `v0.1.13` and Android `v0.5.7`. Native tests execute a
+declared query and typed operation for a plugin with no host catalog entry, bind authority to the
+exact owner/plugin/version/digest identity, reject stale and revoked identities before spawning,
+and prove an active external package cannot inherit undeclared bundled authority. Android release
+run `39269680042` validates the same package through the SDK 1.9 inspector and isolated host runtime.
 
 1. Extend package admission to parse, bound, validate, and project process-query and tool-operation
    declarations. Argument templates, parameter kinds and suffixes, executable candidates, timeout,
