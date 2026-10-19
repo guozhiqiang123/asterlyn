@@ -28,11 +28,11 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
           npm ci
       - name: Check out the oldest compatible canonical inspector
-        run: git clone --depth 1 --branch v0.1.12 https://github.com/guozhiqiang123/asterlyn.git .asterlyn-host
+        run: git clone --depth 1 --branch v0.1.13 https://github.com/guozhiqiang123/asterlyn.git .asterlyn-host
       - name: Verify exact Release package
         env:
           ASTERLYN_HOST_CHECKOUT: ${{ github.workspace }}/.asterlyn-host
-          ASTERLYN_HOST_VERSION: 0.1.12
+          ASTERLYN_HOST_VERSION: 0.1.13
         run: npm run verify
       - name: Publish one inspected package
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0

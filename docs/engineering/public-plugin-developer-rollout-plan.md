@@ -18,11 +18,12 @@ credential, or shell access.
 
 ## Frozen developer baseline
 
-- Plugin SDK: `1.8.0`, SDK major `1`.
+- Plugin SDK: `1.9.0`, SDK major `1`.
 - Installable package schema: `2`.
 - External runtime protocol: `1`.
-- Oldest external-runtime host: `0.1.12`.
-- Initial host compatibility window: `>=0.1.12` and `<0.2.0`.
+- Oldest external-runtime host: `0.1.12` for SDK `1.8.0` packages.
+- Current SDK `1.9.0` host baseline: `0.1.13`.
+- Initial host compatibility window: `>=0.1.13` and `<0.2.0` for the current template.
 - Distribution: one stable GitHub Release, one `.asterlyn-plugin.tgz` asset, one normalized
   lowercase `owner/repository`, and a GitHub-provided `sha256:` digest.
 - Runtime entry: one self-contained neutral ESM bundle. It runs only in the supervised plugin host.
@@ -158,7 +159,7 @@ changes do not erase its data, and reinstall restores only values valid under th
 
 ### MKT8F — Package-owned native tool authority
 
-Status: planned on 2026-10-19 after MKT8E exposed the next bundled assumption. The public SDK
+Status: implemented on 2026-10-19 after MKT8E exposed the next bundled assumption. The public SDK
 already lets a package declare bounded `processQueries` and typed `toolOperations`, but the native
 executor still admits only an Android-specific table compiled into the host. A third-party package
 can therefore describe these capabilities yet cannot exercise them.
