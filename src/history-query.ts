@@ -169,6 +169,16 @@ export function filterHistoryText(
     };
   }
 
+  if (/^[0-9a-f]{40}$/iu.test(needle)) {
+    const normalizedOid = needle.toLowerCase();
+    const startingIndex = commits.findIndex(
+      (commit) => commit.oid.toLowerCase() === normalizedOid,
+    );
+    if (startingIndex >= 0) {
+      return { commits: commits.slice(startingIndex), error: null };
+    }
+  }
+
   const expected = options.caseSensitive ? needle : needle.toLocaleLowerCase();
   return {
     commits: commits.filter((commit) =>

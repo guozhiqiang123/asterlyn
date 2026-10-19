@@ -224,7 +224,7 @@ U11 moves the deferred history controls ahead of Stage 3 and delivers them in tw
 - Let Branch select any bounded set of exact displayed local, remote-tracking, or tag refs. An empty selection means `All refs`; direct activation in the left ref tree remains a one-ref shortcut, and activating that sole ref again returns to all refs.
 - Resolve User choices by exact author email. `me` is resolved inside the Git boundary from the repository's effective `user.email`; no identity value is stored in application preferences.
 - Apply 24-hour and seven-day Date presets, one exact repository-relative Path, first-parent/no-merge options, and topological/date ordering through a typed query. Git receives only validated refs, timestamps, author values, booleans, and a path after `--`; the UI rejects stale results by the complete normalized query identity.
-- Keep text/hash matching within the returned 150-row window. Case-sensitive and regular-expression toggles affect the same fields as ordinary text search; an invalid expression presents an inline error and never runs or empties a Git query.
+- Keep text/hash matching within the returned history window. A literal full 40-character commit ID anchors the visible projection at that exact loaded commit and retains every older loaded row, so paging can continue the history beneath it; shorter hash fragments, messages, authors, decorations, and regular expressions remain filters. Case-sensitive and regular-expression toggles affect the same fields as ordinary text search; an invalid expression presents an inline error and never runs or empties a Git query.
 
 #### U11B — Durable ref shortcuts and linear collapse
 

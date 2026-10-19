@@ -93,6 +93,24 @@ test("text filtering supports case and regular expression modes", () => {
   );
 });
 
+test("an exact full commit ID anchors the loaded history instead of hiding older commits", () => {
+  assert.deepEqual(
+    filterHistoryText(commits, "B".repeat(40), {
+      caseSensitive: false,
+      regularExpression: false,
+    }).commits.map(({ oid }) => oid),
+    ["b".repeat(40), "c".repeat(40)],
+  );
+
+  assert.deepEqual(
+    filterHistoryText(commits, "bbbbbbb", {
+      caseSensitive: false,
+      regularExpression: false,
+    }).commits.map(({ oid }) => oid),
+    ["b".repeat(40)],
+  );
+});
+
 test("invalid expressions retain loaded commits and report the error", () => {
   const result = filterHistoryText(commits, "[", {
     caseSensitive: false,
