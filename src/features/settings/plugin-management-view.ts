@@ -78,7 +78,7 @@ export interface PluginManagementCopy {
 }
 
 export interface PluginMarketplaceViewState {
-  readonly tab: "installed" | "marketplace";
+  readonly tab: PluginManagementTab;
   readonly snapshot: PluginSourceSnapshot | null;
   readonly loading: boolean;
   readonly error: string | null;
@@ -91,6 +91,25 @@ export interface PluginMarketplaceViewState {
   readonly restartRequired: boolean;
   readonly busyPlugin: string | null;
   readonly confirmUninstallPlugin: string | null;
+}
+
+export type PluginManagementTab = "installed" | "marketplace";
+
+export function nextPluginManagementTab(
+  current: PluginManagementTab,
+  key: string,
+): PluginManagementTab | null {
+  switch (key) {
+    case "ArrowLeft":
+    case "ArrowRight":
+      return current === "installed" ? "marketplace" : "installed";
+    case "Home":
+      return "installed";
+    case "End":
+      return "marketplace";
+    default:
+      return null;
+  }
 }
 
 /** Renders host-owned plugin metadata; plugins contribute keys and values, never HTML. */
@@ -114,10 +133,12 @@ export function renderPluginManagementSection(
   const content = marketplace.tab === "installed"
     ? `<div class="plugin-management-list">${installedError}${restart}${admitted}${cards || (!admitted ? `<p class="plugin-management-empty" role="status">${escapeHtml(loading ? copy.loadingPlugins : copy.noPlugins)}</p>` : "")}</div>`
     : renderMarketplace(marketplace, copy);
+  const activeTabId = `plugin-management-tab-${marketplace.tab}`;
+  const activePanelId = `plugin-management-panel-${marketplace.tab}`;
   return `<section class="settings-group plugin-management" data-plugin-management>
     <header><h2>${escapeHtml(copy.title)}</h2><p>${escapeHtml(copy.description)}</p></header>
-    <div class="plugin-management-tabs" role="tablist" aria-label="${escapeAttribute(copy.title)}"><button type="button" role="tab" data-plugin-management-tab="installed" aria-selected="${marketplace.tab === "installed"}">${escapeHtml(copy.installedTab)}</button><button type="button" role="tab" data-plugin-management-tab="marketplace" aria-selected="${marketplace.tab === "marketplace"}">${escapeHtml(copy.marketplaceTab)}</button></div>
-    ${content}
+    <div class="plugin-management-tabs" role="tablist" aria-label="${escapeAttribute(copy.title)}"><button id="plugin-management-tab-installed" type="button" role="tab" data-plugin-management-tab="installed" aria-controls="plugin-management-panel-installed" aria-selected="${marketplace.tab === "installed"}" tabindex="${marketplace.tab === "installed" ? "0" : "-1"}">${escapeHtml(copy.installedTab)}</button><button id="plugin-management-tab-marketplace" type="button" role="tab" data-plugin-management-tab="marketplace" aria-controls="plugin-management-panel-marketplace" aria-selected="${marketplace.tab === "marketplace"}" tabindex="${marketplace.tab === "marketplace" ? "0" : "-1"}">${escapeHtml(copy.marketplaceTab)}</button></div>
+    <div id="${activePanelId}" role="tabpanel" aria-labelledby="${activeTabId}" tabindex="0">${content}</div>
   </section>`;
 }
 

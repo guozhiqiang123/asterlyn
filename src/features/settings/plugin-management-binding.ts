@@ -3,7 +3,11 @@ import type {
   PluginSettingValue,
 } from "../../application/plugins/plugin-types.ts";
 import type { PluginManagementCopy } from "./plugin-management-view.ts";
-import { renderPluginManagementSection, type PluginMarketplaceViewState } from "./plugin-management-view.ts";
+import {
+  nextPluginManagementTab,
+  renderPluginManagementSection,
+  type PluginMarketplaceViewState,
+} from "./plugin-management-view.ts";
 import type { PluginInstallationSnapshot, PluginMarketplaceBridge, PluginPackageAdmissionReview, PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
 
 export interface PluginManagementHost {
@@ -90,6 +94,16 @@ export class PluginManagementBinding {
         this.tab = tab;
         this.marketplaceError = null;
         this.options.render(`[data-plugin-management-tab="${tab}"]`);
+      });
+      button.addEventListener("keydown", (event) => {
+        const current = button.dataset.pluginManagementTab;
+        if (current !== "installed" && current !== "marketplace") return;
+        const next = nextPluginManagementTab(current, event.key);
+        if (!next) return;
+        event.preventDefault();
+        this.tab = next;
+        this.marketplaceError = null;
+        this.options.render(`[data-plugin-management-tab="${next}"]`);
       });
     });
     this.root

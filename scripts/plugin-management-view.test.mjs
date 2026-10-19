@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderPluginManagementSection } from "../src/features/settings/plugin-management-view.ts";
+import {
+  nextPluginManagementTab,
+  renderPluginManagementSection,
+} from "../src/features/settings/plugin-management-view.ts";
 
 const copy = {
   locale: "en-US",
@@ -46,7 +49,19 @@ test("plugin management renders localized metadata and declarative settings with
   assert.match(html, /role="switch"[^>]*checked/u);
   assert.match(html, /class="plugin-setting-switch-track" aria-hidden="true"/u);
   assert.match(html, /Trust this workspace/u);
-  assert.doesNotMatch(html, /<script|on[a-z]+=|<iframe/i);
+  assert.match(html, /role="tablist"/u);
+  assert.match(html, /role="tabpanel" aria-labelledby="plugin-management-tab-installed"/u);
+  assert.match(html, /data-plugin-management-tab="installed"[^>]*tabindex="0"/u);
+  assert.match(html, /data-plugin-management-tab="marketplace"[^>]*tabindex="-1"/u);
+  assert.doesNotMatch(html, /<script|\son[a-z]+\s*=|<iframe/i);
+});
+
+test("plugin management tabs support the standard two-tab keyboard model", () => {
+  assert.equal(nextPluginManagementTab("installed", "ArrowRight"), "marketplace");
+  assert.equal(nextPluginManagementTab("marketplace", "ArrowLeft"), "installed");
+  assert.equal(nextPluginManagementTab("marketplace", "Home"), "installed");
+  assert.equal(nextPluginManagementTab("installed", "End"), "marketplace");
+  assert.equal(nextPluginManagementTab("installed", "Enter"), null);
 });
 
 test("workspace trust switch fails closed while host authorization state is unavailable", () => {
@@ -107,7 +122,7 @@ test("plugin marketplace renders configured Release sources as host-owned contro
   assert.match(html, /data-plugin-source-refresh="asterlyn\/example"/u);
   assert.match(html, /data-plugin-source-install="asterlyn\/example"/u);
   assert.match(html, /data-plugin-source-delete="asterlyn\/example"/u);
-  assert.doesNotMatch(html, /<script|on[a-z]+=/iu);
+  assert.doesNotMatch(html, /<script|\son[a-z]+\s*=/iu);
 });
 
 test("plugin marketplace renders a host-owned admission review", () => {
