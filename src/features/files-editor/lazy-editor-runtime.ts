@@ -11,6 +11,10 @@ import type {
   GitBlameSource,
 } from "./editor-gutter.ts";
 import type { EditorCopy } from "../../localization/catalog.ts";
+import {
+  NOOP_CONTEXT_MENU_PORT,
+  type ContextMenuPort,
+} from "../../shared/context-menu/context-menu-model.ts";
 
 type TextMount = {
   parent: HTMLElement;
@@ -49,12 +53,15 @@ export class LazyTextEditor {
   private preferences: AppPreferences | null = null;
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
+  private readonly contextMenu: ContextMenuPort;
   constructor(
     blameRuntime: GitBlameRuntime,
     blameCopy: EditorCopy,
+    contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {
     this.blameRuntime = blameRuntime;
     this.blameCopy = blameCopy;
+    this.contextMenu = contextMenu;
   }
 
   mount(
@@ -270,6 +277,7 @@ export class LazyTextEditor {
         const editor = new TextEditor(
           this.blameRuntime,
           this.blameCopy,
+          this.contextMenu,
         );
         this.implementation = editor;
         return editor;
@@ -291,12 +299,15 @@ export class LazyDiffEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
+  private readonly contextMenu: ContextMenuPort;
   constructor(
     blameRuntime: GitBlameRuntime,
     blameCopy: GitBlameCopy,
+    contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {
     this.blameRuntime = blameRuntime;
     this.blameCopy = blameCopy;
+    this.contextMenu = contextMenu;
   }
 
   currentPath(): string | null {
@@ -422,6 +433,7 @@ export class LazyDiffEditor {
         const editor = new DiffEditor(
           this.blameRuntime,
           this.blameCopy,
+          this.contextMenu,
         );
         this.implementation = editor;
         return editor;

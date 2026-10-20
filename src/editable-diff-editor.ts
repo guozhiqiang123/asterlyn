@@ -60,6 +60,7 @@ import {
 import { EditableDiffReviewSurface } from "./shared/diff-review/editable-diff-review-surface.ts";
 import { attachEditableDiffReviewSplitter } from "./shared/diff-review/editable-diff-review-splitter.ts";
 import { EditableDiffScrollbars } from "./shared/diff-review/editable-diff-scrollbars.ts";
+import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 
 interface ViewBinding {
   view: EditorView;
@@ -126,12 +127,15 @@ export class EditableDiffEditor {
   constructor(
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
+    contextMenu?: ContextMenuPort,
   ) {
     this.copy = copy;
     this.blameSources = unavailableEditableDiffBlameSources(copy.gitBlameRequiresSplit);
     this.blameController = new GitBlamePaneController(
       blameRuntime,
       copy,
+      contextMenu,
+      "editor.editable-diff.git-blame",
     );
   }
 
@@ -175,7 +179,6 @@ export class EditableDiffEditor {
     interactions?: EditableDiffInteractions,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
-    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     const isSamePath = this.path === path;
     this.blameSources = blameSources;
     this.configureBlameTargets();
@@ -393,7 +396,6 @@ export class EditableDiffEditor {
 
   setPreferences(preferences: AppPreferences): void {
     this.preferences = { ...preferences };
-    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     for (const binding of this.bindings) {
       binding.view.dispatch({ effects: [
         binding.tabSize.reconfigure(EditorState.tabSize.of(preferences.editorTabSize)),
@@ -615,8 +617,8 @@ export class EditableDiffEditor {
       EditorView.editable.of(editable),
       codeMirrorFocusOwnership,
       gutterSide
-        ? diffLineNumberGutter(gutterSide)
-        : lineNumberGutter(),
+        ? diffLineNumberGutter(gutterSide, undefined, this.blameController.menu(blamePane))
+        : lineNumberGutter(undefined, "before", this.blameController.menu(blamePane)),
       ...this.blameController.extensions(blamePane, binding.blame),
       binding.changeIndicators?.extension ?? [],
       collapseSide ? this.reviewSurface?.extension(collapseSide) ?? [] : [],

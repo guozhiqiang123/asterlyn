@@ -50,6 +50,7 @@ import type { EffectiveTheme } from "./presentation/presentation-environment";
 import { EditorLanguageLoader } from "./editor-language";
 import type { GitBlameResult } from "./models.ts";
 import {
+  editorGutterContextMenu,
   gitBlamePresentation,
   lineNumberGutter,
   type DiffGitBlameSources,
@@ -75,6 +76,11 @@ import {
 } from "./diff-overview-ruler";
 import { removeOverviewRuler } from "./features/files-editor/change-overview-surface.ts";
 import { ReadOnlyDiffScrollbars } from "./shared/diff-review/read-only-diff-scrollbars.ts";
+import {
+  NOOP_CONTEXT_MENU_PORT,
+  type ContextMenuPort,
+} from "./shared/context-menu/context-menu-model.ts";
+import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
 
 const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
 const activeDiffBlockDecoration = StateField.define({
@@ -150,6 +156,7 @@ export class DiffEditor {
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
     private blameCopy: GitBlameCopy,
+    private readonly contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {
     this.blameSources = unavailableDiffBlameSources(blameCopy.gitBlameRequiresSplit);
   }
@@ -223,8 +230,6 @@ export class DiffEditor {
   }
 
   setPreferences(preferences: AppPreferences): void {
-    const blameDisplayChanged =
-      this.editorPreferences.gitBlameDisplayMode !== preferences.gitBlameDisplayMode;
     this.editorPreferences = { ...preferences };
     for (const binding of this.languageBindings) {
       applyEditorPreferences(binding.view, preferences);
@@ -233,12 +238,6 @@ export class DiffEditor {
           EditorState.tabSize.of(preferences.editorTabSize),
         ),
       });
-    }
-    if (blameDisplayChanged) {
-      for (const side of ["old", "new"] as const) {
-        const result = this.blameState[side].result;
-        if (result) this.installBlame(side, result);
-      }
     }
   }
 
@@ -366,8 +365,6 @@ export class DiffEditor {
     if (blocks.length > 0) {
       this.ruler = renderOverviewRuler(parent, newView.state.doc.lines, blocks, onSelect);
     }
-    void this.ensureBlame("old");
-    void this.ensureBlame("new");
   }
 
   private createView(
@@ -400,11 +397,18 @@ export class DiffEditor {
       highlightSelectionMatches(),
       theme.of(asterlynEditorTheme(this.themeValue)),
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
+      editorGutterContextMenu(
+        (event, view) => this.openBlameMenu(side ?? null, event, view),
+      ),
       blame.of(activeBlame
         ? gitBlamePresentation(
             activeBlame,
             this.blameCopy,
-            this.editorPreferences.gitBlameDisplayMode,
+            (event, view) => this.openBlameMenu(side ?? null, event, view),
+            (hunk) => {
+              const source = side ? this.blameSources[side].source : null;
+              if (source && !hunk.uncommitted) this.blameRuntime.openCommit(source, hunk);
+            },
             sourceLine,
           )
         : []),
@@ -426,6 +430,7 @@ export class DiffEditor {
         lineNumberGutter(
           (lineNumber) => rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
           side === "old" ? "after" : "before",
+          (event, view) => this.openBlameMenu(side, event, view),
         ),
         sourceChangeGutter(rows, side),
         sourceLineDecorations(rows, side),
@@ -439,6 +444,7 @@ export class DiffEditor {
             return (r.newLineNumber ?? r.oldLineNumber)?.toString() ?? "";
           },
           "before",
+          (event, editorView) => this.openBlameMenu(null, event, editorView),
         ),
         unifiedChangeGutter(unifiedRows),
         unifiedLineDecorations(unifiedRows),
@@ -494,13 +500,51 @@ export class DiffEditor {
     view.dom.dataset.languageStatus = this.languageStatus;
   }
 
-  private async ensureBlame(side: "old" | "new"): Promise<void> {
+  private openBlameMenu(
+    side: "old" | "new" | null,
+    event: MouseEvent,
+    view: EditorView,
+  ): void {
+    const state = side ? this.blameState[side] : null;
+    const generation = state?.generation ?? 0;
+    const active = state?.result !== null && state !== null;
+    const loading = state?.loading ?? false;
+    const availability = side ? this.blameSources[side] : null;
+    this.contextMenu.open(
+      { x: event.clientX, y: event.clientY },
+      gitBlameContextSession("editor.diff.git-blame", {
+        active,
+        loading,
+        enabled: availability?.source !== null && availability !== null,
+        unavailableReason: availability?.unavailableReason ?? this.blameSources.unifiedReason,
+        copy: this.blameCopy,
+        isCurrent: () => {
+          const current = side ? this.blameState[side] : null;
+          return this.views.includes(view) &&
+            (current?.generation ?? 0) === generation &&
+            (current?.result !== null && current !== null) === active &&
+            (current?.loading ?? false) === loading;
+        },
+        toggle: () => side ? this.toggleBlame(side) : undefined,
+        blocked: (reason) => this.blameRuntime.status(reason, "warning"),
+        restoreFocus: () => {
+          if (this.views.includes(view)) view.focus();
+        },
+      }),
+    );
+  }
+
+  private async toggleBlame(side: "old" | "new"): Promise<void> {
     const state = this.blameState[side];
-    if (state.result || state.loading) return;
+    if (state.result || state.loading) {
+      this.clearBlame(side, true);
+      return;
+    }
     const source = this.blameSources[side].source;
     if (!source) return;
     const generation = ++state.generation;
     state.loading = true;
+    this.blameRuntime.status(this.blameCopy.loadingGitBlame, "information");
     try {
       const result = await this.blameRuntime.load(source);
       if (
@@ -510,15 +554,30 @@ export class DiffEditor {
       state.loading = false;
       state.result = result;
       this.installBlame(side, result);
-      if (result.truncated) {
-        const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
-        this.blameRuntime.status(this.blameCopy.gitBlameLimited(lines), "warning");
-      }
+      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
+      this.blameRuntime.status(
+        result.truncated ? this.blameCopy.gitBlameLimited(lines) : this.blameCopy.gitBlameLoaded(lines),
+        result.truncated ? "warning" : "information",
+      );
     } catch (error) {
       if (generation !== state.generation) return;
       state.loading = false;
       this.blameRuntime.error(error);
     }
+  }
+
+  private clearBlame(side: "old" | "new", report: boolean): void {
+    this.contextMenu.close("editor.diff.git-blame");
+    const state = this.blameState[side];
+    state.generation += 1;
+    state.loading = false;
+    state.result = null;
+    for (const binding of this.languageBindings) {
+      if (binding.side === side) {
+        binding.view.dispatch({ effects: binding.blame.reconfigure([]) });
+      }
+    }
+    if (report) this.blameRuntime.status(this.blameCopy.gitBlameHidden, "information");
   }
 
   private installBlame(side: "old" | "new", result: GitBlameResult): void {
@@ -529,7 +588,11 @@ export class DiffEditor {
           gitBlamePresentation(
             result,
             this.blameCopy,
-            this.editorPreferences.gitBlameDisplayMode,
+            (event, view) => this.openBlameMenu(side, event, view),
+            (hunk) => {
+              const source = this.blameSources[side].source;
+              if (source && !hunk.uncommitted) this.blameRuntime.openCommit(source, hunk);
+            },
             binding.sourceLine,
           ),
         ),
@@ -538,6 +601,7 @@ export class DiffEditor {
   }
 
   private resetBlame(): void {
+    this.contextMenu.close("editor.diff.git-blame");
     for (const side of ["old", "new"] as const) {
       const state = this.blameState[side];
       state.generation += 1;
@@ -602,6 +666,7 @@ export class DiffEditor {
   }
 
   destroy(): void {
+    this.contextMenu.close("editor.diff.git-blame");
     this.languageLoader.cancel();
     this.destroyViews();
     this.parent?.classList.remove("split-diff");

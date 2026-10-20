@@ -371,28 +371,27 @@ test("Diff position navigation outlines the complete current change block", asyn
   assert.match(theme, /\.cm-diff-current-change-end/);
 });
 
-test("ordinary and Diff editors load eligible Git Blame sources automatically", async () => {
+test("ordinary and Diff editors load Git Blame only from the gutter action", async () => {
   const [gutterSource, textEditorSource, diffEditorSource, paneControllerSource] = await Promise.all([
     readFile(new URL("../src/features/files-editor/editor-gutter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/text-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/diff-editor.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/files-editor/git-blame-pane-controller.ts", import.meta.url), "utf8"),
   ]);
-  assert.doesNotMatch(gutterSource, /contextmenu|blameContentContextMenu/u);
-  assert.match(gutterSource, /view\.dom\.addEventListener\("mouseover", this\.mouseover/u);
-  assert.match(gutterSource, /view\.dom\.addEventListener\("mouseout", this\.mouseout/u);
-  assert.match(gutterSource, /this\.listeners\.abort\(\)/u);
-  assert.match(gutterSource, /if \(!view\.hasFocus\) return Decoration\.none;/u);
+  assert.match(gutterSource, /contextmenu/u);
+  assert.match(gutterSource, /cm-git-blame-gutter/u);
+  assert.doesNotMatch(gutterSource, /if \(!view\.hasFocus\) return Decoration\.none;/u);
+  assert.match(gutterSource, /formatGitBlameDateTime\(hunk\.authoredAt\)/u);
   assert.match(gutterSource, /view\.state\.selection\.main\.head/u);
   assert.match(gutterSource, /update\.selectionSet/u);
   assert.match(gutterSource, /update\.focusChanged/u);
   assert.doesNotMatch(gutterSource, /for \(const visible of view\.visibleRanges\)/u);
-  assert.match(textEditorSource, /void this\.ensureBlame\(mountedEntry\)/u);
-  assert.match(diffEditorSource, /void this\.ensureBlame\("old"\)/u);
-  assert.match(diffEditorSource, /void this\.ensureBlame\("new"\)/u);
-  assert.match(paneControllerSource, /else void this\.ensure\(pane\)/u);
-  assert.doesNotMatch(textEditorSource, /gitBlameContextSession|toggleBlame/u);
-  assert.doesNotMatch(diffEditorSource, /gitBlameContextSession|toggleBlame/u);
+  assert.doesNotMatch(textEditorSource, /void this\.ensureBlame/u);
+  assert.doesNotMatch(diffEditorSource, /void this\.ensureBlame/u);
+  assert.doesNotMatch(paneControllerSource, /void this\.ensure/u);
+  assert.match(textEditorSource, /gitBlameContextSession|toggleBlame/u);
+  assert.match(diffEditorSource, /gitBlameContextSession|toggleBlame/u);
+  assert.match(paneControllerSource, /gitBlameContextSession|toggle/u);
 });
 
 test("split Diff centers line numbers and uses one stable change gutter per side", async () => {

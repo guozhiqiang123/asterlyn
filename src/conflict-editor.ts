@@ -33,6 +33,7 @@ import {
   type GitBlameRuntime,
 } from "./features/files-editor/editor-gutter.ts";
 import { ConflictGitBlameController } from "./features/files-editor/conflict-git-blame-controller.ts";
+import type { ContextMenuPort } from "./shared/context-menu/context-menu-model.ts";
 import { codeMirrorFocusOwnership } from "./features/files-editor/editor-runtime-shared.ts";
 import {
   applyExactTextChanges,
@@ -135,10 +136,12 @@ export class ConflictEditor {
   constructor(
     blameRuntime: GitBlameRuntime,
     editorCopy: EditorCopy,
+    contextMenu?: ContextMenuPort,
   ) {
     this.blameController = new ConflictGitBlameController(
       blameRuntime,
       editorCopy,
+      contextMenu,
     );
   }
 
@@ -171,7 +174,6 @@ export class ConflictEditor {
       blameSources, conflict.path, conflict.revisionToken, ours, theirs,
       this.exactResult.text, presentation.layout, editorCopy,
     );
-    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     this.copy = copy;
     const analysis = prepared?.analysis ??
       analyzeConflictResolution(base, ours, this.exactResult.text, theirs);
@@ -360,7 +362,6 @@ export class ConflictEditor {
 
   setPreferences(preferences: AppPreferences): void {
     this.preferences = { ...preferences };
-    this.blameController.setDisplayMode(preferences.gitBlameDisplayMode);
     this.conflictRoot?.style.setProperty("--conflict-source-tab-size", String(preferences.editorTabSize));
     for (const binding of this.bindings) {
       binding.view.dispatch({ effects: [
@@ -484,7 +485,7 @@ export class ConflictEditor {
         ? this.resultEditable.of(EditorView.editable.of(!this.resultReadOnlyValue))
         : EditorView.editable.of(editable),
       codeMirrorFocusOwnership,
-      diffLineNumberGutter(gutterSide),
+      diffLineNumberGutter(gutterSide, undefined, this.blameController.menu(binding.paneId)),
       ...this.blameController.extensions(binding.paneId, binding.blame),
       binding.changeIndicators?.extension ?? [],
       this.collapseCoordinator?.extension(collapseSide) ?? [],

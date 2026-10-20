@@ -68,6 +68,13 @@ export interface ContextMenuPort {
   revalidate(): void;
 }
 
+/** Keeps editor runtimes independently testable when no application menu host is installed. */
+export const NOOP_CONTEXT_MENU_PORT: ContextMenuPort = {
+  open: () => undefined,
+  close: () => undefined,
+  revalidate: () => undefined,
+};
+
 export function contextMenuModelErrors(model: ContextMenuModel): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();

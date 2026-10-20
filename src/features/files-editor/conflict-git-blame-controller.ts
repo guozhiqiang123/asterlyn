@@ -1,9 +1,10 @@
 import { Compartment, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { EditorCopy } from "../../localization/catalog.ts";
+import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import { projectConflictResultBlame } from "./conflict-blame-projection.ts";
 import type { ConflictGitBlameSources, GitBlameRuntime } from "./editor-gutter.ts";
-import type { GitBlameDisplayMode } from "../../preferences.ts";
+import type { OpenEditorContextMenu } from "./editor-gutter.ts";
 import { GitBlamePaneController, sourceBlameTarget } from "./git-blame-pane-controller.ts";
 
 type ConflictBlamePane = "ours" | "result" | "theirs";
@@ -24,9 +25,10 @@ export class ConflictGitBlameController {
   constructor(
     runtime: GitBlameRuntime,
     copy: EditorCopy,
+    contextMenu?: ContextMenuPort,
   ) {
     this.runtime = runtime;
-    this.panes = new GitBlamePaneController(runtime, copy);
+    this.panes = new GitBlamePaneController(runtime, copy, contextMenu, "editor.conflict.git-blame");
   }
 
   mount(
@@ -59,8 +61,8 @@ export class ConflictGitBlameController {
     this.panes.register(pane, view, compartment);
   }
 
-  setDisplayMode(displayMode: GitBlameDisplayMode): void {
-    this.panes.setDisplayMode(displayMode);
+  menu(pane: ConflictBlamePane): OpenEditorContextMenu {
+    return this.panes.menu(pane);
   }
 
   setPresentation(layout: "split" | "unified"): void {
@@ -112,7 +114,7 @@ export class ConflictGitBlameController {
         ...available.map((candidate) => candidate.availability.source!.commitOid ?? ""),
       ].join("\0"),
       source: null,
-      autoLoad: this.version === 0,
+      navigationSource: available[0]?.availability.source ?? null,
       unavailableReason: available.length > 0
         ? null
         : sources.ours.unavailableReason ?? sources.theirs.unavailableReason,

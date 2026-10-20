@@ -18,6 +18,7 @@ import { EMBEDDED_EDITABLE_DIFF_CAPABILITIES } from "../../shared/diff-review/di
 import { renderDiffReviewToolbar } from "../../shared/diff-review/diff-review-toolbar.ts";
 import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 import type { GitBlameRuntime } from "./editor-gutter.ts";
+import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 
 export interface WorkspaceReplacementPresentationOptions {
   readonly controller: WorkspaceReplacementController;
@@ -43,6 +44,7 @@ export interface WorkspaceReplacementPresentationOptions {
   readonly persistLayout: () => void;
   readonly describeError: (error: unknown) => string;
   readonly blameRuntime: GitBlameRuntime;
+  readonly contextMenu: ContextMenuPort;
 }
 
 export class WorkspaceReplacementPresentationRuntime {
@@ -65,6 +67,7 @@ export class WorkspaceReplacementPresentationRuntime {
     this.editor = new LazyEditableDiffEditor(
       options.editorCopy(),
       options.blameRuntime,
+      options.contextMenu,
     );
   }
 

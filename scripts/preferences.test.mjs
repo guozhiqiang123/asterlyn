@@ -70,7 +70,6 @@ test("preferences update only through bounded choices and round trip by version"
     editorLetterSpacing: 0.5,
     editorIndentSize: 2,
     editorTabSize: 2,
-    gitBlameDisplayMode: "line-end",
     diffLayout: "unified",
     showWhitespace: true,
     askBeforeRemoteUpdate: false,
@@ -97,11 +96,6 @@ test("preferences update only through bounded choices and round trip by version"
   );
   assert.equal(updateAppPreferences(updated, { locale: "fr-FR" }).locale, "zh-CN");
   assert.equal(updateAppPreferences(updated, { theme: "sepia" }).theme, "light");
-  assert.equal(
-    updateAppPreferences(updated, { gitBlameDisplayMode: "wide-gutter" })
-      .gitBlameDisplayMode,
-    "line-end",
-  );
   assert.equal(
     updateAppPreferences(updated, { preferredRemoteUpdateStrategy: "reset" })
       .preferredRemoteUpdateStrategy,
@@ -194,7 +188,6 @@ test("version three untouched typography defaults migrate without replacing cust
     editorLetterSpacing: 0.5,
     editorIndentSize: 8,
     editorTabSize: 8,
-    gitBlameDisplayMode: "line-number-hover",
     diffLayout: "unified",
     showWhitespace: true,
     askBeforeRemoteUpdate: true,
@@ -203,7 +196,7 @@ test("version three untouched typography defaults migrate without replacing cust
   });
 });
 
-test("version nine persists bounded presentation, editor, Update, staging, and Blame choices", () => {
+test("version nine persists bounded presentation, editor, Update, and staging choices", () => {
   const selected = {
     ...DEFAULT_APP_PREFERENCES,
     editorFontFamily: "cascadia-code",
@@ -227,7 +220,7 @@ test("version nine persists bounded presentation, editor, Update, staging, and B
   assert.equal(loadAppPreferences(memoryStorage(malformed)).theme, "dark");
 });
 
-test("version eight preferences gain the compact line-number Blame default", () => {
+test("legacy Git Blame display preferences are ignored", () => {
   const persisted = JSON.stringify({
     version: 8,
     preferences: {
@@ -235,10 +228,7 @@ test("version eight preferences gain the compact line-number Blame default", () 
       gitBlameDisplayMode: undefined,
     },
   });
-  assert.equal(
-    loadAppPreferences(memoryStorage(persisted)).gitBlameDisplayMode,
-    "line-number-hover",
-  );
+  assert.equal("gitBlameDisplayMode" in loadAppPreferences(memoryStorage(persisted)), false);
 });
 
 test("version six gains safe prompting defaults for current-branch Update", () => {

@@ -15,6 +15,8 @@
     "test:conflict:rendered": "node scripts/test-conflict-editor-rendered.mjs",
     "test:diff:rendered": "node scripts/test-diff-editor-rendered.mjs",
     "test:editor-patch:rendered": "node scripts/test-editor-patch-popover-rendered.mjs",
+    "test:git-blame:rendered": "node scripts/test-git-blame-rendered.mjs",
+    "test:history:rendered": "node scripts/test-history-selection-rendered.mjs",
     "test:native:rendered": "node scripts/smoke-native-app.mjs --require-rendered target/release/asterlyn",
     "test:native:rendered:build": "tauri build --no-bundle && npm run test:native:rendered",
     "tauri": "tauri"

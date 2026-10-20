@@ -294,7 +294,7 @@ test("settings view keeps one selected section and bounded preference controls",
   assert.equal((navigation.match(/settings-navigation-item selected/g) ?? []).length, 1);
   assert.match(content, /Editor font size/);
   assert.match(content, /Editor line spacing/);
-  assert.match(content, /data-setting-git-blame-display="line-number-hover" aria-pressed="true"/);
+  assert.doesNotMatch(content, /data-setting-git-blame-display/u);
 
   const appearance = renderSettingsSection({
     section: "appearance",

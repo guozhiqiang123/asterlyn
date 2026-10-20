@@ -155,8 +155,53 @@ const editorThemeRules =
       borderRight: "1px solid var(--bg-panel)",
     },
     ".cm-activeLineGutter": { backgroundColor: "var(--editor-active-line)" },
-    ".cm-line-number-value": {
-      cursor: "help",
+    ".cm-git-blame-gutter": {
+      minWidth: "0",
+      color: "var(--text-muted)",
+      backgroundColor: "var(--bg-deep)",
+    },
+    ".cm-git-blame-gutter .cm-gutterElement": {
+      boxSizing: "border-box",
+      padding: "0 8px",
+    },
+    ".cm-git-blame-marker": {
+      display: "inline-grid",
+      gridTemplateColumns: "10ch minmax(0, 14ch)",
+      gap: "8px",
+      padding: "0",
+      overflow: "hidden",
+      color: "inherit",
+      background: "transparent",
+      border: "0",
+      font: "inherit",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      cursor: "pointer",
+    },
+    ".cm-git-blame-time, .cm-git-blame-author": {
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    },
+    ".cm-git-blame-author": {
+      textAlign: "left",
+    },
+    ".cm-git-blame-time": {
+      textAlign: "left",
+    },
+    ".cm-git-blame-tone-0": {
+      backgroundColor: "color-mix(in srgb, var(--graph-1) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-tone-1": {
+      backgroundColor: "color-mix(in srgb, var(--graph-2) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-tone-2": {
+      backgroundColor: "color-mix(in srgb, var(--graph-3) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-tone-3": {
+      backgroundColor: "color-mix(in srgb, var(--graph-4) 10%, var(--bg-deep))",
+    },
+    ".cm-git-blame-local": {
+      backgroundColor: "color-mix(in srgb, var(--file-modified) 18%, var(--bg-deep))",
     },
     ".cm-git-blame-line-end": {
       display: "inline-block",
@@ -169,7 +214,12 @@ const editorThemeRules =
       color: "var(--text-faint)",
       opacity: "0.68",
       fontStyle: "italic",
-      cursor: "help",
+      padding: "0",
+      background: "transparent",
+      border: "0",
+      fontFamily: "inherit",
+      fontSize: "inherit",
+      cursor: "pointer",
     },
     ".cm-git-blame-tooltip": {
       position: "absolute",

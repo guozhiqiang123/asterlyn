@@ -19,7 +19,7 @@ import { EditorLanguageLoader, type EditorLanguageStatus } from "./editor-langua
 import { asterlynEditorTheme, asterlynSyntaxHighlighting } from "./editor-theme";
 import type { EffectiveTheme } from "./presentation/presentation-environment";
 import { linkVerticalScrollProportionally } from "./presentation/linked-scroll";
-import type { AppPreferences, GitBlameDisplayMode } from "./preferences";
+import type { AppPreferences } from "./preferences";
 import {
   applyExactTextChanges,
   computeTextChange,
@@ -29,12 +29,18 @@ import {
   type TextChange,
 } from "./features/files-editor/text-content";
 import {
+  editorGutterContextMenu,
   gitBlamePresentation,
   lineNumberGutter,
   type GitBlameRuntime,
   type GitBlameSource,
 } from "./features/files-editor/editor-gutter.ts";
 import type { GitBlameResult } from "./models.ts";
+import {
+  NOOP_CONTEXT_MENU_PORT,
+  type ContextMenuPort,
+} from "./shared/context-menu/context-menu-model.ts";
+import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
 import type { EditorRuntimeTabRemap } from "./editor-path-mutation.ts";
 import { remapEditorCacheEntries } from "./features/files-editor/editor-cache-remap.ts";
 import {
@@ -96,11 +102,11 @@ export class TextEditor {
   private phrasesValue: Readonly<Record<string, string>> = {};
   private synchronizing = false;
   private scrollRestorationGeneration = 0;
-  private blameDisplayMode: GitBlameDisplayMode = "line-number-hover";
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
     private blameCopy: EditorCopy,
+    private readonly contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {}
 
   mount(
@@ -115,7 +121,6 @@ export class TextEditor {
     blameUnavailableReason: string | null,
     onChange: (content: string) => void,
   ): void {
-    this.setBlameDisplayMode(preferences.gitBlameDisplayMode);
     const active = this.activeEntry();
     if (
       active?.id === tabId &&
@@ -151,7 +156,6 @@ export class TextEditor {
         active.serializedContent = content;
       }
       active.view.requestMeasure();
-      void this.ensureBlame(active);
       return;
     }
 
@@ -206,7 +210,6 @@ export class TextEditor {
     if (mountedEntry.languageStatus === "loading") {
       this.loadLanguage(mountedEntry);
     }
-    void this.ensureBlame(mountedEntry);
   }
 
   private restoreScroll(
@@ -322,7 +325,6 @@ export class TextEditor {
   }
 
   setPreferences(preferences: AppPreferences): void {
-    this.setBlameDisplayMode(preferences.gitBlameDisplayMode);
     for (const entry of this.entries.values()) {
       if (entry.view) applyEditorPreferences(entry.view, preferences);
       this.dispatchEffects(
@@ -370,6 +372,7 @@ export class TextEditor {
   }
 
   detach(): void {
+    this.contextMenu.close("editor.text.git-blame");
     this.releaseActiveView(false);
   }
 
@@ -429,6 +432,7 @@ export class TextEditor {
   }
 
   destroy(): void {
+    this.contextMenu.close("editor.text.git-blame");
     for (const tabId of [...this.entries.keys()]) this.dispose(tabId);
   }
 
@@ -499,7 +503,14 @@ export class TextEditor {
         language.of([]),
         blame.of([]),
         changeIndicators.extension,
-        lineNumberGutter(),
+        editorGutterContextMenu(
+          (event, view) => this.openBlameMenu(entry, event, view),
+        ),
+        lineNumberGutter(
+          undefined,
+          "before",
+          (event, view) => this.openBlameMenu(entry, event, view),
+        ),
         foldGutter({ markerDOM: createFoldMarker }),
         history(),
         drawSelection(),
@@ -534,12 +545,47 @@ export class TextEditor {
     return entry;
   }
 
-  private async ensureBlame(entry: CachedTextEditor): Promise<void> {
-    if (entry.blameResult || entry.blameLoading) return;
+  private openBlameMenu(
+    entry: CachedTextEditor,
+    event: MouseEvent,
+    view: EditorView,
+  ): void {
+    const generation = entry.blameGeneration;
+    const active = entry.blameResult !== null;
+    const loading = entry.blameLoading;
+    this.contextMenu.open(
+      { x: event.clientX, y: event.clientY },
+      gitBlameContextSession("editor.text.git-blame", {
+        active,
+        loading,
+        enabled: entry.blameSource !== null,
+        unavailableReason: entry.blameUnavailableReason,
+        copy: this.blameCopy,
+        isCurrent: () =>
+          this.entries.get(entry.id) === entry &&
+          entry.view === view &&
+          entry.blameGeneration === generation &&
+          (entry.blameResult !== null) === active &&
+          entry.blameLoading === loading,
+        toggle: () => this.toggleBlame(entry),
+        blocked: (reason) => this.blameRuntime.status(reason, "warning"),
+        restoreFocus: () => {
+          if (entry.view === view) view.focus();
+        },
+      }),
+    );
+  }
+
+  private async toggleBlame(entry: CachedTextEditor): Promise<void> {
+    if (entry.blameResult || entry.blameLoading) {
+      this.clearBlame(entry, true);
+      return;
+    }
     const source = entry.blameSource;
     if (!source) return;
     const generation = ++entry.blameGeneration;
     entry.blameLoading = true;
+    this.blameRuntime.status(this.blameCopy.loadingGitBlame, "information");
     try {
       const result = await this.blameRuntime.load(source);
       if (
@@ -550,10 +596,11 @@ export class TextEditor {
       entry.blameLoading = false;
       entry.blameResult = result;
       this.installBlame(entry, result);
-      if (result.truncated) {
-        const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
-        this.blameRuntime.status(this.blameCopy.gitBlameLimited(lines), "warning");
-      }
+      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
+      this.blameRuntime.status(
+        result.truncated ? this.blameCopy.gitBlameLimited(lines) : this.blameCopy.gitBlameLoaded(lines),
+        result.truncated ? "warning" : "information",
+      );
     } catch (error) {
       if (generation !== entry.blameGeneration || this.entries.get(entry.id) !== entry) return;
       entry.blameLoading = false;
@@ -568,31 +615,29 @@ export class TextEditor {
         gitBlamePresentation(
           result,
           this.blameCopy,
-          this.blameDisplayMode,
+          (event, view) => this.openBlameMenu(entry, event, view),
+          (hunk) => {
+            const source = entry.blameSource;
+            if (source && !hunk.uncommitted) this.blameRuntime.openCommit(source, hunk);
+          },
         ),
       ),
     );
   }
 
-  private clearBlame(entry: CachedTextEditor): void {
+  private clearBlame(entry: CachedTextEditor, report = false): void {
+    this.contextMenu.close("editor.text.git-blame");
     entry.blameGeneration += 1;
     entry.blameLoading = false;
     entry.blameResult = null;
     this.dispatchEffects(entry, entry.blame.reconfigure([]));
+    if (report) this.blameRuntime.status(this.blameCopy.gitBlameHidden, "information");
   }
 
   private invalidateBlameForEdit(entry: CachedTextEditor): void {
     entry.blameSource = null;
     entry.blameUnavailableReason = this.blameCopy.gitBlameRequiresSavedFile;
     if (entry.blameResult || entry.blameLoading) this.clearBlame(entry);
-  }
-
-  private setBlameDisplayMode(mode: GitBlameDisplayMode): void {
-    if (this.blameDisplayMode === mode) return;
-    this.blameDisplayMode = mode;
-    for (const entry of this.entries.values()) {
-      if (entry.blameResult) this.installBlame(entry, entry.blameResult);
-    }
   }
 
   private updateBlameAvailability(

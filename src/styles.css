@@ -412,13 +412,6 @@ textarea:focus-visible {
   }
 }
 
-@supports (content-visibility: auto) {
-  .history-row {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 28px;
-  }
-}
-
 .app-shell .repository-name,
 .app-shell .command-center-button,
 .app-shell .project-file-row,

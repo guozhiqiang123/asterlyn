@@ -300,7 +300,6 @@ import {
   type EditorFontLoadSource,
 } from "./features/settings/editor-fonts";
 import {
-  isGitBlameDisplayMode,
   isLocalePreference,
   isNewFileStagePreference,
   isRemoteUpdateStrategyPreference,
@@ -409,6 +408,7 @@ export class AsterlynApp {
   private readonly stashRuntime: StashRuntime;
   private readonly dialogRuntime: ApplicationDialogRuntime;
   private readonly historyListView = new GitHistoryListView();
+  private pendingBlameCommitFocus: string | null = null;
   private readonly editorFontLoader = new EditorFontLoader(window.localStorage);
   private markdownModePreferences = loadMarkdownModePreferences(window.localStorage);
   private imageSurface: ImageSurfaceState | null = null;
@@ -544,6 +544,10 @@ export class AsterlynApp {
         source.commitOid,
         source.parent,
       ),
+      openCommit: (source, hunk) => void import("./features/files-editor/git-blame-history-navigation.ts")
+        .then(({ gitBlameHistoryTarget }) => { const target = gitBlameHistoryTarget(source, hunk.oid, this.windowSession.repository.state.snapshot, this.windowSession.generation);
+          if (target) this.installContextHistoryQuery(target.intent, target.commitKey);
+        }).catch((error) => this.showError(error)),
       status: (message, kind) => this.setStatus(
         message,
         kind === "information" ? "normal" : "warning",
@@ -554,10 +558,12 @@ export class AsterlynApp {
       root,
       initialCatalog.editor,
       blameRuntime,
+      this.contextMenuHost,
     );
     this.pushDiffEditor = new LazyDiffEditor(
       blameRuntime,
       initialCatalog.editor,
+      this.contextMenuHost,
     );
     this.activityRailBinding = new ActivityRailBinding(root, {
       order: () => this.shellState.activityOrder,
@@ -855,6 +861,7 @@ export class AsterlynApp {
       setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }),
       fileListWidth: () => this.shellState.layout.replacementListWidth, resizeFileList: (width) => this.resizeWorkbench("replacementListWidth", width), persistLayout: () => this.persistWorkbenchLayout(), describeError: (error) => localizedOperationError(error, this.localization.catalog.errors),
       blameRuntime,
+      contextMenu: this.contextMenuHost,
     });
     this.replacementPresentationRuntime.setTheme(this.settingsPresentationRuntime.presentation.snapshot.theme); this.replacementPresentationRuntime.setPhrases(this.localization.catalog.editorPhrases);
     this.gitOperationRuntime = new GitOperationRuntime({
@@ -1777,6 +1784,11 @@ export class AsterlynApp {
       revalidateContextMenu: () => this.contextMenuHost.revalidate(), error: (error) => this.showError(error),
       warning: (message) => this.setStatus(message, "warning"),
     });
+    if (change.reason === "query-error") this.pendingBlameCommitFocus = null;
+    const blameKey = this.pendingBlameCommitFocus;
+    if (change.reason === "query-complete" && blameKey && this.historyState.selectedCommit === blameKey) queueMicrotask(() => {
+      if (this.pendingBlameCommitFocus === blameKey) { this.pendingBlameCommitFocus = null; this.focusHistoryCommit(blameKey); }
+    });
   }
 
   private handleHistoryComparisonChange(change: HistoryComparisonChange): void {
@@ -2184,19 +2196,6 @@ export class AsterlynApp {
         this.updatePreferences({ [field]: Number(select.value) }, select.id);
       });
     });
-    this.root
-      .querySelectorAll<HTMLButtonElement>("[data-setting-git-blame-display]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          const mode = button.dataset.settingGitBlameDisplay;
-          if (isGitBlameDisplayMode(mode)) {
-            this.updatePreferences(
-              { gitBlameDisplayMode: mode },
-              `setting-git-blame-display-${mode}`,
-            );
-          }
-        });
-      });
     this.root
       .querySelectorAll<HTMLButtonElement>("[data-setting-locale]")
       .forEach((button) => {
@@ -4347,12 +4346,12 @@ export class AsterlynApp {
 
   private installContextHistoryQuery(
     intent: import("./application/workbench-navigation.ts").HistoryQueryIntent,
+    focusCommit: string | null = null,
   ): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (
       !snapshot ||
       !this.windowSession.matches(intent.workspaceGeneration, intent.workspaceRoot) ||
-      intent.query.paths.length === 0 ||
       intent.query.paths.some((path) =>
         !snapshot.repositoryRoots.some((root) => root.id === path.repositoryId)
       )
@@ -4360,7 +4359,8 @@ export class AsterlynApp {
     this.gitHistoryPresentationRuntime.folderDiff.clear();
     this.gitHistoryPresentationRuntime.detail.show("commit");
     this.gitHistoryPresentationRuntime.filters.install(intent.query);
-    this.recordRecentHistoryPath(intent.query.paths[0]!);
+    if (intent.query.paths[0]) this.recordRecentHistoryPath(intent.query.paths[0]);
+    this.pendingBlameCommitFocus = focusCommit;
     this.gitHistoryPresentationRuntime.filters.clearTextQuery();
     this.gitHistoryPresentationRuntime.filters.closeMenus();
     this.shellController.setLayout({ ...this.shellState.layout, bottomTool: "branches" }, true);

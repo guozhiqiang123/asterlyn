@@ -121,7 +121,7 @@ test("CodeMirror adapters delegate menu lifecycle to the lazy per-window host", 
     readFile(new URL("../src/app.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(gutter, /activeMenu|document\.body/u);
-  assert.doesNotMatch(gutter, /contextmenu|openMenu/u);
+  assert.match(gutter, /contextmenu|openMenu/u);
   assert.match(host, /class ContextMenuHost implements ContextMenuPort/u);
   assert.match(host, /AbortController/u);
   assert.match(host, /active\.session\.dismissed\?\.\(\)/u);

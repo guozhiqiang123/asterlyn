@@ -1,5 +1,60 @@
 # Compact Git Blame presentation plan
 
+> Status: superseded on 2026-10-20. The persistent display preference and line-number-hover mode
+> described below were removed after usage feedback. Git Blame is on-demand again.
+
+## Current behavior
+
+- Right-clicking anywhere in the CodeMirror gutter band exposes one checked Git Blame action. This
+  includes line numbers, fold and change-indicator lanes, and empty gutter space below short files.
+  Enabling it performs the exact-source request and renders a dedicated author/date gutter;
+  disabling it removes the result without changing source content.
+- The selected-line annotation remains at the line end while Blame is enabled, including when focus
+  temporarily moves to a context menu or another application surface. The dedicated gutter keeps
+  the compact `YYYY-MM-DD` date, while the line-end annotation shows the author and exact local
+  authored time as `YYYY-MM-DD HH:mm`.
+- Gutter rows follow the Android Studio-style `date | author` order. A fixed-width date column and
+  an 8-pixel gap make every author begin at the same horizontal position; long author names are
+  truncated inside a bounded author column.
+- Committed author/date annotations are buttons. Activating one opens the Git panel, scopes History
+  to the owning repository (including submodule roots), starts at the exact commit, and focuses it.
+  Local/uncommitted annotations are not navigable.
+- The focused target row remains fully painted after a pointer click. History keeps its bounded
+  JavaScript render window as the only virtualization layer; CSS `content-visibility` is not used
+  because macOS WebView can suppress the visible focused row's commit subject and metadata.
+- The Editor settings no longer persist or expose a Git Blame display mode. Dirty, untracked,
+  ambiguous unified-Diff, and stale-source safeguards remain unchanged.
+
+The remainder of this document records the now-retired automatic compact-mode design.
+
+## Restoration acceptance (2026-10-20)
+
+- Functional coverage: 1,248 frontend script tests pass. A dedicated Chromium/WebKit rendered test
+  verifies hidden-by-default state, activation from blank fold-gutter space without duplicate menu
+  dispatch, one explicit load, fixed date/author column alignment, gutter `YYYY-MM-DD`, retained
+  line-end `YYYY-MM-DD HH:mm`, focus-transfer persistence, exact repository/commit activation, and
+  focused History-row paint stability. Existing Diff,
+  editable Diff, conflict, and editor-patch rendered suites also pass in both engines.
+- Build and performance: TypeScript checking and the production build pass; the startup chunk is
+  499.23 kB against the 500 kB gate. Removing automatic loading avoids repository work until the
+  explicit gutter action. The native application rendered its shell within the six-second smoke
+  window.
+- Lifecycle and accessibility: the checked context action restores editor focus, committed
+  annotations are keyboard-focusable buttons, local annotations remain non-actions, and every
+  controller invalidates requests/results and releases menu/view bindings on edit or destroy.
+- Native acceptance package:
+  `target/release/bundle/macos/Asterlyn-0.1.13-history-row-paint-20261020-final-macos.app.zip`,
+  14,833,917 bytes, SHA-256
+  `1081344d3e6684e9b9f84d62ff4c9eea35e44505e157e666e0bbe8c1eeb11e41`.
+- The strictly verified ad-hoc bundle is installed and running at `/Applications/Asterlyn.app`.
+  Its executable matches the accepted bundle byte-for-byte with SHA-256
+  `0ab2dcbeb4c8bc6ccf28690957bc7c9720965eca153e06626f5c5c3e8f3cf388`.
+  The replaced installation is recoverable at
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261020-200421-history-row-paint/Asterlyn.app`.
+- Known limitations remain deliberate: unified Diff cannot expose one exact source identity; Local
+  changes have no commit destination; a separate long-duration process-tree memory profile was not
+  run for this bounded editor interaction.
+
 ## Context
 
 Asterlyn currently renders active Git Blame information in a dedicated CodeMirror gutter. The

@@ -23,6 +23,10 @@ import {
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import { LazyConflictEditor, LazyEditableDiffEditor } from "./lazy-merge-editor-runtime.ts";
 import { scheduleEditorRuntimePreload } from "./editor-runtime-preload.ts";
+import {
+  NOOP_CONTEXT_MENU_PORT,
+  type ContextMenuPort,
+} from "../../shared/context-menu/context-menu-model.ts";
 
 export type ImageSurfaceState =
   | { key: string; version: number; status: "loading"; error: null; image: null; diff: null }
@@ -60,19 +64,22 @@ export class EditorSurface {
     root: HTMLElement,
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
+    contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {
     this.root = root;
     this.copy = copy;
     this.diffEditor = new LazyDiffEditor(
       blameRuntime,
       copy,
+      contextMenu,
     );
     this.textEditor = new LazyTextEditor(
       blameRuntime,
       copy,
+      contextMenu,
     );
-    this.editableDiffEditor = new LazyEditableDiffEditor(copy, blameRuntime);
-    this.conflictEditor = new LazyConflictEditor(copy, blameRuntime);
+    this.editableDiffEditor = new LazyEditableDiffEditor(copy, blameRuntime, contextMenu);
+    this.conflictEditor = new LazyConflictEditor(copy, blameRuntime, contextMenu);
   }
 
   setCopy(copy: EditorCopy): void {

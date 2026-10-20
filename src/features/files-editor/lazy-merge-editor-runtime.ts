@@ -11,6 +11,10 @@ import { decodeExactText } from "./text-content.ts";
 import type { ConflictGitBlameSources, DiffGitBlameSources, GitBlameRuntime } from "./editor-gutter.ts";
 import { ConflictPreparationRuntime } from "./conflict-preparation-runtime.ts";
 import { emptyState, loadingBlock } from "./editor-view.ts";
+import {
+  NOOP_CONTEXT_MENU_PORT,
+  type ContextMenuPort,
+} from "../../shared/context-menu/context-menu-model.ts";
 
 interface EditableDiffMount {
   parent: HTMLElement;
@@ -52,12 +56,15 @@ export class LazyEditableDiffEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private readonly blameRuntime: GitBlameRuntime;
+  private readonly contextMenu: ContextMenuPort;
   constructor(
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
+    contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {
     this.copy = copy;
     this.blameRuntime = blameRuntime;
+    this.contextMenu = contextMenu;
   }
 
   currentPath(): string | null {
@@ -203,6 +210,7 @@ export class LazyEditableDiffEditor {
       const editor = new EditableDiffEditor(
         this.copy,
         this.blameRuntime,
+        this.contextMenu,
       );
       this.implementation = editor;
       return editor;
@@ -226,13 +234,16 @@ export class LazyConflictEditor {
   private ready = false;
   private editorCopy: EditorCopy;
   private readonly blameRuntime: GitBlameRuntime;
+  private readonly contextMenu: ContextMenuPort;
   private readonly preparation = new ConflictPreparationRuntime();
   constructor(
     editorCopy: EditorCopy,
     blameRuntime: GitBlameRuntime,
+    contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {
     this.editorCopy = editorCopy;
     this.blameRuntime = blameRuntime;
+    this.contextMenu = contextMenu;
   }
 
   setCopy(copy: EditorCopy): void {
@@ -402,6 +413,7 @@ export class LazyConflictEditor {
       const editor = new ConflictEditor(
         this.blameRuntime,
         this.editorCopy,
+        this.contextMenu,
       );
       this.implementation = editor;
       return editor;

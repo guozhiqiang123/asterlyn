@@ -45,10 +45,16 @@ export function formatPresentationDateTime(
   return date && time ? `${date} ${time}` : date || time;
 }
 
-export function formatGitBlameDateTime(epochSeconds: number): string {
+export function formatGitBlameDate(epochSeconds: number): string {
   const value = dateFromEpochSeconds(epochSeconds);
   if (!value) return "";
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${clock(value)}`;
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+export function formatGitBlameDateTime(epochSeconds: number): string {
+  const date = formatGitBlameDate(epochSeconds);
+  const value = dateFromEpochSeconds(epochSeconds);
+  return date && value ? `${date} ${clock(value)}` : date;
 }
 
 function dateFromEpochSeconds(epochSeconds: number): Date | null {

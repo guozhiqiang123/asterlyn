@@ -164,8 +164,6 @@ export interface SettingsCopy {
   indentAria: string;
   spaces(value: number): string;
   tabWidthLabel: string; tabWidthDescription: string; tabWidthAria: string;
-  gitBlameDisplayLabel: string; gitBlameDisplayDescription: string; gitBlameDisplayAria: string;
-  gitBlameLineEnd: string; gitBlameLineNumberHover: string;
   versionControlTitle: string;
   versionControlDescription: string;
   updateStrategyLabel: string;

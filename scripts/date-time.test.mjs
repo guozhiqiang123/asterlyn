@@ -5,6 +5,7 @@ import { createLocalization } from "../src/localization/localization.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { ZH_CN } from "../src/localization/zh-CN.ts";
 import {
+  formatGitBlameDate,
   formatGitBlameDateTime,
   formatPresentationDate,
   formatPresentationDateTime,
@@ -33,7 +34,8 @@ test("older timestamps use an exact date and 24-hour local clock", () => {
   assert.equal(formatPresentationDateTime(0, english, now), "");
 });
 
-test("Git Blame always uses its exact dense-table timestamp", () => {
+test("Git Blame shows only the authored calendar date", () => {
+  assert.equal(formatGitBlameDate(seconds(localTime(2026, 9, 8, 6, 3))), "2026-09-08");
   assert.equal(formatGitBlameDateTime(seconds(localTime(2026, 9, 8, 6, 3))), "2026-09-08 06:03");
 });
 

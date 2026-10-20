@@ -16,9 +16,9 @@ one commit by assumption.
 
 ## Invariants
 
-- Git Blame loads automatically when an eligible exact source is mounted. One source identity has
-  at most one active request, and loading never moves the cursor, selection, active review block, or
-  conflict decision.
+- Git Blame loads only after the user invokes the line-number-gutter action for an eligible exact
+  source. One source identity has at most one active request, and loading never moves the cursor,
+  selection, active review block, or conflict decision.
 - Immutable source panes are attributed only when their exact blob can be matched to an exact
   commit. Missing provenance fails closed with a visible reason.
 - Result attribution is a projection, not invented history: a line may inherit an Ours/Theirs
@@ -39,8 +39,9 @@ Extract loading, presentation installation, stale completion, copy update, and d
 into a reusable pane controller for the two new editable surfaces. Ordinary/read-only Diff remains
 the behavior reference and keeps its mature owner; editable Diff and conflict Diff share the new
 controller and the existing `gitBlamePresentation` and `GitBlameRuntime` boundaries. The
-presentation extension follows the compact display preference defined by the compact Git Blame
-presentation plan.
+presentation extension follows the restored on-demand gutter contract defined by the compact Git
+Blame presentation plan. The wide author/date gutter and active-line end annotation share one
+loaded result and one checked context action.
 
 Each pane target has a stable identity, availability reason, and loader. A target change clears its
 previous result and invalidates late completions. One controller may install the same logical Result
@@ -66,8 +67,8 @@ Pass the already established working-Diff sources into `EditableDiffEditor`:
 - After is disabled with the saved-file reason as soon as the shared text buffer becomes dirty;
   saving/remounting restores availability.
 
-Mounting starts each eligible side automatically. Editing clears any active After annotations
-immediately while leaving Before annotations intact.
+Invoking the gutter action loads each eligible side independently. Editing clears any active After
+annotations immediately while leaving Before annotations intact.
 
 ### 4. Complete three-pane conflict Blame
 
@@ -94,9 +95,9 @@ clears mounted annotations, and unified mode returns the established side-by-sid
 
 ## Regression coverage
 
-- Existing read-only two-pane Blame behavior remains unchanged.
-- Editable split Diff automatically loads independent Before/After annotations; a dirty buffer
-  disables and clears only After.
+- Existing read-only two-pane Blame uses the same on-demand action.
+- Editable split Diff loads independent Before/After annotations on demand; a dirty buffer disables
+  and clears only After.
 - Exact stage-blob candidate matching accepts Ours/Theirs commits and rejects a same-path commit
   whose blob differs.
 - Conflict Ours and Theirs load independently and late results cannot cross files or panes.
@@ -119,8 +120,8 @@ clears mounted annotations, and unified mode returns the established side-by-sid
 
 ## Implementation result
 
-- Editable split Diff automatically loads independent Before/After Git Blame annotations. A dirty
-  buffer immediately disables and clears only After annotations.
+- Editable split Diff loads independent Before/After Git Blame annotations from each pane's line
+  number gutter. A dirty buffer immediately disables and clears only After annotations.
 - Conflict Ours/Theirs provenance is resolved by exact stage-blob matching against a bounded set
   of Git-owned commits. Multiple matches fail closed rather than selecting a plausible commit.
 - Conflict Result annotations conservatively inherit exact source lines; inserted, edited, and
