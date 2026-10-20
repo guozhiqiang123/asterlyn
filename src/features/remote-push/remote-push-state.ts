@@ -1,4 +1,5 @@
 import type {
+  CommitComparisonDiffResult,
   CommitDetails,
   CommitDiffResult,
   CommitFileChange,
@@ -18,8 +19,9 @@ export interface PushDiffState {
   repositoryId: string | null;
   oid: string | null;
   parentOid: string | null;
+  comparison: boolean;
   file: CommitFileChange;
-  patch: CommitDiffResult | null;
+  patch: CommitDiffResult | CommitComparisonDiffResult | null;
   image: ImageDiffPreview | null;
   loading: boolean;
   error: string | null;

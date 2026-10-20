@@ -1,4 +1,5 @@
 import type {
+  CommitComparisonDiffResult,
   CommitDetails,
   CommitDiffResult,
   ImageDiffPreview,
@@ -81,10 +82,27 @@ export interface RemotePushGateway {
     originalPath: string | null,
     expandedUnchanged: boolean,
   ): Promise<CommitDiffResult>;
+  readCommitComparisonDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
+    path: string,
+    originalPath: string | null,
+    expandedUnchanged: boolean,
+  ): Promise<CommitComparisonDiffResult>;
   readCommitImageDiff(
     repositoryRoot: string,
     repositoryId: string,
     commitOid: string,
+    path: string,
+    originalPath: string | null,
+  ): Promise<ImageDiffPreview>;
+  readCommitComparisonImageDiff(
+    repositoryRoot: string,
+    repositoryId: string,
+    beforeOid: string,
+    afterOid: string,
     path: string,
     originalPath: string | null,
   ): Promise<ImageDiffPreview>;

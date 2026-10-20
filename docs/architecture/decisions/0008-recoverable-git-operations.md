@@ -81,6 +81,14 @@ requires inspection instead of announcing success or retrying. The divergent-bra
 asserts that Merge leaves the source branch ref unchanged and that both the all-ref snapshot and the
 current-branch History projection contain the source commit.
 
+Top-level operation cleanliness is scoped to the superproject. A porcelain entry that reports only
+an initialized submodule worktree at another checked-out commit, or dirty inside its own Git root,
+remains visible in Changes but does not block a superproject Merge, Cherry-pick, Rebase, Revert,
+branch mutation, or Update. A staged gitlink change, submodule conflict, removed submodule path, or
+ordinary superproject change still blocks. Execution repeats this distinction from fresh porcelain
+state so presentation cannot weaken the native preflight, and operations never recurse into or
+rewrite the submodule worktree.
+
 Squash is intentionally non-interactive and bounded to at most 1,000 commits after a selected
 first-parent ancestor. It creates one commit from the reviewed `HEAD` tree and message, then updates
 the checked-out branch only if that ref still equals the reviewed old `HEAD`. It does not run reset,

@@ -1493,6 +1493,7 @@ impl GitRepository {
 
     pub fn diff(&self, path: &str, staged: bool) -> Result<DiffResult, GitError> {
         validate_relative_path(path)?;
+        let head_oid = self.head_oid()?;
         let mut args = vec![
             OsString::from("diff"),
             OsString::from("--no-ext-diff"),
@@ -1534,6 +1535,7 @@ impl GitRepository {
         Ok(DiffResult {
             path: path.to_string(),
             staged,
+            head_oid,
             patch: String::from_utf8_lossy(&patch).into_owned(),
             binary,
             truncated,
@@ -1553,6 +1555,7 @@ impl GitRepository {
         if let Some(original) = &selected.original_path {
             validate_relative_path(original)?;
         }
+        let head_oid = self.head_oid()?;
         let mut args = vec![
             OsString::from("--literal-pathspecs"),
             OsString::from("diff"),
@@ -1560,8 +1563,8 @@ impl GitRepository {
             OsString::from("--no-color"),
             diff_context_argument(expanded_unchanged),
         ];
-        if self.head_oid()?.is_some() {
-            args.push(OsString::from("HEAD"));
+        if let Some(head_oid) = &head_oid {
+            args.push(OsString::from(head_oid));
         }
         args.push(OsString::from("--"));
         args.push(OsString::from(&selected.path));
@@ -1607,6 +1610,7 @@ impl GitRepository {
         Ok(DiffResult {
             path: selected.path.clone(),
             staged: false,
+            head_oid,
             patch: String::from_utf8_lossy(&patch).into_owned(),
             binary,
             truncated,
@@ -5339,13 +5343,14 @@ impl GitRepository {
             ["status", "--porcelain=v2", "-z", "--untracked-files=normal"],
         )?;
         let (_, changes) = parse_status(&status.stdout)?;
-        if changes.is_empty() {
+        let blockers = crate::model::top_level_mutation_blockers(changes);
+        if blockers.is_empty() {
             return Ok(());
         }
         Err(GitError::UnsafeOperation {
             operation: operation.to_string(),
             message: "commit, stash, or remove working-tree changes before continuing".to_string(),
-            blockers: changes.into_iter().map(|change| change.path).collect(),
+            blockers,
         })
     }
 
@@ -5431,9 +5436,11 @@ impl GitRepository {
     }
 
     fn run_mutation(&self, operation: &str, args: Vec<OsString>) -> Result<Output, GitError> {
-        let output = run_git_output(&self.root, args).map_err(|error| GitError::Io {
-            operation: operation.to_string(),
-            message: error.to_string(),
+        let output = crate::process::run_mutation_output(&self.root, args).map_err(|error| {
+            GitError::Io {
+                operation: operation.to_string(),
+                message: error.to_string(),
+            }
         })?;
         ensure_success(operation, output)
     }
@@ -8095,6 +8102,10 @@ mod tests {
             .local_diff(&selected)
             .expect("complete local diff");
 
+        assert_eq!(
+            diff.head_oid.as_deref(),
+            Some(git_stdout(directory.path(), &["rev-parse", "HEAD"]).as_str())
+        );
         assert!(diff.patch.contains("-before"));
         assert!(diff.patch.contains("+working"));
         assert!(!diff.patch.contains("+staged"));
@@ -9890,6 +9901,57 @@ mod tests {
             git_stdout(&fixture.remote, &["rev-parse", "refs/heads/main"]),
             current.head_oid
         );
+    }
+
+    #[test]
+    fn diverged_push_range_keeps_remote_only_changes_inspectable() {
+        let fixture = remote_fixture();
+        let remote_oid = commit_file(
+            &fixture.peer,
+            "base.txt",
+            "remote version\n",
+            "Remote-only change",
+        );
+        git(&fixture.peer, &["push", "origin", "main"]);
+        git(&fixture.local, &["fetch", "origin"]);
+        let local_oid = commit_file(
+            &fixture.local,
+            "local.txt",
+            "local version\n",
+            "Local-only change",
+        );
+        let repository = GitRepository::open(&fixture.local).expect("repository opens");
+
+        let preview = repository
+            .push_preview("origin", 0, 100)
+            .expect("diverged preview loads");
+        assert!(!preview.ordinary_allowed);
+        assert_eq!(
+            preview.comparison_base_oid.as_deref(),
+            Some(remote_oid.as_str())
+        );
+        assert_eq!(preview.head_oid, local_oid);
+        assert!(preview.files.iter().any(|file| file.path == "base.txt"));
+        assert!(
+            repository
+                .push_file_commit(
+                    "origin",
+                    PushTagMode::None,
+                    &preview.preview_token,
+                    "base.txt",
+                )
+                .expect("outgoing commit lookup succeeds")
+                .is_none(),
+            "the remote-only path is part of the push result, not a local outgoing commit",
+        );
+
+        let comparison = repository
+            .commit_comparison_diff(&remote_oid, &local_oid, "base.txt", None)
+            .expect("the reviewed range provides the inspectable Diff");
+        assert_eq!(comparison.before_oid, remote_oid);
+        assert_eq!(comparison.after_oid, local_oid);
+        assert!(comparison.patch.contains("-remote version"));
+        assert!(comparison.patch.contains("+base"));
     }
 
     #[test]

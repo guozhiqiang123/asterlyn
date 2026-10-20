@@ -364,7 +364,7 @@ function change(path, indexStatus = "unmodified", worktreeStatus = "modified") {
 }
 
 function diff(path, patch = `diff --git a/${path} b/${path}`) {
-  return { path, patch, binary: false, truncated: false };
+  return { path, headOid: "a".repeat(40), patch, binary: false, truncated: false };
 }
 
 function workingBase(path, originalPath = null) {

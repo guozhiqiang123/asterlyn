@@ -436,6 +436,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     case "diffResult": {
       const result = record(value, command);
       strings(result, command, "path", "patch");
+      nullableStrings(result, command, "headOid");
       booleans(result, command, "staged", "binary", "truncated");
       break;
     }

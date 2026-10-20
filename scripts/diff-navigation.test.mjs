@@ -163,14 +163,19 @@ test("editable working Diff keeps expanded state in its mount identity and runti
     loadEpoch: 7,
     status: "ready",
     content: "after\n",
+    persistedContent: "after\n",
     document: { path: "src/file.ts" },
   };
   const mounted = mountEditableWorkingDiff({
     surface: { mountEditableDiff(...args) { calls.push(args); } },
     document,
     state: {
-      workingPatch: { patch: "diff", binary: false },
-      workingDiffBase: { content: "before\n" },
+      workingPatch: {
+        headOid: "a".repeat(40),
+        patch: "@@ -1 +1 @@\n-before\n+after\n",
+        binary: false,
+      },
+      workingDiffBase: { headOid: "a".repeat(40), content: "before\n" },
       workingPatchVersion: 3,
     },
     tab,
@@ -203,6 +208,7 @@ test("editable Changes Diff validates its backing file against the authoritative
   const patch = {
     path: "gradle.properties",
     staged: false,
+    headOid: "a".repeat(40),
     binary: false,
     truncated: false,
     patch: [
@@ -226,13 +232,49 @@ test("editable Changes Diff validates its backing file against the authoritative
       "+adsBomVersion=2.3.1",
     ].join("\n"),
   };
-  const base = { content: before };
+  const base = { headOid: "a".repeat(40), content: before };
 
   assert.equal(workingDiffBackingContentMatchesPatch(patch, base, { persistedContent: after }), true);
   assert.equal(workingDiffBackingContentMatchesPatch(patch, base, { persistedContent: before }), false);
   assert.equal(workingDiffBackingContentMatchesPatch(patch, base, {
     persistedContent: after.replace("source-5", "stale-source"),
   }), true, "lines outside bounded Git hunks do not invent a mismatch");
+  assert.equal(workingDiffBackingContentMatchesPatch(
+    patch,
+    { ...base, headOid: "b".repeat(40) },
+    { persistedContent: after },
+  ), false, "the patch and editable baseline must come from the same HEAD");
+});
+
+test("pure-addition patch cannot mount identical sources after HEAD advances", () => {
+  const before = "# Contracts\nexisting\n";
+  const after = `${before}| plugin.marketplace-source | proposed |\n| plugin.external-runtime | proposed |\n`;
+  const patch = {
+    path: "docs/governance/plugin-contracts.md",
+    staged: false,
+    headOid: "a".repeat(40),
+    binary: false,
+    truncated: false,
+    patch: [
+      "diff --git a/docs/governance/plugin-contracts.md b/docs/governance/plugin-contracts.md",
+      "--- a/docs/governance/plugin-contracts.md",
+      "+++ b/docs/governance/plugin-contracts.md",
+      "@@ -2,0 +3,2 @@ existing",
+      "+| plugin.marketplace-source | proposed |",
+      "+| plugin.external-runtime | proposed |",
+    ].join("\n"),
+  };
+
+  assert.equal(workingDiffBackingContentMatchesPatch(
+    patch,
+    { headOid: patch.headOid, content: before },
+    { persistedContent: after },
+  ), true);
+  assert.equal(workingDiffBackingContentMatchesPatch(
+    patch,
+    { headOid: patch.headOid, content: after },
+    { persistedContent: after },
+  ), false, "identical panes cannot satisfy a non-empty authoritative patch");
 });
 
 test("stale editable backing content falls back to the authoritative Git patch", () => {
@@ -246,10 +288,10 @@ test("stale editable backing content falls back to the authoritative Git patch",
     },
     state: {
       workingPatch: {
-        path: "gradle.properties", staged: false, binary: false, truncated: false,
+        path: "gradle.properties", staged: false, headOid: "a".repeat(40), binary: false, truncated: false,
         patch: "@@ -1 +1 @@\n-old\n+new\n",
       },
-      workingDiffBase: { content: "old\n" },
+      workingDiffBase: { headOid: "a".repeat(40), content: "old\n" },
       workingPatchVersion: 1,
     },
     tab: {

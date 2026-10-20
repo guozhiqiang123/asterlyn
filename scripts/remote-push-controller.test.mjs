@@ -223,13 +223,13 @@ test("commit details are cached and stale selections cannot replace the review",
 });
 
 test("switching files invalidates an older push Diff request", async () => {
-  const firstCommit = deferred();
+  const firstDiff = deferred();
   const gateway = createGateway({
     previewResponses: [Promise.resolve(preview("origin", "token"))],
-    readPushFileCommit(_root, _remote, _tagMode, _token, path) {
+    readCommitComparisonDiff(_root, repositoryId, beforeOid, afterOid, path) {
       return path === "one.txt"
-        ? firstCommit.promise
-        : Promise.resolve(details("two", "two.txt"));
+        ? firstDiff.promise
+        : Promise.resolve(comparisonDiff(repositoryId, beforeOid, afterOid, path));
     },
   });
   const controller = new RemotePushController(gateway);
@@ -242,7 +242,7 @@ test("switching files invalidates an older push Diff request", async () => {
   controller.selectPushFile("two.txt");
   await controller.openSelectedPushFileDiff();
   assert.equal(controller.state.pushDiff?.file.path, "two.txt");
-  firstCommit.resolve(details("one", "one.txt"));
+  firstDiff.resolve(comparisonDiff(".", "b".repeat(40), "a".repeat(40), "one.txt"));
   await first;
   assert.equal(controller.state.pushDiff?.file.path, "two.txt");
   assert.equal(controller.state.pushFileActionLoading, false);
@@ -252,9 +252,17 @@ test("expanding omitted Push Diff context requests the complete patch", async ()
   const requested = [];
   const controller = new RemotePushController(createGateway({
     previewResponses: [Promise.resolve(preview("origin", "token"))],
-    async readCommitDiff(_root, _repositoryId, _oid, _path, _originalPath, expandedUnchanged) {
+    async readCommitComparisonDiff(
+      _root,
+      _repositoryId,
+      _beforeOid,
+      _afterOid,
+      _path,
+      _originalPath,
+      expandedUnchanged,
+    ) {
       requested.push(expandedUnchanged);
-      return { repositoryId: ".", oid: "one", path: "one.txt", patch: "@@ -1 +1 @@\n-a\n+b", binary: false, truncated: false };
+      return comparisonDiff(".", "b".repeat(40), "a".repeat(40), "one.txt");
     },
   }));
   controller.installSnapshot(snapshot());
@@ -267,6 +275,86 @@ test("expanding omitted Push Diff context requests the complete patch", async ()
   await controller.togglePushDiffUnchangedLines();
   assert.equal(controller.state.pushDiff?.expandedUnchanged, true);
   assert.deepEqual(requested, [false, true]);
+  controller.dispose();
+});
+
+test("aggregate Push Diff compares the reviewed destination and head for a remote-only path", async () => {
+  const calls = [];
+  const reviewed = {
+    ...preview("origin", "diverged-token"),
+    ordinaryAllowed: false,
+    files: [file("remote-only.txt")],
+    commits: [commit("local-only")],
+    totalCommits: 1,
+  };
+  const controller = new RemotePushController(createGateway({
+    previewResponses: [Promise.resolve(reviewed)],
+    async readPushFileCommit() {
+      throw new Error("aggregate range inspection must not require a containing outgoing commit");
+    },
+    async readCommitComparisonDiff(
+      root,
+      repositoryId,
+      beforeOid,
+      afterOid,
+      path,
+      originalPath,
+      expandedUnchanged,
+    ) {
+      calls.push({ root, repositoryId, beforeOid, afterOid, path, originalPath, expandedUnchanged });
+      return comparisonDiff(repositoryId, beforeOid, afterOid, path);
+    },
+  }));
+  controller.installSnapshot(snapshot({ branch: { ahead: 1, behind: 1 } }));
+  controller.openDialog("push");
+  await settle();
+
+  controller.selectPushFile("remote-only.txt");
+  await controller.openSelectedPushFileDiff();
+
+  assert.deepEqual(calls, [{
+    root: "/repo",
+    repositoryId: ".",
+    beforeOid: reviewed.comparisonBaseOid,
+    afterOid: reviewed.headOid,
+    path: "remote-only.txt",
+    originalPath: null,
+    expandedUnchanged: false,
+  }]);
+  assert.equal(controller.state.pushDiff?.comparison, true);
+  assert.equal(controller.state.pushDiff?.parentOid, reviewed.comparisonBaseOid);
+  assert.equal(controller.state.pushDiff?.oid, reviewed.headOid);
+  assert.equal(controller.state.pushDiff?.error, null);
+  assert.equal(controller.state.pushDiff?.patch?.path, "remote-only.txt");
+  controller.dispose();
+});
+
+test("a selected outgoing commit still opens that commit Diff", async () => {
+  let commitDiffReads = 0;
+  let comparisonDiffReads = 0;
+  const controller = new RemotePushController(createGateway({
+    previewResponses: [Promise.resolve(preview("origin", "token"))],
+    async readCommitDiff(_root, repositoryId, oid, path) {
+      commitDiffReads += 1;
+      return { repositoryId, oid, path, patch: "@@ -1 +1 @@\n-a\n+b", binary: false, truncated: false };
+    },
+    async readCommitComparisonDiff() {
+      comparisonDiffReads += 1;
+      throw new Error("selected commit must not open an aggregate comparison");
+    },
+  }));
+  controller.installSnapshot(snapshot());
+  controller.openDialog("push");
+  await settle();
+
+  await controller.selectPushCommit("one");
+  controller.selectPushFile("one.txt");
+  await controller.openSelectedPushFileDiff();
+
+  assert.equal(commitDiffReads, 1);
+  assert.equal(comparisonDiffReads, 0);
+  assert.equal(controller.state.pushDiff?.comparison, false);
+  assert.equal(controller.state.pushDiff?.oid, "one");
   controller.dispose();
 });
 
@@ -406,7 +494,13 @@ function createGateway(overrides = {}) {
     async readCommitDiff(_root, repositoryId, oid, path) {
       return { repositoryId, oid, path, patch: `diff --git a/${path} b/${path}`, binary: false, truncated: false };
     },
+    async readCommitComparisonDiff(_root, repositoryId, beforeOid, afterOid, path) {
+      return comparisonDiff(repositoryId, beforeOid, afterOid, path);
+    },
     async readCommitImageDiff(_root, _repositoryId, _oid, path) {
+      return { path, before: null, after: null };
+    },
+    async readCommitComparisonImageDiff(_root, _repositoryId, _beforeOid, _afterOid, path) {
       return { path, before: null, after: null };
     },
     fetchRemote() {
@@ -496,6 +590,18 @@ function commit(oid) {
 
 function details(oid, path) {
   return { repositoryId: ".", oid, parentOid: null, files: [file(path)] };
+}
+
+function comparisonDiff(repositoryId, beforeOid, afterOid, path) {
+  return {
+    repositoryId,
+    beforeOid,
+    afterOid,
+    path,
+    patch: `diff --git a/${path} b/${path}`,
+    binary: false,
+    truncated: false,
+  };
 }
 
 function file(path) {

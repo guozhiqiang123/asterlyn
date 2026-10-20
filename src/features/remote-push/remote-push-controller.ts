@@ -1,8 +1,6 @@
 import type {
   CommitDetails,
-  CommitDiffResult,
   CommitFileChange,
-  ImageDiffPreview,
   PushMode,
   PushTagMode,
   RepositorySnapshot,
@@ -10,7 +8,6 @@ import type {
 import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
 import { filesForPushReview, isPushPreviewActionable } from "./push-review.ts";
 import { isValidGitBranchName } from "./git-branch-name.ts";
-import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
@@ -42,6 +39,11 @@ import {
   storePushTagsEnabled,
 } from "./push-preferences.ts";
 import { branchPushRemote, clearRemotePushSelectionState, effectivePushDestination, resetRemotePushDialogState } from "./remote-push-dialog-state.ts";
+import {
+  commitPushDiffState,
+  initialPushDiffState,
+  readPushDiffContent,
+} from "./remote-push-diff.ts";
 
 export type {
   PushDiffState,
@@ -444,19 +446,18 @@ export class RemotePushController {
     const sequence = ++this.diffSequence;
     const generation = this.repositoryGeneration;
     this.state.pushFileActionLoading = true;
-    this.state.pushDiff = {
-      repositoryId: null,
-      oid: null,
-      parentOid: null,
-      file: selectedFile,
-      patch: null,
-      image: null,
-      loading: true,
-      error: null,
-      expandedUnchanged: false,
-    };
+    const initialDiff = initialPushDiffState(
+      preview,
+      this.state.pushSelectedCommit,
+      selectedFile,
+    );
+    this.state.pushDiff = initialDiff;
     this.emit({ reason: "diff-start", dialogChanged: true, diffChanged: true });
     try {
+      if (initialDiff.comparison) {
+        await this.loadPushDiffContent(sequence, generation, snapshot.root);
+        return;
+      }
       const selectedDetails = this.state.pushSelectedCommit
         ? this.state.pushCommitDetails
         : null;
@@ -475,17 +476,7 @@ export class RemotePushController {
       if (!details) throw new Error(this.messages.noOutgoingCommitForFile(path));
       const file = details.files.find((candidate) => candidate.path === path);
       if (!file) throw new Error(this.messages.selectedOutgoingFileMissing);
-      this.state.pushDiff = {
-        repositoryId: details.repositoryId,
-        oid: details.oid,
-        parentOid: details.parentOid,
-        file,
-        patch: null,
-        image: null,
-        loading: true,
-        error: null,
-        expandedUnchanged: false,
-      };
+      this.state.pushDiff = commitPushDiffState(details, file);
       await this.loadPushDiffContent(sequence, generation, snapshot.root);
     } catch (error) {
       if (!this.diffRequestMatches(sequence, generation, snapshot.root, path)) return;
@@ -726,17 +717,12 @@ export class RemotePushController {
     repositoryRoot: string,
   ): Promise<void> {
     const current = this.state.pushDiff;
-    if (!current?.repositoryId || !current.oid) return;
-    const { repositoryId, oid, file, expandedUnchanged } = current;
-    const image = isImagePreviewPath(file.path);
-    const result = image
-      ? await this.gateway.readCommitImageDiff(repositoryRoot, repositoryId, oid, file.path, file.originalPath)
-      : await this.gateway.readCommitDiff(repositoryRoot, repositoryId, oid, file.path, file.originalPath, expandedUnchanged);
-    if (!this.diffRequestMatches(sequence, generation, repositoryRoot, file.path)) return;
+    if (!current) return;
+    const content = await readPushDiffContent(this.gateway, repositoryRoot, current);
+    if (!this.diffRequestMatches(sequence, generation, repositoryRoot, current.file.path)) return;
     this.state.pushDiff = {
       ...current,
-      patch: image ? null : result as CommitDiffResult,
-      image: image ? result as ImageDiffPreview : null,
+      ...content,
       loading: false,
       error: null,
     };

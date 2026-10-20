@@ -1,4 +1,5 @@
 import type { Localization } from "../localization/localization.ts";
+import { topLevelMutationChanges } from "../git-worktree-policy.ts";
 import type { BranchMutationKind, BranchSummary, RepositorySnapshot } from "../models.ts";
 import { remotePolicy } from "../remote-policy.ts";
 import type { WindowSession } from "./window-session.ts";
@@ -59,7 +60,8 @@ export async function prepareBranchMutation(
   if (!snapshot) return { kind: "stale" };
   if (
     requiresCleanCheck &&
-    (snapshot.changes.length > 0 || snapshot.untrackedState !== "complete")
+    (topLevelMutationChanges(snapshot.changes).length > 0 ||
+      snapshot.untrackedState !== "complete")
   ) return { kind: "blocked", snapshot };
   const currentBranch = snapshot.branches.find((candidate) =>
     candidate.repositoryId === branch.repositoryId && candidate.fullName === branch.fullName
@@ -73,7 +75,7 @@ export function branchSafety(
   snapshot: RepositorySnapshot,
   localization: Localization,
 ): { ready: boolean; message: string; blockers: string[] } {
-  const blockers = snapshot.changes.map((change) => change.path);
+  const blockers = topLevelMutationChanges(snapshot.changes).map((change) => change.path);
   if (blockers.length > 0) return {
     ready: false,
     message: localization.catalog.history.changedPathsBlock(blockers.length),

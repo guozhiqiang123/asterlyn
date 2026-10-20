@@ -82,18 +82,71 @@ export function comparisonDiffBlameSources(
   file: CommitFileChange,
   copy: EditorCopy,
 ): DiffGitBlameSources {
-  if (!repositoryAvailable(snapshot, document.repositoryRoot, document.repositoryId)) {
-    return unavailableDiffBlame(copy.gitBlameRequiresGit, copy.gitBlameRequiresSplit);
-  }
-  return changedFileBlameSources(
+  return commitComparisonBlameSources(
+    snapshot,
     document.repositoryRoot,
     document.repositoryId,
     document.beforeOid,
     document.afterOid,
+    file,
+    copy,
+  );
+}
+
+export function commitComparisonBlameSources(
+  snapshot: RepositorySnapshot | null,
+  repositoryRoot: string | null,
+  repositoryId: string | null,
+  beforeOid: string | null,
+  afterOid: string | null,
+  file: CommitFileChange,
+  copy: EditorCopy,
+): DiffGitBlameSources {
+  if (!repositoryRoot || !repositoryId || !beforeOid || !afterOid ||
+    !repositoryAvailable(snapshot, repositoryRoot, repositoryId)) {
+    return unavailableDiffBlame(copy.gitBlameRequiresGit, copy.gitBlameRequiresSplit);
+  }
+  return changedFileBlameSources(
+    repositoryRoot,
+    repositoryId,
+    beforeOid,
+    afterOid,
     false,
     file,
     copy,
   );
+}
+
+export function reviewedDiffBlameSources(
+  snapshot: RepositorySnapshot | null,
+  repositoryRoot: string | null,
+  review: {
+    readonly repositoryId: string | null;
+    readonly oid: string | null;
+    readonly parentOid: string | null;
+    readonly comparison: boolean;
+    readonly file: CommitFileChange;
+  },
+  copy: EditorCopy,
+): DiffGitBlameSources {
+  return review.comparison
+    ? commitComparisonBlameSources(
+        snapshot,
+        repositoryRoot,
+        review.repositoryId,
+        review.parentOid,
+        review.oid,
+        review.file,
+        copy,
+      )
+    : commitDiffBlameSources(
+        snapshot,
+        repositoryRoot,
+        review.repositoryId,
+        review.oid,
+        review.file,
+        copy,
+      );
 }
 
 export function unavailableDiffBlame(

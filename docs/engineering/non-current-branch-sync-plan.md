@@ -66,6 +66,15 @@ time; its full name, object, upstream/destination, selected remote, tag scope, a
 are part of the opaque preview token. Execution uses the reviewed object-to-destination refspec and
 ordinary Push by default. Stale source movement or upstream changes invalidate the review.
 
+The aggregate file tree describes the exact destination-base-to-reviewed-head result, not merely
+the union of paths touched by commits reachable only from the local source. This distinction is
+observable when the refs diverge: a remote-only edit will be removed by a force-with-lease push and
+must remain visible in review even though no outgoing local commit contains that path. Opening an
+aggregate file therefore uses a two-commit comparison between the reviewed destination base and
+head. Selecting a specific outgoing commit continues to use that commit's parent comparison. This
+keeps file inspection aligned with the file tree and prevents divergent reviews from reporting a
+false “no outgoing commit contains this file” error.
+
 ## Delivery slices
 
 1. Extend reference parsing and protocol models; add parser and repository tests for every local

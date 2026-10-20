@@ -7,6 +7,7 @@ import {
   requiresRemoteConfiguration,
 } from "../src/remote-policy.ts";
 import {
+  branchSafety,
   prepareBranchMutation,
   recoverPendingBranchMutation,
   recoverPendingRemoteAction,
@@ -97,6 +98,45 @@ test("enables clean Update for both known incoming commits and a fresh upstream 
     "origin",
   );
   assert.equal(dirty.pull.enabled, false);
+});
+
+test("top-level mutations ignore only unstaged submodule worktree state", async () => {
+  const selected = {
+    repositoryId: ".", kind: "local", fullName: "refs/heads/topic", name: "topic",
+    current: false, upstream: null, tracking: null, oid: "b".repeat(40),
+    subject: "topic", committedAt: 1,
+  };
+  const submoduleWorktree = {
+    path: "vaLib", originalPath: null,
+    indexStatus: "unmodified", worktreeStatus: "modified",
+    conflicted: false, submodule: true,
+  };
+  const repository = snapshot({
+    branch: { ahead: 0, behind: 1 },
+    branches: [selected],
+    changes: [submoduleWorktree],
+  });
+  const session = {
+    generation: 23,
+    repository: { state: { snapshot: repository } },
+    async ensureUntrackedScan() {},
+    matches() { return true; },
+  };
+
+  assert.equal(branchSafety(repository, DEFAULT_LOCALIZATION).ready, true);
+  assert.equal(remotePolicy(repository, "origin").pull.enabled, true);
+  assert.deepEqual(await prepareBranchMutation(session, "switch", selected), {
+    kind: "ready", root: "/repo", branch: selected,
+  });
+
+  repository.changes = [{ ...submoduleWorktree, indexStatus: "modified", worktreeStatus: "unmodified" }];
+  assert.deepEqual(branchSafety(repository, DEFAULT_LOCALIZATION), {
+    ready: false,
+    message: "1 changed path blocks branch mutation. Commit, stash, or remove the changes first.",
+    blockers: ["vaLib"],
+  });
+  assert.equal(remotePolicy(repository, "origin").pull.enabled, false);
+  assert.equal((await prepareBranchMutation(session, "switch", selected)).kind, "blocked");
 });
 
 test("reviews divergence and blocks mirror push while allowing new-branch publish", () => {

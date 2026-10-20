@@ -162,25 +162,27 @@ export function workingDiffBackingContentMatchesPatch(
   base: WorkingDiffBase,
   tab: Pick<TextTabState, "persistedContent">,
 ): boolean {
-  if (patch.binary || patch.patch.length === 0) return true;
+  if (patch.binary || patch.patch.length === 0 || patch.headOid !== base.headOid) return false;
+  const beforeText = decodeExactText(base.content).text;
+  const afterText = decodeExactText(tab.persistedContent).text;
+  // A non-empty Git patch cannot describe two identical text sources. This explicit invariant
+  // closes the pure-addition race where every added row exists after HEAD advances, so line-only
+  // validation would otherwise mount an all-unchanged editable Diff.
+  if (beforeText === afterText) return false;
   const rows = splitUnifiedDiff(patch.patch).rows;
   const changed = rows.filter((row) =>
     row.kind === "added" || row.kind === "removed" || row.kind === "modified"
   );
-  // A bounded notice or an unfamiliar patch has no line evidence to validate. Keep the existing
-  // behavior in that case instead of turning a parser limitation into a false mismatch.
-  if (changed.length === 0) return true;
-  const beforeLines = normalizedLines(base.content);
-  const afterLines = normalizedLines(tab.persistedContent);
+  // An unfamiliar or metadata-only patch cannot prove that the editable sources describe the
+  // same Git read. Fail closed to the authoritative read-only patch instead.
+  if (changed.length === 0) return false;
+  const beforeLines = beforeText.split("\n");
+  const afterLines = afterText.split("\n");
   return rows.every((row) => {
     if (row.kind === "omitted" || row.kind === "notice") return true;
     return sideMatches(beforeLines, row.old.lineNumber, row.old.text) &&
       sideMatches(afterLines, row.new.lineNumber, row.new.text);
   });
-}
-
-function normalizedLines(content: string): readonly string[] {
-  return decodeExactText(content).text.split("\n");
 }
 
 function sideMatches(

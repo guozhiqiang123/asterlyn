@@ -655,6 +655,7 @@ function diffResultsEqual(a: DiffResult | null, b: DiffResult | null): boolean {
   if (!a || !b) return false;
   return a.path === b.path &&
     a.staged === b.staged &&
+    a.headOid === b.headOid &&
     a.patch === b.patch &&
     a.binary === b.binary &&
     a.truncated === b.truncated;

@@ -1,4 +1,5 @@
 import type { RemoteSummary, RepositorySnapshot } from "./models";
+import { topLevelMutationChanges } from "./git-worktree-policy.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "./localization/localization.ts";
 
 export interface RemoteActionState {
@@ -96,7 +97,7 @@ function pullState(
   if (snapshot.untrackedState === "failed") {
     return blocked(label, copy.refreshAfterScanFailure);
   }
-  if (snapshot.changes.length > 0) {
+  if (topLevelMutationChanges(snapshot.changes).length > 0) {
     return blocked(label, copy.clearLocalChanges);
   }
   if (branch.behind > 0) {

@@ -311,6 +311,7 @@ export function demoDiff(path: string, staged: boolean): DiffResult {
   return {
     path,
     staged,
+    headOid: demoSnapshot.branch.oid,
     patch:
       patches[path] ??
       `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old content\n+updated content\n`,

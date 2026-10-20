@@ -142,6 +142,8 @@ impl<'a> GitRunner<'a> {
             GitProcessProfile::Standard => {}
             GitProcessProfile::Operation => {
                 command
+                    .arg("-c")
+                    .arg("submodule.recurse=false")
                     .env("GIT_EDITOR", "true")
                     .env("GIT_SEQUENCE_EDITOR", "true");
             }
@@ -454,6 +456,13 @@ impl<'a> GitRunner<'a> {
             stderr_truncated,
         })
     }
+}
+
+pub(crate) fn run_mutation_output(
+    repository_root: &Path,
+    arguments: Vec<OsString>,
+) -> std::io::Result<Output> {
+    GitRunner::operation(repository_root).output(arguments)
 }
 
 fn harden_remote_command(command: &mut Command, credential_helper: Option<&OsStr>) {
@@ -789,8 +798,17 @@ mod tests {
     }
 
     #[test]
-    fn operation_runner_disables_editor_prompts() {
+    fn operation_runner_disables_editor_prompts_and_submodule_recursion() {
         let command = GitRunner::operation(Path::new("repo")).command();
+        let arguments = command
+            .get_args()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(
+            arguments
+                .windows(2)
+                .any(|pair| pair == ["-c", "submodule.recurse=false"])
+        );
         assert_eq!(
             environment_value(&command, "GIT_EDITOR"),
             Some(Some("true"))

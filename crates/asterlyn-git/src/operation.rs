@@ -600,13 +600,15 @@ impl GitRepository {
             ],
             None,
         )?;
-        if output.stdout.is_empty() {
+        let (_, changes) = crate::parser::parse_status(&output.stdout)?;
+        let blockers = crate::model::top_level_mutation_blockers(changes);
+        if blockers.is_empty() {
             return Ok(());
         }
         Err(GitError::UnsafeOperation {
             operation: format!("prepare {}", kind.label()),
             message: "commit, stash, or remove working-tree changes before continuing".to_string(),
-            blockers: Vec::new(),
+            blockers,
         })
     }
 

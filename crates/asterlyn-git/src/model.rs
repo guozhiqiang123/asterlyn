@@ -373,6 +373,13 @@ pub struct SelectedCommitResult {
 }
 
 impl FileChange {
+    pub fn is_submodule_worktree_only_change(&self) -> bool {
+        self.submodule
+            && !self.conflicted
+            && self.index_status == ChangeKind::Unmodified
+            && self.worktree_status == ChangeKind::Modified
+    }
+
     pub fn has_staged_change(&self) -> bool {
         !matches!(
             self.index_status,
@@ -386,6 +393,14 @@ impl FileChange {
             ChangeKind::Unmodified | ChangeKind::Ignored
         )
     }
+}
+
+pub(crate) fn top_level_mutation_blockers(changes: Vec<FileChange>) -> Vec<String> {
+    changes
+        .into_iter()
+        .filter(|change| !change.is_submodule_worktree_only_change())
+        .map(|change| change.path)
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -845,6 +860,7 @@ pub struct BranchMutationPlan {
 pub struct DiffResult {
     pub path: String,
     pub staged: bool,
+    pub head_oid: Option<String>,
     pub patch: String,
     pub binary: bool,
     pub truncated: bool,

@@ -266,6 +266,7 @@ import {
   comparisonDiffBlameSources,
   editorDiffSideLabels,
   historicalDiffSideLabels,
+  reviewedDiffBlameSources,
   unavailableBlame,
   unavailableDiffBlame,
 } from "./features/files-editor/diff-context.ts";
@@ -3564,12 +3565,10 @@ export class AsterlynApp {
       this.settingsState.preferences,
       this.diffPresentation(),
       pushDiffSideLabels(this.remoteState, this.localization.catalog.editor),
-      commitDiffBlameSources(
+      reviewedDiffBlameSources(
         this.windowSession.repository.state.snapshot,
         this.windowSession.workspace.state.root,
-        state.repositoryId,
-        state.oid,
-        state.file,
+        state,
         this.localization.catalog.editor,
       ),
       () => {

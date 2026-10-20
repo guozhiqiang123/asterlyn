@@ -856,7 +856,8 @@ export interface GitRootDescriptor {
 }
 
 export interface DiffResult {
-  path: string; staged: boolean; patch: string; binary: boolean; truncated: boolean;
+  path: string; staged: boolean; headOid: string | null;
+  patch: string; binary: boolean; truncated: boolean;
 }
 
 export interface WorkingDiffBase {

@@ -62,3 +62,16 @@ Keep the user-facing surface concise. Timeout errors identify that loading excee
 - Changing the focus-recovery policy or disabling background fetch.
 - Serializing all repository reads behind remote operations.
 - Changing Diff presentation, navigation, or editable-file semantics.
+
+## Follow-up identity correction — 2026-10-19
+
+The initial patch-first fix bounded loading but did not bind the patch and editable baseline to the
+same Git `HEAD`. A commit racing those two reads could therefore return an old pure-addition patch
+and a new baseline that already contained every added line. The line-evidence guard accepted that
+combination and CodeMirror correctly rendered two identical documents as entirely unchanged.
+
+Every local `DiffResult` now carries the exact `HEAD` used to produce its patch. The editable Diff
+requires that identity to match the baseline, requires distinct normalized before/after text for a
+non-empty patch, and fails closed to the authoritative read-only patch when the parser cannot prove
+changed-line correspondence. Regression coverage uses the plugin-contract table's pure-addition
+shape and verifies that a cross-commit baseline cannot mount an all-unchanged editable Diff.
