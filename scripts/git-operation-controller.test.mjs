@@ -15,11 +15,12 @@ import {
 
 test("restart reconstruction installs one typed operation and exposes only allowed actions", () => {
   const controller = new GitOperationController(gateway());
-  const operation = activeOperation();
+  const operation = activeOperation("modules/library");
 
   controller.installSnapshot(snapshot("/repo", operation));
 
   assert.equal(controller.state.operation, operation);
+  assert.equal(controller.state.repositoryId, "modules/library");
   const banner = renderGitOperationBanner(controller.state.operation);
   assert.match(banner, /Merge/);
   assert.match(banner, /data-git-operation-action="abort"/);
@@ -35,8 +36,9 @@ test("review binds exact ordered targets and execute closes only after success",
       calls.push(args);
       return plan;
     },
-    async executeGitOperation(root, reviewed) {
+    async executeGitOperation(root, repositoryId, reviewed) {
       assert.equal(root, "/repo");
+      assert.equal(repositoryId, ".");
       assert.equal(reviewed, plan);
       return outcome(snapshot("/repo", null));
     },
@@ -45,7 +47,7 @@ test("review binds exact ordered targets and execute closes only after success",
   controller.openSetup("cherryPick", ["one", "two"]);
 
   assert.equal(await controller.prepare(), true);
-  assert.deepEqual(calls[0], ["/repo", "cherryPick", ["one", "two"], null]);
+  assert.deepEqual(calls[0], ["/repo", ".", "cherryPick", ["one", "two"], null]);
   assert.equal(controller.state.dialog, "review");
   assert.match(renderGitOperationDialog(controller.state), /Exact targets/);
 
@@ -77,11 +79,12 @@ test("a repository replacement rejects a late reviewed plan", async () => {
 test("conflict resolution sends the opened revision token and edited result", async () => {
   const calls = [];
   const changes = [];
-  const operation = activeOperation();
+  const operation = activeOperation("modules/library");
   const controller = new GitOperationController(gateway({
-    async readConflictContent(root, path) {
-      assert.deepEqual([root, path], ["/repo", "shared.txt"]);
+    async readConflictContent(root, repositoryId, path) {
+      assert.deepEqual([root, repositoryId, path], ["/repo", "modules/library", "shared.txt"]);
       return {
+        repositoryId,
         path,
         base: "base\n",
         ours: "ours\n",
@@ -104,7 +107,7 @@ test("conflict resolution sends the opened revision token and edited result", as
   const result = await controller.resolveConflict(false);
 
   assert.equal(result.status, "success");
-  assert.deepEqual(calls[0], ["/repo", "shared.txt", "revision-1", "resolved\n"]);
+  assert.deepEqual(calls[0], ["/repo", "modules/library", "shared.txt", "revision-1", "resolved\n"]);
   assert.equal(controller.state.dialog, null);
   assert.ok(changes.some((change) => change.reason === "request-start" && change.conflictChanged));
   assert.ok(changes.some((change) => change.reason === "request-complete" && change.conflictChanged));
@@ -114,9 +117,10 @@ test("conflict resolution sends the opened revision token and edited result", as
 test("worktree conflicts can be opened and resolved without an active Git operation", async () => {
   const calls = [];
   const controller = new GitOperationController(gateway({
-    async readConflictContent(root, path) {
-      assert.deepEqual([root, path], ["/repo", "stash-conflict.txt"]);
+    async readConflictContent(root, repositoryId, path) {
+      assert.deepEqual([root, repositoryId, path], ["/repo", ".", "stash-conflict.txt"]);
       return {
+        repositoryId,
         path, base: "base\n", ours: "ours\n", theirs: "stashed\n",
         worktree: "markers\n", binary: false, revisionToken: "stash-revision",
       };
@@ -136,7 +140,7 @@ test("worktree conflicts can be opened and resolved without an active Git operat
 
   assert.equal(result.status, "success");
   assert.deepEqual(calls[0], [
-    "/repo", "stash-conflict.txt", "stash-revision", "merged stash content\n",
+    "/repo", ".", "stash-conflict.txt", "stash-revision", "merged stash content\n",
   ]);
   controller.dispose();
 });
@@ -160,8 +164,9 @@ function gateway(overrides = {}) {
   };
 }
 
-function activeOperation() {
+function activeOperation(repositoryId = ".") {
   return {
+    repositoryId,
     kind: "merge",
     phase: "conflicted",
     originalHeadOid: "a".repeat(40),
@@ -208,6 +213,7 @@ function operationOutcome(operation) {
 
 function conflictedChange(path) {
   return {
+    repositoryId: ".",
     path, originalPath: null, indexStatus: "unmerged", worktreeStatus: "unmerged",
     conflicted: true, submodule: false,
   };
@@ -261,7 +267,7 @@ test("Review validity follows targets, operation kind, message and loading", () 
 test("unsaved conflict results survive close attempts and external operation completion", async () => {
   const controller = new GitOperationController(gateway({
     async readConflictContent() {
-      return { path: "shared.txt", base: "base", ours: "ours", theirs: "theirs", worktree: "markers", binary: false, revisionToken: "opened" };
+      return { repositoryId: ".", path: "shared.txt", base: "base", ours: "ours", theirs: "theirs", worktree: "markers", binary: false, revisionToken: "opened" };
     },
   }));
   controller.installSnapshot(snapshot("/repo", activeOperation()));

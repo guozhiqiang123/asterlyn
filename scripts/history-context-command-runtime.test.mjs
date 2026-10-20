@@ -91,7 +91,7 @@ test("History context commands resolve current range, file, and focused folder t
       commit: {
         ...feedback, current: () => true, select: () => true,
         policyOptions: () => ({ busy: false, clean: true, cleanReason: "", localBranch: true, headOid: second.oid, historyCommits: [first, second] }),
-        openGitOperation: (kind, oid) => events.push(["commit-operation", kind, oid]),
+        openGitOperation: (kind, target) => events.push(["commit-operation", kind, target.repositoryId, target.oid]),
         openBranchFromCommit() {}, tagRemotes: () => [], openTagMutation() {}, openReset() {}, openHeadCommitMutation() {},
       },
       range: {
@@ -145,7 +145,7 @@ test("History context commands resolve current range, file, and focused folder t
   await runtime.executeCommand("branch-merge");
   assert.deepEqual(events, [
     ["compare", 2], ["copy", second.oid], ["copy", `${first.oid}\n${second.oid}`],
-    ["commit-operation", "cherryPick", second.oid],
+    ["commit-operation", "cherryPick", ".", second.oid],
     ["range-operation", "cherryPick", first.oid, second.oid],
     ["historical", "src/app.ts"], ["file-history", "src/app.ts"],
     ["folder-reveal", "src"], ["folder-history", "src"], ["load-more"],

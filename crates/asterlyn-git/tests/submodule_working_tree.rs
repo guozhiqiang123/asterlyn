@@ -2,7 +2,9 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use asterlyn_git::{GitError, GitRepository, PushTagMode, RepositoryPushTarget};
+use asterlyn_git::{
+    GitError, GitRepository, PushTagMode, RepositoryPushTarget, TagMutationKind, TagMutationRequest,
+};
 
 #[test]
 fn child_changes_are_qualified_routed_and_committed_one_root_at_a_time() {
@@ -125,6 +127,42 @@ fn child_changes_are_qualified_routed_and_committed_one_root_at_a_time() {
             .iter()
             .any(|change| change.repository_id == "." && change.path == "shared.txt")
     );
+
+    let child_repository = repository
+        .discovered_repository("modules/library")
+        .expect("child mutation root is safely resolved");
+    let canonical_child = fs::canonicalize(&child).expect("child path resolves");
+    assert_eq!(child_repository.root(), canonical_child);
+    assert!(matches!(
+        repository.discovered_repository("../source"),
+        Err(GitError::InvalidInput { .. })
+    ));
+    let child_head = git_stdout(&child, &["rev-parse", "HEAD"]);
+    let revert = child_repository
+        .prepare_revert(&child_head)
+        .expect("child commit operation is prepared in the child repository");
+    assert_eq!(revert.repository_root, canonical_child.to_string_lossy());
+    child_repository
+        .execute_local_tag_mutation(&TagMutationRequest {
+            kind: TagMutationKind::Create,
+            tag_name: "child-context-action".to_string(),
+            commit_oid: child_head,
+            remote: None,
+        })
+        .expect("child tag mutation is routed to the child repository");
+    assert_eq!(
+        git_stdout(&child, &["rev-parse", "refs/tags/child-context-action"]),
+        git_stdout(&child, &["rev-parse", "HEAD"])
+    );
+    assert!(
+        !Command::new("git")
+            .args(["rev-parse", "--verify", "refs/tags/child-context-action"])
+            .current_dir(&main)
+            .output()
+            .expect("main ref check starts")
+            .status
+            .success()
+    );
 }
 
 fn change(
@@ -151,4 +189,17 @@ fn git(directory: &Path, arguments: &[&str]) {
         "git {arguments:?} failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn git_stdout(directory: &Path, arguments: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(arguments)
+        .current_dir(directory)
+        .output()
+        .expect("git starts");
+    assert!(output.status.success(), "git {arguments:?} failed");
+    String::from_utf8(output.stdout)
+        .expect("Git output is UTF-8")
+        .trim()
+        .to_string()
 }

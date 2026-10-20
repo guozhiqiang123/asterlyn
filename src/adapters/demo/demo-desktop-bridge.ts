@@ -1434,16 +1434,13 @@ const demoBridge: DesktopBridge = {
     });
   },
 
-  async prepareBranchMutation(
-    repositoryRoot: string,
-    request: BranchMutationRequest,
-  ): Promise<BranchMutationPlan> {
+  async prepareBranchMutation(repositoryRoot: string, repositoryId: string, request: BranchMutationRequest): Promise<BranchMutationPlan> {
     if (!isTauri) return demoPrepareBranchMutation(browserSnapshot, request);
-    return invoke<BranchMutationPlan>("prepare_branch_mutation", { repositoryRoot, request });
+    return invoke<BranchMutationPlan>("prepare_branch_mutation", { repositoryRoot, repositoryId, request });
   },
 
   async executeBranchMutation(
-    repositoryRoot: string, plan: BranchMutationPlan, operationId: string,
+    repositoryRoot: string, repositoryId: string, plan: BranchMutationPlan, operationId: string,
   ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(260);
@@ -1451,13 +1448,13 @@ const demoBridge: DesktopBridge = {
       return completeDemoMutation();
     }
     return invoke<RepositoryMutationOutcome>(
-      "execute_branch_mutation", { repositoryRoot, plan, operationId },
+      "execute_branch_mutation", { repositoryRoot, repositoryId, plan, operationId },
     );
   },
 
-  async executeTagMutation(repositoryRoot: string, request: TagMutationRequest, operationId: string): Promise<RepositoryMutationOutcome> {
+  async executeTagMutation(repositoryRoot: string, repositoryId: string, request: TagMutationRequest, operationId: string): Promise<RepositoryMutationOutcome> {
     if (!isTauri) { await demoDelay(180); browserSnapshot = demoExecuteTagMutation(browserSnapshot, request); if (request.kind === "checkout") return completeDemoMutation(); return { snapshot: demoTrackedSnapshot(browserSnapshot), invalidatedSlices: request.kind === "push" || request.kind === "deleteRemote" ? [] : ["refs", "history"] }; }
-    return invoke<RepositoryMutationOutcome>("execute_tag_mutation", { repositoryRoot, request, operationId });
+    return invoke<RepositoryMutationOutcome>("execute_tag_mutation", { repositoryRoot, repositoryId, request, operationId });
   },
 
   executeStashMutation: async (_root, request) => { await demoDelay(180); return demoExecuteStashMutation(browserSnapshot, request); },
@@ -1476,18 +1473,18 @@ const demoBridge: DesktopBridge = {
     return invoke<RepositoryMutationOutcome>("execute_remote_mutation", { repositoryRoot, plan });
   },
 
-  async prepareGitReset(repositoryRoot: string, targetOid: string): Promise<GitResetPlan> {
+  async prepareGitReset(repositoryRoot: string, repositoryId: string, targetOid: string): Promise<GitResetPlan> {
     if (!isTauri) return demoPrepareGitReset(browserSnapshot, targetOid);
-    return invoke<GitResetPlan>("prepare_git_reset", { repositoryRoot, targetOid });
+    return invoke<GitResetPlan>("prepare_git_reset", { repositoryRoot, repositoryId, targetOid });
   },
 
-  async executeGitReset(repositoryRoot: string, plan: GitResetPlan, mode: GitResetMode): Promise<RepositoryMutationOutcome> {
+  async executeGitReset(repositoryRoot: string, repositoryId: string, plan: GitResetPlan, mode: GitResetMode): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
       await demoDelay(220);
       browserSnapshot = demoExecuteGitReset(browserSnapshot, plan, mode);
       return completeDemoMutation();
     }
-    return invoke<RepositoryMutationOutcome>("execute_git_reset", { repositoryRoot, plan, mode });
+    return invoke<RepositoryMutationOutcome>("execute_git_reset", { repositoryRoot, repositoryId, plan, mode });
   },
 
   async fetchRemote(
@@ -1705,12 +1702,7 @@ const demoBridge: DesktopBridge = {
     return invoke<GitOperationSnapshot | null>("read_git_operation", { repositoryRoot });
   },
 
-  async prepareGitOperation(
-    repositoryRoot: string,
-    kind: GitOperationKind,
-    targetRefs: string[],
-    message: string | null,
-  ): Promise<GitOperationPlan> {
+  async prepareGitOperation(repositoryRoot: string, repositoryId: string, kind: GitOperationKind, targetRefs: string[], message: string | null): Promise<GitOperationPlan> {
     if (!isTauri) {
       await demoDelay(120);
       const head = browserSnapshot.branch.oid;
@@ -1737,6 +1729,7 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<GitOperationPlan>("prepare_git_operation", {
       repositoryRoot,
+      repositoryId,
       kind,
       targetRefs,
       message,
@@ -1745,6 +1738,7 @@ const demoBridge: DesktopBridge = {
 
   async executeGitOperation(
     repositoryRoot: string,
+    repositoryId: string,
     plan: GitOperationPlan,
   ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
@@ -1754,30 +1748,34 @@ const demoBridge: DesktopBridge = {
       }
       return completeDemoMutation();
     }
-    return invoke<RepositoryMutationOutcome>("execute_git_operation", { repositoryRoot, plan });
+    return invoke<RepositoryMutationOutcome>("execute_git_operation", { repositoryRoot, repositoryId, plan });
   },
 
   async runGitOperationAction(
     repositoryRoot: string,
+    repositoryId: string,
     action: GitOperationAction,
   ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) throw new Error(`No demo Git operation can ${action}.`);
     return invoke<RepositoryMutationOutcome>("run_git_operation_action", {
       repositoryRoot,
+      repositoryId,
       action,
     });
   },
 
   async readConflictContent(
     repositoryRoot: string,
+    repositoryId: string,
     path: string,
   ): Promise<GitConflictContent> {
     if (!isTauri) throw new Error("The browser demo has no conflicted index.");
-    return invoke<GitConflictContent>("read_conflict_content", { repositoryRoot, path });
+    return invoke<GitConflictContent>("read_conflict_content", { repositoryRoot, repositoryId, path });
   },
 
   async resolveConflict(
     repositoryRoot: string,
+    repositoryId: string,
     path: string,
     expectedRevisionToken: string,
     content: string | null,
@@ -1785,6 +1783,7 @@ const demoBridge: DesktopBridge = {
     if (!isTauri) throw new Error("The browser demo has no conflicted index.");
     return invoke<GitOperationMutationOutcome>("resolve_conflict", {
       repositoryRoot,
+      repositoryId,
       path,
       expectedRevisionToken,
       content,

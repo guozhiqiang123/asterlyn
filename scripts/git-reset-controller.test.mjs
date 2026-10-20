@@ -5,14 +5,14 @@ import { GitResetController } from "../src/features/git-history/git-reset-contro
 import { renderGitResetDialog } from "../src/features/git-history/git-reset-view.ts";
 import { EN_GIT_RESET_COPY } from "../src/localization/git-reviewed-copy.ts";
 
-const target = { repositoryRoot: "/repo", oid: "a".repeat(40), shortOid: "aaaaaaaa", subject: "older" };
+const target = { repositoryRoot: "/repo", repositoryId: "modules/library", oid: "a".repeat(40), shortOid: "aaaaaaaa", subject: "older" };
 const plan = { repositoryRoot: "/repo", startHeadRef: "refs/heads/main", startHeadOid: "b".repeat(40), targetOid: target.oid, previewToken: "lease" };
 
 test("reset review defaults to Mixed and executes the exact prepared plan", async () => {
   const calls = [];
   const controller = new GitResetController({
-    async prepare(root, oid, intent) { calls.push(["prepare", root, oid, intent]); return plan; },
-    async execute(value, mode, intent) { calls.push(["execute", value, mode, intent]); return true; },
+    async prepare(root, repositoryId, oid, intent) { calls.push(["prepare", root, repositoryId, oid, intent]); return plan; },
+    async execute(repositoryId, value, mode, intent) { calls.push(["execute", repositoryId, value, mode, intent]); return true; },
     errorMessage(error) { return String(error); },
   });
   controller.open(target);
@@ -21,14 +21,14 @@ test("reset review defaults to Mixed and executes the exact prepared plan", asyn
   controller.selectMode("hard");
   await controller.execute();
   assert.equal(controller.state.dialog, null);
-  assert.deepEqual(calls, [["prepare", "/repo", target.oid, "reset"], ["execute", plan, "hard", "reset"]]);
+  assert.deepEqual(calls, [["prepare", "/repo", "modules/library", target.oid, "reset"], ["execute", "modules/library", plan, "hard", "reset"]]);
 });
 
 test("latest commit actions lock their reset semantics and route the reviewed intent", async () => {
   const calls = [];
   const controller = new GitResetController({
-    async prepare(root, oid, intent) { calls.push(["prepare", root, oid, intent]); return plan; },
-    async execute(value, mode, intent) { calls.push(["execute", value, mode, intent]); return true; },
+    async prepare(root, repositoryId, oid, intent) { calls.push(["prepare", root, repositoryId, oid, intent]); return plan; },
+    async execute(repositoryId, value, mode, intent) { calls.push(["execute", repositoryId, value, mode, intent]); return true; },
     errorMessage: String,
   });
   controller.open(target, "undoCommit");
@@ -37,8 +37,8 @@ test("latest commit actions lock their reset semantics and route the reviewed in
   assert.equal(controller.state.dialog.mode, "mixed");
   await controller.execute();
   assert.deepEqual(calls, [
-    ["prepare", "/repo", target.oid, "undoCommit"],
-    ["execute", plan, "mixed", "undoCommit"],
+    ["prepare", "/repo", "modules/library", target.oid, "undoCommit"],
+    ["execute", "modules/library", plan, "mixed", "undoCommit"],
   ]);
 
   controller.open(target, "dropCommit");

@@ -5,10 +5,11 @@ export function isSubmoduleWorktreeOnlyChange(change: FileChange): boolean {
     change.indexStatus === "unmodified" && change.worktreeStatus === "modified";
 }
 
-export function topLevelMutationChanges(
+export function repositoryMutationChanges(
   changes: readonly FileChange[],
+  repositoryId = ".",
 ): FileChange[] {
   return changes.filter(
-    (change) => (change.repositoryId || ".") === "." && !isSubmoduleWorktreeOnlyChange(change),
+    (change) => (change.repositoryId || ".") === repositoryId && !isSubmoduleWorktreeOnlyChange(change),
   );
 }

@@ -8,6 +8,7 @@ import { EN_US_TAG_MUTATION_COPY } from "../src/localization/tag-mutation-copy.t
 
 const target = {
   repositoryRoot: "/repo",
+  repositoryId: "modules/library",
   commitOid: "a".repeat(40),
   commitSubject: "Release candidate",
 };
@@ -15,7 +16,7 @@ const target = {
 test("new tag requires a name and executes against the exact selected commit", async () => {
   const requests = [];
   const controller = new TagMutationController({
-    execute: async (request) => { requests.push(request); return true; },
+    execute: async (repositoryId, request) => { requests.push([repositoryId, request]); return true; },
     errorMessage: String,
   });
   controller.open(target, "create");
@@ -23,16 +24,16 @@ test("new tag requires a name and executes against the exact selected commit", a
   assert.equal(controller.state.error, "tag-name-required");
   controller.updateTagName("v1.0");
   await controller.submit();
-  assert.deepEqual(requests, [{
+  assert.deepEqual(requests, [["modules/library", {
     kind: "create", tagName: "v1.0", commitOid: target.commitOid, remote: null,
-  }]);
+  }]]);
   assert.equal(controller.state, null);
 });
 
 test("local and remote tag deletion remain explicit reviewed actions", async () => {
   const requests = [];
   const controller = new TagMutationController({
-    execute: async (request) => { requests.push(request); return true; },
+    execute: async (repositoryId, request) => { requests.push([repositoryId, request]); return true; },
     errorMessage: String,
   });
   controller.open(target, "deleteLocal", "v1.0");
@@ -46,15 +47,15 @@ test("local and remote tag deletion remain explicit reviewed actions", async () 
   assert.match(remote, /<code>origin<\/code>/);
   await controller.submit();
   assert.deepEqual(requests, [
-    { kind: "deleteLocal", tagName: "v1.0", commitOid: target.commitOid, remote: null },
-    { kind: "deleteRemote", tagName: "v1.0", commitOid: target.commitOid, remote: "origin" },
+    ["modules/library", { kind: "deleteLocal", tagName: "v1.0", commitOid: target.commitOid, remote: null }],
+    ["modules/library", { kind: "deleteRemote", tagName: "v1.0", commitOid: target.commitOid, remote: "origin" }],
   ]);
 });
 
 test("checkout and single-tag push show explicit non-destructive reviews", async () => {
   const requests = [];
   const controller = new TagMutationController({
-    execute: async (request) => { requests.push(request); return true; },
+    execute: async (repositoryId, request) => { requests.push([repositoryId, request]); return true; },
     errorMessage: String,
   });
   controller.open(target, "checkout", "v1.0");
@@ -69,8 +70,8 @@ test("checkout and single-tag push show explicit non-destructive reviews", async
   assert.match(push, /<code>origin<\/code>/);
   await controller.submit();
   assert.deepEqual(requests, [
-    { kind: "checkout", tagName: "v1.0", commitOid: target.commitOid, remote: null },
-    { kind: "push", tagName: "v1.0", commitOid: target.commitOid, remote: "origin" },
+    ["modules/library", { kind: "checkout", tagName: "v1.0", commitOid: target.commitOid, remote: null }],
+    ["modules/library", { kind: "push", tagName: "v1.0", commitOid: target.commitOid, remote: "origin" }],
   ]);
 });
 

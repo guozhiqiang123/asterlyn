@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use crate::error::GitError;
 use crate::model::{
-    BinaryDiffResult, DiffResult, FileChange, GitRootDescriptor, SelectedCommitResult,
-    WorkingDiffBaseVersion,
+    BinaryDiffResult, DiffResult, FileChange, GitOperationSnapshot, GitRootDescriptor,
+    SelectedCommitResult, WorkingDiffBaseVersion,
 };
 
 use super::{DiscoveredGitRoot, GitRepository};
@@ -128,6 +128,18 @@ pub(super) fn sort_changes(changes: &mut [FileChange]) {
             .cmp(&right.repository_id)
             .then_with(|| left.path.cmp(&right.path))
     });
+}
+
+pub(super) fn operation_snapshot_for_roots(
+    roots: &[DiscoveredGitRoot],
+) -> Result<Option<GitOperationSnapshot>, GitError> {
+    for root in roots {
+        if let Some(mut operation) = root.repository.operation_snapshot()? {
+            operation.repository_id = root.descriptor.id.clone();
+            return Ok(Some(operation));
+        }
+    }
+    Ok(None)
 }
 
 fn validate_change_owner(

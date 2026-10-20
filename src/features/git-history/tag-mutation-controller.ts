@@ -2,6 +2,7 @@ import type { TagMutationKind, TagMutationRequest } from "../../models.ts";
 
 export interface TagMutationTarget {
   readonly repositoryRoot: string;
+  readonly repositoryId: string;
   readonly commitOid: string;
   readonly commitSubject: string;
 }
@@ -16,7 +17,7 @@ export interface TagMutationDialog {
 }
 
 export interface TagMutationGateway {
-  execute(request: TagMutationRequest): Promise<boolean>;
+  execute(repositoryId: string, request: TagMutationRequest): Promise<boolean>;
   errorMessage(error: unknown): string;
 }
 
@@ -69,7 +70,7 @@ export class TagMutationController {
     dialog.error = null;
     this.emit();
     try {
-      const succeeded = await this.gateway.execute({
+      const succeeded = await this.gateway.execute(dialog.target.repositoryId, {
         kind: dialog.kind,
         tagName,
         commitOid: dialog.target.commitOid,

@@ -358,6 +358,7 @@ export interface GitOperationProgress {
 }
 
 export interface GitOperationSnapshot {
+  repositoryId: string;
   kind: GitOperationKind;
   phase: GitOperationPhase;
   originalHeadOid: string | null;
@@ -383,6 +384,7 @@ export interface GitOperationPlan {
 }
 
 export interface GitConflictContent {
+  repositoryId: string;
   path: string;
   base: string | null;
   ours: string | null;

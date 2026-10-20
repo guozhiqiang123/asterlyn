@@ -20,7 +20,6 @@ export interface HistoryCommitContextPolicyOptions {
 }
 
 export interface HistoryCommitContextPolicy {
-  readonly writable: boolean;
   readonly cherryPick: ContextMenuAvailability;
   readonly revert: ContextMenuAvailability;
   readonly create: ContextMenuAvailability;
@@ -33,7 +32,6 @@ export function historyCommitContextPolicy(
   target: HistoryCommitContextTarget,
   options: HistoryCommitContextPolicyOptions,
 ): HistoryCommitContextPolicy {
-  const writable = target.repositoryId === ".";
   const mutation = options.busy
     ? busy(options.reasons.busy)
     : !options.localBranch
@@ -46,21 +44,21 @@ export function historyCommitContextPolicy(
     ? mutation
     : blocked(options.reasons.mergeMainlineRequired);
   const currentBranchCommit = Boolean(
-    writable && options.localBranch && options.headOid && target.oid !== options.headOid &&
-    historyContains(options.historyCommits, options.headOid!, target.oid),
+    options.localBranch && options.headOid && target.oid !== options.headOid &&
+    historyContains(options.historyCommits, target.repositoryId, options.headOid!, target.oid),
   );
   const reset = !currentBranchCommit ? null : options.busy ? busy(options.reasons.busy) : enabled();
   const unpublishedHead = Boolean(
-    writable && options.headOid === target.oid && target.commit.outgoing === true &&
+    options.headOid === target.oid && target.commit.outgoing === true &&
     target.commit.parents.length === 1,
   );
   const headMutation = unpublishedHead ? mutation : null;
   const tag = options.busy ? busy(options.reasons.busy) : enabled();
-  return { writable, cherryPick: commitMutation, revert: commitMutation, create: mutation, tag, reset, headMutation };
+  return { cherryPick: commitMutation, revert: commitMutation, create: mutation, tag, reset, headMutation };
 }
 
-function historyContains(commits: readonly CommitSummary[], headOid: string, targetOid: string): boolean {
-  const byOid = new Map(commits.filter((commit) => commit.repositoryId === ".").map((commit) => [commit.oid, commit]));
+function historyContains(commits: readonly CommitSummary[], repositoryId: string, headOid: string, targetOid: string): boolean {
+  const byOid = new Map(commits.filter((commit) => commit.repositoryId === repositoryId).map((commit) => [commit.oid, commit]));
   const pending = [headOid];
   const visited = new Set<string>();
   while (pending.length) {

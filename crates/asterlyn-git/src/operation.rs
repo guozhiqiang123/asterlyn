@@ -51,6 +51,7 @@ impl GitRepository {
             progress.total.is_some_and(|total| total > 1),
         );
         Ok(Some(GitOperationSnapshot {
+            repository_id: ".".to_string(),
             kind,
             phase: if conflicts.is_empty() {
                 GitOperationPhase::Paused
@@ -252,6 +253,7 @@ impl GitRepository {
             .any(|bytes| std::str::from_utf8(bytes).is_err() || bytes.contains(&0));
         let revision_token = self.conflict_revision_token(conflict, worktree_bytes.as_deref())?;
         Ok(GitConflictContent {
+            repository_id: ".".to_string(),
             path: path.to_string(),
             base: text_side(base.as_deref(), binary),
             ours: text_side(ours.as_deref(), binary),

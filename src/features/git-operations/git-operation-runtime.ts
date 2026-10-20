@@ -64,8 +64,8 @@ export class GitOperationRuntime {
     });
   }
 
-  openSetup(kind: GitOperationKind, targets: string[], message = ""): void {
-    this.binding.openSetup(kind, targets, message);
+  openSetup(kind: GitOperationKind, targets: string[], message = "", repositoryId = "."): void {
+    this.binding.openSetup(kind, targets, message, repositoryId);
   }
 
   openConflict(path: string): Promise<boolean> {

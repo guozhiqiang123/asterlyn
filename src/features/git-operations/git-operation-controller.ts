@@ -16,6 +16,7 @@ export type GitOperationDialog = "setup" | "review" | null;
 
 export interface GitOperationState {
   repositoryRoot: string | null;
+  repositoryId: string;
   operation: GitOperationSnapshot | null;
   dialog: GitOperationDialog;
   kind: GitOperationKind;
@@ -31,21 +32,25 @@ export interface GitOperationState {
 export interface GitOperationGateway {
   prepareGitOperation(
     repositoryRoot: string,
+    repositoryId: string,
     kind: GitOperationKind,
     targetRefs: string[],
     message: string | null,
   ): Promise<GitOperationPlan>;
   executeGitOperation(
     repositoryRoot: string,
+    repositoryId: string,
     plan: GitOperationPlan,
   ): Promise<RepositoryMutationOutcome>;
   runGitOperationAction(
     repositoryRoot: string,
+    repositoryId: string,
     action: GitOperationAction,
   ): Promise<RepositoryMutationOutcome>;
-  readConflictContent(repositoryRoot: string, path: string): Promise<GitConflictContent>;
+  readConflictContent(repositoryRoot: string, repositoryId: string, path: string): Promise<GitConflictContent>;
   resolveConflict(
     repositoryRoot: string,
+    repositoryId: string,
     path: string,
     expectedRevisionToken: string,
     content: string | null,
@@ -79,6 +84,7 @@ type Listener = (change: GitOperationChange) => void;
 export class GitOperationController {
   readonly state: GitOperationState = {
     repositoryRoot: null,
+    repositoryId: ".",
     operation: null,
     dialog: null,
     kind: "merge",
@@ -124,8 +130,11 @@ export class GitOperationController {
     const keepConflictDraft = this.hasUnsavedConflict();
     this.state.repositoryRoot = snapshot?.root ?? null;
     this.state.operation = snapshot?.operation ?? null;
+    if (snapshot?.operation) this.state.repositoryId = snapshot.operation.repositoryId;
     this.conflictPaths = new Set([
-      ...(snapshot?.changes.filter((change) => change.conflicted).map((change) => change.path) ?? []),
+      ...(snapshot?.changes.filter((change) =>
+        change.repositoryId === this.state.repositoryId && change.conflicted
+      ).map((change) => change.path) ?? []),
       ...(snapshot?.operation?.conflicts.map((conflict) => conflict.path) ?? []),
     ]);
     if (rootChanged) {
@@ -157,9 +166,11 @@ export class GitOperationController {
     kind: GitOperationKind = "merge",
     targetRefs: string[] = [],
     message = "",
+    repositoryId = ".",
   ): void {
     if (!this.state.repositoryRoot || this.state.loading || this.hasUnsavedConflict()) return;
     this.state.kind = kind;
+    this.state.repositoryId = repositoryId;
     this.state.targetText = targetRefs.join("\n");
     this.state.message = message;
     this.state.plan = null;
@@ -205,6 +216,7 @@ export class GitOperationController {
     try {
       const plan = await this.gateway.prepareGitOperation(
         root,
+        this.state.repositoryId,
         this.state.kind,
         targets,
         this.state.kind === "squash" ? this.state.message : null,
@@ -229,7 +241,9 @@ export class GitOperationController {
     const plan = this.state.plan;
     if (!root || !plan) return { status: "stale" };
     if (this.state.loading) return { status: "busy" };
-    return this.runMutation("execute", root, () => this.gateway.executeGitOperation(root, plan));
+    return this.runMutation("execute", root, () =>
+      this.gateway.executeGitOperation(root, this.state.repositoryId, plan)
+    );
   }
 
   async runAction(action: GitOperationAction): Promise<GitOperationResult> {
@@ -238,7 +252,9 @@ export class GitOperationController {
       return { status: "stale" };
     }
     if (this.state.loading) return { status: "busy" };
-    return this.runMutation("action", root, () => this.gateway.runGitOperationAction(root, action));
+    return this.runMutation("action", root, () =>
+      this.gateway.runGitOperationAction(root, this.state.operation!.repositoryId, action)
+    );
   }
 
   async openConflict(path: string): Promise<boolean> {
@@ -256,7 +272,7 @@ export class GitOperationController {
     this.conflictInitialResult = "";
     this.emit({ reason: "request-start", dialogChanged, conflictChanged: true });
     try {
-      const conflict = await this.gateway.readConflictContent(root, path);
+      const conflict = await this.gateway.readConflictContent(root, this.state.repositoryId, path);
       if (!this.matches(generation, request, root)) return false;
       this.state.conflict = conflict;
       this.conflictInitialResult = initialConflictResult(conflict);
@@ -287,6 +303,7 @@ export class GitOperationController {
     return this.runMutation("resolve", root, () =>
       this.gateway.resolveConflict(
         root,
+        conflict.repositoryId,
         conflict.path,
         conflict.revisionToken,
         deleteFile ? null : this.state.conflictResult,
@@ -361,6 +378,7 @@ export class GitOperationController {
     this.conflictInitialResult = "";
     this.state.loading = null;
     this.state.error = null;
+    if (!this.state.operation) this.state.repositoryId = ".";
   }
 
   private emit(change: GitOperationChange): void {

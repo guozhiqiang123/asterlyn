@@ -40,9 +40,9 @@ export class GitOperationDialogBinding {
     this.copy = copy;
   }
 
-  openSetup(kind: GitOperationKind, targets: string[], message = ""): void {
+  openSetup(kind: GitOperationKind, targets: string[], message = "", repositoryId = "."): void {
     this.captureReturnFocus();
-    this.controller.openSetup(kind, targets, message);
+    this.controller.openSetup(kind, targets, message, repositoryId);
   }
 
   async close(): Promise<boolean> {

@@ -87,6 +87,7 @@ import type { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
 import { createRemoteRuntime } from "./features/remote-push/create-remote-runtime.ts";
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import { bindPushPreviewSplitter } from "./features/remote-push/push-preview-splitter.ts";
+import { repositoryBranch, repositoryRemotes } from "./features/remote-push/git-root-scope.ts";
 import { ApplicationDialogRuntime } from "./shared/application-dialog-runtime.ts";
 import { closeLastProjectWindowConfirmation, discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, switchConflictBlockedNotice, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
 import {
@@ -717,20 +718,20 @@ export class AsterlynApp {
     );
     this.gitHistoryMutationRuntime = new GitHistoryMutationRuntime({
       root,
-      branch: { gateway: { prepare: (repositoryRoot, request) => bridge.prepareBranchMutation(repositoryRoot, request),
-        execute: (plan) => this.executeReviewedBranchMutation(plan), errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
+      branch: { gateway: { prepare: (repositoryRoot, repositoryId, request) => bridge.prepareBranchMutation(repositoryRoot, repositoryId, request),
+        execute: (repositoryId, plan) => this.executeReviewedBranchMutation(repositoryId, plan), errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.branchMutation },
       worktree: { gateway: { chooseDirectory: (path) => bridge.chooseRepositoryDirectory(path), prepare: (...args) => bridge.prepareWorktreeCreation(...args), execute: (plan) => { const copy = this.localization.catalog.history.worktreeCreation; return this.runBranchMutation(copy.progress(plan.projectName), copy.completed(plan.destinationPath), (root) => bridge.executeWorktreeCreation(root, plan), null); }, errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors) }, copy: () => this.localization.catalog.history.worktreeCreation },
       tag: { gateway: {
-        execute: async (request) => { const copy = this.localization.catalog.history.tagMutation; const checkout = request.kind === "checkout";
+        execute: async (repositoryId, request) => { const copy = this.localization.catalog.history.tagMutation; const checkout = request.kind === "checkout";
           const succeeded = await this.runBranchMutation(copy.progress(request.kind, request.tagName, request.remote), copy.completed(request.kind, request.tagName, request.remote),
-            (root) => bridge.executeTagMutation(root, request, `tag-mutation-${++this.branchMutationSequence}`), checkout ? this.localization.catalog.common.actions.changeBranches : null, !checkout, tagMutationCompletionIsProminent(request.kind));
-          if (succeeded) this.historyReadRuntime.details.applyTagMutation(request); return succeeded; },
+            (root) => bridge.executeTagMutation(root, repositoryId, request, `tag-mutation-${++this.branchMutationSequence}`), checkout ? this.localization.catalog.common.actions.changeBranches : null, !checkout, tagMutationCompletionIsProminent(request.kind));
+          if (succeeded) this.historyReadRuntime.details.applyTagMutation(request, repositoryId); return succeeded; },
         errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.tagMutation },
       reset: { gateway: {
-        prepare: (root, oid, intent) => intent === "reset" ? bridge.prepareGitReset(root, oid) : bridge.prepareHeadCommitMutation(root, oid, intent),
-        execute: (plan, mode, intent) => intent === "reset" ? this.executeReviewedGitReset(plan, mode) : this.executeReviewedHeadCommitMutation(plan, intent),
+        prepare: (root, repositoryId, oid, intent) => intent === "reset" ? bridge.prepareGitReset(root, repositoryId, oid) : bridge.prepareHeadCommitMutation(root, repositoryId, oid, intent),
+        execute: (repositoryId, plan, mode, intent) => intent === "reset" ? this.executeReviewedGitReset(repositoryId, plan, mode) : this.executeReviewedHeadCommitMutation(repositoryId, plan, intent),
         errorMessage: (error) => localizedOperationError(error, this.localization.catalog.errors),
       }, copy: () => this.localization.catalog.history.reset },
       fileRestore: {
@@ -879,11 +880,11 @@ export class AsterlynApp {
         root, editor: this.filesEditorRuntime.editor, surface: this.editorSurface,
         snapshot: () => this.windowSession.repository.state.snapshot,
         activeDocument: () => this.activeDocument(),
-        activate: (document) => this.activateDiffPreview(document), selectConflict: (path) => { if (this.changesRuntime.controller.selectConflict(path)) this.markChangeSelection(path); },
+        activate: (document) => this.activateDiffPreview(document), selectConflict: (repositoryId, path) => { if (this.changesRuntime.controller.selectConflict(path, repositoryId)) this.markChangeSelection(path, repositoryId); },
         renderEditor: () => this.renderEditor(),
         preferences: () => this.settingsState.preferences, copy: () => this.localization.catalog.gitOperations,
         presentation: () => this.diffPresentation(), editorCopy: () => this.localization.catalog.editor,
-        status: (message) => this.setStatus(message, "warning"), setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }), conflictSourceAvailable: (path) => this.filesEditorRuntime.files.fileForWorkspacePath(path) !== null,
+        status: (message) => this.setStatus(message, "warning"), setDiffLayout: (diffLayout) => this.updatePreferences({ diffLayout }), setWhitespace: (showWhitespace) => this.updatePreferences({ showWhitespace }), conflictSourceAvailable: (repositoryId, path) => this.filesEditorRuntime.files.fileForRepositoryPath(repositoryId, path) !== null,
         revealConflictSource: () => this.locateCurrentProjectFile(), resolve: (deleteFile) => void this.resolveGitConflict(deleteFile), notifyBlockedSwitch: async () => { await this.dialogRuntime.confirm(switchConflictBlockedNotice(this.localization.catalog)); },
       },
       recovery: { actions: { activeRoot: () => this.windowSession.workspace.state.root,
@@ -984,7 +985,7 @@ export class AsterlynApp {
             this.branchRemoteRuntime.activate(kind, target, returnFocus as HTMLButtonElement),
           tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => (remote.repositoryId ?? ".") === "." && remote.pushSupported).map((remote) => remote.name) ?? [],
           selectedTagRemote: () => this.windowSession.repository.state.snapshot?.remotes.find((remote) => (remote.repositoryId ?? ".") === "." && remote.name === this.remoteState.selectedRemote && remote.pushSupported)?.name ?? null, tagRemoteUnavailable: () => this.localization.catalog.remote.policy.selectConfigured,
-          openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
+          openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, repositoryId: target.branch.repositoryId, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
         },
         commit: {
           ...contextFeedback,
@@ -995,12 +996,13 @@ export class AsterlynApp {
             this.markHistoryCommitContextTarget(target.key);
             return this.historyState.selectedCommit === target.key;
           },
-          policyOptions: () => {
+          policyOptions: (target) => {
             const snapshot = this.windowSession.repository.state.snapshot;
-            const safety = snapshot ? branchSafety(snapshot, this.localization) : {
+            const safety = snapshot ? branchSafety(snapshot, this.localization, target.repositoryId) : {
               ready: false,
               message: this.localization.catalog.history.commitContextMenu.cleanRequired,
             };
+            const branch = snapshot ? repositoryBranch(snapshot, target.repositoryId) : null;
             const unsaved = dirtyTextTabs(this.editorState.session).length > 0;
             return {
               busy: this.state.loading || Boolean(snapshot?.operation),
@@ -1009,28 +1011,28 @@ export class AsterlynApp {
                 ? this.localization.catalog.gitOperations.saveBeforeReview
                 : safety.message,
               localBranch: Boolean(
-                snapshot?.branch.head && !snapshot.branch.detached && !snapshot.branch.unborn
+                branch?.head && !branch.detached && !branch.unborn
               ),
-              headOid: snapshot?.branch.oid ?? null,
+              headOid: branch?.oid ?? null,
               historyCommits: this.historyState.history.commits,
             };
           },
-          openGitOperation: (kind, oid) => this.openGitOperation(kind, [oid]),
+          openGitOperation: (kind, target) => this.openGitOperation(kind, [target.oid], target.repositoryId),
           openBranchFromCommit: (target) => {
             this.gitHistoryMutationRuntime.branch.open(target.workspaceRoot, "create", {
               repositoryId: target.repositoryId, fullName: target.oid,
               name: target.commit.shortOid, oid: target.oid,
             });
           },
-          tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
+          tagRemotes: (target) => { const snapshot = this.windowSession.repository.state.snapshot; return snapshot ? repositoryRemotes(snapshot, target.repositoryId).filter((remote) => remote.pushSupported).map((remote) => remote.name) : []; },
           openTagMutation: (kind, target, tagName, remote) => {
             this.gitHistoryMutationRuntime.tag.open({
-              repositoryRoot: target.workspaceRoot, commitOid: target.oid, commitSubject: target.commit.subject,
+              repositoryRoot: target.workspaceRoot, repositoryId: target.repositoryId, commitOid: target.oid, commitSubject: target.commit.subject,
             }, kind, tagName, remote);
           },
-          openReset: (target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot,
+          openReset: (target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot, repositoryId: target.repositoryId,
             oid: target.oid, shortOid: target.commit.shortOid, subject: target.commit.subject }),
-          openHeadCommitMutation: (kind, target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot, oid: target.oid, shortOid: target.commit.shortOid, subject: target.commit.subject }, kind),
+          openHeadCommitMutation: (kind, target) => this.gitHistoryMutationRuntime.reset?.open({ repositoryRoot: target.workspaceRoot, repositoryId: target.repositoryId, oid: target.oid, shortOid: target.commit.shortOid, subject: target.commit.subject }, kind),
         },
         range: {
           ...contextFeedback,
@@ -7837,10 +7839,6 @@ export class AsterlynApp {
       ? findFileChange(snapshot.changes, repositoryId, path)
       : null;
     if (!snapshot || !conflict) return;
-    if (repositoryId !== ".") {
-      this.setStatus(this.localization.catalog.changes.contextMenu.operationsUnavailable, "warning");
-      return;
-    }
     void this.gitOperationRuntime.openConflict(path);
   }
 
@@ -8191,6 +8189,7 @@ export class AsterlynApp {
   private openGitOperation(
     kind: GitOperationKind = "merge",
     targets: string[] = [],
+    repositoryId = ".",
   ): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot) {
@@ -8209,7 +8208,7 @@ export class AsterlynApp {
       );
       return;
     }
-    this.gitOperationRuntime.openSetup(kind, targets);
+    this.gitOperationRuntime.openSetup(kind, targets, "", repositoryId);
   }
 
   private async prepareGitOperation(): Promise<void> {
@@ -8418,13 +8417,14 @@ export class AsterlynApp {
     }
   }
 
-  private async executeReviewedBranchMutation(plan: BranchMutationPlan): Promise<boolean> {
+  private async executeReviewedBranchMutation(repositoryId: string, plan: BranchMutationPlan): Promise<boolean> {
     const copy = this.localization.catalog.history.branchMutation;
     return this.runBranchMutation(
       copy.progress(plan.kind, plan.sourceName),
       copy.completed(plan.kind, plan.sourceName, plan.newName, plan.remoteDeletion?.remote ?? null),
       (root) => bridge.executeBranchMutation(
         root,
+        repositoryId,
         plan,
         `branch-mutation-${++this.branchMutationSequence}`,
       ),
@@ -8436,14 +8436,14 @@ export class AsterlynApp {
     return this.runBranchMutation(copy.working, copy.changed, (root) => bridge.executeRemoteMutation(root, plan));
   }
 
-  private async executeReviewedGitReset(plan: GitResetPlan, mode: GitResetMode): Promise<boolean> {
+  private async executeReviewedGitReset(repositoryId: string, plan: GitResetPlan, mode: GitResetMode): Promise<boolean> {
     const copy = this.localization.catalog.history.reset;
-    return this.runBranchMutation(copy.working, copy.reset, (root) => bridge.executeGitReset(root, plan, mode));
+    return this.runBranchMutation(copy.working, copy.reset, (root) => bridge.executeGitReset(root, repositoryId, plan, mode));
   }
 
-  private async executeReviewedHeadCommitMutation(plan: GitResetPlan, kind: HeadCommitMutationKind): Promise<boolean> {
+  private async executeReviewedHeadCommitMutation(repositoryId: string, plan: GitResetPlan, kind: HeadCommitMutationKind): Promise<boolean> {
     const copy = this.localization.catalog.history.reset.headCommit[kind];
-    return this.runBranchMutation(copy.working, copy.completed, (root) => bridge.executeHeadCommitMutation(root, plan, kind));
+    return this.runBranchMutation(copy.working, copy.completed, (root) => bridge.executeHeadCommitMutation(root, repositoryId, plan, kind));
   }
 
   private async fetchConfiguredRemote(root: string, remote: string): Promise<boolean> {

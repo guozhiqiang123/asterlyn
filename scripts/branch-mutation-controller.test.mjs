@@ -6,7 +6,7 @@ import { renderBranchMutationDialog } from "../src/features/git-history/branch-m
 import { EN_US } from "../src/localization/en-US.ts";
 
 const branch = {
-  repositoryId: ".", kind: "local", fullName: "refs/heads/topic", name: "topic",
+  repositoryId: "modules/library", kind: "local", fullName: "refs/heads/topic", name: "topic",
   current: false, upstream: null, tracking: null, oid: "b".repeat(40), subject: "topic", committedAt: 1,
 };
 
@@ -36,8 +36,8 @@ function plan(request) {
 test("named non-destructive mutations prepare and execute in one submission", async () => {
   const calls = [];
   const controller = new BranchMutationController({
-    async prepare(root, request) { calls.push(["prepare", root, { ...request }]); return plan(request); },
-    async execute(value) { calls.push(["execute", value.previewToken]); return true; },
+    async prepare(root, repositoryId, request) { calls.push(["prepare", root, repositoryId, { ...request }]); return plan(request); },
+    async execute(repositoryId, value) { calls.push(["execute", repositoryId, value.previewToken]); return true; },
     errorMessage: String,
   });
   let renders = 0;
@@ -48,18 +48,18 @@ test("named non-destructive mutations prepare and execute in one submission", as
   assert.equal(renders, rendersAfterOpen, "typing must not replace the focused input");
   await controller.submit();
   assert.equal(controller.state.dialog, null);
-  assert.deepEqual(calls[0], ["prepare", "/repo", {
+  assert.deepEqual(calls[0], ["prepare", "/repo", "modules/library", {
     kind: "create", sourceFullName: branch.fullName, sourceOid: branch.oid,
     newName: "feature/menu", deleteRemote: false,
     forceWorktreeRemoval: false, reviewedWorktreeToken: null,
   }]);
-  assert.deepEqual(calls[1], ["execute", "token"]);
+  assert.deepEqual(calls[1], ["execute", "modules/library", "token"]);
 });
 
 test("delete begins review immediately and a failed execution keeps the reviewed plan", async () => {
   let prepared = false;
   const controller = new BranchMutationController({
-    async prepare(_root, request) { prepared = true; return plan(request); },
+    async prepare(_root, _repositoryId, request) { prepared = true; return plan(request); },
     async execute() { return false; },
     errorMessage: String,
   });
@@ -75,7 +75,7 @@ test("delete begins review immediately and a failed execution keeps the reviewed
 test("switch prepares and executes directly without a confirmation state", async () => {
   const calls = [];
   const controller = new BranchMutationController({
-    async prepare(_root, request) { calls.push("prepare"); return plan(request); },
+    async prepare(_root, _repositoryId, request) { calls.push("prepare"); return plan(request); },
     async execute() { calls.push("execute"); return true; },
     errorMessage: String,
   });
@@ -87,7 +87,7 @@ test("switch prepares and executes directly without a confirmation state", async
 
 test("worktree removal reviews the exact path and retains explicit confirmation", async () => {
   const controller = new BranchMutationController({
-    async prepare(_root, request) { return plan(request); },
+    async prepare(_root, _repositoryId, request) { return plan(request); },
     async execute() { return true; },
     errorMessage: String,
   });
@@ -105,7 +105,7 @@ test("warning review prepares an exact forced plan before deleting the worktree"
   const requests = [];
   let executed = null;
   const controller = new BranchMutationController({
-    async prepare(_root, request) {
+    async prepare(_root, _repositoryId, request) {
       requests.push({ ...request });
       const value = plan(request);
       value.worktreeReview = {
@@ -116,7 +116,7 @@ test("warning review prepares an exact forced plan before deleting the worktree"
       };
       return value;
     },
-    async execute(value) { executed = value; return true; },
+    async execute(_repositoryId, value) { executed = value; return true; },
     errorMessage: String,
   });
   controller.open("/repo", "removeWorktree", { ...branch, linkedWorktreePath: "/worktrees/topic" });
@@ -138,7 +138,7 @@ test("warning review prepares an exact forced plan before deleting the worktree"
 test("remote deletion is opt-in and replaces the exact delete plan before execution", async () => {
   const requests = [];
   const controller = new BranchMutationController({
-    async prepare(_root, request) {
+    async prepare(_root, _repositoryId, request) {
       requests.push({ ...request });
       return plan(request);
     },

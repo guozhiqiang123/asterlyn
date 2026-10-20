@@ -342,7 +342,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
     }
     case "gitConflictContent": {
       const result = record(value, command);
-      strings(result, command, "path", "revisionToken");
+      strings(result, command, "repositoryId", "path", "revisionToken");
       nullableStrings(result, command, "base", "ours", "theirs", "worktree");
       for (const field of ["oursCommitOid", "theirsCommitOid"] as const) {
         assert(
@@ -717,7 +717,7 @@ function isRepositorySliceSnapshot(value: unknown): value is TransportRecord {
 }
 
 function isGitOperationSnapshot(value: unknown): value is TransportRecord {
-  if (!isRecord(value)) return false;
+  if (!isRecord(value) || typeof value.repositoryId !== "string") return false;
   if (!isGitOperationKind(value.kind)) return false;
   if (value.phase !== "conflicted" && value.phase !== "paused") return false;
   if (!isStringArray(value.targetOids) || !Array.isArray(value.conflicts)) return false;

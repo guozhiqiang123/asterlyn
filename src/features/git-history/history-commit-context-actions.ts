@@ -30,7 +30,7 @@ export interface HistoryCommitContextRuntime {
   current(target: HistoryCommitContextTarget): boolean;
   select(target: HistoryCommitContextTarget): boolean;
   policyOptions(target: HistoryCommitContextTarget): Omit<HistoryCommitContextPolicyOptions, "reasons">;
-  openGitOperation(kind: "cherryPick" | "revert", oid: string): void;
+  openGitOperation(kind: "cherryPick" | "revert", target: HistoryCommitContextTarget): void;
   openBranchFromCommit(target: HistoryCommitContextTarget): void;
   tagRemotes(target: HistoryCommitContextTarget): readonly string[];
   openTagMutation(
@@ -110,7 +110,6 @@ export class HistoryCommitContextActions {
     const policy = historyCommitContextPolicy(target, {
       ...this.runtime.policyOptions(target), reasons: labels,
     });
-    if (!policy.writable) return { kind: "blocked", reason: this.copy().rangeContextMenu.topLevelRequired };
     if (action === "cherry-pick") return policy.cherryPick;
     if (action === "revert") return policy.revert;
     if (action === "create-branch") return policy.create;
@@ -149,10 +148,10 @@ export class HistoryCommitContextActions {
   ): void {
     switch (actionId) {
       case `${OWNER_ID}.cherry-pick`:
-        this.runtime.openGitOperation("cherryPick", target.oid);
+        this.runtime.openGitOperation("cherryPick", target);
         return;
       case `${OWNER_ID}.revert`:
-        this.runtime.openGitOperation("revert", target.oid);
+        this.runtime.openGitOperation("revert", target);
         return;
       case `${OWNER_ID}.reset`:
         this.runtime.openReset(target);
@@ -200,22 +199,20 @@ export function historyCommitContextMenuModel(
   });
   const copyAction = commitCopyAction(OWNER_ID, labels.copyCommitId, target.oid);
   const items: ContextMenuItem[] = [copyCommandItem(copyAction)];
-  if (policy.writable) {
-    items.push(
-      { kind: "separator" },
-      command("cherry-pick", labels.cherryPick, policy.cherryPick),
-      command("revert", labels.revertCommit, policy.revert),
-      ...(policy.headMutation ? [
-        command("undo-commit", labels.undoCommit, policy.headMutation),
-        dangerCommand("drop-commit", labels.dropCommit, policy.headMutation),
-      ] : []),
-      ...(policy.reset ? [command("reset", labels.resetToHere, policy.reset)] : []),
-      { kind: "separator" },
-      command("create-branch", labels.newBranchFromCommit, policy.create),
-      command("new-tag", labels.newTag, policy.tag),
-      ...tagSubmenus(target, policy, copy, remotes),
-    );
-  }
+  items.push(
+    { kind: "separator" },
+    command("cherry-pick", labels.cherryPick, policy.cherryPick),
+    command("revert", labels.revertCommit, policy.revert),
+    ...(policy.headMutation ? [
+      command("undo-commit", labels.undoCommit, policy.headMutation),
+      dangerCommand("drop-commit", labels.dropCommit, policy.headMutation),
+    ] : []),
+    ...(policy.reset ? [command("reset", labels.resetToHere, policy.reset)] : []),
+    { kind: "separator" },
+    command("create-branch", labels.newBranchFromCommit, policy.create),
+    command("new-tag", labels.newTag, policy.tag),
+    ...tagSubmenus(target, policy, copy, remotes),
+  );
   return { ariaLabel: labels.ariaLabel(target.commit.subject), items };
 }
 

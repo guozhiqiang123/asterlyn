@@ -104,6 +104,8 @@ pub struct GitOperationProgress {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitOperationSnapshot {
+    #[serde(default = "primary_repository_id")]
+    pub repository_id: String,
     pub kind: GitOperationKind,
     pub phase: GitOperationPhase,
     pub original_head_oid: Option<String>,
@@ -186,6 +188,8 @@ pub struct GitResetPlan {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitConflictContent {
+    #[serde(default = "primary_repository_id")]
+    pub repository_id: String,
     pub path: String,
     pub base: Option<String>,
     pub ours: Option<String>,

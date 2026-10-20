@@ -128,18 +128,18 @@ export interface DesktopCommandMap {
   revert_changes: { args: { repositoryRoot: string; plan: Model.RestoreChangesPlan; }; result: Model.WorkingTreeMutationOutcome };
   switch_branch: { args: { repositoryRoot: string; targetFullName: string; }; result: Model.RepositoryMutationOutcome };
   create_branch: { args: { repositoryRoot: string; name: string; }; result: Model.RepositoryMutationOutcome };
-  prepare_branch_mutation: { args: { repositoryRoot: string; request: Model.BranchMutationRequest; }; result: Model.BranchMutationPlan };
-  execute_branch_mutation: { args: { repositoryRoot: string; plan: Model.BranchMutationPlan; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  prepare_branch_mutation: { args: { repositoryRoot: string; repositoryId: string; request: Model.BranchMutationRequest; }; result: Model.BranchMutationPlan };
+  execute_branch_mutation: { args: { repositoryRoot: string; repositoryId: string; plan: Model.BranchMutationPlan; operationId: string; }; result: Model.RepositoryMutationOutcome };
   prepare_worktree_creation: { args: { repositoryRoot: string; request: Model.WorktreeCreationRequest; }; result: Model.WorktreeCreationPlan };
   execute_worktree_creation: { args: { repositoryRoot: string; plan: Model.WorktreeCreationPlan; }; result: Model.RepositoryMutationOutcome };
-  execute_tag_mutation: { args: { repositoryRoot: string; request: Model.TagMutationRequest; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  execute_tag_mutation: { args: { repositoryRoot: string; repositoryId: string; request: Model.TagMutationRequest; operationId: string; }; result: Model.RepositoryMutationOutcome };
   execute_stash_mutation: { args: { repositoryRoot: string; request: Model.StashMutationRequest; }; result: Model.RepositoryMutationOutcome };
   prepare_remote_mutation: { args: { repositoryRoot: string; request: Model.RemoteMutationRequest; }; result: Model.RemoteMutationPlan };
   execute_remote_mutation: { args: { repositoryRoot: string; plan: Model.RemoteMutationPlan; }; result: Model.RepositoryMutationOutcome };
-  prepare_git_reset: { args: { repositoryRoot: string; targetOid: string; }; result: Model.GitResetPlan };
-  execute_git_reset: { args: { repositoryRoot: string; plan: Model.GitResetPlan; mode: Model.GitResetMode; }; result: Model.RepositoryMutationOutcome };
-  prepare_head_commit_mutation: { args: { repositoryRoot: string; selectedHeadOid: string; kind: Model.HeadCommitMutationKind; }; result: Model.GitResetPlan };
-  execute_head_commit_mutation: { args: { repositoryRoot: string; plan: Model.GitResetPlan; kind: Model.HeadCommitMutationKind; }; result: Model.RepositoryMutationOutcome };
+  prepare_git_reset: { args: { repositoryRoot: string; repositoryId: string; targetOid: string; }; result: Model.GitResetPlan };
+  execute_git_reset: { args: { repositoryRoot: string; repositoryId: string; plan: Model.GitResetPlan; mode: Model.GitResetMode; }; result: Model.RepositoryMutationOutcome };
+  prepare_head_commit_mutation: { args: { repositoryRoot: string; repositoryId: string; selectedHeadOid: string; kind: Model.HeadCommitMutationKind; }; result: Model.GitResetPlan };
+  execute_head_commit_mutation: { args: { repositoryRoot: string; repositoryId: string; plan: Model.GitResetPlan; kind: Model.HeadCommitMutationKind; }; result: Model.RepositoryMutationOutcome };
   read_remote_authentication: { args: { repositoryRoot: string; repositoryId: string; remote: string; }; result: Model.RemoteAuthenticationStatus };
   store_remote_https_credential: { args: { repositoryRoot: string; repositoryId: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
   configure_remote_ssh: { args: { repositoryRoot: string; repositoryId: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };
@@ -151,11 +151,11 @@ export interface DesktopCommandMap {
   push_current: { args: { repositoryRoot: string; repositoryId: string; remote: string; mode: Model.PushMode; tagMode: Model.PushTagMode; previewToken: string; operationId: string; destinationBranch: string | null; sourceBranch: string | null; }; result: Model.RepositoryMutationOutcome };
   cancel_remote_operation: { args: { repositoryRoot: string; operationId: string; }; result: void };
   read_git_operation: { args: { repositoryRoot: string; }; result: Model.GitOperationSnapshot | null };
-  prepare_git_operation: { args: { repositoryRoot: string; kind: Model.GitOperationKind; targetRefs: Array<string>; message: string | null; }; result: Model.GitOperationPlan };
-  execute_git_operation: { args: { repositoryRoot: string; plan: Model.GitOperationPlan; }; result: Model.RepositoryMutationOutcome };
-  run_git_operation_action: { args: { repositoryRoot: string; action: Model.GitOperationAction; }; result: Model.RepositoryMutationOutcome };
-  read_conflict_content: { args: { repositoryRoot: string; path: string; }; result: Model.GitConflictContent };
-  resolve_conflict: { args: { repositoryRoot: string; path: string; expectedRevisionToken: string; content: string | null; }; result: Model.GitOperationMutationOutcome };
+  prepare_git_operation: { args: { repositoryRoot: string; repositoryId: string; kind: Model.GitOperationKind; targetRefs: Array<string>; message: string | null; }; result: Model.GitOperationPlan };
+  execute_git_operation: { args: { repositoryRoot: string; repositoryId: string; plan: Model.GitOperationPlan; }; result: Model.RepositoryMutationOutcome };
+  run_git_operation_action: { args: { repositoryRoot: string; repositoryId: string; action: Model.GitOperationAction; }; result: Model.RepositoryMutationOutcome };
+  read_conflict_content: { args: { repositoryRoot: string; repositoryId: string; path: string; }; result: Model.GitConflictContent };
+  resolve_conflict: { args: { repositoryRoot: string; repositoryId: string; path: string; expectedRevisionToken: string; content: string | null; }; result: Model.GitOperationMutationOutcome };
 }
 
 export type DesktopCommandName = keyof DesktopCommandMap;

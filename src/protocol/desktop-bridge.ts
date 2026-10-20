@@ -387,10 +387,12 @@ export interface GitOperationBridge {
   createBranch(repositoryRoot: string, name: string): Promise<RepositoryMutationOutcome>;
   prepareBranchMutation(
     repositoryRoot: string,
+    repositoryId: string,
     request: BranchMutationRequest,
   ): Promise<BranchMutationPlan>;
   executeBranchMutation(
     repositoryRoot: string,
+    repositoryId: string,
     plan: BranchMutationPlan,
     operationId: string,
   ): Promise<RepositoryMutationOutcome>;
@@ -404,6 +406,7 @@ export interface GitOperationBridge {
   ): Promise<RepositoryMutationOutcome>;
   executeTagMutation(
     repositoryRoot: string,
+    repositoryId: string,
     request: TagMutationRequest,
     operationId: string,
   ): Promise<RepositoryMutationOutcome>;
@@ -419,19 +422,22 @@ export interface GitOperationBridge {
     repositoryRoot: string,
     plan: RemoteMutationPlan,
   ): Promise<RepositoryMutationOutcome>;
-  prepareGitReset(repositoryRoot: string, targetOid: string): Promise<GitResetPlan>;
+  prepareGitReset(repositoryRoot: string, repositoryId: string, targetOid: string): Promise<GitResetPlan>;
   executeGitReset(
     repositoryRoot: string,
+    repositoryId: string,
     plan: GitResetPlan,
     mode: GitResetMode,
   ): Promise<RepositoryMutationOutcome>;
   prepareHeadCommitMutation(
     repositoryRoot: string,
+    repositoryId: string,
     selectedHeadOid: string,
     kind: HeadCommitMutationKind,
   ): Promise<GitResetPlan>;
   executeHeadCommitMutation(
     repositoryRoot: string,
+    repositoryId: string,
     plan: GitResetPlan,
     kind: HeadCommitMutationKind,
   ): Promise<RepositoryMutationOutcome>;
@@ -480,21 +486,25 @@ export interface GitOperationBridge {
   readGitOperation(repositoryRoot: string): Promise<GitOperationSnapshot | null>;
   prepareGitOperation(
     repositoryRoot: string,
+    repositoryId: string,
     kind: GitOperationKind,
     targetRefs: string[],
     message: string | null,
   ): Promise<GitOperationPlan>;
   executeGitOperation(
     repositoryRoot: string,
+    repositoryId: string,
     plan: GitOperationPlan,
   ): Promise<RepositoryMutationOutcome>;
   runGitOperationAction(
     repositoryRoot: string,
+    repositoryId: string,
     action: GitOperationAction,
   ): Promise<RepositoryMutationOutcome>;
-  readConflictContent(repositoryRoot: string, path: string): Promise<GitConflictContent>;
+  readConflictContent(repositoryRoot: string, repositoryId: string, path: string): Promise<GitConflictContent>;
   resolveConflict(
     repositoryRoot: string,
+    repositoryId: string,
     path: string,
     expectedRevisionToken: string,
     content: string | null,

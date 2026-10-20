@@ -14,9 +14,9 @@ export function demoHeadCommitMutationBridge(
   delay: (milliseconds?: number) => Promise<void>,
 ): HeadCommitMutationBridge {
   return {
-    prepareHeadCommitMutation: async (_root, selectedHeadOid, kind) =>
+    prepareHeadCommitMutation: async (_root, _repositoryId, selectedHeadOid, kind) =>
       demoPrepareHeadCommitMutation(snapshot(), selectedHeadOid, kind),
-    executeHeadCommitMutation: async (_root, plan, kind) => {
+    executeHeadCommitMutation: async (_root, _repositoryId, plan, kind) => {
       await delay(220);
       replace(demoExecuteHeadCommitMutation(snapshot(), plan, kind));
       return complete();

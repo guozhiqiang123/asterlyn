@@ -4,6 +4,7 @@ export type GitResetIntent = "reset" | HeadCommitMutationKind;
 
 export interface GitResetTarget {
   readonly repositoryRoot: string;
+  readonly repositoryId: string;
   readonly oid: string;
   readonly shortOid: string;
   readonly subject: string;
@@ -19,8 +20,8 @@ export interface GitResetDialog {
 }
 
 export interface GitResetGateway {
-  prepare(repositoryRoot: string, targetOid: string, intent: GitResetIntent): Promise<GitResetPlan>;
-  execute(plan: GitResetPlan, mode: GitResetMode, intent: GitResetIntent): Promise<boolean>;
+  prepare(repositoryRoot: string, repositoryId: string, targetOid: string, intent: GitResetIntent): Promise<GitResetPlan>;
+  execute(repositoryId: string, plan: GitResetPlan, mode: GitResetMode, intent: GitResetIntent): Promise<boolean>;
   errorMessage(error: unknown): string;
 }
 
@@ -40,7 +41,7 @@ export class GitResetController {
     const mode = intent === "dropCommit" ? "hard" : "mixed";
     const dialog: GitResetDialog = { target: { ...target }, intent, plan: null, mode, busy: true, error: null };
     this.dialog = dialog; this.emit();
-    void this.gateway.prepare(target.repositoryRoot, target.oid, intent).then((plan) => {
+    void this.gateway.prepare(target.repositoryRoot, target.repositoryId, target.oid, intent).then((plan) => {
       if (this.dialog === dialog) { dialog.plan = plan; dialog.busy = false; this.emit(); }
     }).catch((error) => {
       if (this.dialog === dialog) { dialog.error = this.gateway.errorMessage(error); dialog.busy = false; this.emit(); }
@@ -57,7 +58,7 @@ export class GitResetController {
     if (!dialog?.plan || dialog.busy) return;
     dialog.busy = true; dialog.error = null; this.emit();
     try {
-      if (await this.gateway.execute(dialog.plan, dialog.mode, dialog.intent)) this.dialog = null;
+      if (await this.gateway.execute(dialog.target.repositoryId, dialog.plan, dialog.mode, dialog.intent)) this.dialog = null;
       else dialog.error = "reset-failed";
     } catch (error) {
       if (this.dialog === dialog) dialog.error = this.gateway.errorMessage(error);

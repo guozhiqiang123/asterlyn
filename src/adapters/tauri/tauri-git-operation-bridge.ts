@@ -58,11 +58,12 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     }),
   createBranch: (repositoryRoot, name) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("create_branch", { repositoryRoot, name }),
-  prepareBranchMutation: (repositoryRoot, request) =>
-    invokeDesktopCommand<BranchMutationPlan>("prepare_branch_mutation", { repositoryRoot, request }),
-  executeBranchMutation: (repositoryRoot, plan, operationId) =>
+  prepareBranchMutation: (repositoryRoot, repositoryId, request) =>
+    invokeDesktopCommand<BranchMutationPlan>("prepare_branch_mutation", { repositoryRoot, repositoryId, request }),
+  executeBranchMutation: (repositoryRoot, repositoryId, plan, operationId) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("execute_branch_mutation", {
       repositoryRoot,
+      repositoryId,
       plan,
       operationId,
     }),
@@ -76,9 +77,10 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       plan,
     }),
-  executeTagMutation: (repositoryRoot, request: TagMutationRequest, operationId) =>
+  executeTagMutation: (repositoryRoot, repositoryId, request: TagMutationRequest, operationId) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("execute_tag_mutation", {
       repositoryRoot,
+      repositoryId,
       request,
       operationId,
     }),
@@ -94,23 +96,26 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       repositoryRoot,
       plan,
     }),
-  prepareGitReset: (repositoryRoot, targetOid) =>
-    invokeDesktopCommand<GitResetPlan>("prepare_git_reset", { repositoryRoot, targetOid }),
-  executeGitReset: (repositoryRoot, plan, mode) =>
+  prepareGitReset: (repositoryRoot, repositoryId, targetOid) =>
+    invokeDesktopCommand<GitResetPlan>("prepare_git_reset", { repositoryRoot, repositoryId, targetOid }),
+  executeGitReset: (repositoryRoot, repositoryId, plan, mode) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("execute_git_reset", {
       repositoryRoot,
+      repositoryId,
       plan,
       mode,
     }),
-  prepareHeadCommitMutation: (repositoryRoot, selectedHeadOid, kind: HeadCommitMutationKind) =>
+  prepareHeadCommitMutation: (repositoryRoot, repositoryId, selectedHeadOid, kind: HeadCommitMutationKind) =>
     invokeDesktopCommand<GitResetPlan>("prepare_head_commit_mutation", {
       repositoryRoot,
+      repositoryId,
       selectedHeadOid,
       kind,
     }),
-  executeHeadCommitMutation: (repositoryRoot, plan, kind: HeadCommitMutationKind) =>
+  executeHeadCommitMutation: (repositoryRoot, repositoryId, plan, kind: HeadCommitMutationKind) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("execute_head_commit_mutation", {
       repositoryRoot,
+      repositoryId,
       plan,
       kind,
     }),
@@ -179,28 +184,32 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     invokeDesktopCommand<void>("cancel_remote_operation", { repositoryRoot, operationId }),
   readGitOperation: (repositoryRoot) =>
     invokeDesktopCommand<GitOperationSnapshot | null>("read_git_operation", { repositoryRoot }),
-  prepareGitOperation: (repositoryRoot, kind, targetRefs, message) =>
+  prepareGitOperation: (repositoryRoot, repositoryId, kind, targetRefs, message) =>
     invokeDesktopCommand<GitOperationPlan>("prepare_git_operation", {
       repositoryRoot,
+      repositoryId,
       kind,
       targetRefs,
       message,
     }),
-  executeGitOperation: (repositoryRoot, plan) =>
+  executeGitOperation: (repositoryRoot, repositoryId, plan) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("execute_git_operation", {
       repositoryRoot,
+      repositoryId,
       plan,
     }),
-  runGitOperationAction: (repositoryRoot, action) =>
+  runGitOperationAction: (repositoryRoot, repositoryId, action) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("run_git_operation_action", {
       repositoryRoot,
+      repositoryId,
       action,
     }),
-  readConflictContent: (repositoryRoot, path) =>
-    invokeDesktopCommand<GitConflictContent>("read_conflict_content", { repositoryRoot, path }),
-  resolveConflict: (repositoryRoot, path, expectedRevisionToken, content) =>
+  readConflictContent: (repositoryRoot, repositoryId, path) =>
+    invokeDesktopCommand<GitConflictContent>("read_conflict_content", { repositoryRoot, repositoryId, path }),
+  resolveConflict: (repositoryRoot, repositoryId, path, expectedRevisionToken, content) =>
     invokeDesktopCommand<GitOperationMutationOutcome>("resolve_conflict", {
       repositoryRoot,
+      repositoryId,
       path,
       expectedRevisionToken,
       content,

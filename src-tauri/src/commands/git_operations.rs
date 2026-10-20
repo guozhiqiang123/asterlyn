@@ -242,6 +242,7 @@ pub(crate) async fn create_branch(
 #[tauri::command]
 pub(crate) async fn prepare_branch_mutation(
     repository_root: String,
+    repository_id: String,
     request: BranchMutationRequest,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -255,7 +256,11 @@ pub(crate) async fn prepare_branch_mutation(
         .run_local(
             repository_root,
             "prepare branch mutation",
-            move |repository| repository.prepare_branch_mutation(&request),
+            move |repository| {
+                repository
+                    .discovered_repository(&repository_id)?
+                    .prepare_branch_mutation(&request)
+            },
         )
         .await
 }
@@ -263,6 +268,7 @@ pub(crate) async fn prepare_branch_mutation(
 #[tauri::command]
 pub(crate) async fn execute_branch_mutation(
     repository_root: String,
+    repository_id: String,
     plan: BranchMutationPlan,
     operation_id: String,
     git_operations: State<'_, GitOperationCoordinator>,
@@ -281,7 +287,9 @@ pub(crate) async fn execute_branch_mutation(
                 "delete local and remote branches",
                 COMMIT_LIMIT,
                 move |repository, cancellation| {
-                    repository.execute_branch_mutation_with_remote(&plan, cancellation)
+                    repository
+                        .discovered_repository(&repository_id)?
+                        .execute_branch_mutation_with_remote(&plan, cancellation)
                 },
             )
             .await
@@ -292,7 +300,9 @@ pub(crate) async fn execute_branch_mutation(
                 repository_root,
                 "execute branch mutation",
                 move |repository| {
-                    repository.execute_branch_mutation(&plan)?;
+                    repository
+                        .discovered_repository(&repository_id)?
+                        .execute_branch_mutation(&plan)?;
                     repository
                         .tracked_snapshot(COMMIT_LIMIT)
                         .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
@@ -352,6 +362,7 @@ pub(crate) async fn execute_worktree_creation(
 #[tauri::command]
 pub(crate) async fn execute_tag_mutation(
     repository_root: String,
+    repository_id: String,
     request: TagMutationRequest,
     operation_id: String,
     git_operations: State<'_, GitOperationCoordinator>,
@@ -378,7 +389,9 @@ pub(crate) async fn execute_tag_mutation(
                 operation,
                 COMMIT_LIMIT,
                 move |repository, cancellation| {
-                    repository.execute_remote_tag_mutation(&request, cancellation)
+                    repository
+                        .discovered_repository(&repository_id)?
+                        .execute_remote_tag_mutation(&request, cancellation)
                 },
             )
             .await
@@ -386,7 +399,9 @@ pub(crate) async fn execute_tag_mutation(
     } else {
         git_operations
             .run_local(repository_root, "mutate local tag", move |repository| {
-                repository.execute_local_tag_mutation(&request)?;
+                repository
+                    .discovered_repository(&repository_id)?
+                    .execute_local_tag_mutation(&request)?;
                 repository.tracked_snapshot(COMMIT_LIMIT).map(|snapshot| {
                     let invalidated = if request.kind == TagMutationKind::Checkout {
                         complete_repository_slices()
@@ -481,6 +496,7 @@ pub(crate) async fn execute_remote_mutation(
 #[tauri::command]
 pub(crate) async fn prepare_git_reset(
     repository_root: String,
+    repository_id: String,
     target_oid: String,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -492,7 +508,9 @@ pub(crate) async fn prepare_git_reset(
         .into_owned();
     git_operations
         .run_local(repository_root, "prepare Git reset", move |repository| {
-            repository.prepare_git_reset(&target_oid)
+            repository
+                .discovered_repository(&repository_id)?
+                .prepare_git_reset(&target_oid)
         })
         .await
 }
@@ -500,6 +518,7 @@ pub(crate) async fn prepare_git_reset(
 #[tauri::command]
 pub(crate) async fn execute_git_reset(
     repository_root: String,
+    repository_id: String,
     plan: GitResetPlan,
     mode: GitResetMode,
     git_operations: State<'_, GitOperationCoordinator>,
@@ -512,7 +531,9 @@ pub(crate) async fn execute_git_reset(
         .into_owned();
     git_operations
         .run_local(repository_root, "execute Git reset", move |repository| {
-            repository.execute_git_reset(&plan, mode)?;
+            repository
+                .discovered_repository(&repository_id)?
+                .execute_git_reset(&plan, mode)?;
             repository
                 .tracked_snapshot(COMMIT_LIMIT)
                 .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
@@ -523,6 +544,7 @@ pub(crate) async fn execute_git_reset(
 #[tauri::command]
 pub(crate) async fn prepare_head_commit_mutation(
     repository_root: String,
+    repository_id: String,
     selected_head_oid: String,
     kind: HeadCommitMutationKind,
     git_operations: State<'_, GitOperationCoordinator>,
@@ -537,7 +559,11 @@ pub(crate) async fn prepare_head_commit_mutation(
         .run_local(
             repository_root,
             "prepare latest commit action",
-            move |repository| repository.prepare_head_commit_mutation(&selected_head_oid, kind),
+            move |repository| {
+                repository
+                    .discovered_repository(&repository_id)?
+                    .prepare_head_commit_mutation(&selected_head_oid, kind)
+            },
         )
         .await
 }
@@ -545,6 +571,7 @@ pub(crate) async fn prepare_head_commit_mutation(
 #[tauri::command]
 pub(crate) async fn execute_head_commit_mutation(
     repository_root: String,
+    repository_id: String,
     plan: GitResetPlan,
     kind: HeadCommitMutationKind,
     git_operations: State<'_, GitOperationCoordinator>,
@@ -560,7 +587,9 @@ pub(crate) async fn execute_head_commit_mutation(
             repository_root,
             "execute latest commit action",
             move |repository| {
-                repository.execute_head_commit_mutation(&plan, kind)?;
+                repository
+                    .discovered_repository(&repository_id)?
+                    .execute_head_commit_mutation(&plan, kind)?;
                 repository
                     .tracked_snapshot(COMMIT_LIMIT)
                     .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
@@ -870,14 +899,16 @@ pub(crate) async fn read_git_operation(
 ) -> Result<Option<GitOperationSnapshot>, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read Git operation", move || {
-        GitRepository::open(root)?.operation_snapshot()
+        GitRepository::open(root)?.discovered_operation_snapshot()
     })
     .await
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn prepare_git_operation(
     repository_root: String,
+    repository_id: String,
     kind: GitOperationKind,
     target_refs: Vec<String>,
     message: Option<String>,
@@ -893,19 +924,26 @@ pub(crate) async fn prepare_git_operation(
         .run_local(
             repository_root,
             "prepare Git operation",
-            move |repository| match kind {
-                GitOperationKind::Merge => repository.prepare_merge(single_target(&target_refs)?),
-                GitOperationKind::CherryPick => repository.prepare_cherry_pick(&target_refs),
-                GitOperationKind::Rebase => repository.prepare_rebase(single_target(&target_refs)?),
-                GitOperationKind::Squash => repository.prepare_squash(
-                    single_target(&target_refs)?,
-                    message.as_deref().unwrap_or_default(),
-                ),
-                GitOperationKind::Revert => repository.prepare_reverts(&target_refs),
-                GitOperationKind::Bisect => Err(GitError::InvalidInput {
-                    field: "operation kind".to_string(),
-                    message: "Asterlyn cannot start this operation kind".to_string(),
-                }),
+            move |repository| {
+                let repository = repository.discovered_repository(&repository_id)?;
+                match kind {
+                    GitOperationKind::Merge => {
+                        repository.prepare_merge(single_target(&target_refs)?)
+                    }
+                    GitOperationKind::CherryPick => repository.prepare_cherry_pick(&target_refs),
+                    GitOperationKind::Rebase => {
+                        repository.prepare_rebase(single_target(&target_refs)?)
+                    }
+                    GitOperationKind::Squash => repository.prepare_squash(
+                        single_target(&target_refs)?,
+                        message.as_deref().unwrap_or_default(),
+                    ),
+                    GitOperationKind::Revert => repository.prepare_reverts(&target_refs),
+                    GitOperationKind::Bisect => Err(GitError::InvalidInput {
+                        field: "operation kind".to_string(),
+                        message: "Asterlyn cannot start this operation kind".to_string(),
+                    }),
+                }
             },
         )
         .await
@@ -914,6 +952,7 @@ pub(crate) async fn prepare_git_operation(
 #[tauri::command]
 pub(crate) async fn execute_git_operation(
     repository_root: String,
+    repository_id: String,
     plan: GitOperationPlan,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -928,7 +967,9 @@ pub(crate) async fn execute_git_operation(
             repository_root,
             "execute Git operation",
             move |repository| {
-                repository.execute_operation_plan(&plan)?;
+                repository
+                    .discovered_repository(&repository_id)?
+                    .execute_operation_plan(&plan)?;
                 repository
                     .tracked_snapshot(COMMIT_LIMIT)
                     .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
@@ -940,6 +981,7 @@ pub(crate) async fn execute_git_operation(
 #[tauri::command]
 pub(crate) async fn run_git_operation_action(
     repository_root: String,
+    repository_id: String,
     action: GitOperationAction,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -951,7 +993,9 @@ pub(crate) async fn run_git_operation_action(
         .into_owned();
     git_operations
         .run_local(repository_root, "resume Git operation", move |repository| {
-            repository.run_operation_action(action)?;
+            repository
+                .discovered_repository(&repository_id)?
+                .run_operation_action(action)?;
             repository
                 .tracked_snapshot(COMMIT_LIMIT)
                 .map(|snapshot| mutation_outcome(snapshot, &complete_repository_slices()))
@@ -962,13 +1006,18 @@ pub(crate) async fn run_git_operation_action(
 #[tauri::command]
 pub(crate) async fn read_conflict_content(
     repository_root: String,
+    repository_id: String,
     path: String,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<GitConflictContent, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read conflict content", move || {
-        GitRepository::open(root)?.read_conflict_content(&path)
+        let mut content = GitRepository::open(root)?
+            .discovered_repository(&repository_id)?
+            .read_conflict_content(&path)?;
+        content.repository_id = repository_id;
+        Ok(content)
     })
     .await
 }
@@ -978,6 +1027,7 @@ pub(crate) async fn read_conflict_content(
 #[tauri::command]
 pub(crate) async fn resolve_conflict(
     repository_root: String,
+    repository_id: String,
     path: String,
     expected_revision_token: String,
     content: Option<String>,
@@ -993,13 +1043,17 @@ pub(crate) async fn resolve_conflict(
         .into_owned();
     git_operations
         .run_local(repository_root, "resolve Git conflict", move |repository| {
-            let operation = git_worktree_transactions::resolve_conflict(
-                repository,
+            let target = repository.discovered_repository(&repository_id)?;
+            let mut operation = git_worktree_transactions::resolve_conflict(
+                &target,
                 &recovery_root,
                 &path,
                 &expected_revision_token,
                 content.as_deref(),
             )?;
+            if let Some(operation) = &mut operation {
+                operation.repository_id = repository_id;
+            }
             let tracked = repository.tracked_changes()?;
             Ok(GitOperationMutationOutcome {
                 tracked,

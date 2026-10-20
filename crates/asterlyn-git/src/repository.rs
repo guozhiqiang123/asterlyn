@@ -20,14 +20,15 @@ use crate::model::{
     BinaryDiffResult, BranchMutationKind, BranchMutationPlan, BranchMutationRequest,
     BranchMutationSourceKind, ChangeKind, CommitComparisonDetails, CommitComparisonDiffResult,
     CommitComparisonRelation, CommitDetails, CommitDiffResult, CommitFileChange, CommitFileVersion,
-    CommitSummary, DiffResult, FileChange, GitBlameResult, GitResetMode, GitResetPlan,
-    GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryQuery, HistoryRef,
-    ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode, PushPreview,
-    PushTagMode, PushTagSummary, RemoteAuthenticationStatus, RemoteBranchDeletionTarget,
-    RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest, RemoteSummary, RemoteTransport,
-    RepositoryReadPlan, RepositorySliceSnapshot, RepositorySnapshot, SelectedCommitResult,
-    StashCatalog, StashEntry, StashMutationKind, StashMutationRequest, TagMutationKind,
-    TagMutationRequest, TrackedChangeScan, UntrackedScan, UntrackedState, WorkingDiffBaseVersion,
+    CommitSummary, DiffResult, FileChange, GitBlameResult, GitOperationSnapshot, GitResetMode,
+    GitResetPlan, GitRootDescriptor, GitRootKind, HistoryOrder, HistoryPage, HistoryQuery,
+    HistoryRef, ProjectEntryKind, ProjectFile, ProjectFileList, ProjectIgnoredEntry, PushMode,
+    PushPreview, PushTagMode, PushTagSummary, RemoteAuthenticationStatus,
+    RemoteBranchDeletionTarget, RemoteMutationKind, RemoteMutationPlan, RemoteMutationRequest,
+    RemoteSummary, RemoteTransport, RepositoryReadPlan, RepositorySliceSnapshot,
+    RepositorySnapshot, SelectedCommitResult, StashCatalog, StashEntry, StashMutationKind,
+    StashMutationRequest, TagMutationKind, TagMutationRequest, TrackedChangeScan, UntrackedScan,
+    UntrackedState, WorkingDiffBaseVersion,
 };
 use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, parse_status};
 use crate::process::{
@@ -45,7 +46,7 @@ pub use remote_branch_sync::BranchPushTarget;
 mod stash_creation;
 mod worktree;
 
-use multi_root_changes::{scope_changes, sort_changes};
+use multi_root_changes::{operation_snapshot_for_roots, scope_changes, sort_changes};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
@@ -318,6 +319,14 @@ impl GitRepository {
             })
     }
 
+    pub fn discovered_repository(&self, repository_id: &str) -> Result<GitRepository, GitError> {
+        Ok(self.resolve_history_root(repository_id)?.repository)
+    }
+
+    pub fn discovered_operation_snapshot(&self) -> Result<Option<GitOperationSnapshot>, GitError> {
+        operation_snapshot_for_roots(&self.discovered_roots()?)
+    }
+
     pub fn snapshot(&self, commit_limit: usize) -> Result<RepositorySnapshot, GitError> {
         let mut snapshot = self.tracked_snapshot(commit_limit)?;
         let scan = self.untracked_changes(&CancellationToken::new())?;
@@ -336,6 +345,12 @@ impl GitRepository {
         let mut histories = vec![snapshot.commits];
         for root in roots.iter().skip(1) {
             let child = root.repository.tracked_root_snapshot(commit_limit)?;
+            snapshot.operation = snapshot.operation.or_else(|| {
+                child.operation.map(|mut operation| {
+                    operation.repository_id = root.descriptor.id.clone();
+                    operation
+                })
+            });
             let mut changes = child.changes;
             let mut branches = child.branches;
             let mut commits = child.commits;
@@ -408,7 +423,7 @@ impl GitRepository {
             .then(|| self.tracked_changes().map(|scan| scan.changes))
             .transpose()?;
 
-        let roots = if plan.refs || plan.history {
+        let roots = if plan.refs || plan.history || plan.operation {
             self.discovered_roots()?
         } else {
             Vec::new()
@@ -475,7 +490,7 @@ impl GitRepository {
                 .then(|| main_branch.expect("head reads the main branch")),
             operation: plan
                 .operation
-                .then(|| self.operation_snapshot())
+                .then(|| operation_snapshot_for_roots(&roots))
                 .transpose()?,
             changes,
             commits: plan

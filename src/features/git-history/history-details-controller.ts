@@ -269,13 +269,13 @@ export class GitHistoryDetailsController {
     this.requestTotalCount(root, normalizedQuery, this.value.history.generation);
   }
 
-  applyTagMutation(request: TagMutationRequest): void {
+  applyTagMutation(request: TagMutationRequest, repositoryId = "."): void {
     if (request.kind !== "create" && request.kind !== "deleteLocal") return;
     const decoration = `tag: ${request.tagName}`;
     let changed = false;
     let selectedChanged = false;
     const commits = this.value.history.commits.map((commit) => {
-      if (commit.repositoryId !== "." || commit.oid !== request.commitOid) return commit;
+      if (commit.repositoryId !== repositoryId || commit.oid !== request.commitOid) return commit;
       const decorations = request.kind === "create"
         ? commit.decorations.includes(decoration) ? commit.decorations : [...commit.decorations, decoration]
         : commit.decorations.filter((value) => value !== decoration);

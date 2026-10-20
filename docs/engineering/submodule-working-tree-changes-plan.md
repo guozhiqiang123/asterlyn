@@ -275,3 +275,62 @@ passed the rendered-window smoke test. The installed executable matches the acce
 SHA-256 `a976672ffafb9f0cbfab3af802e274ed692a33d63adf9a37decd6d1cdbf96695`; the immediately
 previous installation is recoverable at
 `/Applications/Asterlyn-before-submodule-push-roots-20261020.app`.
+
+## SM6 follow-up — repository-scoped commit actions
+
+Commit-row context actions must not collapse to copy-only for initialized child roots. The same
+single-commit commands shown for the primary repository are exposed for a child commit, with policy
+and execution derived from that commit's `repositoryId`:
+
+- Cherry-pick and Revert target the child repository's checked-out branch and retain the reviewed
+  operation boundary.
+- Reset, Undo Commit, and Drop Commit compare against and mutate only the child repository's HEAD.
+- New Branch and tag create/delete actions resolve the child repository and use only its remotes.
+- Clean-worktree, local-branch, ancestry, outgoing-HEAD, and busy checks are evaluated inside the
+  selected repository rather than borrowing primary-root state.
+- The renderer passes only a discovered repository identity. Native commands resolve that identity
+  through the authoritative root catalog before review or mutation and refresh the full workspace
+  after success so the parent gitlink is updated visibly.
+- An in-progress Git operation carries its owning repository identity through conflict reads,
+  conflict resolution, Continue, Skip, and Abort. Paths remain repository-relative at Git command
+  boundaries and become workspace-relative only for Files/editor presentation.
+
+Acceptance uses a real initialized submodule and verifies menu parity, child-only branch/tag/reset
+effects, child-only Cherry-pick/Revert preparation and execution, stale or unknown root rejection,
+and unchanged primary-root behavior.
+
+SM6 is complete. Commit context policy no longer treats a non-primary `repositoryId` as read-only;
+the menu exposes Cherry-pick, Revert, New Branch, New Tag, and the same conditional Reset/Undo/Drop
+actions for initialized child roots. Branch, tag, reset, latest-commit, reviewed Git-operation, active
+operation, and conflict commands now carry the selected repository identity through the controller,
+desktop protocol, and native command boundary. Native execution accepts only a root rediscovered
+from the primary repository's Git links. Operation and conflict snapshots retain that identity so
+restart recovery, Continue/Skip/Abort, source lookup, navigation, and Save and Stage cannot collide
+with a same-named primary path.
+
+The focused context/operation suite passed 49 tests and the complete frontend suite passed all 1,246
+tests. Type checking, the production build and startup boundary, the complete Rust workspace suite,
+the real-submodule integration test, strict Clippy, Rust formatting, protocol generation, and patch
+hygiene passed. The real-submodule fixture rejects an unknown root, prepares Revert from the child
+HEAD, and proves a reviewed tag mutation creates the ref only in the child repository. Controller
+tests bind child identities for Branch, Tag, Reset, commit operations, restart reconstruction, and
+conflict resolution while retaining the primary-root cases.
+
+The accepted arm64 macOS `0.1.13` archive is
+`target/release/bundle/macos/Asterlyn-0.1.13-submodule-commit-actions-20261020.app.zip`
+(14,824,330 bytes, SHA-256
+`e2164d179c08eeac054c42b098f10695a1edf458246945599862c6c7b0d3d057`). The complete app has an
+ad-hoc hardened-runtime signature, a sealed-resources record, and passed strict deep verification.
+Both the accepted build and installed app rendered the application shell within the six-second native
+smoke bound. The installed executable matches the accepted bundle byte-for-byte with SHA-256
+`7bc5e7a2e3c1d8e536aa146c5d3bc2fd96bc13ec739687790240299cbb1091d2`; the previous installation is
+recoverable at `/Applications/Asterlyn-before-submodule-commit-actions-20261020.app`. The accepted
+installation was relaunched against `/Users/gzq/AndroidStudioProjects/superboost_pro`.
+
+No dedicated memory benchmark was repeated because the change adds no process, cache, watcher, or
+unbounded collection; startup size remained inside the enforced build boundary. Context-menu model
+validation preserves labels and availability semantics, and the rendered-shell accessibility smoke
+passed, but this delivery does not claim a manual VoiceOver menu audit. The repository snapshot still
+projects one active Git operation at a time; if independent operations are created externally in
+multiple roots simultaneously, Asterlyn deterministically surfaces the first discovered operation
+and blocks starting another until it is reconciled.

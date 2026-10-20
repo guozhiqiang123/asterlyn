@@ -16,6 +16,7 @@ test("opening a conflict activates an editor document without opening a modal", 
   assert.deepEqual(harness.active(), {
     kind: "conflict-resolution",
     repositoryRoot: "/repo",
+    repositoryId: ".",
     path: "one.txt",
   });
   assert.equal(controller.state.dialog, null);
@@ -92,15 +93,15 @@ test("conflict file navigation follows the exact deduplicated conflict order", (
     theirsOid: "t".repeat(40),
   });
 
-  assert.deepEqual(conflictFileNavigation(repository, "one.txt"), {
+  assert.deepEqual(conflictFileNavigation(repository, ".", "one.txt"), {
     previous: null,
     next: "two.txt",
   });
-  assert.deepEqual(conflictFileNavigation(repository, "two.txt"), {
+  assert.deepEqual(conflictFileNavigation(repository, ".", "two.txt"), {
     previous: "one.txt",
     next: "operation-only.txt",
   });
-  assert.deepEqual(conflictFileNavigation(repository, "operation-only.txt"), {
+  assert.deepEqual(conflictFileNavigation(repository, ".", "operation-only.txt"), {
     previous: "two.txt",
     next: null,
   });
@@ -219,7 +220,7 @@ function runtimeHarness(controller, repository = snapshot(), confirmations = {})
     snapshot: () => repository,
     activeDocument: () => active,
     activate(document) { active = document; },
-    selectConflict(path) { selections.push(path); },
+    selectConflict(_repositoryId, path) { selections.push(path); },
     renderEditor() { renders += 1; },
     preferences: () => DEFAULT_APP_PREFERENCES,
     presentation: () => ({ layout: "split", showWhitespace: false }),
@@ -270,8 +271,9 @@ function gateway() {
     async prepareGitOperation() { throw new Error("not used"); },
     async executeGitOperation() { throw new Error("not used"); },
     async runGitOperationAction() { throw new Error("not used"); },
-    async readConflictContent(_root, path) {
+    async readConflictContent(_root, repositoryId, path) {
       return {
+        repositoryId,
         path,
         base: "base\n",
         ours: "ours\n",
@@ -301,12 +303,14 @@ function snapshot() {
       upstreamRef: null, ahead: 0, behind: 0, detached: false, unborn: false,
     },
     operation: {
+      repositoryId: ".",
       kind: "merge", phase: "conflicted", originalHeadOid: "a".repeat(40),
       currentHeadOid: "a".repeat(40), headRef: "refs/heads/main",
       targetOids: ["c".repeat(40)], conflicts,
       progress: { current: null, total: null, detail: null }, allowedActions: ["abort"],
     },
     changes: conflicts.map(({ path }) => ({
+      repositoryId: ".",
       path, originalPath: null, indexStatus: "unmerged", worktreeStatus: "unmerged",
       conflicted: true, submodule: false,
     })),

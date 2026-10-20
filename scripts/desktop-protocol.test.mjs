@@ -830,6 +830,7 @@ test("desktop response validation checks workspace mutation plans and outcomes",
 
 test("conflict content accepts exact side commit provenance", () => {
   const conflict = {
+    repositoryId: ".",
     path: "file.txt",
     base: "base\n",
     ours: "ours\n",

@@ -26,8 +26,8 @@ export interface BranchMutationState {
 }
 
 export interface BranchMutationGateway {
-  prepare(repositoryRoot: string, request: BranchMutationRequest): Promise<BranchMutationPlan>;
-  execute(plan: BranchMutationPlan): Promise<boolean>;
+  prepare(repositoryRoot: string, repositoryId: string, request: BranchMutationRequest): Promise<BranchMutationPlan>;
+  execute(repositoryId: string, plan: BranchMutationPlan): Promise<boolean>;
   errorMessage(error: unknown): string;
 }
 
@@ -99,7 +99,7 @@ export class BranchMutationController {
     dialog.error = null;
     this.emit();
     try {
-      const plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.request);
+      const plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.source.repositoryId, dialog.request);
       if (this.value.dialog === dialog) dialog.plan = plan;
     } catch (error) {
       if (this.value.dialog === dialog) {
@@ -127,11 +127,11 @@ export class BranchMutationController {
     dialog.error = null;
     this.emit();
     try {
-      const plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.request);
+      const plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.source.repositoryId, dialog.request);
       if (this.value.dialog !== dialog) return;
       if (mutationNeedsReview(dialog.request.kind)) {
         dialog.plan = plan;
-      } else if (await this.gateway.execute(plan)) {
+      } else if (await this.gateway.execute(dialog.source.repositoryId, plan)) {
         this.value = { dialog: null };
       } else {
         dialog.error = "branch-mutation-failed";
@@ -160,11 +160,11 @@ export class BranchMutationController {
       ) {
         dialog.request.forceWorktreeRemoval = true;
         dialog.request.reviewedWorktreeToken = plan.worktreeReview.reviewToken;
-        plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.request);
+        plan = await this.gateway.prepare(dialog.repositoryRoot, dialog.source.repositoryId, dialog.request);
         if (this.value.dialog !== dialog) return;
         dialog.plan = plan;
       }
-      const succeeded = await this.gateway.execute(plan);
+      const succeeded = await this.gateway.execute(dialog.source.repositoryId, plan);
       if (this.value.dialog !== dialog) return;
       if (succeeded) {
         this.value = { dialog: null };

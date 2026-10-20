@@ -65,7 +65,7 @@ export interface ConflictEditorRuntimeOptions {
   snapshot(): RepositorySnapshot | null;
   activeDocument(): EditorDocument;
   activate(document: ConflictDocument): void;
-  selectConflict(path: string): void;
+  selectConflict(repositoryId: string, path: string): void;
   renderEditor(): void;
   preferences(): AppPreferences;
   presentation(): DiffPresentation;
@@ -75,7 +75,7 @@ export interface ConflictEditorRuntimeOptions {
   resolve(deleteFile: boolean): void;
   setDiffLayout(layout: "unified" | "split"): void;
   setWhitespace(showWhitespace: boolean): void;
-  conflictSourceAvailable(path: string): boolean;
+  conflictSourceAvailable(repositoryId: string, path: string): boolean;
   revealConflictSource(): void;
   confirmDiscard(): Promise<boolean>;
   notifyBlockedSwitch(): Promise<void>;
@@ -93,15 +93,17 @@ export class ConflictEditorRuntime {
   async open(path: string): Promise<boolean> {
     const { controller } = this.options;
     const snapshot = this.options.snapshot();
-    if (!snapshot?.changes.some((change) => change.path === path && change.conflicted) &&
-      !snapshot?.operation?.conflicts.some((conflict) => conflict.path === path)) return false;
+    const repositoryId = controller.state.repositoryId;
+    if (!snapshot?.changes.some((change) =>
+      change.repositoryId === repositoryId && change.path === path && change.conflicted
+    ) && !snapshot?.operation?.conflicts.some((conflict) => conflict.path === path)) return false;
     if (controller.state.conflict?.path !== path && this.hasUnsavedReview()) {
       await this.notifyBlockedSwitch();
       return false;
     }
-    this.options.selectConflict(path);
+    this.options.selectConflict(repositoryId, path);
     const opening = controller.openConflict(path);
-    this.options.activate({ kind: "conflict-resolution", repositoryRoot: snapshot.root, path });
+    this.options.activate({ kind: "conflict-resolution", repositoryRoot: snapshot.root, repositoryId, path });
     this.options.renderEditor();
     return opening;
   }
@@ -125,7 +127,7 @@ export class ConflictEditorRuntime {
     const conflict = state.conflict;
     if (state.loading === "conflict") {
       surface.showHtml(editorDocumentContentKey(document, "loading"), loadingBlock(copy.readingConflict), () => undefined);
-    } else if (!conflict || conflict.path !== document.path) {
+    } else if (!conflict || conflict.repositoryId !== document.repositoryId || conflict.path !== document.path) {
       surface.showHtml(
         editorDocumentContentKey(document, `error:${state.error ?? "unavailable"}`),
         retryState(copy.conflictUnavailable, state.error ?? copy.conflictUnavailable, "retry-conflict-editor", "changes", this.options.editorCopy()),
@@ -176,7 +178,7 @@ export class ConflictEditorRuntime {
           return;
         }
         if (action === "previous-file" || action === "next-file") {
-          const target = conflictFileNavigation(this.options.snapshot(), document.path)[
+          const target = conflictFileNavigation(this.options.snapshot(), document.repositoryId, document.path)[
             action === "next-file" ? "next" : "previous"
           ];
           if (target) void this.open(target);
@@ -208,7 +210,8 @@ export class ConflictEditorRuntime {
   private toolbar(summary: DiffReviewSummary | null, ready: boolean, path: string): string {
     const editor = this.options.editorCopy();
     const copy = this.options.copy();
-    const files = conflictFileNavigation(this.options.snapshot(), path);
+    const repositoryId = this.options.controller.state.repositoryId;
+    const files = conflictFileNavigation(this.options.snapshot(), repositoryId, path);
     return renderDiffReviewToolbar({
       namespace: "editor",
       capabilities: CONFLICT_DIFF_CAPABILITIES,
@@ -218,7 +221,7 @@ export class ConflictEditorRuntime {
       expandedUnchanged: this.options.surface.conflictUnchangedExpanded(),
       previousFileAvailable: files.previous !== null,
       nextFileAvailable: files.next !== null,
-      sourceAvailable: this.options.conflictSourceAvailable(path),
+      sourceAvailable: this.options.conflictSourceAvailable(repositoryId, path),
       summary: summary ? copy.conflictReviewSummary(summary.conflicts, summary.pendingConflicts, summary.total) : null,
       copy: {
         toolbar: editor.diffToolbar,
@@ -305,7 +308,7 @@ function conflictBlameSources(
     return {
       source: {
         repositoryRoot: document.repositoryRoot,
-        repositoryId: ".",
+        repositoryId: document.repositoryId,
         path: conflict.path,
         commitOid,
         parent: false,
@@ -322,10 +325,13 @@ function conflictBlameSources(
 
 export function conflictFileNavigation(
   snapshot: RepositorySnapshot | null,
+  repositoryId: string,
   path: string,
 ): { readonly previous: string | null; readonly next: string | null } {
   const paths = [...new Set([
-    ...(snapshot?.changes.filter((change) => change.conflicted).map((change) => change.path) ?? []),
+    ...(snapshot?.changes.filter((change) =>
+      change.repositoryId === repositoryId && change.conflicted
+    ).map((change) => change.path) ?? []),
     ...(snapshot?.operation?.conflicts.map((conflict) => conflict.path) ?? []),
   ])];
   const index = paths.indexOf(path);

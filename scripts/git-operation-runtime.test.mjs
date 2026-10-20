@@ -67,8 +67,9 @@ test("closing a conflict through the aggregate runtime clears the conflict sessi
   const runtime = new GitOperationRuntime({
     root: { querySelector: () => null },
     gateway: {
-      async readConflictContent(_root, path) {
+      async readConflictContent(_root, repositoryId, path) {
         return {
+          repositoryId,
           path,
           base: "base\n",
           ours: "ours\n",
@@ -120,6 +121,7 @@ function conflictedSnapshot() {
     branch: null,
     operation: null,
     changes: [{
+      repositoryId: ".",
       path: "shared.txt", originalPath: null, indexStatus: "unmerged",
       worktreeStatus: "unmerged", conflicted: true, submodule: false,
     }],

@@ -56,7 +56,7 @@ test("every tag on a commit has local and per-remote deletion actions", () => {
   ]);
 });
 
-test("merge commits explain mainline limits and nested commits remain copy-only", () => {
+test("merge commits explain mainline limits and nested commits expose repository-scoped actions", () => {
   const merge = target(commit(".", ["a".repeat(40), "c".repeat(40)]));
   const mergePolicy = historyCommitContextPolicy(merge, options);
   assert.equal(mergePolicy.cherryPick.kind, "blocked");
@@ -67,7 +67,13 @@ test("merge commits explain mainline limits and nested commits remain copy-only"
   const nestedPolicy = historyCommitContextPolicy(nested, options);
   const model = historyCommitContextMenuModel(nested, nestedPolicy, EN_US.history);
   assert.deepEqual(contextMenuModelErrors(model), []);
-  assert.deepEqual(ids(model), ["git-history.commit-context-actions.copy-commit-id"]);
+  assert.deepEqual(ids(model), [
+    "git-history.commit-context-actions.copy-commit-id",
+    "git-history.commit-context-actions.cherry-pick",
+    "git-history.commit-context-actions.revert",
+    "git-history.commit-context-actions.create-branch",
+    "git-history.commit-context-actions.new-tag",
+  ]);
 });
 
 test("Reset to Here appears only for a non-HEAD commit reachable from the current branch", () => {
@@ -139,7 +145,7 @@ test("provider selects without executing and routes exact IDs into existing revi
     {
       current: () => true, select: () => { events.push(["select"]); return true; },
       policyOptions: () => ({ ...options }),
-      openGitOperation: (kind, oid) => events.push(["operation", kind, oid]),
+      openGitOperation: (kind, value) => events.push(["operation", kind, value.repositoryId, value.oid]),
       openBranchFromCommit: (value) => events.push(["branch", value.oid]),
       tagRemotes: () => ["origin"],
       openTagMutation: (kind, value, tagName, remote) =>
@@ -160,7 +166,7 @@ test("provider selects without executing and routes exact IDs into existing revi
   await session.invoke("git-history.commit-context-actions.new-tag");
   assert.deepEqual(events.slice(1), [
     ["copy", selected.oid], ["status", "Full commit ID copied"],
-    ["operation", "revert", selected.oid], ["branch", selected.oid],
+    ["operation", "revert", ".", selected.oid], ["branch", selected.oid],
     ["tag", "create", selected.oid, undefined, undefined],
   ]);
 });
@@ -211,18 +217,18 @@ test("commit copy command revalidates selection and reuses clipboard feedback", 
   ]);
 });
 
-test("commit mutation commands reuse current policy and existing review entry points", async () => {
-  const selected = target();
+test("commit mutation commands preserve the selected submodule repository", async () => {
+  const selected = target(commit("packages/ui"));
   const events = [];
   const provider = new HistoryCommitContextActions(
     { open() {}, close() {} }, { async writeText() { return { status: "copied" }; } },
     {
       current: () => true, select: () => true, policyOptions: () => ({ ...options }),
-      openGitOperation: (kind, oid) => events.push([kind, oid]),
-      openBranchFromCommit: (value) => events.push(["branch", value.oid]),
-      tagRemotes: () => [], openTagMutation: (kind, value) => events.push([kind, value.oid]),
-      openReset: (value) => events.push(["reset", value.oid]),
-      openHeadCommitMutation: (kind, value) => events.push(["head", kind, value.oid]),
+      openGitOperation: (kind, value) => events.push([kind, value.repositoryId, value.oid]),
+      openBranchFromCommit: (value) => events.push(["branch", value.repositoryId, value.oid]),
+      tagRemotes: () => [], openTagMutation: (kind, value) => events.push([kind, value.repositoryId, value.oid]),
+      openReset: (value) => events.push(["reset", value.repositoryId, value.oid]),
+      openHeadCommitMutation: (kind, value) => events.push(["head", kind, value.repositoryId, value.oid]),
       blocked: (reason) => events.push(["blocked", reason]), status() {}, error() {},
     }, () => EN_US.history,
   );
@@ -231,7 +237,7 @@ test("commit mutation commands reuse current policy and existing review entry po
   await provider.executeCommand("create-branch", selected);
   await provider.executeCommand("create-tag", selected);
   assert.deepEqual(events, [
-    ["cherryPick", selected.oid], ["revert", selected.oid],
-    ["branch", selected.oid], ["create", selected.oid],
+    ["cherryPick", "packages/ui", selected.oid], ["revert", "packages/ui", selected.oid],
+    ["branch", "packages/ui", selected.oid], ["create", "packages/ui", selected.oid],
   ]);
 });

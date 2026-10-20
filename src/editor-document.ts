@@ -42,6 +42,7 @@ export interface HistoricalFileComparisonDocument {
 export interface ConflictResolutionDocument {
   kind: "conflict-resolution";
   repositoryRoot: string;
+  repositoryId: string;
   path: string;
 }
 
@@ -86,7 +87,7 @@ export function editorDocumentKey(document: EditorDocument): string {
     case "historical-file-comparison":
       return `historical-comparison\0${document.repositoryRoot}\0${document.repositoryId}\0${document.commitOid}\0${document.path}\0${document.originalPath ?? ""}\0${document.status}\0${document.currentSource}`;
     case "conflict-resolution":
-      return `conflict\0${document.repositoryRoot}\0${document.path}`;
+      return `conflict\0${document.repositoryRoot}\0${document.repositoryId}\0${document.path}`;
     case "working-diff":
       return `working\0${document.repositoryRoot}\0${document.selection.repositoryId}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
     case "commit-diff":
