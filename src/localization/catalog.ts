@@ -591,8 +591,8 @@ export interface ChangesCopy {
   commitMessage: string; messagePlaceholder: string; messageRequirement: string;
   commitButton: string; stashButton: string;
   resolveBeforeAction: string;
-  excludeSubmodules: string;
-  selectFile: string;
+  excludeSubmodules: string; selectSingleRepository: string;
+  commitRepository(name: string): string; selectFile: string;
   saveBeforeRevert: string;
   stagingUnversioned(count: number): string;
   stagedUnversioned(count: number): string;

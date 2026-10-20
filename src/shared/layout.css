@@ -484,6 +484,7 @@
 }
 
 .change-group,
+.change-repository,
 .branch-group {
   border-bottom: 1px solid var(--border);
 }

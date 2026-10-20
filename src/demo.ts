@@ -38,7 +38,9 @@ export const demoSnapshot: RepositorySnapshot = {
   operation: null,
   changes: [
     {
+      repositoryId: ".",
       path: "crates/asterlyn-git/src/repository.rs",
+      workspacePath: "crates/asterlyn-git/src/repository.rs",
       originalPath: null,
       indexStatus: "modified",
       worktreeStatus: "modified",
@@ -46,7 +48,9 @@ export const demoSnapshot: RepositorySnapshot = {
       submodule: false,
     },
     {
+      repositoryId: ".",
       path: "src/app.ts",
+      workspacePath: "src/app.ts",
       originalPath: null,
       indexStatus: "unmodified",
       worktreeStatus: "modified",
@@ -54,7 +58,9 @@ export const demoSnapshot: RepositorySnapshot = {
       submodule: false,
     },
     {
+      repositoryId: ".",
       path: "src/diff-editor.ts",
+      workspacePath: "src/diff-editor.ts",
       originalPath: null,
       indexStatus: "added",
       worktreeStatus: "unmodified",
@@ -62,7 +68,9 @@ export const demoSnapshot: RepositorySnapshot = {
       submodule: false,
     },
     {
+      repositoryId: ".",
       path: "docs/product/roadmap.md",
+      workspacePath: "docs/product/roadmap.md",
       originalPath: null,
       indexStatus: "unmodified",
       worktreeStatus: "modified",
@@ -70,7 +78,9 @@ export const demoSnapshot: RepositorySnapshot = {
       submodule: false,
     },
     {
+      repositoryId: ".",
       path: "docs/notes/m1-benchmark.md",
+      workspacePath: "docs/notes/m1-benchmark.md",
       originalPath: null,
       indexStatus: "unmodified",
       worktreeStatus: "untracked",

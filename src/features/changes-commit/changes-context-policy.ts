@@ -48,7 +48,7 @@ export function changesContextPolicy(
     : options.sourceAvailable
       ? enabled()
       : blocked(options.reasons.sourceUnavailable);
-  const conflict = !options.conflictAvailable
+  const conflict = target.repositoryId !== "." || !options.conflictAvailable
     ? blocked(options.reasons.conflictUnavailable)
     : mutation;
   const restore = !changeSupportsRestore(options.snapshot, target)
@@ -104,7 +104,8 @@ function changeSupportsRestore(
 ): boolean {
   const change = target.change;
   return Boolean(
-    snapshot && !snapshot.branch.unborn && !change.conflicted && !change.submodule &&
+    snapshot && target.repositoryId === "." && !snapshot.branch.unborn &&
+    !change.conflicted && !change.submodule &&
     !changeIsUntracked(target) && change.indexStatus !== "copied"
   );
 }

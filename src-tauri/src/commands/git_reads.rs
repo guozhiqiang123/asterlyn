@@ -99,7 +99,8 @@ pub(crate) async fn read_local_diff(
 ) -> Result<DiffResult, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read complete local diff", move || {
-        GitRepository::open(root)?.local_diff_with_unchanged(&selected, expanded_unchanged)
+        GitRepository::open(root)?
+            .repository_local_diff_with_unchanged(&selected, expanded_unchanged)
     })
     .await
 }
@@ -113,8 +114,10 @@ pub(crate) async fn read_working_diff_base(
 ) -> Result<WorkingDiffBase, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read editable working Diff base", move || {
-        let version = GitRepository::open(root)?
-            .working_diff_base(&selected, asterlyn_workspace::DEFAULT_TEXT_LIMIT_BYTES)?;
+        let version = GitRepository::open(root)?.repository_working_diff_base(
+            &selected,
+            asterlyn_workspace::DEFAULT_TEXT_LIMIT_BYTES,
+        )?;
         working_diff_base(version)
     })
     .await

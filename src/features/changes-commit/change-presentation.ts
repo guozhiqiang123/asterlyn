@@ -1,5 +1,6 @@
 import type { ChangeKind, FileChange } from "../../models";
 import { compareFileTreeNodes } from "../../presentation/file-name-order.ts";
+import { fileChangeKey } from "../../change-identity.ts";
 
 export type ChangeFileView = "tree" | "flat";
 export type ChangeGroupId = "conflicts" | "changes" | "unversioned";
@@ -29,14 +30,16 @@ export function includedChanges(
   changes: FileChange[],
   excludedPaths: ReadonlySet<string>,
 ): FileChange[] {
-  return changes.filter((change) => !excludedPaths.has(change.path));
+  return changes.filter((change) => !excludedPaths.has(fileChangeKey(change)));
 }
 
 export function reconcileExcludedChangePaths(
   excludedPaths: ReadonlySet<string>,
   changes: FileChange[],
 ): Set<string> {
-  const current = new Set(changes.filter((change) => !change.conflicted).map((change) => change.path));
+  const current = new Set(
+    changes.filter((change) => !change.conflicted).map(fileChangeKey),
+  );
   return new Set(Array.from(excludedPaths).filter((path) => current.has(path)));
 }
 
@@ -71,7 +74,7 @@ export function buildChangeFileTree(changes: FileChange[]): ChangeFileTreeNode[]
 }
 
 export function descendantChangePaths(node: ChangeFileTreeNode): string[] {
-  if (node.kind === "file") return [node.path];
+  if (node.kind === "file") return [fileChangeKey(node.change!)];
   return node.children.flatMap(descendantChangePaths);
 }
 

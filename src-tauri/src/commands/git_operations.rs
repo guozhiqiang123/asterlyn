@@ -6,6 +6,7 @@ use crate::application::git_worktree_transactions::{self, RestoreChangesPlan};
 #[tauri::command]
 pub(crate) async fn stage_paths(
     repository_root: String,
+    repository_id: String,
     paths: Vec<String>,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -17,7 +18,7 @@ pub(crate) async fn stage_paths(
         .into_owned();
     git_operations
         .run_local(repository_root, "stage paths", move |repository| {
-            repository.stage(&paths)?;
+            repository.stage_repository_paths(&repository_id, &paths)?;
             repository
                 .tracked_changes()
                 .map(|tracked| working_tree_outcome(tracked, &[RepositoryStateSlice::WorkingTree]))
@@ -28,6 +29,7 @@ pub(crate) async fn stage_paths(
 #[tauri::command]
 pub(crate) async fn trash_untracked_paths(
     repository_root: String,
+    repository_id: String,
     paths: Vec<String>,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -42,7 +44,8 @@ pub(crate) async fn trash_untracked_paths(
             repository_root,
             "trash untracked paths",
             move |repository| {
-                let targets = repository.resolve_untracked_paths_for_trash(&paths)?;
+                let targets = repository
+                    .resolve_repository_untracked_paths_for_trash(&repository_id, &paths)?;
                 for target in targets {
                     move_to_system_trash(&target).map_err(|error| GitError::Io {
                         operation: "move untracked files to system Trash".to_string(),
@@ -60,6 +63,7 @@ pub(crate) async fn trash_untracked_paths(
 #[tauri::command]
 pub(crate) async fn unstage_paths(
     repository_root: String,
+    repository_id: String,
     paths: Vec<String>,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -71,7 +75,7 @@ pub(crate) async fn unstage_paths(
         .into_owned();
     git_operations
         .run_local(repository_root, "unstage paths", move |repository| {
-            repository.unstage(&paths)?;
+            repository.unstage_repository_paths(&repository_id, &paths)?;
             repository
                 .tracked_changes()
                 .map(|tracked| working_tree_outcome(tracked, &[RepositoryStateSlice::WorkingTree]))
@@ -97,7 +101,7 @@ pub(crate) async fn commit_changes(
             repository_root,
             "create selected commit",
             move |repository| {
-                let committed = repository.commit_selected(&message, &selected)?;
+                let committed = repository.commit_repository_selected(&message, &selected)?;
                 match repository.tracked_snapshot(COMMIT_LIMIT) {
                     Ok(snapshot) => Ok(CommitSelectedResult {
                         oid: committed.oid,

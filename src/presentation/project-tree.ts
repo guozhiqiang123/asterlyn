@@ -66,7 +66,7 @@ export function projectTreeEntries(
   }
   for (const change of changes) {
     mergeEntry(entries, {
-      path: change.path,
+      path: change.workspacePath || change.path,
       kind: "file",
       status: effectiveProjectFileStatus(change),
     });

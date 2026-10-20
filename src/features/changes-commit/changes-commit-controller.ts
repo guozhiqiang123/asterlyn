@@ -18,6 +18,12 @@ import {
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import type { ChangesCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import {
+  fileChangeKey,
+  changeWorkspacePath,
+  findFileChange,
+  sameFileChangeIdentity,
+} from "../../change-identity.ts";
 
 export interface ChangesCommitState {
   selectedChange: ChangeSelection | null;
@@ -148,7 +154,9 @@ export class ChangesCommitController {
   ): void {
     const previousSnapshot = this.snapshot;
     const previousExcludedPaths = new Set(this.state.excludedPaths);
-    const previousSelection = this.state.selectedChange?.path ?? null;
+    const previousSelection = this.state.selectedChange
+      ? JSON.stringify([this.state.selectedChange.repositoryId || ".", this.state.selectedChange.path])
+      : null;
     const previousDiffPath = this.state.workingDiffPath;
     const rootChanged = previousSnapshot?.root !== snapshot?.root;
     const changesChanged = rootChanged || !sameFileChanges(
@@ -173,11 +181,13 @@ export class ChangesCommitController {
     if (rootChanged || options.clearDisclosure) this.state.collapsedDirectories.clear();
     if (rootChanged || options.clearSelection) this.state.selectedChange = null;
     this.chooseValidSelection();
-    const selectionChanged = previousSelection !== (this.state.selectedChange?.path ?? null);
+    const selectionChanged = previousSelection !== (this.state.selectedChange
+      ? JSON.stringify([this.state.selectedChange.repositoryId || ".", this.state.selectedChange.path])
+      : null);
     const inclusionChanged = changesChanged ||
       !sameStringSets(previousExcludedPaths, this.state.excludedPaths);
     const retainedDiff = !rootChanged && previousDiffPath !== null &&
-      Boolean(snapshot?.changes.some((change) => change.path === previousDiffPath));
+      Boolean(snapshot?.changes.some((change) => changeWorkspacePath(change) === previousDiffPath));
     this.diffSequence += 1;
     const diffStateChanged = previousDiffPath !== null && (
       !retainedDiff || this.state.workingPatchLoading || this.state.workingPatchError !== null
@@ -203,9 +213,9 @@ export class ChangesCommitController {
   }
 
   selectedChange(): FileChange | null {
-    const path = this.state.selectedChange?.path;
-    return path
-      ? this.snapshot?.changes.find((change) => change.path === path) ?? null
+    const selected = this.state.selectedChange;
+    return selected && this.snapshot
+      ? findFileChange(this.snapshot.changes, selected.repositoryId || ".", selected.path)
       : null;
   }
 
@@ -215,10 +225,11 @@ export class ChangesCommitController {
       : [];
   }
 
-  selectChange(path: string): boolean {
-    if (!this.snapshot?.changes.some((change) => change.path === path)) return false;
-    const changed = this.state.selectedChange?.path !== path;
-    this.state.selectedChange = { path, staged: false };
+  selectChange(path: string, repositoryId = "."): boolean {
+    if (!this.snapshot || !findFileChange(this.snapshot.changes, repositoryId, path)) return false;
+    const changed = this.state.selectedChange?.path !== path ||
+      (this.state.selectedChange.repositoryId || ".") !== repositoryId;
+    this.state.selectedChange = { repositoryId, path, staged: false };
     this.clearWorkingDiff(false);
     this.emit({
       reason: "selection",
@@ -229,10 +240,11 @@ export class ChangesCommitController {
     return true;
   }
 
-  selectContextChange(path: string): boolean {
-    if (!this.snapshot?.changes.some((change) => change.path === path)) return false;
-    const changed = this.state.selectedChange?.path !== path;
-    this.state.selectedChange = { path, staged: false };
+  selectContextChange(path: string, repositoryId = "."): boolean {
+    if (!this.snapshot || !findFileChange(this.snapshot.changes, repositoryId, path)) return false;
+    const changed = this.state.selectedChange?.path !== path ||
+      (this.state.selectedChange.repositoryId || ".") !== repositoryId;
+    this.state.selectedChange = { repositoryId, path, staged: false };
     if (changed) {
       this.emit({
         reason: "selection",
@@ -244,19 +256,22 @@ export class ChangesCommitController {
     return true;
   }
 
-  selectConflict(path: string): boolean {
-    if (!this.selectChange(path)) return false;
-    this.state.excludedPaths.delete(path);
+  selectConflict(path: string, repositoryId = "."): boolean {
+    if (!this.selectChange(path, repositoryId)) return false;
+    const selected = this.selectedChange();
+    if (selected) this.state.excludedPaths.delete(fileChangeKey(selected));
     this.emit({ reason: "inclusion", inclusionChanged: true, composerChanged: true });
     return true;
   }
 
   setPathsIncluded(paths: Iterable<string>, included: boolean): void {
-    const known = new Set(this.snapshot?.changes.map((change) => change.path) ?? []);
+    const known = new Map(
+      this.snapshot?.changes.map((change) => [fileChangeKey(change), change]) ?? [],
+    );
     let changed = false;
     for (const path of paths) {
       if (!known.has(path)) continue;
-      const conflict = this.snapshot?.changes.find((change) => change.path === path)?.conflicted === true;
+      const conflict = known.get(path)?.conflicted === true;
       if (conflict) {
         changed = this.state.excludedPaths.delete(path) || changed;
         continue;
@@ -315,8 +330,10 @@ export class ChangesCommitController {
     const selected = this.includedChanges();
     return Boolean(
       snapshot && selected.length > 0 &&
-      !snapshot.changes.some((change) => change.conflicted) &&
+      !selected.some((change) => change.conflicted) &&
       !selected.some((change) => change.submodule) &&
+      selectedRepositoryCount(selected) === 1 &&
+      (selected[0]?.repositoryId || ".") === "." &&
       (!keepStagedChanges || (
         selected.some(hasStagedChange) && selected.some(hasUnstagedOrUntrackedChange)
       )) &&
@@ -331,8 +348,9 @@ export class ChangesCommitController {
       snapshot &&
       this.state.commitMessage.trim() &&
       selected.length > 0 &&
-      !snapshot.changes.some((change) => change.conflicted) &&
+      !selected.some((change) => change.conflicted) &&
       !selected.some((change) => change.submodule) &&
+      selectedRepositoryCount(selected) === 1 &&
       !this.state.mutation,
     );
   }
@@ -354,7 +372,7 @@ export class ChangesCommitController {
     if (!snapshot || !selected) return;
     const sequence = ++this.diffSequence;
     const generation = this.repositoryGeneration;
-    const path = selected.path;
+    const path = changeWorkspacePath(selected);
     const image = isImagePreviewPath(path);
     const hasExistingDiff = this.state.workingDiffPath === path &&
       ((image && this.state.workingImageDiff !== null) || (!image && this.state.workingPatch !== null));
@@ -436,14 +454,18 @@ export class ChangesCommitController {
     if (!root || !selected || this.state.mutation) return null;
     const plan = await this.gateway.prepareRestoreChanges(root, [selected]);
     return !this.disposed && generation === this.repositoryGeneration &&
-      this.snapshot?.root === root && this.selectedChange()?.path === selected.path ? plan : null;
+      this.snapshot?.root === root &&
+      Boolean(this.selectedChange() && sameFileChangeIdentity(this.selectedChange()!, selected))
+        ? plan
+        : null;
   }
 
   async revertSelected(plan: RestoreChangesPlan): Promise<ChangesMutationResult<WorkingTreeMutationOutcome>> {
     const snapshot = this.snapshot;
     const selected = this.selectedChange();
     if (!snapshot || !selected || this.state.mutation || plan.root !== snapshot.root ||
-      plan.selected.length !== 1 || plan.selected[0]?.path !== selected.path) return { status: "unavailable" };
+      plan.selected.length !== 1 ||
+      !sameFileChangeIdentity(plan.selected[0]!, selected)) return { status: "unavailable" };
     const sequence = ++this.mutationSequence;
     const generation = this.repositoryGeneration;
     this.state.mutation = "revert";
@@ -542,12 +564,16 @@ export class ChangesCommitController {
   private chooseValidSelection(): void {
     const changes = this.snapshot?.changes ?? [];
     const current = this.state.selectedChange;
-    if (current && changes.some((change) => change.path === current.path)) {
-      this.state.selectedChange = { path: current.path, staged: false };
+    if (current && findFileChange(changes, current.repositoryId || ".", current.path)) {
+      this.state.selectedChange = {
+        repositoryId: current.repositoryId || ".",
+        path: current.path,
+        staged: false,
+      };
       return;
     }
     this.state.selectedChange = changes[0]
-      ? { path: changes[0].path, staged: false }
+      ? { repositoryId: changes[0].repositoryId || ".", path: changes[0].path, staged: false }
       : null;
   }
 
@@ -685,10 +711,15 @@ function sameFileChanges(left: readonly FileChange[], right: readonly FileChange
   return left.length === right.length && left.every((change, index) => {
     const next = right[index];
     if (!next) return false;
-    return change.path === next.path && change.originalPath === next.originalPath &&
+    return change.repositoryId === next.repositoryId && change.path === next.path &&
+      change.workspacePath === next.workspacePath && change.originalPath === next.originalPath &&
       change.indexStatus === next.indexStatus && change.worktreeStatus === next.worktreeStatus &&
       change.conflicted === next.conflicted && change.submodule === next.submodule;
   });
+}
+
+function selectedRepositoryCount(changes: readonly FileChange[]): number {
+  return new Set(changes.map((change) => change.repositoryId || ".")).size;
 }
 
 function sameStringSets(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {

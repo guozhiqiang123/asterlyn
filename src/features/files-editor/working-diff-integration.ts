@@ -31,8 +31,12 @@ export function editableWorkingDiffBlameSources(
 
 export function diffProjectFile(files: readonly ProjectFile[], document: DiffDocument): ProjectFile | null {
   if (document.kind === "working-diff") {
-    return files.find((file) => file.repositoryId === "." && file.path === document.selection.path) ?? {
-      repositoryId: ".",
+    const repositoryId = document.selection.repositoryId || ".";
+    return files.find((file) =>
+      file.repositoryId === repositoryId &&
+      file.path === document.selection.path
+    ) ?? {
+      repositoryId,
       path: document.selection.path,
       workspacePath: document.selection.path,
       readOnly: false,
@@ -47,7 +51,11 @@ export function workingDiffSourceFile(
   changes: readonly FileChange[],
 ): ProjectFile | null {
   if (document.kind === "working-diff") {
-    const change = changes.find((candidate) => candidate.path === document.selection.path);
+    const repositoryId = document.selection.repositoryId || ".";
+    const change = changes.find((candidate) =>
+      (candidate.repositoryId || ".") === repositoryId &&
+      candidate.path === document.selection.path
+    );
     const deleted = change?.worktreeStatus === "deleted" || (
       change?.indexStatus === "deleted" && change.worktreeStatus === "unmodified"
     );
@@ -96,7 +104,9 @@ export function activeProjectWorkspacePath(
 ): string | null {
   if (document.kind === "welcome" || document.repositoryRoot !== workspaceRoot) return null;
   if (document.kind === "project-file" || document.kind === "project-image") return document.workspacePath;
-  if (document.kind === "working-diff") return document.selection.path;
+  if (document.kind === "working-diff") {
+    return diffProjectFile(files, document)?.workspacePath ?? document.selection.path;
+  }
   if (document.kind === "conflict-resolution") return document.path;
   return files.find((file) => file.repositoryId === document.repositoryId && file.path === document.path)?.workspacePath ?? null;
 }

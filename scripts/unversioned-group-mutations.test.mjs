@@ -9,6 +9,7 @@ const target = {
   workspaceRoot: "/repo", workspaceGeneration: 3, kind: "group",
   group: "unversioned", repositoryId: ".", repositoryRevision: 7,
   paths: ["new-a.txt", "new-b.txt"],
+  workspacePaths: ["new-a.txt", "new-b.txt"],
 };
 
 function harness(overrides = {}) {
@@ -21,12 +22,12 @@ function harness(overrides = {}) {
     matches: () => true,
     completeTransition: (generation) => events.push(["complete", generation]),
     setLoading: (loading, message) => events.push(["loading", loading, message]),
-    stagePaths: async (root, paths) => {
-      events.push(["stage", root, paths]);
+    stagePaths: async (root, repositoryId, paths) => {
+      events.push(["stage", root, repositoryId, paths]);
       return { tracked: { root, changes: [] }, invalidatedSlices: ["workingTree"] };
     },
-    trashPaths: async (root, paths) => {
-      events.push(["trash", root, paths]);
+    trashPaths: async (root, repositoryId, paths) => {
+      events.push(["trash", root, repositoryId, paths]);
       return { tracked: { root, changes: [] }, invalidatedSlices: ["workingTree"] };
     },
     install: (outcome) => { events.push(["install"]); return outcome.tracked.root; },
@@ -55,7 +56,7 @@ test("unversioned group Stage saves, mutates, reconciles and scans the exact pat
   const { events, runtime } = harness();
   await runtime.stage(target);
   assert.deepEqual(events.filter(([name]) => ["stage", "install", "scan"].includes(name)), [
-    ["stage", "/repo", ["new-a.txt", "new-b.txt"]], ["install"], ["scan"],
+    ["stage", "/repo", ".", ["new-a.txt", "new-b.txt"]], ["install"], ["scan"],
   ]);
   assert.ok(events.some((event) => event[0] === "status" && event[1] === "staged 2"));
 });
@@ -66,7 +67,7 @@ test("unversioned group Trash applies one editor lease after the native exact-se
   await runtime.trash(target, (completed) => progress.push(completed));
   assert.deepEqual(progress, [2]);
   assert.deepEqual(events.filter(([name]) => ["capture", "trash", "apply-trash", "files"].includes(name)), [
-    ["capture"], ["trash", "/repo", ["new-a.txt", "new-b.txt"]], ["apply-trash"], ["files"],
+    ["capture"], ["trash", "/repo", ".", ["new-a.txt", "new-b.txt"]], ["apply-trash"], ["files"],
   ]);
   assert.equal(events.some(([name]) => name === "release-trash"), false);
 });

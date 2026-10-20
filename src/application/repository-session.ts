@@ -5,6 +5,7 @@ import type {
   TrackedChangeScan,
   UntrackedScan,
 } from "../models.ts";
+import { fileChangeKey } from "../change-identity.ts";
 import {
   mergeRefreshingWorkingTree,
   mergeTrackedChanges,
@@ -187,7 +188,7 @@ export class RepositorySession {
     const next: RepositorySnapshot = {
       ...snapshot,
       changes: [...tracked, ...scan.changes].sort((left, right) =>
-        left.path.localeCompare(right.path),
+        fileChangeKey(left).localeCompare(fileChangeKey(right)),
       ),
       untrackedState: "complete",
     };

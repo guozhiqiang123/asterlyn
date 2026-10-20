@@ -34,7 +34,7 @@ pub(crate) async fn read_local_image_diff(
 ) -> Result<ImageDiffPreview, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read local image diff", move || {
-        let diff = GitRepository::open(root)?.local_binary_diff(&selected)?;
+        let diff = GitRepository::open(root)?.repository_local_binary_diff(&selected)?;
         encode_image_diff(diff.path, diff.before, diff.after)
     })
     .await

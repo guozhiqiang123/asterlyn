@@ -25,8 +25,8 @@ interface UnversionedGroupMutationPort {
   matches(generation: number, root: string): boolean;
   completeTransition(generation: number): void;
   setLoading(loading: boolean, message: string): void;
-  stagePaths(root: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
-  trashPaths(root: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
+  stagePaths(root: string, repositoryId: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
+  trashPaths(root: string, repositoryId: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
   install(outcome: WorkingTreeMutationOutcome): string;
   captureEditor(): void;
   prepareTrash(root: string, paths: readonly string[]): EditorPathMigrationPreparation;
@@ -74,7 +74,11 @@ export function createUnversionedGroupMutationRuntime(
       let failure: unknown = null;
       port.setLoading(true, copy.staging(target.paths.length));
       try {
-        const outcome = await port.stagePaths(target.workspaceRoot, [...target.paths]);
+        const outcome = await port.stagePaths(
+          target.workspaceRoot,
+          target.repositoryId,
+          [...target.paths],
+        );
         if (!port.matches(generation, target.workspaceRoot)) return;
         pendingRoot = port.install(outcome);
         port.render();
@@ -98,7 +102,7 @@ export function createUnversionedGroupMutationRuntime(
       const copy = port.copy();
       if (!port.current(target)) throw new Error("target-changed");
       port.captureEditor();
-      const prepared = port.prepareTrash(target.workspaceRoot, target.paths);
+      const prepared = port.prepareTrash(target.workspaceRoot, target.workspacePaths);
       if (prepared.status !== "ready") {
         throw new Error(
           prepared.status === "blocked" && prepared.reason === "dirtyDelete"
@@ -112,7 +116,11 @@ export function createUnversionedGroupMutationRuntime(
       let failure: unknown = null;
       port.setLoading(true, copy.trashing(0, target.paths.length));
       try {
-        const outcome = await port.trashPaths(target.workspaceRoot, [...target.paths]);
+        const outcome = await port.trashPaths(
+          target.workspaceRoot,
+          target.repositoryId,
+          [...target.paths],
+        );
         progress(target.paths.length);
         if (!port.matches(generation, target.workspaceRoot)) return;
         leaseApplied = port.applyTrash(prepared.lease) === "applied";

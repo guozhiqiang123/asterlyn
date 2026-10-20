@@ -329,7 +329,7 @@ export const ZH_CN = {
     changedFileCount: (count) => `${count} 个已更改文件`, resizeCommit: "调整提交或储藏消息区域大小", createCommit: "提交或储藏所选更改",
     commitMessage: "消息", messagePlaceholder: "提交或储藏消息", messageRequirement: "提交时必填 · 储藏时可选",
     commitButton: "提交", stashButton: "储藏更改", resolveBeforeAction: "请先解决冲突再提交或储藏。",
-    excludeSubmodules: "请排除子模块更改，并在其 Git 根目录中处理。", selectFile: "请至少选择一个文件。",
+    excludeSubmodules: "请排除子模块更改，并在其 Git 根目录中处理。", selectFile: "请至少选择一个文件。", selectSingleRepository: "每次请选择一个 Git 仓库中的更改。", commitRepository: (name) => `目标仓库：${name}`,
     saveBeforeRevert: "恢复此文件前，请保存或撤销未保存的编辑", restoreConfirm: (label) => `是否将 1 个已跟踪文件恢复到 HEAD？\n\n${label}\n\n这会替换已检查的暂存区和工作树内容。系统会保存恢复副本，以供撤销。`,
     stagingUnversioned: (count) => `正在暂存 ${count} 个未纳入版本控制的文件…`,
     stagedUnversioned: (count) => `已暂存 ${count} 个未纳入版本控制的文件`,

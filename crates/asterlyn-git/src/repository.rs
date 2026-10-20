@@ -38,10 +38,13 @@ use crate::remote_failure::parse_remote_ref_failures;
 mod commit_details;
 mod head_commit_mutation;
 mod history_query;
+mod multi_root_changes;
 mod remote_branch_sync;
 pub use remote_branch_sync::BranchPushTarget;
 mod stash_creation;
 mod worktree;
+
+use multi_root_changes::{scope_changes, sort_changes};
 
 const DIFF_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const COMMIT_FILE_LIST_LIMIT_BYTES: usize = 16 * 1024 * 1024;
@@ -310,9 +313,7 @@ impl GitRepository {
         let mut snapshot = self.tracked_snapshot(commit_limit)?;
         let scan = self.untracked_changes(&CancellationToken::new())?;
         snapshot.changes.extend(scan.changes);
-        snapshot
-            .changes
-            .sort_by(|left, right| left.path.cmp(&right.path));
+        sort_changes(&mut snapshot.changes);
         snapshot.untracked_state = UntrackedState::Complete;
         Ok(snapshot)
     }
@@ -321,17 +322,22 @@ impl GitRepository {
         let roots = self.discovered_roots()?;
         let mut snapshot = self.tracked_root_snapshot(commit_limit)?;
         snapshot.repository_roots = roots.iter().map(|root| root.descriptor.clone()).collect();
+        scope_changes(&mut snapshot.changes, &roots[0].descriptor);
 
         let mut histories = vec![snapshot.commits];
         for root in roots.iter().skip(1) {
             let child = root.repository.tracked_root_snapshot(commit_limit)?;
+            let mut changes = child.changes;
             let mut branches = child.branches;
             let mut commits = child.commits;
+            scope_changes(&mut changes, &root.descriptor);
             scope_branches(&mut branches, &root.descriptor.id);
             scope_commits(&mut commits, &root.descriptor.id);
+            snapshot.changes.extend(changes);
             snapshot.branches.extend(branches);
             histories.push(commits);
         }
+        sort_changes(&mut snapshot.changes);
         snapshot.branches.sort_by(|left, right| {
             right
                 .committed_at
@@ -345,15 +351,27 @@ impl GitRepository {
     }
 
     pub fn tracked_changes(&self) -> Result<TrackedChangeScan, GitError> {
+        let roots = self.discovered_roots()?;
+        let mut changes = Vec::new();
+        for root in &roots {
+            let mut root_changes = root.repository.tracked_root_changes()?;
+            scope_changes(&mut root_changes, &root.descriptor);
+            changes.extend(root_changes);
+        }
+        sort_changes(&mut changes);
+        Ok(TrackedChangeScan {
+            root: self.root.to_string_lossy().into_owned(),
+            changes,
+        })
+    }
+
+    fn tracked_root_changes(&self) -> Result<Vec<FileChange>, GitError> {
         let status = self.run_read(
             "read tracked working tree status",
             ["status", "--porcelain=v2", "-z", "--untracked-files=no"],
         )?;
         let (_, changes) = parse_status(&status.stdout)?;
-        Ok(TrackedChangeScan {
-            root: self.root.to_string_lossy().into_owned(),
-            changes,
-        })
+        Ok(changes)
     }
 
     pub fn read_slices(
@@ -361,24 +379,22 @@ impl GitRepository {
         plan: RepositoryReadPlan,
         commit_limit: usize,
     ) -> Result<RepositorySliceSnapshot, GitError> {
-        let (main_branch, changes) = if plan.working_tree && (plan.head || plan.history) {
-            let (branch, changes) = self.read_branch_and_changes()?;
-            (Some(branch), Some(changes))
-        } else if plan.working_tree {
-            (None, Some(self.tracked_changes()?.changes))
+        let main_branch = if plan.working_tree && (plan.head || plan.history) {
+            Some(self.read_branch_and_changes()?.0)
         } else if plan.head {
-            (Some(self.read_head_state()?), None)
+            Some(self.read_head_state()?)
         } else if plan.history {
-            (
-                Some(crate::model::BranchState {
-                    oid: self.head_oid()?,
-                    ..crate::model::BranchState::default()
-                }),
-                None,
-            )
+            Some(crate::model::BranchState {
+                oid: self.head_oid()?,
+                ..crate::model::BranchState::default()
+            })
         } else {
-            (None, None)
+            None
         };
+        let changes = plan
+            .working_tree
+            .then(|| self.tracked_changes().map(|scan| scan.changes))
+            .transpose()?;
 
         let roots = if plan.refs || plan.history {
             self.discovered_roots()?
@@ -832,6 +848,24 @@ impl GitRepository {
         &self,
         cancellation: &CancellationToken,
     ) -> Result<UntrackedScan, GitError> {
+        let roots = self.discovered_roots()?;
+        let mut changes = Vec::new();
+        for root in &roots {
+            let mut root_changes = root.repository.untracked_root_changes(cancellation)?;
+            scope_changes(&mut root_changes, &root.descriptor);
+            changes.extend(root_changes);
+        }
+        sort_changes(&mut changes);
+        Ok(UntrackedScan {
+            root: self.root.to_string_lossy().into_owned(),
+            changes,
+        })
+    }
+
+    fn untracked_root_changes(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<FileChange>, GitError> {
         let output = self.run_cancellable_read(
             "scan untracked files",
             ["ls-files", "--others", "--exclude-standard", "-z"],
@@ -842,7 +876,9 @@ impl GitRepository {
             .split(|byte| *byte == 0)
             .filter(|path| !path.is_empty())
             .map(|path| FileChange {
+                repository_id: ".".to_string(),
                 path: String::from_utf8_lossy(path).into_owned(),
+                workspace_path: String::from_utf8_lossy(path).into_owned(),
                 original_path: None,
                 index_status: ChangeKind::Unmodified,
                 worktree_status: ChangeKind::Untracked,
@@ -852,10 +888,7 @@ impl GitRepository {
             .collect();
         changes.sort_by(|left, right| left.path.cmp(&right.path));
 
-        Ok(UntrackedScan {
-            root: self.root.to_string_lossy().into_owned(),
-            changes,
-        })
+        Ok(changes)
     }
 
     pub fn project_files(&self, limit: usize) -> Result<ProjectFileList, GitError> {
@@ -6462,7 +6495,10 @@ mod tests {
         assert!(working.commits.is_none());
         assert_eq!(
             repository.take_read_trace(),
-            vec!["read tracked working tree status".to_string()]
+            vec![
+                "discover initialized submodule candidates".to_string(),
+                "read tracked working tree status".to_string(),
+            ]
         );
 
         let expected_branch = repository.tracked_snapshot(150).unwrap().branch;

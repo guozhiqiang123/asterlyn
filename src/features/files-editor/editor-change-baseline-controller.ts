@@ -1,4 +1,5 @@
 import type { FileChange, RepositorySnapshot, WorkingDiffBase } from "../../models.ts";
+import { fileChangeKey, findFileChange } from "../../change-identity.ts";
 
 export interface EditorChangeBaselineGateway {
   readWorkingDiffBase(repositoryRoot: string, change: FileChange): Promise<WorkingDiffBase>;
@@ -10,6 +11,7 @@ export interface EditorChangeBaselineChange {
 
 type BaselineEntry = {
   readonly identity: string;
+  readonly workspacePath: string;
   status: "loading" | "ready" | "unavailable";
   content: string | null;
 };
@@ -44,19 +46,19 @@ export class EditorChangeBaselineController {
     this.snapshot = snapshot;
     const invalidated: string[] = [];
     const identities = new Map(
-      snapshot?.changes.map((change) => [change.path, changeBaselineIdentity(snapshot, change)]) ?? [],
+      snapshot?.changes.map((change) => [fileChangeKey(change), changeBaselineIdentity(snapshot, change)]) ?? [],
     );
-    for (const [path, entry] of this.entries) {
-      if (identities.get(path) !== entry.identity) {
-        this.entries.delete(path);
-        if (entry.status === "ready") invalidated.push(path);
+    for (const [key, entry] of this.entries) {
+      if (identities.get(key) !== entry.identity) {
+        this.entries.delete(key);
+        if (entry.status === "ready") invalidated.push(entry.workspacePath);
       }
     }
     for (const path of invalidated) this.emit(path);
   }
 
-  content(path: string): string | null {
-    const entry = this.entries.get(path);
+  content(path: string, repositoryId = "."): string | null {
+    const entry = this.entries.get(JSON.stringify([repositoryId, path]));
     return entry?.status === "ready" ? entry.content : null;
   }
 
@@ -67,23 +69,29 @@ export class EditorChangeBaselineController {
     fallback: string,
   ): string {
     this.installSnapshot(snapshot);
-    if (repositoryId === ".") this.load(path);
-    return this.content(path) ?? fallback;
+    this.load(path, repositoryId);
+    return this.content(path, repositoryId) ?? fallback;
   }
 
-  load(path: string): void {
+  load(path: string, repositoryId = "."): void {
     if (this.disposed) return;
     const snapshot = this.snapshot;
-    const change = snapshot?.changes.find((candidate) => candidate.path === path);
+    const change = snapshot ? findFileChange(snapshot.changes, repositoryId, path) : null;
     if (!snapshot || !change || !supportsBaseline(change)) return;
+    const key = fileChangeKey(change);
     const identity = changeBaselineIdentity(snapshot, change);
-    const existing = this.entries.get(path);
+    const existing = this.entries.get(key);
     if (existing?.identity === identity) return;
-    const entry: BaselineEntry = { identity, status: "loading", content: null };
-    this.entries.set(path, entry);
+    const entry: BaselineEntry = {
+      identity,
+      workspacePath: change.workspacePath || change.path,
+      status: "loading",
+      content: null,
+    };
+    this.entries.set(key, entry);
     void this.gateway.readWorkingDiffBase(snapshot.root, change).then(
-      (result) => this.complete(path, entry, result.content),
-      () => this.complete(path, entry, null),
+      (result) => this.complete(key, entry, result.content),
+      () => this.complete(key, entry, null),
     );
   }
 
@@ -103,7 +111,7 @@ export class EditorChangeBaselineController {
     if (this.disposed || this.entries.get(path) !== entry) return;
     entry.status = content === null ? "unavailable" : "ready";
     entry.content = content;
-    this.emit(path);
+    this.emit(entry.workspacePath);
   }
 
   private emit(path: string): void {
@@ -120,6 +128,7 @@ function changeBaselineIdentity(snapshot: RepositorySnapshot, change: FileChange
   return [
     snapshot.root,
     snapshot.branch.oid ?? "",
+    change.repositoryId || ".",
     change.path,
     change.originalPath ?? "",
     change.indexStatus,

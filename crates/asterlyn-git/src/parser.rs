@@ -58,7 +58,9 @@ pub(crate) fn parse_status(input: &[u8]) -> Result<(BranchState, Vec<FileChange>
             changes.push(parse_unmerged(rest)?);
         } else if let Some(path) = text.strip_prefix("? ") {
             changes.push(FileChange {
+                repository_id: ".".to_string(),
                 path: path.to_string(),
+                workspace_path: path.to_string(),
                 original_path: None,
                 index_status: ChangeKind::Unmodified,
                 worktree_status: ChangeKind::Untracked,
@@ -67,7 +69,9 @@ pub(crate) fn parse_status(input: &[u8]) -> Result<(BranchState, Vec<FileChange>
             });
         } else if let Some(path) = text.strip_prefix("! ") {
             changes.push(FileChange {
+                repository_id: ".".to_string(),
                 path: path.to_string(),
+                workspace_path: path.to_string(),
                 original_path: None,
                 index_status: ChangeKind::Ignored,
                 worktree_status: ChangeKind::Ignored,
@@ -91,7 +95,9 @@ fn parse_ordinary(rest: &str) -> Result<FileChange, GitError> {
 
     let (index_status, worktree_status) = parse_xy(fields[0]);
     Ok(FileChange {
+        repository_id: ".".to_string(),
         path: fields[7].to_string(),
+        workspace_path: fields[7].to_string(),
         original_path: None,
         index_status,
         worktree_status,
@@ -108,7 +114,9 @@ fn parse_rename(rest: &str) -> Result<FileChange, GitError> {
 
     let (index_status, worktree_status) = parse_xy(fields[0]);
     Ok(FileChange {
+        repository_id: ".".to_string(),
         path: fields[8].to_string(),
+        workspace_path: fields[8].to_string(),
         original_path: None,
         index_status,
         worktree_status,
@@ -123,7 +131,9 @@ fn parse_unmerged(rest: &str) -> Result<FileChange, GitError> {
         return Err(status_record_error("unmerged", fields.len()));
     }
     Ok(FileChange {
+        repository_id: ".".to_string(),
         path: fields[9].to_string(),
+        workspace_path: fields[9].to_string(),
         original_path: None,
         index_status: ChangeKind::Unmerged,
         worktree_status: ChangeKind::Unmerged,

@@ -66,6 +66,26 @@ test("Changes compacts unary folders while preserving the terminal disclosure ta
   );
 });
 
+test("multi-root changes render repository selectors and preserve duplicate relative paths", () => {
+  const main = change("same.txt");
+  const child = {
+    ...change("same.txt"), repositoryId: "modules/lib", workspacePath: "modules/lib/same.txt",
+  };
+  const current = snapshot([main, child]);
+  current.repositoryRoots.push({
+    id: "modules/lib", relativePath: "modules/lib", displayName: "lib", kind: "submodule",
+  });
+  const rows = changeViewRows(current, state());
+  assert.deepEqual(
+    rows.filter((row) => row.kind === "repository").map((row) => row.title),
+    ["repo", "lib"],
+  );
+  assert.equal(rows.filter((row) => row.kind === "file" && row.change.path === "same.txt").length, 2);
+  const html = renderChangeNavigation(current, state());
+  assert.match(html, /data-include-repository="modules\/lib"/u);
+  assert.match(html, /data-change-repository-id="modules\/lib"/u);
+});
+
 test("flat Changes rows sort by file name instead of directory path", () => {
   const rows = changeViewRows(
     snapshot([
@@ -174,7 +194,9 @@ function state() {
 
 function change(path, worktreeStatus = "modified", indexStatus = "unmodified") {
   return {
+    repositoryId: ".",
     path,
+    workspacePath: path,
     originalPath: null,
     indexStatus,
     worktreeStatus,

@@ -1238,6 +1238,7 @@ const demoBridge: DesktopBridge = {
 
   async stagePaths(
     repositoryRoot: string,
+    repositoryId: string,
     paths: string[],
   ): Promise<WorkingTreeMutationOutcome> {
     if (!isTauri) {
@@ -1247,11 +1248,12 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<WorkingTreeMutationOutcome>("stage_paths", {
       repositoryRoot,
+      repositoryId,
       paths,
     });
   },
 
-  async trashUntrackedPaths(repositoryRoot: string, paths: string[]): Promise<WorkingTreeMutationOutcome> {
+  async trashUntrackedPaths(repositoryRoot: string, repositoryId: string, paths: string[]): Promise<WorkingTreeMutationOutcome> {
     if (!isTauri) {
       await demoDelay();
       const removed = new Set(paths);
@@ -1259,11 +1261,12 @@ const demoBridge: DesktopBridge = {
         changes: browserSnapshot.changes.filter((change) => !removed.has(change.path)) };
       return demoWorkingTreeOutcome(browserSnapshot);
     }
-    return invoke<WorkingTreeMutationOutcome>("trash_untracked_paths", { repositoryRoot, paths });
+    return invoke<WorkingTreeMutationOutcome>("trash_untracked_paths", { repositoryRoot, repositoryId, paths });
   },
 
   async unstagePaths(
     repositoryRoot: string,
+    repositoryId: string,
     paths: string[],
   ): Promise<WorkingTreeMutationOutcome> {
     if (!isTauri) {
@@ -1273,6 +1276,7 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<WorkingTreeMutationOutcome>("unstage_paths", {
       repositoryRoot,
+      repositoryId,
       paths,
     });
   },
@@ -1986,7 +1990,9 @@ function reconcileDemoTextChange(
   if (existing?.worktreeStatus === "untracked") return;
   if (!existing && modified) {
     browserSnapshot.changes.push({
+      repositoryId: ".",
       path,
+      workspacePath: path,
       originalPath: null,
       indexStatus: "unmodified",
       worktreeStatus: "modified",

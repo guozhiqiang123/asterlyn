@@ -433,7 +433,7 @@ export const EN_US: LocaleCatalog = {
     changedFileCount: (count) => `${count} changed files`, resizeCommit: "Resize commit or stash message area", createCommit: "Commit or stash selected changes",
     commitMessage: "Message", messagePlaceholder: "Commit or stash message", messageRequirement: "Required for commit · Optional for stash", commitButton: "Commit", stashButton: "Stash Changes",
     resolveBeforeAction: "Resolve conflicts before committing or stashing.",
-    excludeSubmodules: "Exclude submodule changes; handle them from their own Git root.", selectFile: "Select at least one file.",
+    excludeSubmodules: "Exclude submodule changes; handle them from their own Git root.", selectFile: "Select at least one file.", selectSingleRepository: "Select changes from one Git repository at a time.", commitRepository: (name) => `Target repository: ${name}`,
     saveBeforeRevert: "Save or undo the unsaved editor changes before reverting this file",
     stagingUnversioned: (count) => `Staging ${count} unversioned files…`,
     stagedUnversioned: (count) => `Staged ${count} unversioned files`,

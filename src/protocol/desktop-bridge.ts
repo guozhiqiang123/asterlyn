@@ -360,9 +360,9 @@ export interface GitReadBridge {
 }
 
 export interface GitOperationBridge {
-  stagePaths(repositoryRoot: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
-  trashUntrackedPaths(repositoryRoot: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
-  unstagePaths(repositoryRoot: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
+  stagePaths(repositoryRoot: string, repositoryId: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
+  trashUntrackedPaths(repositoryRoot: string, repositoryId: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
+  unstagePaths(repositoryRoot: string, repositoryId: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
   commitChanges(
     repositoryRoot: string,
     message: string,

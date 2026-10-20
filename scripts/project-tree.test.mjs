@@ -79,6 +79,23 @@ test("project tree keeps explicit ignored directories and truthful file states",
   assert.equal(findProjectTreeNode(tree, "src/new.ts")?.status, "added");
 });
 
+test("submodule changes decorate their workspace path instead of the duplicate root path", () => {
+  const entries = projectTreeEntries(
+    [
+      { repositoryId: ".", path: "same.txt", workspacePath: "same.txt" },
+      { repositoryId: "modules/lib", path: "same.txt", workspacePath: "modules/lib/same.txt" },
+    ],
+    [{
+      repositoryId: "modules/lib", path: "same.txt", workspacePath: "modules/lib/same.txt",
+      originalPath: null, indexStatus: "unmodified", worktreeStatus: "modified",
+      conflicted: false, submodule: false,
+    }],
+    [],
+  );
+  assert.equal(entries.find((entry) => entry.path === "same.txt")?.status, "unmodified");
+  assert.equal(entries.find((entry) => entry.path === "modules/lib/same.txt")?.status, "modified");
+});
+
 test("ignored file descendants materialize their parent directories", () => {
   const entries = projectTreeEntries(
     [{

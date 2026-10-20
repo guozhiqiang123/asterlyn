@@ -2,16 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ChangesCommitController } from "../src/features/changes-commit/changes-commit-controller.ts";
+import { fileChangeKey } from "../src/change-identity.ts";
 
 test("snapshot reconciliation retains valid inclusion and selection identities", () => {
   const controller = new ChangesCommitController(gateway());
   controller.installSnapshot(snapshot([change("a.txt"), change("b.txt")]));
-  controller.setPathsIncluded(["b.txt"], false);
+  controller.setPathsIncluded([fileChangeKey(change("b.txt"))], false);
   controller.selectChange("a.txt");
 
   controller.installSnapshot(snapshot([change("b.txt"), change("c.txt")]));
   assert.equal(controller.state.selectedChange?.path, "b.txt");
-  assert.deepEqual([...controller.state.excludedPaths], ["b.txt"]);
+  assert.deepEqual([...controller.state.excludedPaths], [fileChangeKey(change("b.txt"))]);
   assert.deepEqual(controller.includedChanges().map(({ path }) => path), ["c.txt"]);
 });
 
@@ -239,13 +240,34 @@ test("commit sends only included files and clears its message after success", as
     },
   }));
   controller.installSnapshot(snapshot([change("a.txt"), change("b.txt")]));
-  controller.setPathsIncluded(["b.txt"], false);
+  controller.setPathsIncluded([fileChangeKey(change("b.txt"))], false);
   controller.setCommitMessage("  focused commit  ");
 
   const result = await controller.commit();
   assert.equal(result.status, "success");
   assert.deepEqual(committed, [{ message: "focused commit", paths: ["a.txt"] }]);
   assert.equal(controller.state.commitMessage, "");
+});
+
+test("commit requires one repository and routes an explicitly isolated child selection", async () => {
+  const committed = [];
+  const controller = new ChangesCommitController(gateway({
+    async commitChanges(_root, _message, changes) {
+      committed.push(changes.map(({ repositoryId, path }) => [repositoryId, path]));
+      return { oid: "child", snapshot: snapshot([]), refreshError: null, verificationWarning: null };
+    },
+  }));
+  const main = change("same.txt");
+  const child = {
+    ...change("same.txt"), repositoryId: "modules/lib", workspacePath: "modules/lib/same.txt",
+  };
+  controller.installSnapshot(snapshot([main, child]));
+  controller.setCommitMessage("child only");
+  assert.equal(controller.canCommit(), false);
+  controller.setPathsIncluded([fileChangeKey(main)], false);
+  assert.equal(controller.canCommit(), true);
+  assert.equal((await controller.commit()).status, "success");
+  assert.deepEqual(committed, [[["modules/lib", "same.txt"]]]);
 });
 
 test("stash accepts an optional shared message and sends only included files", async () => {
@@ -257,7 +279,7 @@ test("stash accepts an optional shared message and sends only included files", a
     },
   }));
   controller.installSnapshot(snapshot([change("a.txt"), change("b.txt")]));
-  controller.setPathsIncluded(["b.txt"], false);
+  controller.setPathsIncluded([fileChangeKey(change("b.txt"))], false);
 
   const result = await controller.stash();
   assert.equal(result.status, "success");
@@ -354,7 +376,9 @@ function snapshot(changes, root = "/repo") {
 
 function change(path, indexStatus = "unmodified", worktreeStatus = "modified") {
   return {
+    repositoryId: ".",
     path,
+    workspacePath: path,
     originalPath: null,
     indexStatus,
     worktreeStatus,

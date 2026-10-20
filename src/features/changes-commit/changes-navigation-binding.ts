@@ -1,6 +1,7 @@
 import type { FileChange, RepositorySnapshot } from "../../models.ts";
 import type { WorkspaceTargetIdentity } from "../../application/workbench-navigation.ts";
 import { changeGroup, type ChangeGroupId } from "./change-presentation.ts";
+import { findFileChange } from "../../change-identity.ts";
 import {
   DelegatedContextBinding,
   type DelegatedContextRequest,
@@ -23,6 +24,7 @@ export interface ChangesGroupContextTarget {
   readonly repositoryId: string;
   readonly repositoryRevision: number;
   readonly paths: readonly string[];
+  readonly workspacePaths: readonly string[];
 }
 
 export type ChangesContextTarget = ChangesFileContextTarget | ChangesGroupContextTarget;
@@ -46,11 +48,12 @@ export class ChangesContextBinding {
         const path = trigger.dataset.changePath;
         const group = trigger.dataset.changeGroup as ChangeGroupId | undefined;
         const context = current();
+        const repositoryId = trigger.dataset.changeRepositoryId ?? context.repositoryId;
         if (path) return resolveChangesContextTarget(
               context.snapshot,
               context.workspaceGeneration,
               path,
-              context.repositoryId,
+              repositoryId,
               context.repositoryRevision,
             );
         return group
@@ -58,7 +61,7 @@ export class ChangesContextBinding {
               context.snapshot,
               context.workspaceGeneration,
               group,
-              context.repositoryId,
+              repositoryId,
               context.repositoryRevision,
             )
           : null;
@@ -79,12 +82,12 @@ export function resolveChangesContextTarget(
   repositoryId = ".",
   repositoryRevision = 0,
 ): ChangesFileContextTarget | null {
-  const change = snapshot?.changes.find((candidate) => candidate.path === path);
+  const change = snapshot ? findFileChange(snapshot.changes, repositoryId, path) : null;
   return snapshot && change
     ? {
         workspaceRoot: snapshot.root,
         workspaceGeneration,
-        workspacePath: path,
+        workspacePath: change.workspacePath || change.path,
         kind: "file",
         repositoryId,
         repositoryRevision,
@@ -103,8 +106,12 @@ export function resolveChangesGroupContextTarget(
 ): ChangesGroupContextTarget | null {
   if (!snapshot || group !== "unversioned" || snapshot.untrackedState !== "complete") return null;
   const paths = snapshot.changes
-    .filter((change) => changeGroup(change) === group)
+    .filter((change) => (change.repositoryId || ".") === repositoryId && changeGroup(change) === group)
     .map((change) => change.path)
+    .sort();
+  const workspacePaths = snapshot.changes
+    .filter((change) => (change.repositoryId || ".") === repositoryId && changeGroup(change) === group)
+    .map((change) => change.workspacePath || change.path)
     .sort();
   return paths.length > 0 ? {
     workspaceRoot: snapshot.root,
@@ -114,6 +121,7 @@ export function resolveChangesGroupContextTarget(
     repositoryId,
     repositoryRevision,
     paths,
+    workspacePaths,
   } : null;
 }
 
@@ -138,7 +146,11 @@ export function changesContextTargetIsCurrent(
     );
     return Boolean(
       current && current.paths.length === target.paths.length &&
-      current.paths.every((path, index) => path === target.paths[index]),
+      current.paths.every((path, index) => path === target.paths[index]) &&
+      current.workspacePaths.length === (target.workspacePaths ?? target.paths).length &&
+      current.workspacePaths.every(
+        (path, index) => path === (target.workspacePaths ?? target.paths)[index],
+      ),
     );
   }
   const current = resolveChangesContextTarget(

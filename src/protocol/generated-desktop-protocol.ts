@@ -117,9 +117,9 @@ export interface DesktopCommandMap {
   read_commit_comparison_diff: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; path: string; originalPath: string | null; expandedUnchanged: boolean; }; result: Model.CommitComparisonDiffResult };
   read_commit_image_diff: { args: { repositoryRoot: string; repositoryId: string; commitOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
   read_commit_comparison_image_diff: { args: { repositoryRoot: string; repositoryId: string; beforeOid: string; afterOid: string; path: string; originalPath: string | null; }; result: Model.ImageDiffPreview };
-  stage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
-  trash_untracked_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
-  unstage_paths: { args: { repositoryRoot: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
+  stage_paths: { args: { repositoryRoot: string; repositoryId: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
+  trash_untracked_paths: { args: { repositoryRoot: string; repositoryId: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
+  unstage_paths: { args: { repositoryRoot: string; repositoryId: string; paths: Array<string>; }; result: Model.WorkingTreeMutationOutcome };
   commit_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; }; result: Model.CommitSelectedResult };
   stash_changes: { args: { repositoryRoot: string; message: string; selected: Array<Model.FileChange>; keepIndex: boolean; }; result: Model.RepositoryMutationOutcome };
   prepare_restore_changes: { args: { repositoryRoot: string; selected: Array<Model.FileChange>; }; result: Model.RestoreChangesPlan };

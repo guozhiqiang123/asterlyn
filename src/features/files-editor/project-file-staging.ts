@@ -16,7 +16,7 @@ interface CreatedFileStagingPort {
   beginTransition(): number;
   matches(generation: number, root: string): boolean;
   completeTransition(generation: number): void;
-  stagePaths(root: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
+  stagePaths(root: string, repositoryId: string, paths: string[]): Promise<WorkingTreeMutationOutcome>;
   install(outcome: WorkingTreeMutationOutcome): string;
   scanUntracked(root: string, generation: number): void;
   failureMessage(): string;
@@ -33,7 +33,7 @@ export function createCreatedFileStagingRuntime(
         port.workspaceRoot(),
         snapshot,
       );
-      return Boolean(snapshot && location?.repositoryId === "." && location.path !== ".");
+      return Boolean(snapshot && location && location.path !== ".");
     },
     async stage(workspacePath) {
       const snapshot = port.snapshot();
@@ -42,13 +42,17 @@ export function createCreatedFileStagingRuntime(
         port.workspaceRoot(),
         snapshot,
       );
-      if (!snapshot || location?.repositoryId !== "." || location.path === ".") {
+      if (!snapshot || !location || location.path === ".") {
         throw new Error(port.failureMessage());
       }
       const generation = port.beginTransition();
       let pendingRoot: string | null = null;
       try {
-        const outcome = await port.stagePaths(snapshot.root, [location.path]);
+        const outcome = await port.stagePaths(
+          snapshot.root,
+          location.repositoryId,
+          [location.path],
+        );
         if (!port.matches(generation, snapshot.root)) throw new Error(port.failureMessage());
         pendingRoot = port.install(outcome);
       } finally {

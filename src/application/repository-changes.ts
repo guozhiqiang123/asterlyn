@@ -1,19 +1,20 @@
 import type { RepositorySnapshot, TrackedChangeScan } from "../models.ts";
+import { fileChangeKey } from "../change-identity.ts";
 
 export function mergeTrackedChanges(
   snapshot: RepositorySnapshot,
   scan: TrackedChangeScan,
 ): RepositorySnapshot {
   if (snapshot.root !== scan.root) return snapshot;
-  const trackedPaths = new Set(scan.changes.map((change) => change.path));
+  const trackedPaths = new Set(scan.changes.map(fileChangeKey));
   const untracked = snapshot.changes.filter(
     (change) =>
-      change.worktreeStatus === "untracked" && !trackedPaths.has(change.path),
+      change.worktreeStatus === "untracked" && !trackedPaths.has(fileChangeKey(change)),
   );
   return {
     ...snapshot,
     changes: [...scan.changes, ...untracked].sort((left, right) =>
-      left.path.localeCompare(right.path),
+      fileChangeKey(left).localeCompare(fileChangeKey(right)),
     ),
   };
 }

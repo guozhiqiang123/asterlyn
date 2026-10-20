@@ -63,7 +63,9 @@ export interface RemoteAuthenticationStatus {
 }
 
 export interface FileChange {
+  repositoryId: string;
   path: string;
+  workspacePath: string;
   originalPath: string | null;
   indexStatus: ChangeKind;
   worktreeStatus: ChangeKind;
@@ -868,6 +870,7 @@ export interface WorkingDiffBase {
 export type WorkspaceView = "changes" | "history" | "branches";
 
 export interface ChangeSelection {
+  repositoryId: string;
   path: string;
   staged: boolean;
 }

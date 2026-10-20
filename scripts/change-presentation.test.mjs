@@ -9,10 +9,13 @@ import {
   includedChanges,
   reconcileExcludedChangePaths,
 } from "../src/features/changes-commit/change-presentation.ts";
+import { fileChangeKey } from "../src/change-identity.ts";
 
 function change(path, indexStatus = "unmodified", worktreeStatus = "modified") {
   return {
+    repositoryId: ".",
     path,
+    workspacePath: path,
     originalPath: null,
     indexStatus,
     worktreeStatus,
@@ -36,12 +39,12 @@ test("change groups and effective colors describe each path once", () => {
 test("excluded paths survive refresh only while the change still exists", () => {
   const changes = [change("a.txt"), change("b.txt")];
   assert.deepEqual(
-    includedChanges(changes, new Set(["b.txt"])).map((item) => item.path),
+    includedChanges(changes, new Set([fileChangeKey(changes[1])])).map((item) => item.path),
     ["a.txt"],
   );
   assert.deepEqual(
-    reconcileExcludedChangePaths(new Set(["b.txt", "gone.txt"]), changes),
-    new Set(["b.txt"]),
+    reconcileExcludedChangePaths(new Set([fileChangeKey(changes[1]), "gone.txt"]), changes),
+    new Set([fileChangeKey(changes[1])]),
   );
 });
 
@@ -55,8 +58,8 @@ test("tree projection keeps directory ancestry and exact descendant paths", () =
   assert.deepEqual(tree.map((node) => node.name), ["src", "README.md"]);
   assert.deepEqual(tree[0].children[0].children.map((node) => node.name), ["a.ts", "z.ts"]);
   assert.deepEqual(descendantChangePaths(tree[0]), [
-    "src/core/a.ts",
-    "src/core/z.ts",
-    "src/ui/b.ts",
+    fileChangeKey(change("src/core/a.ts")),
+    fileChangeKey(change("src/core/z.ts")),
+    fileChangeKey(change("src/ui/b.ts")),
   ]);
 });

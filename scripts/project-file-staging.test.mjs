@@ -42,8 +42,8 @@ test("created-file staging installs one exact-path mutation before rescanning", 
     beginTransition: () => 4,
     matches: (generation, root) => generation === 4 && root === "/repo",
     completeTransition: (generation) => records.completed.push(generation),
-    stagePaths: async (root, paths) => {
-      records.staged.push([root, paths]);
+    stagePaths: async (root, repositoryId, paths) => {
+      records.staged.push([root, repositoryId, paths]);
       return { tracked: { root, changes: [] }, invalidatedSlices: ["workingTree"] };
     },
     install: (outcome) => {
@@ -55,13 +55,17 @@ test("created-file staging installs one exact-path mutation before rescanning", 
   });
 
   assert.equal(runtime.canStage("src/new.txt"), true);
-  assert.equal(runtime.canStage("vendor/lib/new.txt"), false);
+  assert.equal(runtime.canStage("vendor/lib/new.txt"), true);
   await runtime.stage("src/new.txt");
+  await runtime.stage("vendor/lib/new.txt");
 
-  assert.deepEqual(records.staged, [["/repo", ["src/new.txt"]]]);
-  assert.equal(records.installed.length, 1);
-  assert.deepEqual(records.completed, [4]);
-  assert.deepEqual(records.scans, [["/repo", 4]]);
+  assert.deepEqual(records.staged, [
+    ["/repo", ".", ["src/new.txt"]],
+    ["/repo", "vendor/lib", ["new.txt"]],
+  ]);
+  assert.equal(records.installed.length, 2);
+  assert.deepEqual(records.completed, [4, 4]);
+  assert.deepEqual(records.scans, [["/repo", 4], ["/repo", 4]]);
 });
 
 test("a stale stage completion is never installed as current state", async () => {

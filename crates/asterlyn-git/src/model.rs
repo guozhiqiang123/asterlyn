@@ -358,12 +358,20 @@ pub struct RemoteAuthenticationStatus {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FileChange {
+    #[serde(default = "primary_repository_id")]
+    pub repository_id: String,
     pub path: String,
+    #[serde(default)]
+    pub workspace_path: String,
     pub original_path: Option<String>,
     pub index_status: ChangeKind,
     pub worktree_status: ChangeKind,
     pub conflicted: bool,
     pub submodule: bool,
+}
+
+fn primary_repository_id() -> String {
+    ".".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

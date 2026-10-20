@@ -88,7 +88,7 @@ export function editorDocumentKey(document: EditorDocument): string {
     case "conflict-resolution":
       return `conflict\0${document.repositoryRoot}\0${document.path}`;
     case "working-diff":
-      return `working\0${document.repositoryRoot}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
+      return `working\0${document.repositoryRoot}\0${document.selection.repositoryId}\0${document.selection.staged ? "index" : "worktree"}\0${document.selection.path}`;
     case "commit-diff":
       return `commit\0${document.repositoryRoot}\0${document.repositoryId}\0${document.oid}\0${document.path}`;
     case "commit-comparison-diff":

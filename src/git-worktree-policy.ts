@@ -8,5 +8,7 @@ export function isSubmoduleWorktreeOnlyChange(change: FileChange): boolean {
 export function topLevelMutationChanges(
   changes: readonly FileChange[],
 ): FileChange[] {
-  return changes.filter((change) => !isSubmoduleWorktreeOnlyChange(change));
+  return changes.filter(
+    (change) => (change.repositoryId || ".") === "." && !isSubmoduleWorktreeOnlyChange(change),
+  );
 }
