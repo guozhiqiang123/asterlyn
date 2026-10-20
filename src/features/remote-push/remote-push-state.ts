@@ -90,6 +90,7 @@ export function resolveRemoteUpdateActivation(
 
 export interface RemotePushState {
   selectedRemote: string | null;
+  pushRepositoryId: string;
   sourceBranch: string | null;
   operation: RemoteOperationState | null;
   dialog: "update" | "push" | null;
@@ -121,6 +122,7 @@ export interface RemotePushState {
 export function createRemotePushState(): RemotePushState {
   return {
     selectedRemote: null,
+    pushRepositoryId: ".",
     sourceBranch: null,
     operation: null,
     dialog: null,

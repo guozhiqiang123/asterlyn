@@ -622,6 +622,7 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       strings(
         result,
         command,
+        "repositoryId",
         "remote",
         "branch",
         "sourceRef",

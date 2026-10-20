@@ -39,6 +39,7 @@ mod commit_details;
 mod head_commit_mutation;
 mod history_query;
 mod multi_root_changes;
+mod multi_root_remote;
 mod remote_branch_sync;
 pub use remote_branch_sync::BranchPushTarget;
 mod stash_creation;
@@ -117,6 +118,14 @@ struct PushExecutionOptions<'a> {
     tag_mode: PushTagMode,
     destination_branch: Option<&'a str>,
     source_branch: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RepositoryPushTarget<'a> {
+    pub repository_id: &'a str,
+    pub remote: &'a str,
+    pub destination_branch: Option<&'a str>,
+    pub source_branch: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]
@@ -330,11 +339,14 @@ impl GitRepository {
             let mut changes = child.changes;
             let mut branches = child.branches;
             let mut commits = child.commits;
+            let mut remotes = child.remotes;
             scope_changes(&mut changes, &root.descriptor);
             scope_branches(&mut branches, &root.descriptor.id);
             scope_commits(&mut commits, &root.descriptor.id);
+            scope_remotes(&mut remotes, &root.descriptor.id);
             snapshot.changes.extend(changes);
             snapshot.branches.extend(branches);
+            snapshot.remotes.extend(remotes);
             histories.push(commits);
         }
         sort_changes(&mut snapshot.changes);
@@ -402,6 +414,7 @@ impl GitRepository {
             Vec::new()
         };
         let mut projected_branches = Vec::new();
+        let mut projected_remotes = Vec::new();
         let mut histories = Vec::new();
         if plan.refs || plan.history {
             for (index, root) in roots.iter().enumerate() {
@@ -431,10 +444,13 @@ impl GitRepository {
                     histories.push(commits);
                 }
                 if plan.refs {
+                    let mut remotes = root.repository.remote_summaries()?;
                     if index > 0 {
                         scope_branches(&mut branches, repository_id);
+                        scope_remotes(&mut remotes, repository_id);
                     }
                     projected_branches.extend(branches);
+                    projected_remotes.extend(remotes);
                 }
             }
         }
@@ -466,7 +482,7 @@ impl GitRepository {
                 .history
                 .then(|| merge_root_histories(histories, commit_limit)),
             branches: plan.refs.then_some(projected_branches),
-            remotes: plan.refs.then(|| self.remote_summaries()).transpose()?,
+            remotes: plan.refs.then_some(projected_remotes),
             untracked_state: plan.working_tree.then_some(UntrackedState::Pending),
         })
     }
@@ -4375,6 +4391,7 @@ impl GitRepository {
         scope_commits(&mut commits, ".");
         let next_offset = offset.saturating_add(commits.len());
         Ok(PushPreview {
+            repository_id: ".".to_string(),
             remote: target.remote,
             branch: target.branch,
             source_ref: target.source_ref,
@@ -4758,6 +4775,7 @@ impl GitRepository {
                 let fetch_supported = self.remote_fetch_is_supported(&name)?;
                 let push_supported = fetch_supported && !self.remote_is_mirror(&name)?;
                 Ok(RemoteSummary {
+                    repository_id: ".".to_string(),
                     name,
                     url,
                     fetch_supported,
@@ -5577,6 +5595,12 @@ fn scope_commits(commits: &mut [CommitSummary], repository_id: &str) {
 fn scope_branches(branches: &mut [crate::model::BranchSummary], repository_id: &str) {
     for branch in branches {
         branch.repository_id = repository_id.to_string();
+    }
+}
+
+fn scope_remotes(remotes: &mut [RemoteSummary], repository_id: &str) {
+    for remote in remotes {
+        remote.repository_id = repository_id.to_string();
     }
 }
 
@@ -9543,6 +9567,7 @@ mod tests {
         assert_eq!(
             snapshot.remotes,
             vec![RemoteSummary {
+                repository_id: ".".to_string(),
                 name: "origin".to_string(),
                 url: Some(fixture.remote.to_string_lossy().into_owned()),
                 fetch_supported: true,

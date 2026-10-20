@@ -24,6 +24,7 @@ export interface BranchState {
 }
 
 export interface RemoteSummary {
+  repositoryId?: string;
   name: string;
   url: string | null;
   fetchSupported: boolean;
@@ -96,6 +97,7 @@ export interface CommitSummary {
 }
 
 export interface PushPreview {
+  repositoryId?: string;
   remote: string;
   branch: string;
   sourceRef: string;

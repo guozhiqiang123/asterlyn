@@ -6,16 +6,19 @@ import type { RemoteAuthenticationStatus } from "../../models.ts";
 export interface RemoteAuthenticationGateway {
   readRemoteAuthentication(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
   ): Promise<RemoteAuthenticationStatus>;
   storeRemoteHttpsCredential(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     username: string,
     token: string,
   ): Promise<RemoteAuthenticationStatus>;
   configureRemoteSsh(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     sshUrl: string,
   ): Promise<RemoteAuthenticationStatus>;
@@ -25,6 +28,7 @@ export interface RemoteAuthenticationState {
   checking: boolean;
   dialog: {
     repositoryRoot: string;
+    repositoryId: string;
     status: RemoteAuthenticationStatus;
   } | null;
   saving: "https" | "ssh" | null;
@@ -75,10 +79,12 @@ export class RemoteAuthenticationController {
     repositoryRoot: string,
     remote: string,
     forceDialog = false,
+    repositoryId = ".",
   ): Promise<RemoteAuthenticationResult> {
     const sequence = ++this.sequence;
     const keepDialog =
       this.state.dialog?.repositoryRoot === repositoryRoot &&
+      this.state.dialog.repositoryId === repositoryId &&
       this.state.dialog.status.remote === remote;
     this.state.checking = true;
     if (!keepDialog) this.state.dialog = null;
@@ -86,14 +92,14 @@ export class RemoteAuthenticationController {
     this.state.error = null;
     this.emit();
     try {
-      const status = await this.gateway.readRemoteAuthentication(repositoryRoot, remote);
+      const status = await this.gateway.readRemoteAuthentication(repositoryRoot, repositoryId, remote);
       if (!this.matches(sequence)) return "stale";
       this.state.checking = false;
       if (!forceDialog && authenticationCanProceed(status)) {
         this.emit();
         return "ready";
       }
-      this.state.dialog = { repositoryRoot, status };
+      this.state.dialog = { repositoryRoot, repositoryId, status };
       this.emit();
       return "required";
     } catch (error) {
@@ -120,6 +126,7 @@ export class RemoteAuthenticationController {
     try {
       const status = await this.gateway.storeRemoteHttpsCredential(
         dialog.repositoryRoot,
+        dialog.repositoryId,
         dialog.status.remote,
         username,
         token,
@@ -127,7 +134,7 @@ export class RemoteAuthenticationController {
       if (!this.matches(sequence)) return "stale";
       this.state.saving = null;
       if (!authenticationCanProceed(status)) {
-        this.state.dialog = { repositoryRoot: dialog.repositoryRoot, status };
+        this.state.dialog = { repositoryRoot: dialog.repositoryRoot, repositoryId: dialog.repositoryId, status };
         this.state.error = this.remoteMessages.credentialNotRetained;
         this.emit();
         return "failure";
@@ -159,13 +166,14 @@ export class RemoteAuthenticationController {
     try {
       const status = await this.gateway.configureRemoteSsh(
         dialog.repositoryRoot,
+        dialog.repositoryId,
         dialog.status.remote,
         sshUrl,
       );
       if (!this.matches(sequence)) return "stale";
       this.state.saving = null;
       if (!authenticationCanProceed(status)) {
-        this.state.dialog = { repositoryRoot: dialog.repositoryRoot, status };
+        this.state.dialog = { repositoryRoot: dialog.repositoryRoot, repositoryId: dialog.repositoryId, status };
         this.state.error = this.remoteMessages.sshIdentityMissing;
         this.emit();
         return "failure";

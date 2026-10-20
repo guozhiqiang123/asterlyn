@@ -17,7 +17,7 @@ export interface BranchRemoteActionRuntimePorts {
   readonly remoteOperation: () => { readonly kind: "fetch" | "pull" | "push" } | null;
   readonly workbenchBusy: () => boolean;
   readonly activateCurrent: (kind: BranchRemoteAction, anchor: HTMLElement) => Promise<void>;
-  readonly openBranchPush: (sourceBranch: string, remoteName: string) => boolean;
+  readonly openBranchPush: (sourceBranch: string, remoteName: string, repositoryId: string) => boolean;
   readonly focusPushDialog: (anchor: HTMLElement) => void;
   readonly updateLocalBranch: (
     repositoryRoot: string,
@@ -50,7 +50,9 @@ export class BranchRemoteActionRuntime {
     kind: BranchRemoteAction,
     target: BranchContextTarget | null = null,
   ): string | null {
-    if (!target || target.branch.current) return this.currentBlockedReason(kind);
+    if (!target || (target.branch.current && target.branch.repositoryId === ".")) {
+      return this.currentBlockedReason(kind);
+    }
     const localization = this.ports.localization();
     const remoteCopy = localization.catalog.remote;
     const branchCopy = localization.catalog.history.branchContextMenu;
@@ -63,12 +65,15 @@ export class BranchRemoteActionRuntime {
     if (
       target.branch.kind !== "local" ||
       target.matches.length !== 1 ||
-      target.branch.repositoryId !== "."
+      (kind === "pull" && target.branch.repositoryId !== ".")
     ) return branchCopy.targetChanged;
     if (kind === "pull") return this.updateBlockedReason(target.branch, snapshot, localization);
     const remoteName = this.remoteName(target.branch, snapshot);
     if (!remoteName) return remoteCopy.unavailable(remoteCopy.policy.selectConfigured);
-    const remote = snapshot.remotes.find((candidate) => candidate.name === remoteName);
+    const remote = snapshot.remotes.find((candidate) =>
+      (candidate.repositoryId ?? ".") === target.branch.repositoryId &&
+      candidate.name === remoteName
+    );
     return remote?.pushSupported
       ? null
       : remoteCopy.unavailable(remoteCopy.policy.unsupportedPush);
@@ -79,7 +84,7 @@ export class BranchRemoteActionRuntime {
     target: BranchContextTarget,
     anchor: HTMLElement,
   ): Promise<void> {
-    if (target.branch.current) {
+    if (target.branch.current && target.branch.repositoryId === ".") {
       await this.ports.activateCurrent(kind, anchor);
       return;
     }
@@ -98,7 +103,7 @@ export class BranchRemoteActionRuntime {
     }
     const snapshot = this.ports.snapshot();
     const remoteName = snapshot ? this.remoteName(target.branch, snapshot) : null;
-    if (!remoteName || !this.ports.openBranchPush(target.branch.fullName, remoteName)) {
+    if (!remoteName || !this.ports.openBranchPush(target.branch.fullName, remoteName, target.branch.repositoryId)) {
       this.ports.showWarning(
         this.blockedReason("push", target) ??
           this.ports.localization().catalog.remote.actionStateChanged(
@@ -151,11 +156,14 @@ export class BranchRemoteActionRuntime {
 
   private remoteName(branch: BranchSummary, snapshot: RepositorySnapshot): string | null {
     if (branch.upstreamRemote) return branch.upstreamRemote;
-    const selected = snapshot.remotes.find(
+    const remotes = snapshot.remotes.filter(
+      (remote) => (remote.repositoryId ?? ".") === branch.repositoryId,
+    );
+    const selected = remotes.find(
       (remote) => remote.name === this.ports.selectedRemote(),
     );
-    return selected?.name ?? snapshot.remotes.find((remote) => remote.name === "origin")?.name ??
-      snapshot.remotes[0]?.name ?? null;
+    return selected?.name ?? remotes.find((remote) => remote.name === "origin")?.name ??
+      remotes[0]?.name ?? null;
   }
 
   private async update(target: BranchContextTarget): Promise<void> {

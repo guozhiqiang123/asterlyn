@@ -1,6 +1,6 @@
 # Submodule working-tree changes plan
 
-- **Status:** Core scope implemented and installed locally; rendered-window probe pending host-session recovery
+- **Status:** SM0–SM5 implemented, fully validated, and installed locally
 - **Date:** 2026-10-20
 - **Baseline:** `80465ef`
 - **Working branch:** `main`
@@ -230,3 +230,48 @@ rendered-probe pass. The installed application was relaunched against
 Child-root transactional restore, stash, and conflict editing remain explicit guarded follow-ups.
 They are not silently redirected to the primary repository and do not block Files decoration,
 Changes discovery/grouping, child diff, staging, or per-repository commit acceptance.
+
+## SM5 follow-up — hierarchy and repository-scoped Push
+
+The first installed implementation exposed two remaining gaps during acceptance. Repository groups
+were present in Changes, but their inner status groups had the same horizontal origin and therefore
+did not read as children. Push also continued to derive remotes, previews, authentication, file
+details, and execution from the primary repository even when outgoing commits belonged to an
+initialized child root.
+
+This follow-up closes both gaps with these boundaries:
+
+- Changes renders an explicit `repository -> status group -> directory/file` hierarchy. Status
+  groups receive one repository-level indent and descendants retain their existing tree depth.
+- Remote summaries and push previews carry `repositoryId`; child remotes are scoped during the
+  authoritative multi-root snapshot instead of being collapsed by a shared remote name such as
+  `origin`.
+- Push presents every initialized root as a selectable target, automatically preferring a root with
+  outgoing commits. Source branch, destination, outgoing commits, changed files, file diff,
+  authentication, credential configuration, and final push all use that same selected identity.
+- One Push action targets exactly one repository. Asterlyn does not silently combine independent
+  repositories into a partially successful operation.
+- Native commands resolve the renderer's `repositoryId` only against discovered initialized roots;
+  arbitrary filesystem paths remain outside the operation boundary.
+- The main toolbar and remote-management editor remain primary-root controls. This avoids showing
+  duplicate `origin` entries without repository context while the Push dialog owns multi-root
+  publication.
+
+Acceptance requires a fixture where the primary root has no outgoing commits and a child root has
+one. Opening Push must select the child root, render its branch and outgoing commit, request its
+preview and authentication, and execute only against that child. Existing single-root behavior and
+all primary-root remote controls must remain unchanged.
+
+SM5 passed the complete 1,246-test frontend suite, type checking, production build, the complete
+Rust workspace tests, strict Clippy, formatting, and patch-hygiene checks. The real-submodule Rust
+fixture verifies child-remote discovery and a repository-scoped outgoing preview; the frontend
+fixture verifies automatic child-root selection plus repository-qualified preview and execution.
+
+The accepted arm64 macOS `0.1.13` archive is
+`target/release/bundle/macos/Asterlyn-0.1.13-submodule-push-roots-20261020.app.zip` (14,788,601
+bytes, SHA-256 `3a3254686fc0942ab0a37df6c1cb33b67abb21836978a2cb688e5d88d1cae322`). Its ad-hoc
+hardened-runtime signature passed strict deep verification, and both the bundle and installed app
+passed the rendered-window smoke test. The installed executable matches the accepted bundle with
+SHA-256 `a976672ffafb9f0cbfab3af802e274ed692a33d63adf9a37decd6d1cdbf96695`; the immediately
+previous installation is recoverable at
+`/Applications/Asterlyn-before-submodule-push-roots-20261020.app`.

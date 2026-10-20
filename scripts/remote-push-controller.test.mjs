@@ -143,6 +143,58 @@ test("non-current branch Push binds preview and execution to the exact source re
   controller.dispose();
 });
 
+test("Push selects an outgoing submodule and keeps preview and execution repository-scoped", async () => {
+  const calls = [];
+  const repository = snapshot({
+    repositoryRoots: [
+      { id: ".", relativePath: ".", displayName: "repo", kind: "main" },
+      { id: "modules/lib", relativePath: "modules/lib", displayName: "lib", kind: "submodule" },
+    ],
+    branch: { ahead: 0 },
+    branches: [{
+      repositoryId: "modules/lib", kind: "local", fullName: "refs/heads/topic", name: "topic",
+      oid: "c".repeat(40), current: true, upstream: "origin/topic", tracking: "[ahead 1]",
+      upstreamRemote: "origin", upstreamRef: "refs/heads/topic", ahead: 1, behind: 0,
+      committedAt: 1, subject: "Topic", primaryWorktreePath: null, linkedWorktreePath: null,
+    }],
+    remotes: [
+      { repositoryId: ".", name: "origin", fetchSupported: true, pushSupported: true },
+      { repositoryId: "modules/lib", name: "origin", fetchSupported: true, pushSupported: true },
+    ],
+  });
+  const gateway = createGateway({
+    async readPushPreview(_root, repositoryId, remote) {
+      calls.push(["preview", repositoryId, remote]);
+      return {
+        ...preview(remote, `${repositoryId}-token`), repositoryId, branch: repositoryId === "." ? "main" : "topic",
+        commits: preview(remote, "unused").commits.map((entry) => ({ ...entry, repositoryId })),
+      };
+    },
+    async pushCurrent(_root, repositoryId, remote) {
+      calls.push(["push", repositoryId, remote]);
+      return repository;
+    },
+  });
+  const controller = new RemotePushController(gateway);
+  controller.installSnapshot(repository);
+
+  assert.equal(controller.openDialog("push"), true);
+  await settle();
+  assert.equal(controller.state.pushRepositoryId, "modules/lib");
+  assert.deepEqual(calls[0], ["preview", "modules/lib", "origin"]);
+  assert.equal(controller.state.pushPreview?.repositoryId, "modules/lib");
+  const { renderRemoteDialogContent } = await import("../src/features/remote-push/remote-push-view.ts");
+  const html = renderRemoteDialogContent({ snapshot: repository, state: controller.state });
+  assert.match(html, /data-push-repository-id="\."/u);
+  assert.match(html, /class="push-repository-option selected"[^>]*data-push-repository-id="modules\/lib"/u);
+  assert.match(html, />lib<\/strong><small>topic<\/small>/u);
+  assert.equal((await controller.runOperation("push")).status, "success");
+  assert.deepEqual(calls[1], ["push", "modules/lib", "origin"]);
+
+  controller.closeDialog();
+  controller.dispose();
+});
+
 test("tag refresh preserves reviewed content and replaces it atomically", async () => {
   const refresh = deferred();
   const gateway = createGateway({
@@ -488,7 +540,7 @@ function createGateway(overrides = {}) {
     async readCommitDetails(_root, _repositoryId, oid) {
       return details(oid, `${oid}.txt`);
     },
-    async readPushFileCommit(_root, _remote, _tagMode, _token, path) {
+    async readPushFileCommit(_root, _repositoryId, _remote, _tagMode, _token, path) {
       return details(path, path);
     },
     async readCommitDiff(_root, repositoryId, oid, path) {
@@ -684,11 +736,11 @@ test("selecting destination branch reloads push preview and forwards to push", a
       Promise.resolve(preview("origin", "t2")),
       Promise.resolve(preview("origin", "t3")),
     ],
-    readPushPreview(_root, remote, tagMode, _offset, _pageSize, destinationBranch) {
+    readPushPreview(_root, _repositoryId, remote, tagMode, _offset, _pageSize, destinationBranch) {
       previewCalls.push({ remote, tagMode, destinationBranch });
       return gateway.previewResponses.shift();
     },
-    pushCurrent(_root, remote, mode, tagMode, _token, _opId, destinationBranch) {
+    pushCurrent(_root, _repositoryId, remote, mode, tagMode, _token, _opId, destinationBranch) {
       pushCalls.push({ remote, mode, tagMode, destinationBranch });
       return Promise.resolve(snapshot());
     },
@@ -729,11 +781,11 @@ test("custom branch mode validates branch name and handles custom branch push", 
       Promise.resolve(preview("origin", "p1")),
       Promise.resolve(preview("origin", "p2")),
     ],
-    readPushPreview(_root, remote, tagMode, _offset, _pageSize, destinationBranch) {
+    readPushPreview(_root, _repositoryId, remote, tagMode, _offset, _pageSize, destinationBranch) {
       previewCalls.push({ remote, destinationBranch });
       return gateway.previewResponses.shift();
     },
-    pushCurrent(_root, remote, mode, tagMode, _token, _opId, destinationBranch) {
+    pushCurrent(_root, _repositoryId, remote, mode, tagMode, _token, _opId, destinationBranch) {
       pushCalls.push({ remote, destinationBranch });
       return Promise.resolve(snapshot());
     },

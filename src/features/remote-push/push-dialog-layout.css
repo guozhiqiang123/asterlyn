@@ -44,3 +44,59 @@
 #push-diff-editor-host {
   position: relative;
 }
+
+.push-repository-selector {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.push-repository-label {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.push-repository-option {
+  display: grid;
+  min-width: 150px;
+  grid-template-columns: 16px minmax(70px, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-chrome);
+  color: var(--text-soft);
+  text-align: left;
+}
+
+.push-repository-option.selected {
+  border-color: var(--info-border);
+  background: var(--info-bg-strong);
+  box-shadow: inset 3px 0 var(--focus-ring-bright);
+}
+
+.push-repository-option > span {
+  display: grid;
+  min-width: 0;
+}
+
+.push-repository-option strong,
+.push-repository-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.push-repository-option small,
+.push-repository-option em {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-style: normal;
+}

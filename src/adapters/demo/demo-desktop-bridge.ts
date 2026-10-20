@@ -1515,6 +1515,7 @@ const demoBridge: DesktopBridge = {
 
   async readRemoteAuthentication(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
   ): Promise<RemoteAuthenticationStatus> {
     if (!isTauri) {
@@ -1529,12 +1530,14 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<RemoteAuthenticationStatus>("read_remote_authentication", {
       repositoryRoot,
+      repositoryId,
       remote,
     });
   },
 
   async storeRemoteHttpsCredential(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     username: string,
     token: string,
@@ -1551,6 +1554,7 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<RemoteAuthenticationStatus>("store_remote_https_credential", {
       repositoryRoot,
+      repositoryId,
       remote,
       username,
       token,
@@ -1559,6 +1563,7 @@ const demoBridge: DesktopBridge = {
 
   async configureRemoteSsh(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     sshUrl: string,
   ): Promise<RemoteAuthenticationStatus> {
@@ -1574,6 +1579,7 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<RemoteAuthenticationStatus>("configure_remote_ssh", {
       repositoryRoot,
+      repositoryId,
       remote,
       sshUrl,
     });
@@ -1581,6 +1587,7 @@ const demoBridge: DesktopBridge = {
 
   async readPushPreview(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     tagMode: PushTagMode,
     offset: number,
@@ -1590,10 +1597,11 @@ const demoBridge: DesktopBridge = {
   ): Promise<PushPreview> {
     if (!isTauri) {
       await demoDelay(120);
-      return demoPushPreview(remote, tagMode, offset, pageSize);
+      return { ...demoPushPreview(remote, tagMode, offset, pageSize), repositoryId };
     }
     return invoke<PushPreview>("read_push_preview", {
       repositoryRoot,
+      repositoryId,
       remote,
       tagMode,
       offset,
@@ -1605,6 +1613,7 @@ const demoBridge: DesktopBridge = {
 
   async readPushFileCommit(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     tagMode: PushTagMode,
     previewToken: string,
@@ -1621,10 +1630,11 @@ const demoBridge: DesktopBridge = {
         (browserCommitFiles.get(candidate.oid) ?? demoCommitDetails(candidate.oid).files)
           .some((file) => file.path === path),
       );
-      return commit ? demoCommitDetails(commit.oid) : null;
+      return commit ? { ...demoCommitDetails(commit.oid), repositoryId } : null;
     }
     return invoke<CommitDetails | null>("read_push_file_commit", {
       repositoryRoot,
+      repositoryId,
       remote,
       tagMode,
       previewToken,
@@ -1654,6 +1664,7 @@ const demoBridge: DesktopBridge = {
 
   async pushCurrent(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     mode: PushMode,
     tagMode: PushTagMode,
@@ -1678,6 +1689,7 @@ const demoBridge: DesktopBridge = {
     }
     return invoke<RepositoryMutationOutcome>("push_current", {
       repositoryRoot,
+      repositoryId,
       remote,
       mode,
       tagMode,

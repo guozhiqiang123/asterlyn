@@ -53,6 +53,7 @@ export interface RemotePushChange {
 export interface RemotePushGateway {
   readPushPreview(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     tagMode: PushTagMode,
     offset: number,
@@ -67,6 +68,7 @@ export interface RemotePushGateway {
   ): Promise<CommitDetails>;
   readPushFileCommit(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     tagMode: PushTagMode,
     previewToken: string,
@@ -114,6 +116,7 @@ export interface RemotePushGateway {
   pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositoryMutationOutcome>;
   pushCurrent(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     mode: PushMode,
     tagMode: PushTagMode,

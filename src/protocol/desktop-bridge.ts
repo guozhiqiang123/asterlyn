@@ -341,6 +341,7 @@ export interface GitReadBridge {
   ): Promise<ImageDiffPreview>;
   readPushPreview(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     tagMode: PushTagMode,
     offset: number,
@@ -350,6 +351,7 @@ export interface GitReadBridge {
   ): Promise<PushPreview>;
   readPushFileCommit(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     tagMode: PushTagMode,
     previewToken: string,
@@ -435,16 +437,19 @@ export interface GitOperationBridge {
   ): Promise<RepositoryMutationOutcome>;
   readRemoteAuthentication(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
   ): Promise<RemoteAuthenticationStatus>;
   storeRemoteHttpsCredential(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     username: string,
     token: string,
   ): Promise<RemoteAuthenticationStatus>;
   configureRemoteSsh(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     sshUrl: string,
   ): Promise<RemoteAuthenticationStatus>;
@@ -462,6 +467,7 @@ export interface GitOperationBridge {
   ): Promise<RepositoryMutationOutcome>;
   pushCurrent(
     repositoryRoot: string,
+    repositoryId: string,
     remote: string,
     mode: PushMode,
     tagMode: PushTagMode,

@@ -29,8 +29,8 @@ test("a personal access token is forwarded once and never retained in controller
   let received = null;
   const controller = createController({
     readRemoteAuthentication: async () => status(),
-    async storeRemoteHttpsCredential(repositoryRoot, remote, username, token) {
-      received = { repositoryRoot, remote, username, token };
+    async storeRemoteHttpsCredential(repositoryRoot, repositoryId, remote, username, token) {
+      received = { repositoryRoot, repositoryId, remote, username, token };
       return status({ credentialAvailable: true });
     },
   });
@@ -39,6 +39,7 @@ test("a personal access token is forwarded once and never retained in controller
   assert.equal(await controller.storeHttpsCredential("developer", "secret-token"), "ready");
   assert.deepEqual(received, {
     repositoryRoot: "/repo",
+    repositoryId: ".",
     remote: "origin",
     username: "developer",
     token: "secret-token",
@@ -82,6 +83,7 @@ test("rechecking an open dialog preserves it while the credential lookup runs", 
   const controller = createController({ readRemoteAuthentication: () => pending.promise });
   controller.state.dialog = {
     repositoryRoot: "/repo",
+    repositoryId: ".",
     status: status(),
   };
 

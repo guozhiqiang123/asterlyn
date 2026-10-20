@@ -58,6 +58,10 @@
   text-transform: none;
 }
 
+.change-group > .group-header.repository-nested {
+  padding-left: calc(var(--compact-file-tree-row-padding-inline) + var(--compact-file-tree-indent));
+}
+
 .change-repository > .group-header {
   grid-template-columns: 18px 15px 15px minmax(0, 1fr);
   color: var(--text);

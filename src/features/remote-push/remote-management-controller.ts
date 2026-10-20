@@ -4,6 +4,7 @@ import type {
   RemoteSummary,
   RepositorySnapshot,
 } from "../../models.ts";
+import { repositoryRemotes } from "./git-root-scope.ts";
 
 export interface RemoteManagementGateway {
   snapshot(): RepositorySnapshot | null;
@@ -140,6 +141,6 @@ export class RemoteManagementController {
 }
 
 function listDialog(snapshot: RepositorySnapshot): Extract<RemoteManagementDialog, { kind: "list" }> {
-  const remotes = snapshot.remotes.map((remote) => ({ ...remote }));
+  const remotes = repositoryRemotes(snapshot, ".").map((remote) => ({ ...remote }));
   return { kind: "list", repositoryRoot: snapshot.root, remotes, selected: remotes[0]?.name ?? null, busy: false, error: null };
 }

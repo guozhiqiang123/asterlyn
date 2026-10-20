@@ -114,21 +114,24 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       plan,
       kind,
     }),
-  readRemoteAuthentication: (repositoryRoot, remote) =>
+  readRemoteAuthentication: (repositoryRoot, repositoryId, remote) =>
     invokeDesktopCommand<RemoteAuthenticationStatus>("read_remote_authentication", {
       repositoryRoot,
+      repositoryId,
       remote,
     }),
-  storeRemoteHttpsCredential: (repositoryRoot, remote, username, token) =>
+  storeRemoteHttpsCredential: (repositoryRoot, repositoryId, remote, username, token) =>
     invokeDesktopCommand<RemoteAuthenticationStatus>("store_remote_https_credential", {
       repositoryRoot,
+      repositoryId,
       remote,
       username,
       token,
     }),
-  configureRemoteSsh: (repositoryRoot, remote, sshUrl) =>
+  configureRemoteSsh: (repositoryRoot, repositoryId, remote, sshUrl) =>
     invokeDesktopCommand<RemoteAuthenticationStatus>("configure_remote_ssh", {
       repositoryRoot,
+      repositoryId,
       remote,
       sshUrl,
     }),
@@ -152,6 +155,7 @@ export const tauriGitOperationBridge: GitOperationBridge = {
     }),
   pushCurrent: (
     repositoryRoot,
+    repositoryId,
     remote,
     mode,
     tagMode,
@@ -162,6 +166,7 @@ export const tauriGitOperationBridge: GitOperationBridge = {
   ) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("push_current", {
       repositoryRoot,
+      repositoryId,
       remote,
       mode,
       tagMode,

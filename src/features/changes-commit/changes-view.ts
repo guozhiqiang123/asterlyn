@@ -40,6 +40,7 @@ export type ChangeViewRow =
       title: string;
       changes: FileChange[];
       collapsed: boolean;
+      nested: boolean;
     }
   | {
       kind: "directory";
@@ -51,6 +52,7 @@ export type ChangeViewRow =
       paths: string[];
       collapsed: boolean;
       label: string;
+      nested: boolean;
     }
   | {
       kind: "file";
@@ -58,6 +60,7 @@ export type ChangeViewRow =
       group: ChangeGroupId;
       change: FileChange;
       depth: number | null;
+      nested: boolean;
     };
 
 export interface ChangeTreeRenderWindow {
@@ -402,17 +405,17 @@ function appendGroupRows(
   if (changes.length === 0) return;
   const groupKey = qualifyKeys ? `group:${repositoryId}:${group}` : `group:${group}`;
   const collapsed = state.collapsedDirectories.has(groupKey);
-  rows.push({ kind: "group", repositoryId, group, key: groupKey, title, changes, collapsed });
+  rows.push({ kind: "group", repositoryId, group, key: groupKey, title, changes, collapsed, nested: qualifyKeys });
   if (collapsed) return;
   if (state.fileView === "flat") {
     for (const change of sortFilesByName(changes)) {
-      rows.push({ kind: "file", repositoryId, group, change, depth: null });
+      rows.push({ kind: "file", repositoryId, group, change, depth: null, nested: qualifyKeys });
     }
     return;
   }
   const visit = (node: ChangeFileTreeNode, depth: number): void => {
     if (node.kind === "file") {
-      rows.push({ kind: "file", repositoryId, group, change: node.change!, depth });
+      rows.push({ kind: "file", repositoryId, group, change: node.change!, depth, nested: qualifyKeys });
       return;
     }
     const chain = compactDirectoryChain(node);
@@ -430,6 +433,7 @@ function appendGroupRows(
       paths: descendantChangePaths(chain.terminal),
       collapsed: collapsedDirectory,
       label: chain.label,
+      nested: qualifyKeys,
     });
     if (!collapsedDirectory) {
       for (const child of chain.terminal.children) visit(child, depth + 1);
@@ -459,7 +463,7 @@ function renderChangeRow(
   }
   if (row.kind === "group") {
     return `<div class="change-group virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}" data-change-group="${row.group}" data-change-repository-id="${escapeAttribute(row.repositoryId)}">
-      <div class="group-header" data-change-disclosure="${escapeAttribute(row.key)}">
+      <div class="group-header${row.nested ? " repository-nested" : ""}" data-change-disclosure="${escapeAttribute(row.key)}">
         <input class="change-checkbox" type="checkbox" data-include-group="${row.group}" data-include-group-repository="${escapeAttribute(row.repositoryId)}" aria-label="${escapeAttribute(copy.includeAll(row.title))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.title) : copy.collapse(row.title))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 12)}</span></button>
         <span class="group-title">${escapeHtml(row.title)}<b>${escapeHtml(copy.fileCount(row.changes.length))}</b><span class="change-scan-status${scanningUntracked ? " active" : ""}" data-change-scan-status="${row.group}" aria-hidden="true"><span class="spinner"></span></span></span>
@@ -468,7 +472,7 @@ function renderChangeRow(
   }
   if (row.kind === "directory") {
     return `<div class="change-directory virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
-      <div class="change-directory-row" style="--tree-depth:${row.depth}" data-change-disclosure="${escapeAttribute(row.key)}">
+      <div class="change-directory-row" style="--tree-depth:${row.depth + (row.nested ? 1 : 0)}" data-change-disclosure="${escapeAttribute(row.key)}">
         <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" data-include-directory-repository="${escapeAttribute(row.repositoryId)}" aria-label="${escapeAttribute(copy.include(row.node.path))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.node.path) : copy.collapse(row.node.path))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 12)}</span></button>
         ${icon("folder", 15)}<span>${escapeHtml(row.label)}</span><small class="compact-file-tree-count">${escapeHtml(copy.fileCount(row.paths.length))}</small>
@@ -480,7 +484,8 @@ function renderChangeRow(
   const primary = state.selectedChange?.repositoryId === (row.change.repositoryId || ".") &&
     state.selectedChange.path === row.change.path;
   const included = !state.excludedPaths.has(key);
-  return `<div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="treeitem" tabindex="0" ${position} style="--tree-depth:${row.depth ?? 1}" data-change-path="${escapeAttribute(row.change.path)}" data-change-key="${escapeAttribute(key)}" data-change-repository-id="${escapeAttribute(row.change.repositoryId || ".")}" aria-selected="${primary}" aria-label="${escapeAttribute(copy.selectedDiff(row.change.path, primary))}">
+  const depth = row.depth === null ? (row.nested ? 2 : 1) : row.depth + (row.nested ? 1 : 0);
+  return `<div class="change-row file-status-${kind} ${included ? "" : "excluded"} ${primary ? "primary" : ""}" role="treeitem" tabindex="0" ${position} style="--tree-depth:${depth}" data-change-path="${escapeAttribute(row.change.path)}" data-change-key="${escapeAttribute(key)}" data-change-repository-id="${escapeAttribute(row.change.repositoryId || ".")}" aria-selected="${primary}" aria-label="${escapeAttribute(copy.selectedDiff(row.change.path, primary))}">
     <input class="change-checkbox" type="checkbox" data-include-path="${escapeAttribute(key)}" aria-label="${escapeAttribute(copy.includeInCommit(row.change.path))}" ${included ? "checked" : ""} ${row.change.conflicted ? "disabled" : ""} />
     <span class="change-status status-${kind}" title="${escapeAttribute(copy.changeLabels[kind])}">${changeCode(kind)}</span>
     <span class="commit-file-glyph">${fileTypeIcon(row.change.path)}</span>

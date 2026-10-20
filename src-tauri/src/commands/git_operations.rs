@@ -606,20 +606,23 @@ pub(crate) async fn fetch_remote(
 #[tauri::command]
 pub(crate) async fn read_remote_authentication(
     repository_root: String,
+    repository_id: String,
     remote: String,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
 ) -> Result<RemoteAuthenticationStatus, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read remote authentication", move || {
-        GitRepository::open(root)?.remote_authentication_status(&remote)
+        GitRepository::open(root)?.repository_remote_authentication_status(&repository_id, &remote)
     })
     .await
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn store_remote_https_credential(
     repository_root: String,
+    repository_id: String,
     remote: String,
     username: String,
     token: String,
@@ -635,7 +638,14 @@ pub(crate) async fn store_remote_https_credential(
         .run_local(
             repository_root,
             "store remote credential",
-            move |repository| repository.store_remote_https_credential(&remote, &username, &token),
+            move |repository| {
+                repository.repository_store_remote_https_credential(
+                    &repository_id,
+                    &remote,
+                    &username,
+                    &token,
+                )
+            },
         )
         .await
 }
@@ -643,6 +653,7 @@ pub(crate) async fn store_remote_https_credential(
 #[tauri::command]
 pub(crate) async fn configure_remote_ssh(
     repository_root: String,
+    repository_id: String,
     remote: String,
     ssh_url: String,
     git_operations: State<'_, GitOperationCoordinator>,
@@ -657,7 +668,9 @@ pub(crate) async fn configure_remote_ssh(
         .run_local(
             repository_root,
             "configure SSH push URL",
-            move |repository| repository.configure_remote_ssh(&remote, &ssh_url),
+            move |repository| {
+                repository.repository_configure_remote_ssh(&repository_id, &remote, &ssh_url)
+            },
         )
         .await
 }
@@ -666,6 +679,7 @@ pub(crate) async fn configure_remote_ssh(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_push_preview(
     repository_root: String,
+    repository_id: String,
     remote: String,
     tag_mode: PushTagMode,
     offset: usize,
@@ -678,23 +692,17 @@ pub(crate) async fn read_push_preview(
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read push preview", move || {
         let repository = GitRepository::open(root)?;
-        match source_branch.as_deref() {
-            Some(source_branch) => repository.push_preview_for_branch(
-                source_branch,
-                &remote,
-                tag_mode,
-                offset,
-                page_size,
-                destination_branch.as_deref(),
-            ),
-            None => repository.push_preview_with_destination(
-                &remote,
-                tag_mode,
-                offset,
-                page_size,
-                destination_branch.as_deref(),
-            ),
-        }
+        repository.repository_push_preview(
+            RepositoryPushTarget {
+                repository_id: &repository_id,
+                remote: &remote,
+                destination_branch: destination_branch.as_deref(),
+                source_branch: source_branch.as_deref(),
+            },
+            tag_mode,
+            offset,
+            page_size,
+        )
     })
     .await
 }
@@ -703,6 +711,7 @@ pub(crate) async fn read_push_preview(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn read_push_file_commit(
     repository_root: String,
+    repository_id: String,
     remote: String,
     tag_mode: PushTagMode,
     preview_token: String,
@@ -715,23 +724,17 @@ pub(crate) async fn read_push_file_commit(
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
     run_blocking("read pushed file commit", move || {
         let repository = GitRepository::open(root)?;
-        match source_branch.as_deref() {
-            Some(source_branch) => repository.push_branch_file_commit(
-                source_branch,
-                &remote,
-                tag_mode,
-                &preview_token,
-                &path,
-                destination_branch.as_deref(),
-            ),
-            None => repository.push_file_commit_with_destination(
-                &remote,
-                tag_mode,
-                &preview_token,
-                &path,
-                destination_branch.as_deref(),
-            ),
-        }
+        repository.repository_push_file_commit(
+            RepositoryPushTarget {
+                repository_id: &repository_id,
+                remote: &remote,
+                destination_branch: destination_branch.as_deref(),
+                source_branch: source_branch.as_deref(),
+            },
+            tag_mode,
+            &preview_token,
+            &path,
+        )
     })
     .await
 }
@@ -797,6 +800,7 @@ pub(crate) async fn update_local_branch(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn push_current(
     repository_root: String,
+    repository_id: String,
     remote: String,
     mode: PushMode,
     tag_mode: PushTagMode,
@@ -818,26 +822,19 @@ pub(crate) async fn push_current(
             operation_id,
             "push",
             COMMIT_LIMIT,
-            move |repository, cancellation| match source_branch.as_deref() {
-                Some(source_branch) => repository.push_branch_with_destination(
-                    BranchPushTarget {
-                        source_branch,
+            move |repository, cancellation| {
+                repository.push_repository(
+                    RepositoryPushTarget {
+                        repository_id: &repository_id,
+                        remote: &remote,
                         destination_branch: destination_branch.as_deref(),
+                        source_branch: source_branch.as_deref(),
                     },
-                    &remote,
                     mode,
                     tag_mode,
                     &preview_token,
                     cancellation,
-                ),
-                None => repository.push_current_with_destination(
-                    &remote,
-                    mode,
-                    tag_mode,
-                    &preview_token,
-                    cancellation,
-                    destination_branch.as_deref(),
-                ),
+                )
             },
         )
         .await

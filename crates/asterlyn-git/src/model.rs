@@ -289,6 +289,8 @@ pub struct BranchState {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSummary {
+    #[serde(default)]
+    pub repository_id: String,
     pub name: String,
     pub url: Option<String>,
     pub fetch_supported: bool,
@@ -446,6 +448,8 @@ pub struct CommitSummary {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PushPreview {
+    #[serde(default)]
+    pub repository_id: String,
     pub remote: String,
     pub branch: String,
     pub source_ref: String,

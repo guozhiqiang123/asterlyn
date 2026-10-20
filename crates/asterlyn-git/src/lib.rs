@@ -29,5 +29,5 @@ pub use model::{
     WorktreeCreationRequest, WorktreeRemovalReview,
 };
 pub use process::CancellationToken;
-pub use repository::{BranchPushTarget, GitRepository};
+pub use repository::{BranchPushTarget, GitRepository, RepositoryPushTarget};
 pub use text_diff::{BoundedTextDiff, bounded_text_diff, bounded_text_diff_expanded};

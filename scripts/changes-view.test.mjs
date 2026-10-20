@@ -84,6 +84,8 @@ test("multi-root changes render repository selectors and preserve duplicate rela
   const html = renderChangeNavigation(current, state());
   assert.match(html, /data-include-repository="modules\/lib"/u);
   assert.match(html, /data-change-repository-id="modules\/lib"/u);
+  assert.match(html, /class="group-header repository-nested" data-change-disclosure="group:modules\/lib:changes"/u);
+  assert.match(html, /style="--tree-depth:2"[^>]*data-change-path="same\.txt"[^>]*data-change-repository-id="modules\/lib"/u);
 });
 
 test("flat Changes rows sort by file name instead of directory path", () => {

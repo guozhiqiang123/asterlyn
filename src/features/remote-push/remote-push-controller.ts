@@ -1,73 +1,23 @@
-import type {
-  CommitDetails,
-  CommitFileChange,
-  PushMode,
-  PushTagMode,
-  RepositorySnapshot,
-} from "../../models.ts";
+import type { CommitDetails, CommitFileChange, PushMode, PushTagMode, RepositorySnapshot } from "../../models.ts";
 import { preferredRemote, remotePolicy } from "../../remote-policy.ts";
+import { preferredPushRepository, repositoryRemotes } from "./git-root-scope.ts";
 import { filesForPushReview, isPushPreviewActionable } from "./push-review.ts";
 import { isValidGitBranchName } from "./git-branch-name.ts";
 import { RecentValueCache } from "../../shared/recent-value-cache.ts";
 import type { ErrorCopy, RemoteCopy } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
-import {
-  localizedOperationError,
-  localizedRemoteOperationError,
-  type OperationErrorPresentation,
-} from "../../localization/error-message.ts";
-import {
-  PUSH_COMMIT_DETAILS_CACHE_LIMIT,
-  PUSH_PREVIEW_PAGE_SIZE,
-  type RemoteOperationResult,
-  type RemotePushChange,
-  type RemotePushControllerOptions,
-  type RemotePushGateway,
-  type UpdateDialogOptions,
-} from "./remote-push-contract.ts";
-import {
-  createRemotePushState,
-  defaultRemoteUpdateStrategy,
-  isRemoteUpdateStrategyAvailable,
-  type RemoteUpdateStrategy,
-  type RemotePushState,
-} from "./remote-push-state.ts";
-import {
-  readPushTagMode,
-  readPushTagsEnabled,
-  storePushTagMode,
-  storePushTagsEnabled,
-} from "./push-preferences.ts";
+import { localizedOperationError, localizedRemoteOperationError, type OperationErrorPresentation } from "../../localization/error-message.ts";
+import { PUSH_COMMIT_DETAILS_CACHE_LIMIT, PUSH_PREVIEW_PAGE_SIZE, type RemoteOperationResult, type RemotePushChange, type RemotePushControllerOptions, type RemotePushGateway, type UpdateDialogOptions } from "./remote-push-contract.ts";
+import { createRemotePushState, defaultRemoteUpdateStrategy, isRemoteUpdateStrategyAvailable, type RemoteUpdateStrategy, type RemotePushState } from "./remote-push-state.ts";
+import { readPushTagMode, readPushTagsEnabled, storePushTagMode, storePushTagsEnabled } from "./push-preferences.ts";
 import { branchPushRemote, clearRemotePushSelectionState, effectivePushDestination, resetRemotePushDialogState } from "./remote-push-dialog-state.ts";
-import {
-  commitPushDiffState,
-  initialPushDiffState,
-  readPushDiffContent,
-} from "./remote-push-diff.ts";
+import { commitPushDiffState, initialPushDiffState, readPushDiffContent } from "./remote-push-diff.ts";
 
-export type {
-  PushDiffState,
-  RemotePushState,
-  RemoteUpdateStrategy,
-} from "./remote-push-state.ts";
-export {
-  defaultRemoteUpdateStrategy,
-  isRemoteUpdateStrategyAvailable,
-  resolveRemoteUpdateActivation,
-} from "./remote-push-state.ts";
-export {
-  PUSH_COMMIT_DETAILS_CACHE_LIMIT,
-  PUSH_PREVIEW_PAGE_SIZE,
-} from "./remote-push-contract.ts";
+export type { PushDiffState, RemotePushState, RemoteUpdateStrategy } from "./remote-push-state.ts";
+export { defaultRemoteUpdateStrategy, isRemoteUpdateStrategyAvailable, resolveRemoteUpdateActivation } from "./remote-push-state.ts";
+export { PUSH_COMMIT_DETAILS_CACHE_LIMIT, PUSH_PREVIEW_PAGE_SIZE } from "./remote-push-contract.ts";
 export { PUSH_TAG_MODE_KEY, PUSH_TAGS_ENABLED_KEY } from "./push-preferences.ts";
-export type {
-  RemoteOperationResult,
-  RemotePushChange,
-  RemotePushChangeReason,
-  RemotePushControllerOptions,
-  RemotePushGateway,
-  UpdateDialogOptions,
-} from "./remote-push-contract.ts";
+export type { RemoteOperationResult, RemotePushChange, RemotePushChangeReason, RemotePushControllerOptions, RemotePushGateway, UpdateDialogOptions } from "./remote-push-contract.ts";
 
 type Listener = (change: RemotePushChange) => void;
 
@@ -128,8 +78,9 @@ export class RemotePushController {
       this.resetDialog();
       this.state.operation = null;
     }
+    const repositoryId = this.state.dialog === "push" ? this.state.pushRepositoryId : ".";
     this.state.selectedRemote = snapshot
-      ? preferredRemote(snapshot, this.state.selectedRemote)
+      ? preferredRemote(snapshot, this.state.selectedRemote, repositoryId)
       : null;
     this.emit({ reason: "snapshot", toolbarChanged: true, dialogChanged: rootChanged });
   }
@@ -139,7 +90,8 @@ export class RemotePushController {
     if (
       !snapshot ||
       this.state.operation ||
-      !snapshot.remotes.some((candidate) => candidate.name === remote) ||
+      !repositoryRemotes(snapshot, this.state.dialog === "push" ? this.state.pushRepositoryId : ".")
+        .some((candidate) => candidate.name === remote) ||
       remote === this.state.selectedRemote
     ) return false;
     this.state.selectedRemote = remote;
@@ -148,6 +100,25 @@ export class RemotePushController {
     this.state.pushCustomBranchInput = "";
     this.emit({ reason: "remote-selection", toolbarChanged: true });
     if (this.state.dialog === "push") this.reloadPushPreview(false);
+    return true;
+  }
+
+  selectPushRepository(repositoryId: string): boolean {
+    const snapshot = this.snapshot;
+    if (
+      !snapshot || this.state.dialog !== "push" || this.state.operation ||
+      repositoryId === this.state.pushRepositoryId ||
+      !snapshot.repositoryRoots.some((root) => root.id === repositoryId)
+    ) return false;
+    this.invalidateDialogRequests();
+    this.resetDialog();
+    this.state.pushRepositoryId = repositoryId;
+    this.state.selectedRemote = preferredRemote(snapshot, null, repositoryId);
+    this.state.dialog = "push";
+    this.state.pushPreviewLoading = true;
+    const sequence = this.dialogSequence;
+    this.emit({ reason: "push-options", toolbarChanged: true, dialogChanged: true, diffChanged: true });
+    void this.loadPushPreview(sequence);
     return true;
   }
 
@@ -197,11 +168,15 @@ export class RemotePushController {
   ): boolean {
     const snapshot = this.snapshot;
     if (!snapshot || this.state.operation) return false;
-    const policy = remotePolicy(snapshot, this.state.selectedRemote);
+    const repositoryId = dialog === "push" ? preferredPushRepository(snapshot) : ".";
+    const selectedRemote = preferredRemote(snapshot, this.state.selectedRemote, repositoryId);
+    const policy = remotePolicy(snapshot, selectedRemote, undefined, repositoryId);
     const action = dialog === "update" ? policy.pull : policy.push;
     if (!action.enabled) return false;
     this.invalidateDialogRequests();
     this.resetDialog();
+    this.state.pushRepositoryId = repositoryId;
+    this.state.selectedRemote = selectedRemote;
     this.state.dialog = dialog;
     if (dialog === "update") {
       this.state.updateStrategy = updateOptions.strategy &&
@@ -217,12 +192,13 @@ export class RemotePushController {
     return true;
   }
 
-  openBranchPush(sourceBranch: string, remoteName: string): boolean {
-    const remote = branchPushRemote(this.snapshot, this.state, sourceBranch, remoteName);
+  openBranchPush(sourceBranch: string, remoteName: string, repositoryId = "."): boolean {
+    const remote = branchPushRemote(this.snapshot, this.state, sourceBranch, remoteName, repositoryId);
     if (!remote) return false;
     this.invalidateDialogRequests();
     this.resetDialog();
     this.state.selectedRemote = remote;
+    this.state.pushRepositoryId = repositoryId;
     this.state.sourceBranch = sourceBranch;
     this.state.dialog = "push";
     this.state.pushPreviewLoading = true;
@@ -406,6 +382,7 @@ export class RemotePushController {
     try {
       const page = await this.gateway.readPushPreview(
         snapshot.root,
+        this.state.pushRepositoryId,
         preview.remote,
         preview.tagMode,
         preview.commits.length,
@@ -414,13 +391,14 @@ export class RemotePushController {
         this.state.sourceBranch,
       );
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
-      if (page.previewToken !== preview.previewToken) {
+      if ((page.repositoryId ?? this.state.pushRepositoryId) !== this.state.pushRepositoryId || page.previewToken !== preview.previewToken) {
         throw new Error(this.messages.branchOrRemoteChanged);
       }
       this.state.pushPreview = {
         ...page,
+        repositoryId: this.state.pushRepositoryId,
         offset: 0,
-        commits: [...preview.commits, ...page.commits],
+        commits: [...preview.commits, ...page.commits.map((commit) => ({ ...commit, repositoryId: this.state.pushRepositoryId }))],
       };
       this.state.pushPreviewLoadingMore = false;
       this.emit({ reason: "preview-page-complete", dialogChanged: true });
@@ -465,6 +443,7 @@ export class RemotePushController {
         ? selectedDetails
         : await this.gateway.readPushFileCommit(
             snapshot.root,
+            preview.repositoryId ?? this.state.pushRepositoryId,
             preview.remote,
             preview.tagMode,
             preview.previewToken,
@@ -547,7 +526,8 @@ export class RemotePushController {
   async runOperation(kind: "fetch" | "pull" | "push", background = false): Promise<RemoteOperationResult> {
     const snapshot = this.snapshot;
     if (!snapshot || this.state.operation) return { status: "unavailable" };
-    const policy = remotePolicy(snapshot, this.state.selectedRemote);
+    const repositoryId = kind === "push" ? this.state.pushRepositoryId : ".";
+    const policy = remotePolicy(snapshot, this.state.selectedRemote, undefined, repositoryId);
     const remote = policy.selectedRemote;
     const branchPush = kind === "push" && this.state.sourceBranch !== null;
     if (branchPush) {
@@ -580,6 +560,7 @@ export class RemotePushController {
           ? await this.gateway.pullCurrent(snapshot.root, operationId)
           : await this.gateway.pushCurrent(
               snapshot.root,
+              repositoryId,
               remote!.name,
               this.state.pushMode,
               preview!.tagMode,
@@ -664,11 +645,13 @@ export class RemotePushController {
     const snapshot = this.snapshot;
     if (!snapshot || this.state.dialog !== "push") return;
     const generation = this.repositoryGeneration;
-    const remote = remotePolicy(snapshot, this.state.selectedRemote).selectedRemote;
+    const repositoryId = this.state.pushRepositoryId;
+    const remote = remotePolicy(snapshot, this.state.selectedRemote, undefined, repositoryId).selectedRemote;
     if (!remote) return;
     try {
       const preview = await this.gateway.readPushPreview(
         snapshot.root,
+        repositoryId,
         remote.name,
         this.effectivePushTagMode(),
         0,
@@ -677,12 +660,19 @@ export class RemotePushController {
         this.state.sourceBranch,
       );
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
-      this.state.pushPreview = preview;
+      if ((preview.repositoryId ?? repositoryId) !== repositoryId) {
+        throw new Error(this.messages.branchOrRemoteChanged);
+      }
+      this.state.pushPreview = {
+        ...preview,
+        repositoryId,
+        commits: preview.commits.map((commit) => ({ ...commit, repositoryId })),
+      };
       this.state.pushPreviewLoading = false;
       this.state.pushPreviewRefreshing = false;
       if (
         this.state.pushSelectedCommit &&
-        !preview.commits.some((commit) => commit.oid === this.state.pushSelectedCommit)
+        !this.state.pushPreview.commits.some((commit) => commit.oid === this.state.pushSelectedCommit)
       ) {
         this.clearPushSelection();
       }
@@ -738,6 +728,7 @@ export class RemotePushController {
   private resetDialog(): void {
     this.clearPushSelection();
     resetRemotePushDialogState(this.state, this.storage);
+    if (this.snapshot) this.state.selectedRemote = preferredRemote(this.snapshot, this.state.selectedRemote);
   }
 
   private invalidateDialogRequests(): void {

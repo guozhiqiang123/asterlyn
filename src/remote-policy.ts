@@ -1,6 +1,7 @@
 import type { RemoteSummary, RepositorySnapshot } from "./models";
 import { topLevelMutationChanges } from "./git-worktree-policy.ts";
 import { DEFAULT_LOCALIZATION, type Localization } from "./localization/localization.ts";
+import { scopedRepositorySnapshot } from "./features/remote-push/git-root-scope.ts";
 
 export interface RemoteActionState {
   enabled: boolean;
@@ -18,33 +19,37 @@ export interface RemotePolicy {
 export function preferredRemote(
   snapshot: RepositorySnapshot,
   selectedName: string | null,
+  repositoryId = ".",
 ): string | null {
-  const names = new Set(snapshot.remotes.map((remote) => remote.name));
+  const scoped = scopedRepositorySnapshot(snapshot, repositoryId);
+  const names = new Set(scoped.remotes.map((remote) => remote.name));
   if (selectedName && names.has(selectedName)) return selectedName;
-  if (snapshot.branch.upstreamRemote && names.has(snapshot.branch.upstreamRemote)) {
-    return snapshot.branch.upstreamRemote;
+  if (scoped.branch.upstreamRemote && names.has(scoped.branch.upstreamRemote)) {
+    return scoped.branch.upstreamRemote;
   }
   if (names.has("origin")) return "origin";
-  return snapshot.remotes[0]?.name ?? null;
+  return scoped.remotes[0]?.name ?? null;
 }
 
-export function requiresRemoteConfiguration(snapshot: RepositorySnapshot): boolean {
-  return snapshot.remotes.length === 0;
+export function requiresRemoteConfiguration(snapshot: RepositorySnapshot, repositoryId = "."): boolean {
+  return scopedRepositorySnapshot(snapshot, repositoryId).remotes.length === 0;
 }
 
 export function remotePolicy(
   snapshot: RepositorySnapshot,
   selectedName: string | null,
   localization: Localization = DEFAULT_LOCALIZATION,
+  repositoryId = ".",
 ): RemotePolicy {
+  const scoped = scopedRepositorySnapshot(snapshot, repositoryId);
   const selectedRemote =
-    snapshot.remotes.find((remote) => remote.name === selectedName) ?? null;
+    scoped.remotes.find((remote) => remote.name === selectedName) ?? null;
 
   return {
     selectedRemote,
-    fetch: fetchState(snapshot, selectedRemote, localization),
-    pull: pullState(snapshot, selectedRemote, localization),
-    push: pushState(snapshot, selectedRemote, localization),
+    fetch: fetchState(scoped, selectedRemote, localization),
+    pull: pullState(scoped, selectedRemote, localization),
+    push: pushState(scoped, selectedRemote, localization),
   };
 }
 

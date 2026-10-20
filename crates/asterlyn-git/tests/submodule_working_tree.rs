@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use asterlyn_git::{GitError, GitRepository};
+use asterlyn_git::{GitError, GitRepository, PushTagMode, RepositoryPushTarget};
 
 #[test]
 fn child_changes_are_qualified_routed_and_committed_one_root_at_a_time() {
@@ -49,6 +49,12 @@ fn child_changes_are_qualified_routed_and_committed_one_root_at_a_time() {
 
     let repository = GitRepository::open(&main).expect("main repository opens");
     let dirty = repository.snapshot(50).expect("multi-root status loads");
+    assert!(
+        dirty
+            .remotes
+            .iter()
+            .any(|remote| { remote.repository_id == "modules/library" && remote.name == "origin" })
+    );
     let main_change = change(&dirty, ".", "shared.txt");
     let child_change = change(&dirty, "modules/library", "shared.txt");
     let child_untracked = change(&dirty, "modules/library", "new.txt");
@@ -71,7 +77,39 @@ fn child_changes_are_qualified_routed_and_committed_one_root_at_a_time() {
     repository
         .commit_repository_selected("Child changes", &[child_change, child_untracked])
         .expect("child commit succeeds");
+    let preview = repository
+        .repository_push_preview(
+            RepositoryPushTarget {
+                repository_id: "modules/library",
+                remote: "origin",
+                destination_branch: None,
+                source_branch: None,
+            },
+            PushTagMode::None,
+            0,
+            100,
+        )
+        .expect("child push preview is routed");
+    assert_eq!(preview.repository_id, "modules/library");
+    assert_eq!(preview.total_commits, 1);
+    assert!(
+        preview
+            .commits
+            .iter()
+            .all(|commit| commit.repository_id == "modules/library")
+    );
     let committed = repository.snapshot(50).expect("workspace refreshes");
+    let child_branch = committed
+        .branches
+        .iter()
+        .find(|branch| {
+            branch.repository_id == "modules/library"
+                && branch.kind == asterlyn_git::BranchKind::Local
+                && branch.current
+        })
+        .expect("child current branch is projected");
+    assert_eq!(child_branch.upstream_remote.as_deref(), Some("origin"));
+    assert_eq!(child_branch.ahead, 1);
     assert!(
         !committed
             .changes

@@ -758,8 +758,7 @@ export interface RemoteCopy {
   publish: string;
   push: string;
   tags(count: number): string;
-  noMatchingTags: string;
-  pushCommitsTo(branch: string): string;
+  noMatchingTags: string; pushCommitsTo(branch: string): string;
   currentBranchFallback: string;
   cancelPushConfirmation: string;
   pushReviewDescription: string;

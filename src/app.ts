@@ -773,7 +773,7 @@ export class AsterlynApp {
     this.branchRemoteRuntime = new BranchRemoteActionRuntime({
       snapshot: () => this.windowSession.repository.state.snapshot, targetCurrent: (target) => this.isBranchContextTargetCurrent(target), localization: () => this.localization,
       selectedRemote: () => this.remoteState.selectedRemote, remoteOperation: () => this.remoteState.operation, workbenchBusy: () => this.state.loading,
-      activateCurrent: (kind, anchor) => this.activateRemoteAction(kind, anchor), openBranchPush: (branch, remote) => this.remoteRuntime.push.openBranchPush(branch, remote),
+      activateCurrent: (kind, anchor) => this.activateRemoteAction(kind, anchor), openBranchPush: (branch, remote, repositoryId) => this.remoteRuntime.push.openBranchPush(branch, remote, repositoryId),
       focusPushDialog: (anchor) => { this.remoteDialogReturnFocus = anchor; queueMicrotask(() => this.root.querySelector<HTMLButtonElement>("#remote-dialog-close")?.focus()); },
       updateLocalBranch: (...args) => bridge.updateLocalBranch(...args), beginTransition: () => this.windowSession.beginTransition({ reconciliationBarrier: true }),
       matches: (generation, repositoryRoot) => this.windowSession.matches(generation, repositoryRoot), completeTransition: (generation) => this.windowSession.completeTransition(generation),
@@ -982,8 +982,8 @@ export class AsterlynApp {
           openGitOperation: (kind, fullName) => this.openGitOperation(kind, [fullName]),
           openRemoteAction: (kind, target, returnFocus) =>
             this.branchRemoteRuntime.activate(kind, target, returnFocus as HTMLButtonElement),
-          tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => remote.pushSupported).map((remote) => remote.name) ?? [],
-          selectedTagRemote: () => this.windowSession.repository.state.snapshot?.remotes.find((remote) => remote.name === this.remoteState.selectedRemote && remote.pushSupported)?.name ?? null, tagRemoteUnavailable: () => this.localization.catalog.remote.policy.selectConfigured,
+          tagRemotes: () => this.windowSession.repository.state.snapshot?.remotes.filter((remote) => (remote.repositoryId ?? ".") === "." && remote.pushSupported).map((remote) => remote.name) ?? [],
+          selectedTagRemote: () => this.windowSession.repository.state.snapshot?.remotes.find((remote) => (remote.repositoryId ?? ".") === "." && remote.name === this.remoteState.selectedRemote && remote.pushSupported)?.name ?? null, tagRemoteUnavailable: () => this.localization.catalog.remote.policy.selectConfigured,
           openTagMutation: (kind, target, remote = null) => this.gitHistoryMutationRuntime.tag.open({ repositoryRoot: target.workspaceRoot, commitOid: target.branch.oid, commitSubject: target.branch.subject }, kind, target.branch.name, remote),
         },
         commit: {
@@ -3360,8 +3360,11 @@ export class AsterlynApp {
       );
     } this.refreshShortcutPresentation();
   }
-
   private bindRemoteDialogEvents(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-push-repository-id]").forEach((button) =>
+      button.addEventListener("click", () => {
+        if (button.dataset.pushRepositoryId) this.remoteRuntime.push.selectPushRepository(button.dataset.pushRepositoryId);
+      }));
     this.root.querySelector<HTMLSelectElement>("#push-remote-select")?.addEventListener("change", (event) => {
       const remote = (event.currentTarget as HTMLSelectElement).value;
       if (remote) this.remoteRuntime.push.selectRemote(remote);
@@ -3413,6 +3416,8 @@ export class AsterlynApp {
           this.remoteRuntime.authentication.check(
             entry.repositoryRoot,
             entry.status.remote,
+            false,
+            entry.repositoryId,
           ),
         );
       });
@@ -3556,7 +3561,7 @@ export class AsterlynApp {
     const path = this.remoteState.pushSelectedFile;
     return path
       ? this.filesState.files.find(
-          (file) => file.repositoryId === "." && file.path === path,
+          (file) => file.repositoryId === this.remoteState.pushRepositoryId && file.path === path,
         ) ?? null
       : null;
   }
@@ -3710,6 +3715,8 @@ export class AsterlynApp {
     const authentication = await this.remoteRuntime.authentication.check(
       snapshot.root,
       preview.remote,
+      false,
+      preview.repositoryId ?? this.remoteState.pushRepositoryId,
     );
     if (authentication !== "ready") return;
     const succeeded = await this.runRemoteOperation("push");
@@ -3749,7 +3756,7 @@ export class AsterlynApp {
   ): Promise<boolean> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.state.loading || this.remoteState.operation) return false;
-    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
+    const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization, kind === "push" ? this.remoteState.pushRepositoryId : ".");
     const branchPush = kind === "push" && this.remoteState.sourceBranch !== null;
     if (
       (!branchPush && !policy[kind].enabled) ||
@@ -3809,6 +3816,7 @@ export class AsterlynApp {
             snapshot.root,
             policy.selectedRemote.name,
             true,
+            this.remoteState.pushRepositoryId,
           );
         }
         try {
