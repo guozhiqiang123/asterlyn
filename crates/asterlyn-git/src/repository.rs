@@ -339,7 +339,8 @@ impl GitRepository {
                 .then_with(|| left.repository_id.cmp(&right.repository_id))
                 .then_with(|| left.full_name.cmp(&right.full_name))
         });
-        snapshot.commits = merge_root_histories(histories, commit_limit);
+        snapshot.commits =
+            self.pin_primary_head(merge_root_histories(histories, commit_limit), commit_limit)?;
         Ok(snapshot)
     }
 
@@ -646,85 +647,6 @@ impl GitRepository {
         Ok(self
             .query_commit_history_page(query, 0, commit_limit)?
             .commits)
-    }
-
-    pub fn query_commit_history_page(
-        &self,
-        query: &HistoryQuery,
-        offset: usize,
-        page_size: usize,
-    ) -> Result<HistoryPage, GitError> {
-        validate_history_query(query)?;
-        if offset > MAX_HISTORY_SESSION {
-            return Err(GitError::InvalidInput {
-                field: "history offset".to_string(),
-                message: format!("must not exceed {MAX_HISTORY_SESSION}"),
-            });
-        }
-        if page_size == 0 || page_size > MAX_HISTORY_PAGE_SIZE {
-            return Err(GitError::InvalidInput {
-                field: "history page size".to_string(),
-                message: format!("must be between 1 and {MAX_HISTORY_PAGE_SIZE}"),
-            });
-        }
-        if offset == MAX_HISTORY_SESSION {
-            return Ok(HistoryPage {
-                commits: Vec::new(),
-                offset,
-                has_more: false,
-            });
-        }
-        let page_size = page_size.min(MAX_HISTORY_SESSION - offset);
-        let requested = offset
-            .saturating_add(page_size)
-            .saturating_add(1)
-            .min(MAX_HISTORY_SESSION + 1);
-        let eligible_roots = self.history_query_roots(query)?;
-        let single_root = eligible_roots.len() == 1;
-        let mut histories = Vec::new();
-
-        for root in eligible_roots {
-            if root.selectors.is_empty() {
-                continue;
-            }
-            let root_offset = if single_root { offset } else { 0 };
-            let root_limit = if single_root {
-                page_size.saturating_add(1)
-            } else {
-                requested
-            };
-            let mut commits = root.repository.run_commit_history_query(
-                "query commit history",
-                root.selectors.iter().map(OsString::from).collect(),
-                query,
-                &root.paths,
-                root_offset,
-                root_limit,
-            )?;
-            scope_commits(&mut commits, &root.repository_id);
-            histories.push(commits);
-        }
-        let page_offset = if single_root { 0 } else { offset };
-        let merged = merge_root_histories(
-            histories,
-            if single_root {
-                page_size + 1
-            } else {
-                requested
-            },
-        );
-        let has_more =
-            offset + page_size < MAX_HISTORY_SESSION && merged.len() > page_offset + page_size;
-        let commits = merged
-            .into_iter()
-            .skip(page_offset)
-            .take(page_size)
-            .collect();
-        Ok(HistoryPage {
-            commits,
-            offset,
-            has_more,
-        })
     }
 
     fn read_commit_history(

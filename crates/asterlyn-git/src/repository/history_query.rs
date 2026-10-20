@@ -32,6 +32,121 @@ impl GitRepository {
         Ok(total)
     }
 
+    pub fn query_commit_history_page(
+        &self,
+        query: &HistoryQuery,
+        offset: usize,
+        page_size: usize,
+    ) -> Result<HistoryPage, GitError> {
+        validate_history_query(query)?;
+        if offset > MAX_HISTORY_SESSION {
+            return Err(GitError::InvalidInput {
+                field: "history offset".to_string(),
+                message: format!("must not exceed {MAX_HISTORY_SESSION}"),
+            });
+        }
+        if page_size == 0 || page_size > MAX_HISTORY_PAGE_SIZE {
+            return Err(GitError::InvalidInput {
+                field: "history page size".to_string(),
+                message: format!("must be between 1 and {MAX_HISTORY_PAGE_SIZE}"),
+            });
+        }
+        if offset == MAX_HISTORY_SESSION {
+            return Ok(HistoryPage {
+                commits: Vec::new(),
+                offset,
+                has_more: false,
+            });
+        }
+        let page_size = page_size.min(MAX_HISTORY_SESSION - offset);
+        let requested = offset
+            .saturating_add(page_size)
+            .saturating_add(1)
+            .min(MAX_HISTORY_SESSION + 1);
+        // Git's topological order can exhaust a long, unrelated branch before it emits HEAD.
+        // Treat the default all-refs history as one stable HEAD-first sequence across every page.
+        let pin_primary_head = query == &HistoryQuery::default();
+        let eligible_roots = self.history_query_roots(query)?;
+        let single_root = eligible_roots.len() == 1;
+        let mut histories = Vec::new();
+
+        for root in eligible_roots {
+            if root.selectors.is_empty() {
+                continue;
+            }
+            let root_offset = if single_root && !pin_primary_head {
+                offset
+            } else {
+                0
+            };
+            let root_limit = if single_root && !pin_primary_head {
+                page_size.saturating_add(1)
+            } else {
+                requested
+            };
+            let mut commits = root.repository.run_commit_history_query(
+                "query commit history",
+                root.selectors.iter().map(OsString::from).collect(),
+                query,
+                &root.paths,
+                root_offset,
+                root_limit,
+            )?;
+            scope_commits(&mut commits, &root.repository_id);
+            histories.push(commits);
+        }
+        let page_offset = if single_root && !pin_primary_head {
+            0
+        } else {
+            offset
+        };
+        let merge_limit = if single_root && !pin_primary_head {
+            page_size + 1
+        } else {
+            requested
+        };
+        let mut merged = merge_root_histories(histories, merge_limit);
+        if pin_primary_head {
+            merged = self.pin_primary_head(merged, requested)?;
+        }
+        let has_more =
+            offset + page_size < MAX_HISTORY_SESSION && merged.len() > page_offset + page_size;
+        let commits = merged
+            .into_iter()
+            .skip(page_offset)
+            .take(page_size)
+            .collect();
+        Ok(HistoryPage {
+            commits,
+            offset,
+            has_more,
+        })
+    }
+
+    pub(super) fn pin_primary_head(
+        &self,
+        mut commits: Vec<CommitSummary>,
+        limit: usize,
+    ) -> Result<Vec<CommitSummary>, GitError> {
+        let Some(head_oid) = self.head_oid()? else {
+            return Ok(commits);
+        };
+        let head = if let Some(index) = commits
+            .iter()
+            .position(|commit| commit.repository_id == "." && commit.oid == head_oid)
+        {
+            commits.remove(index)
+        } else {
+            let Some(head) = self.read_commit_history(&head_oid, 1)?.into_iter().next() else {
+                return Ok(commits);
+            };
+            head
+        };
+        commits.insert(0, head);
+        commits.truncate(limit.clamp(1, MAX_HISTORY_SESSION + 1));
+        Ok(commits)
+    }
+
     pub(super) fn history_query_roots(
         &self,
         query: &HistoryQuery,
