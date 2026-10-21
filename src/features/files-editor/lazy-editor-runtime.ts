@@ -1,5 +1,6 @@
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { DiffEditor } from "../../diff-editor.ts";
+import type { DiffExpansionAnchor } from "./diff-expansion-anchor.ts";
 import type { TextEditor } from "../../text-editor.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
@@ -37,9 +38,12 @@ type DiffMount = {
   presentation: DiffPresentation;
   sideLabels: DiffSideLabels;
   blameSources: DiffGitBlameSources;
-  onExpandUnchanged: (section: string) => void;
+  onExpandUnchanged: (section: string, anchor: DiffExpansionAnchor) => void;
   restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null;
+  restoredExpansionAnchor?: DiffExpansionAnchor | null;
 };
+
+type DiffScroll = { topRatio: number; scrollTop: number; left: number };
 
 /** Loads the CodeMirror text runtime only when the first editable document is mounted. */
 export class LazyTextEditor {
@@ -299,6 +303,8 @@ export class LazyDiffEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private presentation: DiffPresentation = { layout: "split", showWhitespace: false };
+  private retainedExpansionScroll: { path: string; scroll: DiffScroll } | null = null;
+  private retainedExpansionAnchor: { path: string; anchor: DiffExpansionAnchor } | null = null;
   private readonly contextMenu: ContextMenuPort;
   constructor(
     blameRuntime: GitBlameRuntime,
@@ -327,8 +333,22 @@ export class LazyDiffEditor {
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
     onExpandUnchanged: (section: string) => void,
-    restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
+    restoredScroll?: DiffScroll | null,
   ): void {
+    const retainedScroll = this.retainedExpansionScroll?.path === path
+      ? this.retainedExpansionScroll.scroll
+      : null;
+    this.retainedExpansionScroll = null;
+    const retainedAnchor = this.retainedExpansionAnchor?.path === path
+      ? this.retainedExpansionAnchor.anchor
+      : null;
+    if (this.retainedExpansionAnchor?.path !== path) this.retainedExpansionAnchor = null;
+    const expandUnchanged = (section: string, anchor: DiffExpansionAnchor) => {
+      const scroll = this.captureScroll();
+      if (scroll) this.retainedExpansionScroll = { path, scroll };
+      this.retainedExpansionAnchor = { path, anchor };
+      onExpandUnchanged(section);
+    };
     const mount = {
       parent,
       document,
@@ -337,8 +357,9 @@ export class LazyDiffEditor {
       presentation,
       sideLabels,
       blameSources,
-      onExpandUnchanged,
-      restoredScroll,
+      onExpandUnchanged: expandUnchanged,
+      restoredScroll: restoredScroll ?? retainedScroll,
+      restoredExpansionAnchor: retainedAnchor,
     };
     this.pendingMount = mount;
     this.presentation = { ...presentation };
@@ -353,9 +374,11 @@ export class LazyDiffEditor {
         this.presentation,
         sideLabels,
         blameSources,
-        onExpandUnchanged,
-        restoredScroll,
+        expandUnchanged,
+        restoredScroll ?? retainedScroll,
+        retainedAnchor,
       );
+      if (retainedAnchor) this.releaseExpansionAnchor(retainedAnchor);
       return;
     }
     const request = ++this.mountGeneration;
@@ -377,8 +400,16 @@ export class LazyDiffEditor {
         mount.blameSources,
         mount.onExpandUnchanged,
         mount.restoredScroll,
+        mount.restoredExpansionAnchor,
       );
+      if (mount.restoredExpansionAnchor) this.releaseExpansionAnchor(mount.restoredExpansionAnchor);
     });
+  }
+
+  private releaseExpansionAnchor(anchor: DiffExpansionAnchor): void {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if (this.retainedExpansionAnchor?.anchor === anchor) this.retainedExpansionAnchor = null;
+    }));
   }
 
   setPresentation(presentation: DiffPresentation): void {

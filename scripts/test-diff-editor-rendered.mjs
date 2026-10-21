@@ -42,10 +42,11 @@ try {
       await page.goto(`http://127.0.0.1:${address.port}/__diff_layout`);
       await page.waitForFunction(() => window.stylesReady);
       await page.evaluate(async (longDocument) => {
-        const [{ DiffEditor }, { EditableDiffEditor }, { DEFAULT_APP_PREFERENCES }, { EN_US }] =
+        const [{ DiffEditor }, { EditableDiffEditor }, { LazyDiffEditor }, { DEFAULT_APP_PREFERENCES }, { EN_US }] =
           await Promise.all([
             import("/src/diff-editor.ts"),
             import("/src/editable-diff-editor.ts"),
+            import("/src/features/files-editor/lazy-editor-runtime.ts"),
             import("/src/preferences.ts"),
             import("/src/localization/en-US.ts"),
           ]);
@@ -62,14 +63,16 @@ try {
         };
         let active = null;
         const long = "x".repeat(320);
-        const sectionedBefore = Array.from({ length: 54 }, (_, index) => `line ${index + 1}`);
+        const sectionedBefore = Array.from({ length: 394 }, (_, index) => `line ${index + 1}`);
         const sectionedAfter = [...sectionedBefore];
-        sectionedAfter[10] = "changed 11";
-        sectionedAfter[50] = "changed 51";
+        for (let line = 11; line <= 255; line += 1) {
+          sectionedAfter[line - 1] = `changed ${line}`;
+        }
+        sectionedAfter[390] = "changed 391";
         const sectionedHunk = (from, to) => {
           const lines = [`@@ -${from},${to - from + 1} +${from},${to - from + 1} @@`];
           for (let line = from; line <= to; line += 1) {
-            if (line === 11 || line === 51) {
+            if (sectionedAfter[line - 1] !== sectionedBefore[line - 1]) {
               lines.push(`-${sectionedBefore[line - 1]}`, `+${sectionedAfter[line - 1]}`);
             } else {
               lines.push(` ${sectionedBefore[line - 1]}`);
@@ -78,10 +81,10 @@ try {
           return lines;
         };
         const compactSectionedPatch = [
-          ...sectionedHunk(8, 14),
-          ...sectionedHunk(48, 54),
+          ...sectionedHunk(8, 258),
+          ...sectionedHunk(388, 394),
         ].join("\n");
-        const fullSectionedPatch = sectionedHunk(1, 54).join("\n");
+        const fullSectionedPatch = sectionedHunk(1, 394).join("\n");
         window.diffLayoutFixture = {
           mountReadOnly() {
             active?.destroy();
@@ -100,11 +103,12 @@ try {
             active = editor;
           },
           mountSectionedReadOnly(layout) {
+            active?.destroy();
             const expanded = new Set();
+            const editor = new LazyDiffEditor(blame, EN_US.editor);
             const mount = () => {
-              active?.destroy();
               host.className = "content-body diff-surface";
-              const editor = new DiffEditor(blame, EN_US.editor);
+              host.innerHTML = "";
               editor.mount(
                 host,
                 expanded.size > 0 ? fullSectionedPatch : compactSectionedPatch,
@@ -119,6 +123,8 @@ try {
                 unavailable,
                 (section) => {
                   expanded.add(section);
+                  editor.destroy();
+                  host.innerHTML = "<div>Loading expanded context</div>";
                   queueMicrotask(mount);
                 },
               );
@@ -232,15 +238,41 @@ try {
         const selector = layout === "split"
           ? ".diff-pane-new .cm-source-omitted"
           : ".cm-source-omitted";
-        const omitted = page.locator(selector);
-        assert.equal(await omitted.count(), 2, `${name}: ${layout} starts with two omitted sections`);
-        await omitted.nth(1).click();
+        const scroller = layout === "split"
+          ? ".diff-pane-new .cm-scroller"
+          : ".diff-unified-grid .cm-scroller";
+        await page.$eval(scroller, (element) => { element.scrollTop = element.scrollHeight; });
         await settle();
-        assert.equal(await page.locator(selector).count(), 1,
-          `${name}: ${layout} expands only the selected omitted section`);
-        assert.match(await page.locator(selector).innerText(), /7 unchanged lines omitted/u);
-        assert.match(await page.locator("#editor").innerText(), /line 15/u);
-        assert.match(await page.locator("#editor").innerText(), /line 47/u);
+        const omitted = page.locator(selector, { hasText: "129 unchanged lines omitted" });
+        assert.equal(await omitted.count(), 1, `${name}: ${layout} renders the selected omitted section`);
+        const clickedTop = (await omitted.boundingBox()).y;
+        await omitted.evaluate((element) => element.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        })));
+        await settle();
+        await page.waitForTimeout(150);
+        const expandedPosition = await page.evaluate((scrollerSelector) => {
+          const scroll = document.querySelector(scrollerSelector);
+          const line = [...document.querySelectorAll(".cm-line")]
+            .find((element) => element.textContent?.includes("line 259"));
+          return {
+            top: line?.getBoundingClientRect().top ?? null,
+            scrollTop: scroll?.scrollTop ?? null,
+            scrollMaximum: scroll ? scroll.scrollHeight - scroll.clientHeight : null,
+            visible: [...document.querySelectorAll(".cm-line")].slice(0, 4)
+              .map((element) => element.textContent),
+          };
+        }, scroller);
+        assert.notEqual(expandedPosition.top, null,
+          `${name}: ${layout} lost source-line anchor ${JSON.stringify(expandedPosition)}`);
+        const expandedTop = expandedPosition.top;
+        assert.ok(Math.abs(expandedTop - clickedTop) <= 2,
+          `${name}: ${layout} expanded away from the clicked row ${JSON.stringify({
+            clickedTop,
+            expandedTop,
+            expandedPosition,
+          })}`);
       }
 
       await page.evaluate(() => window.diffLayoutFixture.mountEditable());

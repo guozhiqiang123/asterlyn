@@ -56,7 +56,7 @@ export function adjacentDiffItem<T>(
 
 export function handleOmittedDiffExpansion(
   target: EventTarget | null,
-  expand: (section: string) => void,
+  expand: (section: string, omitted: Element) => void,
 ): boolean {
   const candidate = target as (EventTarget & {
     closest?: (selector: string) => {
@@ -66,7 +66,7 @@ export function handleOmittedDiffExpansion(
   const omitted = candidate?.closest?.(".cm-source-omitted");
   const section = omitted?.getAttribute?.("data-diff-omitted-key");
   if (!section) return false;
-  expand(section);
+  expand(section, omitted as Element);
   return true;
 }
 

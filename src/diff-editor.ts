@@ -81,6 +81,12 @@ import {
   type ContextMenuPort,
 } from "./shared/context-menu/context-menu-model.ts";
 import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
+import {
+  captureDiffExpansionAnchor,
+  restoreDiffExpansionAnchor,
+  restoreDiffScroll,
+  type DiffExpansionAnchor,
+} from "./features/files-editor/diff-expansion-anchor.ts";
 
 const setActiveDiffBlock = StateEffect.define<DiffChangeBlock | null>();
 const activeDiffBlockDecoration = StateField.define({
@@ -151,7 +157,7 @@ export class DiffEditor {
     new: { result: null, loading: false, generation: 0 },
   };
   private ruler: HTMLDivElement | null = null;
-  private onExpandUnchanged: ((section: string) => void) | null = null;
+  private onExpandUnchanged: ((section: string, anchor: DiffExpansionAnchor) => void) | null = null;
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -169,8 +175,9 @@ export class DiffEditor {
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
-    onExpandUnchanged: (section: string) => void,
+    onExpandUnchanged: (section: string, anchor: DiffExpansionAnchor) => void,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
+    restoredExpansionAnchor?: DiffExpansionAnchor | null,
   ): void {
     const isSamePath = this.parent === parent || this.sourcePath === path;
     const scroll = restoredScroll ?? (isSamePath ? this.captureScroll() : null);
@@ -185,8 +192,16 @@ export class DiffEditor {
     this.blameSources = blameSources;
     this.onExpandUnchanged = onExpandUnchanged;
     this.render();
-    if (scroll) {
-      this.restoreScroll(scroll, previousLayout === this.presentation.layout);
+    const anchored = restoredExpansionAnchor
+      ? restoreDiffExpansionAnchor(
+          restoredExpansionAnchor,
+          this.languageBindings,
+          this.views,
+          () => this.parent !== null,
+        )
+      : false;
+    if (!anchored && scroll) {
+      restoreDiffScroll(scroll, previousLayout === this.presentation.layout, this.views, () => this.parent !== null);
     }
     void this.loadLanguage(parent, path);
   }
@@ -197,7 +212,7 @@ export class DiffEditor {
     this.presentation = { ...presentation };
     if (!this.parent) return;
     this.render();
-    this.restoreScroll(scroll, previousLayout === this.presentation.layout);
+    restoreDiffScroll(scroll, previousLayout === this.presentation.layout, this.views, () => this.parent !== null);
   }
 
   requestMeasure(): void {
@@ -424,7 +439,10 @@ export class DiffEditor {
       EditorView.domEventHandlers({
         click: (event) => handleOmittedDiffExpansion(
           event.target,
-          (section) => this.onExpandUnchanged?.(section),
+          (section, omitted) => {
+            const anchor = captureDiffExpansionAnchor(view, section, side ?? null, omitted);
+            this.onExpandUnchanged?.(section, anchor);
+          },
         ),
       }),
       keymap.of([
@@ -628,33 +646,6 @@ export class DiffEditor {
       scrollTop: first?.scrollTop ?? 0,
       left: first?.scrollLeft ?? 0,
     };
-  }
-
-  private restoreScroll(
-    scroll: { topRatio: number; scrollTop: number; left: number },
-    preserveExact: boolean,
-  ): void {
-    let attempts = 0;
-    const apply = () => {
-      if (!this.parent || this.views.length === 0) return;
-      for (const view of this.views) {
-        const dom = view.scrollDOM;
-        const max = Math.max(0, dom.scrollHeight - dom.clientHeight);
-        if (max > 0 || attempts >= 5) {
-          dom.scrollTop = preserveExact ? Math.min(max, scroll.scrollTop) : max * scroll.topRatio;
-        } else {
-          dom.scrollTop = scroll.scrollTop;
-        }
-        dom.scrollLeft = preserveExact ? scroll.left : 0;
-      }
-      const first = this.views[0]?.scrollDOM;
-      if (first && preserveExact && first.scrollTop < scroll.scrollTop && attempts < 5) {
-        attempts += 1;
-        window.requestAnimationFrame(apply);
-      }
-    };
-    apply();
-    window.requestAnimationFrame(apply);
   }
 
   private destroyViews(): void {

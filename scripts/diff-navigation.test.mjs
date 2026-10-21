@@ -81,6 +81,7 @@ test("deleted working Diffs do not expose a missing source file", () => {
 
 test("clicking an omitted Diff row expands it exactly once", () => {
   const expansions = [];
+  let expandedElement = null;
   const omitted = {
     closest(selector) {
       return selector === ".cm-source-omitted" ? this : null;
@@ -93,8 +94,12 @@ test("clicking an omitted Diff row expands it exactly once", () => {
 
   assert.equal(handleOmittedDiffExpansion(ordinary, (section) => expansions.push(section)), false);
   assert.equal(handleOmittedDiffExpansion(null, (section) => expansions.push(section)), false);
-  assert.equal(handleOmittedDiffExpansion(omitted, (section) => expansions.push(section)), true);
+  assert.equal(handleOmittedDiffExpansion(omitted, (section, element) => {
+    expansions.push(section);
+    expandedElement = element;
+  }), true);
   assert.deepEqual(expansions, ["15:48:15:48"]);
+  assert.equal(expandedElement, omitted);
 });
 
 test("read-only Diff keeps the omitted-row expansion callback wired end to end", async () => {
