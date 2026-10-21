@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Asterlyn",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "identifier": "dev.asterlyn.desktop",
   "build": {
     "beforeDevCommand": "node scripts/prepare-plugin-host-sidecar.mjs && npm run dev",

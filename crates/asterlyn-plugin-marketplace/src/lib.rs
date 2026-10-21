@@ -1,4 +1,6 @@
-use std::fs::{self, File, OpenOptions};
+#[cfg(unix)]
+use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -1366,10 +1368,19 @@ fn remove_stale_file(path: &Path, label: &str) -> Result<(), MarketplaceError> {
     }
 }
 
+#[cfg(unix)]
 fn sync_directory(path: &Path) -> Result<(), MarketplaceError> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(|error| io_error("sync source directory", error))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<(), MarketplaceError> {
+    // Windows does not permit opening a directory through std::fs::File, so the Unix durability
+    // barrier above would fail with ERROR_ACCESS_DENIED after the already-synced catalog file is
+    // renamed. File contents are still flushed by write_new_file before publication.
+    Ok(())
 }
 
 fn io_error(operation: &str, error: std::io::Error) -> MarketplaceError {
@@ -1382,6 +1393,12 @@ mod tests {
 
     fn content_digest() -> String {
         format!("sha256:{}", "c".repeat(64))
+    }
+
+    #[test]
+    fn synchronizes_a_source_directory_with_platform_semantics() {
+        let directory = tempfile::tempdir().unwrap();
+        sync_directory(directory.path()).unwrap();
     }
 
     #[test]
