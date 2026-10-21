@@ -80,18 +80,21 @@ test("deleted working Diffs do not expose a missing source file", () => {
 });
 
 test("clicking an omitted Diff row expands it exactly once", () => {
-  let expansions = 0;
+  const expansions = [];
   const omitted = {
     closest(selector) {
       return selector === ".cm-source-omitted" ? this : null;
     },
+    getAttribute(name) {
+      return name === "data-diff-omitted-key" ? "15:48:15:48" : null;
+    },
   };
   const ordinary = { closest() { return null; } };
 
-  assert.equal(handleOmittedDiffExpansion(ordinary, () => { expansions += 1; }), false);
-  assert.equal(handleOmittedDiffExpansion(null, () => { expansions += 1; }), false);
-  assert.equal(handleOmittedDiffExpansion(omitted, () => { expansions += 1; }), true);
-  assert.equal(expansions, 1);
+  assert.equal(handleOmittedDiffExpansion(ordinary, (section) => expansions.push(section)), false);
+  assert.equal(handleOmittedDiffExpansion(null, (section) => expansions.push(section)), false);
+  assert.equal(handleOmittedDiffExpansion(omitted, (section) => expansions.push(section)), true);
+  assert.deepEqual(expansions, ["15:48:15:48"]);
 });
 
 test("read-only Diff keeps the omitted-row expansion callback wired end to end", async () => {
@@ -102,9 +105,9 @@ test("read-only Diff keeps the omitted-row expansion callback wired end to end",
     readFile(new URL("../src/app.ts", import.meta.url), "utf8"),
   ]);
   assert.match(editor, /EditorView\.domEventHandlers\(\{[\s\S]*handleOmittedDiffExpansion/u);
-  assert.match(lazy, /onExpandUnchanged:\s*\(\) => void/u);
-  assert.match(surface, /onExpandUnchanged:\s*\(\) => void/u);
-  assert.match(app, /\(\) => this\.expandDiffUnchangedLines\(\)/u);
+  assert.match(lazy, /onExpandUnchanged:\s*\(section: string\) => void/u);
+  assert.match(surface, /onExpandUnchanged:\s*\(section: string\) => void/u);
+  assert.match(app, /\(section\) => this\.expandDiffUnchangedSection\(section\)/u);
 });
 
 test("Diff document identities isolate source kind, side, repository, and revision", () => {

@@ -291,7 +291,7 @@ export class EditorSurface {
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
-    onExpandUnchanged: () => void,
+    onExpandUnchanged: (section: string) => void,
     beforeTransition: () => void,
   ): void {
     if (this.mountedEditorKey === key) {

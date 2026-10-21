@@ -127,7 +127,12 @@ export function unifiedLineDecorations(rows: readonly UnifiedDiffRow[]): Extensi
         className = "cm-source-notice";
       }
       if (className) {
-        decorations.push(Decoration.line({ class: className }).range(line.from));
+        decorations.push(Decoration.line({
+          class: className,
+          attributes: row.omittedKey
+            ? { "data-diff-omitted-key": row.omittedKey }
+            : undefined,
+        }).range(line.from));
       }
       if (row.changed && row.changed.length > 0) {
         const markClass =

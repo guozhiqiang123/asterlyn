@@ -37,7 +37,7 @@ type DiffMount = {
   presentation: DiffPresentation;
   sideLabels: DiffSideLabels;
   blameSources: DiffGitBlameSources;
-  onExpandUnchanged: () => void;
+  onExpandUnchanged: (section: string) => void;
   restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null;
 };
 
@@ -326,7 +326,7 @@ export class LazyDiffEditor {
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
-    onExpandUnchanged: () => void,
+    onExpandUnchanged: (section: string) => void,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
     const mount = {

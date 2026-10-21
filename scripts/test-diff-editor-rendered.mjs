@@ -62,6 +62,26 @@ try {
         };
         let active = null;
         const long = "x".repeat(320);
+        const sectionedBefore = Array.from({ length: 54 }, (_, index) => `line ${index + 1}`);
+        const sectionedAfter = [...sectionedBefore];
+        sectionedAfter[10] = "changed 11";
+        sectionedAfter[50] = "changed 51";
+        const sectionedHunk = (from, to) => {
+          const lines = [`@@ -${from},${to - from + 1} +${from},${to - from + 1} @@`];
+          for (let line = from; line <= to; line += 1) {
+            if (line === 11 || line === 51) {
+              lines.push(`-${sectionedBefore[line - 1]}`, `+${sectionedAfter[line - 1]}`);
+            } else {
+              lines.push(` ${sectionedBefore[line - 1]}`);
+            }
+          }
+          return lines;
+        };
+        const compactSectionedPatch = [
+          ...sectionedHunk(8, 14),
+          ...sectionedHunk(48, 54),
+        ].join("\n");
+        const fullSectionedPatch = sectionedHunk(1, 54).join("\n");
         window.diffLayoutFixture = {
           mountReadOnly() {
             active?.destroy();
@@ -78,6 +98,33 @@ try {
               () => {},
             );
             active = editor;
+          },
+          mountSectionedReadOnly(layout) {
+            const expanded = new Set();
+            const mount = () => {
+              active?.destroy();
+              host.className = "content-body diff-surface";
+              const editor = new DiffEditor(blame, EN_US.editor);
+              editor.mount(
+                host,
+                expanded.size > 0 ? fullSectionedPatch : compactSectionedPatch,
+                "sectioned.ts",
+                DEFAULT_APP_PREFERENCES,
+                {
+                  layout,
+                  showWhitespace: false,
+                  expandedUnchangedSections: [...expanded],
+                },
+                { before: "Before", after: "After" },
+                unavailable,
+                (section) => {
+                  expanded.add(section);
+                  queueMicrotask(mount);
+                },
+              );
+              active = editor;
+            };
+            mount();
           },
           mountEditable(before = `old ${long}\ncontext\n`, after = `new ${long}\ncontext\n`) {
             active?.destroy();
@@ -178,6 +225,23 @@ try {
         ".diff-split-grid",
         (element) => element.style.getPropertyValue("--diff-before-width"),
       )) > 37);
+
+      for (const layout of ["split", "unified"]) {
+        await page.evaluate((value) => window.diffLayoutFixture.mountSectionedReadOnly(value), layout);
+        await settle();
+        const selector = layout === "split"
+          ? ".diff-pane-new .cm-source-omitted"
+          : ".cm-source-omitted";
+        const omitted = page.locator(selector);
+        assert.equal(await omitted.count(), 2, `${name}: ${layout} starts with two omitted sections`);
+        await omitted.nth(1).click();
+        await settle();
+        assert.equal(await page.locator(selector).count(), 1,
+          `${name}: ${layout} expands only the selected omitted section`);
+        assert.match(await page.locator(selector).innerText(), /7 unchanged lines omitted/u);
+        assert.match(await page.locator("#editor").innerText(), /line 15/u);
+        assert.match(await page.locator("#editor").innerText(), /line 47/u);
+      }
 
       await page.evaluate(() => window.diffLayoutFixture.mountEditable());
       await settle();

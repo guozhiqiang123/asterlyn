@@ -56,13 +56,17 @@ export function adjacentDiffItem<T>(
 
 export function handleOmittedDiffExpansion(
   target: EventTarget | null,
-  expand: () => void,
+  expand: (section: string) => void,
 ): boolean {
   const candidate = target as (EventTarget & {
-    closest?: (selector: string) => unknown;
+    closest?: (selector: string) => {
+      getAttribute?: (name: string) => string | null;
+    } | null;
   }) | null;
-  if (!candidate?.closest?.(".cm-source-omitted")) return false;
-  expand();
+  const omitted = candidate?.closest?.(".cm-source-omitted");
+  const section = omitted?.getAttribute?.("data-diff-omitted-key");
+  if (!section) return false;
+  expand(section);
   return true;
 }
 

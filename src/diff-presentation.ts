@@ -6,6 +6,7 @@ export type DiffLayout = "unified" | "split";
 export interface DiffPresentation {
   layout: DiffLayout;
   showWhitespace: boolean;
+  expandedUnchangedSections?: readonly string[];
   splitPercentage?: number;
   onSplitPercentageChange?: (value: number, committed: boolean) => void;
   editableSplitPercentage?: number;
@@ -62,6 +63,7 @@ export interface SourceDiffRow {
   kind: SourceDiffRowKind;
   old: SourceDiffSide;
   new: SourceDiffSide;
+  omittedKey?: string;
 }
 
 export interface SplitDiffDocument {
@@ -76,6 +78,7 @@ export interface UnifiedDiffRow {
   newLineNumber: number | null;
   text: string;
   changed?: TextRange[];
+  omittedKey?: string;
 }
 
 export interface UnifiedDiffDocument {
@@ -88,7 +91,10 @@ const INLINE_DIFF_CONFIG = { scanLimit: 1_000, timeout: 50 } as const;
 const MAX_LINE_ALIGNMENT_CELLS = 4_096;
 const ALIGNMENT_GAP_SCORE = -0.45;
 
-export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
+export function parseUnifiedDiff(
+  document: string,
+  expandedUnchangedSections: ReadonlySet<string> = new Set(),
+): UnifiedDiffDocument {
   const lines = document.split("\n");
   const rows: UnifiedDiffRow[] = [];
   let index = 0;
@@ -117,6 +123,12 @@ export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
         oldLineNumber: null,
         newLineNumber: null,
         text: label,
+        omittedKey: omittedSectionKey(
+          sawHunk ? oldLine : 1,
+          nextOldLine,
+          sawHunk ? newLine : 1,
+          nextNewLine,
+        ),
       });
     }
     sawHunk = true;
@@ -226,13 +238,19 @@ export function parseUnifiedDiff(document: string): UnifiedDiffDocument {
     });
   }
 
+  const projected = expandedUnchangedSections.size > 0
+    ? collapseExpandedUnifiedRows(rows, expandedUnchangedSections)
+    : rows;
   return {
-    document: rows.map((r) => r.text).join("\n"),
-    rows,
+    document: projected.map((r) => r.text).join("\n"),
+    rows: projected,
   };
 }
 
-export function splitUnifiedDiff(document: string): SplitDiffDocument {
+export function splitUnifiedDiff(
+  document: string,
+  expandedUnchangedSections: ReadonlySet<string> = new Set(),
+): SplitDiffDocument {
   const lines = document.split("\n");
   const rows: SourceDiffRow[] = [];
   let index = 0;
@@ -344,10 +362,13 @@ export function splitUnifiedDiff(document: string): SplitDiffDocument {
     );
   }
 
+  const projected = expandedUnchangedSections.size > 0
+    ? collapseExpandedSplitRows(rows, expandedUnchangedSections)
+    : rows;
   return {
-    oldDocument: rows.map((item) => item.old.text).join("\n"),
-    newDocument: rows.map((item) => item.new.text).join("\n"),
-    rows,
+    oldDocument: projected.map((item) => item.old.text).join("\n"),
+    newDocument: projected.map((item) => item.new.text).join("\n"),
+    rows: projected,
   };
 }
 
@@ -366,7 +387,131 @@ function appendOmittedRow(
     oldCount === newCount
       ? `⋯ ${oldCount} unchanged ${oldCount === 1 ? "line" : "lines"} omitted ⋯`
       : `⋯ ${oldCount} old / ${newCount} new lines omitted ⋯`;
-  rows.push(row("omitted", side(null, label), side(null, label)));
+  rows.push(row(
+    "omitted",
+    side(null, label),
+    side(null, label),
+    omittedSectionKey(
+      sawHunk ? previousOldLine : 1,
+      nextOldLine,
+      sawHunk ? previousNewLine : 1,
+      nextNewLine,
+    ),
+  ));
+}
+
+function collapseExpandedSplitRows(
+  rows: readonly SourceDiffRow[],
+  expanded: ReadonlySet<string>,
+): SourceDiffRow[] {
+  return collapseContextRows(
+    rows,
+    expanded,
+    (item) => item.kind,
+    (item) => [item.old.lineNumber, item.new.lineNumber],
+    (oldFrom, oldTo, newFrom, newTo, key) => {
+      const label = omittedLabel(oldTo - oldFrom, newTo - newFrom);
+      return row("omitted", side(null, label), side(null, label), key);
+    },
+  );
+}
+
+function collapseExpandedUnifiedRows(
+  rows: readonly UnifiedDiffRow[],
+  expanded: ReadonlySet<string>,
+): UnifiedDiffRow[] {
+  return collapseContextRows(
+    rows,
+    expanded,
+    (item) => item.kind,
+    (item) => [item.oldLineNumber, item.newLineNumber],
+    (oldFrom, oldTo, newFrom, newTo, key) => ({
+      kind: "omitted",
+      oldLineNumber: null,
+      newLineNumber: null,
+      text: omittedLabel(oldTo - oldFrom, newTo - newFrom),
+      omittedKey: key,
+    }),
+  );
+}
+
+function collapseContextRows<T>(
+  rows: readonly T[],
+  expanded: ReadonlySet<string>,
+  kind: (item: T) => string,
+  lines: (item: T) => readonly [number | null, number | null],
+  omitted: (
+    oldFrom: number,
+    oldTo: number,
+    newFrom: number,
+    newTo: number,
+    key: string,
+  ) => T,
+): T[] {
+  const margin = 3;
+  const firstChange = rows.findIndex((item) => isChangedDiffRow(kind(item)));
+  let lastChange = -1;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (isChangedDiffRow(kind(rows[index]!))) {
+      lastChange = index;
+      break;
+    }
+  }
+  if (firstChange < 0) return [...rows];
+
+  const result: T[] = [];
+  for (let index = 0; index < rows.length;) {
+    if (kind(rows[index]!) !== "context") {
+      result.push(rows[index]!);
+      index += 1;
+      continue;
+    }
+    const runStart = index;
+    while (index < rows.length && kind(rows[index]!) === "context") index += 1;
+    const runEnd = index;
+    const collapseStart = runStart + (firstChange < runStart ? margin : 0);
+    const collapseEnd = runEnd - (lastChange >= runEnd ? margin : 0);
+    if (collapseEnd <= collapseStart) {
+      result.push(...rows.slice(runStart, runEnd));
+      continue;
+    }
+    const first = lines(rows[collapseStart]!);
+    const last = lines(rows[collapseEnd - 1]!);
+    if (first[0] === null || first[1] === null || last[0] === null || last[1] === null) {
+      result.push(...rows.slice(runStart, runEnd));
+      continue;
+    }
+    const oldTo = last[0] + 1;
+    const newTo = last[1] + 1;
+    const key = omittedSectionKey(first[0], oldTo, first[1], newTo);
+    if (expanded.has(key)) {
+      result.push(...rows.slice(runStart, runEnd));
+      continue;
+    }
+    result.push(...rows.slice(runStart, collapseStart));
+    result.push(omitted(first[0], oldTo, first[1], newTo, key));
+    result.push(...rows.slice(collapseEnd, runEnd));
+  }
+  return result;
+}
+
+function isChangedDiffRow(kind: string): boolean {
+  return kind === "added" || kind === "removed" || kind === "modified";
+}
+
+function omittedSectionKey(
+  oldFrom: number,
+  oldTo: number,
+  newFrom: number,
+  newTo: number,
+): string {
+  return `${oldFrom}:${oldTo}:${newFrom}:${newTo}`;
+}
+
+function omittedLabel(oldCount: number, newCount: number): string {
+  return oldCount === newCount
+    ? `⋯ ${oldCount} unchanged ${oldCount === 1 ? "line" : "lines"} omitted ⋯`
+    : `⋯ ${oldCount} old / ${newCount} new lines omitted ⋯`;
 }
 
 function appendChangedRows(
@@ -572,8 +717,9 @@ function row(
   kind: SourceDiffRowKind,
   oldSide: SourceDiffSide,
   newSide: SourceDiffSide,
+  omittedKey?: string,
 ): SourceDiffRow {
-  return { kind, old: oldSide, new: newSide };
+  return { kind, old: oldSide, new: newSide, ...(omittedKey ? { omittedKey } : {}) };
 }
 
 function side(

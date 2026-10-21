@@ -151,7 +151,7 @@ export class DiffEditor {
     new: { result: null, loading: false, generation: 0 },
   };
   private ruler: HTMLDivElement | null = null;
-  private onExpandUnchanged: (() => void) | null = null;
+  private onExpandUnchanged: ((section: string) => void) | null = null;
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -169,7 +169,7 @@ export class DiffEditor {
     presentation: DiffPresentation,
     sideLabels: DiffSideLabels,
     blameSources: DiffGitBlameSources,
-    onExpandUnchanged: () => void,
+    onExpandUnchanged: (section: string) => void,
     restoredScroll?: { topRatio: number; scrollTop: number; left: number } | null,
   ): void {
     const isSamePath = this.parent === parent || this.sourcePath === path;
@@ -294,7 +294,10 @@ export class DiffEditor {
     };
 
     if (this.presentation.layout === "unified") {
-      const unified = parseUnifiedDiff(this.sourceDocument);
+      const unified = parseUnifiedDiff(
+        this.sourceDocument,
+        new Set(this.presentation.expandedUnchangedSections ?? []),
+      );
       this.changeBlocks = unifiedDiffChangeBlocks(unified.rows);
       const grid = window.document.createElement("div");
       grid.className = "diff-unified-grid";
@@ -312,7 +315,10 @@ export class DiffEditor {
       return;
     }
 
-    const split = splitUnifiedDiff(this.sourceDocument);
+    const split = splitUnifiedDiff(
+      this.sourceDocument,
+      new Set(this.presentation.expandedUnchangedSections ?? []),
+    );
     this.changeBlocks = splitChangeBlocks(split.rows);
     const grid = window.document.createElement("div");
     grid.className = "diff-split-grid";
@@ -418,7 +424,7 @@ export class DiffEditor {
       EditorView.domEventHandlers({
         click: (event) => handleOmittedDiffExpansion(
           event.target,
-          () => this.onExpandUnchanged?.(),
+          (section) => this.onExpandUnchanged?.(section),
         ),
       }),
       keymap.of([
@@ -696,7 +702,12 @@ function sourceLineDecorations(
       const sourceSide = row[side];
       const className = sourceLineClass(row, side);
       if (className) {
-        decorations.push(Decoration.line({ class: className }).range(line.from));
+        decorations.push(Decoration.line({
+          class: className,
+          attributes: row.omittedKey
+            ? { "data-diff-omitted-key": row.omittedKey }
+            : undefined,
+        }).range(line.from));
       }
       for (const range of sourceSide.changed) {
         if (range.to <= range.from || range.from >= line.length) continue;

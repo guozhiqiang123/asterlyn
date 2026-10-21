@@ -121,6 +121,48 @@ test("source diff exposes omitted ranges and no-newline markers", () => {
   assert.equal(split.rows[4].old.lineNumber, 30);
 });
 
+test("expanding one omitted section keeps the other sections collapsed", () => {
+  const before = Array.from({ length: 54 }, (_, index) => `line ${index + 1}`);
+  const after = [...before];
+  after[10] = "changed 11";
+  after[50] = "changed 51";
+  const hunk = (from, to) => {
+    const lines = [`@@ -${from},${to - from + 1} +${from},${to - from + 1} @@`];
+    for (let line = from; line <= to; line += 1) {
+      if (line === 11 || line === 51) {
+        lines.push(`-${before[line - 1]}`, `+${after[line - 1]}`);
+      } else {
+        lines.push(` ${before[line - 1]}`);
+      }
+    }
+    return lines;
+  };
+  const compactPatch = [...hunk(8, 14), ...hunk(48, 54)].join("\n");
+  const fullPatch = hunk(1, 54).join("\n");
+  const compact = splitUnifiedDiff(compactPatch);
+  const omitted = compact.rows.filter((row) => row.kind === "omitted");
+  assert.deepEqual(omitted.map((row) => row.omittedKey), [
+    "1:8:1:8",
+    "15:48:15:48",
+  ]);
+
+  const expanded = new Set([omitted[1].omittedKey]);
+  const split = splitUnifiedDiff(fullPatch, expanded);
+  assert.deepEqual(
+    split.rows.filter((row) => row.kind === "omitted").map((row) => row.omittedKey),
+    ["1:8:1:8"],
+  );
+  assert.ok(split.rows.some((row) => row.old.lineNumber === 15 && row.old.text === "line 15"));
+  assert.ok(split.rows.some((row) => row.old.lineNumber === 47 && row.old.text === "line 47"));
+
+  const unified = parseUnifiedDiff(fullPatch, expanded);
+  assert.deepEqual(
+    unified.rows.filter((row) => row.kind === "omitted").map((row) => row.omittedKey),
+    ["1:8:1:8"],
+  );
+  assert.ok(unified.rows.some((row) => row.oldLineNumber === 15 && row.text === "line 15"));
+});
+
 test("source diff expands replacements to presentation-oriented word ranges", () => {
   const split = splitUnifiedDiff(
     ["@@ -1 +1 @@", "-const answer = oldValue;", "+const answer = newValue;"].join(

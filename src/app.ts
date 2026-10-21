@@ -252,6 +252,7 @@ import {
 } from "./shell/layout-state";
 import { attachSplitter } from "./presentation/splitter";
 import { adjacentDiffItem, type DiffDirection } from "./features/files-editor/diff-navigation";
+import { DiffContextExpansionState, isDiffDocument } from "./features/files-editor/diff-context-expansion.ts";
 import {
   activeProjectWorkspacePath,
   activeEditableTextTab,
@@ -259,7 +260,6 @@ import {
   mountEditableWorkingDiff,
   showsContextHeader,
   workingDiffActive,
-  workingDiffExpanded,
   workingDiffSourceFile,
   workingDiffTextTab,
 } from "./features/files-editor/working-diff-integration.ts";
@@ -418,7 +418,7 @@ export class AsterlynApp {
     source?: EditorFontLoadSource;
     message?: string;
   } = { id: null, kind: "idle" };
-  private expandedUnchangedDiffKey: string | null = null;
+  private readonly diffContextExpansion = new DiffContextExpansionState();
   private remoteDialogReturnFocus: HTMLElement | null = null;
   private lastRenderedEditorDocumentKey: string | null = null;
   private commandSurfaceReturnFocus: HTMLElement | null = null;
@@ -523,7 +523,7 @@ export class AsterlynApp {
       openDiff: (document) => {
         this.activateDiffPreview(document);
         this.renderEditor();
-        void this.stashRuntime.loadDiff(document, workingDiffExpanded(document, this.expandedUnchangedDiffKey));
+        void this.stashRuntime.loadDiff(document, this.diffContextExpansion.requestsExpandedPatch(document));
       },
       closeDiff: (document) => {
         const preview = this.editorState.session.preview;
@@ -5959,7 +5959,7 @@ export class AsterlynApp {
       const editableTab = workingDiffTextTab(this.editorState.session, document, this.filesState.files); const editable = mountEditableWorkingDiff({
         surface: this.editorSurface, document, state: this.changesState,
         tab: editableTab,
-        preferences: this.settingsState.preferences, presentation: this.diffPresentation(), expandedUnchanged: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
+        preferences: this.settingsState.preferences, presentation: this.diffPresentation(), expandedUnchanged: this.diffContextExpansion.isFullyExpanded(document),
         sideLabels: this.diffSideLabels(document),
         blameSources: editableWorkingDiffBlameSources(this.diffBlameSources(document), editableTab, copy.gitBlameRequiresSavedFile),
         beforeTransition: () => this.captureMountedTextEditor(),
@@ -5973,7 +5973,7 @@ export class AsterlynApp {
         this.mountEditorDiff(
           editorDocumentContentKey(
             document,
-            `patch:${this.changesState.workingPatchVersion}`,
+            `patch:${this.changesState.workingPatchVersion}:${this.diffContextExpansion.projectionKey(document)}`,
           ),
           this.changesState.workingPatch.patch ||
             copy.noTextualDiff,
@@ -6042,7 +6042,7 @@ export class AsterlynApp {
         this.mountEditorDiff(
           editorDocumentContentKey(
             document,
-            `patch:${this.gitHistoryPresentationRuntime.detailState.comparisonPatchVersion}`,
+            `patch:${this.gitHistoryPresentationRuntime.detailState.comparisonPatchVersion}:${this.diffContextExpansion.projectionKey(document)}`,
           ),
           this.gitHistoryPresentationRuntime.detailState.comparisonPatch.patch || copy.noTextualDiff,
           document.path,
@@ -6082,10 +6082,10 @@ export class AsterlynApp {
         editorDocumentContentKey(document, `stash-error:${this.stashRuntime.controller.state.patchVersion}`),
         renderEditorRetryState(copy.patchLoadFailed, this.stashRuntime.controller.state.patchError, "retry-stash-patch", "changes", copy),
       );
-      this.query("#retry-stash-patch").addEventListener("click", () => { void this.stashRuntime.loadDiff(document, workingDiffExpanded(document, this.expandedUnchangedDiffKey)); });
+      this.query("#retry-stash-patch").addEventListener("click", () => { void this.stashRuntime.loadDiff(document, this.diffContextExpansion.requestsExpandedPatch(document)); });
     } else if (stashDiff && this.stashRuntime.controller.state.patch) {
       this.mountEditorDiff(
-        editorDocumentContentKey(document, `stash-patch:${this.stashRuntime.controller.state.patchVersion}`),
+        editorDocumentContentKey(document, `stash-patch:${this.stashRuntime.controller.state.patchVersion}:${this.diffContextExpansion.projectionKey(document)}`),
         this.stashRuntime.controller.state.patch.patch || copy.noTextualDiff,
         document.path,
         this.diffSideLabels(document),
@@ -6117,7 +6117,7 @@ export class AsterlynApp {
       this.mountEditorDiff(
         editorDocumentContentKey(
           document,
-          `patch:${this.gitHistoryPresentationRuntime.detailState.commitPatchVersion}`,
+          `patch:${this.gitHistoryPresentationRuntime.detailState.commitPatchVersion}:${this.diffContextExpansion.projectionKey(document)}`,
         ),
         this.gitHistoryPresentationRuntime.detailState.commitPatch.patch || copy.noTextualDiff,
         document.path,
@@ -6364,7 +6364,7 @@ export class AsterlynApp {
       this.diffPresentation(),
       sideLabels,
       blameSources,
-      () => this.expandDiffUnchangedLines(),
+      (section) => this.expandDiffUnchangedSection(section),
       () => this.captureMountedTextEditor(),
     );
   }
@@ -6863,7 +6863,7 @@ export class AsterlynApp {
       previousFile: this.adjacentDiffPath(document, -1),
       nextFile: this.adjacentDiffPath(document, 1),
       canOpenSource: workingDiffSourceFile(this.filesState.files, document, this.windowSession.repository.state.snapshot?.changes ?? []) !== null,
-      expanded: workingDiffExpanded(document, this.expandedUnchangedDiffKey),
+      expanded: this.diffContextExpansion.isFullyExpanded(document),
       preferences: this.settingsState.preferences,
       copy: this.localization.catalog.editor,
     });
@@ -7012,30 +7012,32 @@ export class AsterlynApp {
 
   private toggleDiffUnchangedLines(): void {
     const document = this.activeDocument();
-    if (
-      document.kind !== "working-diff" &&
-      document.kind !== "commit-diff" &&
-      document.kind !== "commit-comparison-diff"
-    ) return;
-    const key = editorDocumentKey(document);
-    this.expandedUnchangedDiffKey = this.expandedUnchangedDiffKey === key ? null : key;
-    if (document.kind === "working-diff") void this.loadSelectedDiff();
-    else if (document.kind === "commit-diff") {
-      if (this.stashRuntime.isDiff(document)) void this.stashRuntime.loadDiff(document, workingDiffExpanded(document, this.expandedUnchangedDiffKey));
-      else void this.loadSelectedCommitDiff();
-    }
-    else void this.loadSelectedComparisonDiff();
+    if (!isDiffDocument(document)) return;
+    this.applyDiffContextExpansion(document, this.diffContextExpansion.toggle(document));
   }
 
-  private expandDiffUnchangedLines(): void {
+  private expandDiffUnchangedSection(section: string): void {
     const document = this.activeDocument();
-    if (
-      document.kind !== "working-diff" &&
-      document.kind !== "commit-diff" &&
-      document.kind !== "commit-comparison-diff"
-    ) return;
-    if (workingDiffExpanded(document, this.expandedUnchangedDiffKey)) return;
-    this.toggleDiffUnchangedLines();
+    if (!isDiffDocument(document)) return;
+    this.applyDiffContextExpansion(document, this.diffContextExpansion.expand(document, section));
+  }
+
+  private applyDiffContextExpansion(document: Parameters<typeof this.reloadActiveDiff>[0], action: "none" | "render" | "reload"): void {
+    if (action === "render") this.renderEditor();
+    else if (action === "reload") this.reloadActiveDiff(document);
+  }
+
+  private reloadActiveDiff(
+    document: Extract<EditorDocument, {
+      kind: "working-diff" | "commit-diff" | "commit-comparison-diff";
+    }>,
+  ): void {
+    if (document.kind === "working-diff") void this.loadSelectedDiff();
+    else if (document.kind === "commit-diff") {
+      if (this.stashRuntime.isDiff(document)) {
+        void this.stashRuntime.loadDiff(document, this.diffContextExpansion.requestsExpandedPatch(document));
+      } else void this.loadSelectedCommitDiff();
+    } else void this.loadSelectedComparisonDiff();
   }
 
   private syncDiffControls(): void {
@@ -7063,9 +7065,11 @@ export class AsterlynApp {
   }
 
   private diffPresentation(): DiffPresentation {
+    const expandedUnchangedSections = this.diffContextExpansion.sections(this.activeDocument());
     return {
       layout: this.settingsState.preferences.diffLayout,
       showWhitespace: this.settingsState.preferences.showWhitespace,
+      ...(expandedUnchangedSections.length > 0 ? { expandedUnchangedSections } : {}),
       splitPercentage: this.shellState.layout.diffBeforePercent,
       onSplitPercentageChange: (value, committed) => {
         this.resizeWorkbench("diffBeforePercent", value);
@@ -7088,7 +7092,7 @@ export class AsterlynApp {
       document.selection.repositoryId !== (selected.repositoryId || ".") ||
       document.selection.path !== selected.path
     ) return;
-    const diff = this.changesRuntime.controller.loadSelectedDiff(workingDiffExpanded(document, this.expandedUnchangedDiffKey));
+    const diff = this.changesRuntime.controller.loadSelectedDiff(this.diffContextExpansion.requestsExpandedPatch(document));
     if (!isImagePreviewPath(selected.path) && !selected.conflicted && !selected.submodule) {
       const file = workingDiffSourceFile(this.filesState.files, document, snapshot.changes);
       if (file && file.readOnly !== true) {
@@ -7129,7 +7133,7 @@ export class AsterlynApp {
   private async loadSelectedCommitDiff(restoreFocus = false): Promise<void> {
     const active = this.activeDocument();
     if (active.kind === "commit-diff" && this.stashRuntime.isDiff(active)) {
-      await this.stashRuntime.loadDiff(active, workingDiffExpanded(active, this.expandedUnchangedDiffKey));
+      await this.stashRuntime.loadDiff(active, this.diffContextExpansion.requestsExpandedPatch(active));
       if (restoreFocus) this.root.querySelector<HTMLButtonElement>(`[data-stash-file="${CSS.escape(active.path)}"]`)?.focus();
       return;
     }
@@ -7208,7 +7212,7 @@ export class AsterlynApp {
         oid,
         file.path,
         file.originalPath,
-        workingDiffExpanded(document, this.expandedUnchangedDiffKey),
+        this.diffContextExpansion.requestsExpandedPatch(document),
       );
       const activeDocument = this.activeDocument();
       if (
@@ -7572,7 +7576,7 @@ export class AsterlynApp {
         details.afterOid,
         file.path,
         file.originalPath,
-        workingDiffExpanded(document, this.expandedUnchangedDiffKey),
+        this.diffContextExpansion.requestsExpandedPatch(document),
       );
       const active = this.activeDocument();
       if (
