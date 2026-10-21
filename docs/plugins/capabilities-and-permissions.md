@@ -1,9 +1,9 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog rooted at Asterlyn `0.1.18`; current SDK `1.10.0`, package schema `3`, and
+Status: experimental public catalog rooted at Asterlyn `0.1.19`; current SDK `1.10.0`, package schema `3`, and
 plugin-host protocol `1`.
 
-Security containment in `0.1.18`: installable packages cannot receive authority from legacy raw
+Security containment in `0.1.19`: installable packages cannot receive authority from legacy raw
 `processQueries` or `toolOperations` executable/argv declarations. Every schema-2 authority package
 is rejected, including the formerly pinned Android `0.5.7` identity. Plugin authors declare only
 `hostOperations`; the host expands each admitted ID into a fixed operation owned by the registered
