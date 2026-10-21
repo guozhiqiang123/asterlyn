@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+base64.workspace = true
 glob.workspace = true
 memchr.workspace = true
 regex.workspace = true

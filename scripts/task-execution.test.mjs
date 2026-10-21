@@ -146,13 +146,18 @@ test("FilesRecovery-scale task output remains complete through terminal delivery
   await controller.confirm(identity);
   listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-large", workspaceRoot: "/repo", sequence: 1, status: "running", message: null, exitCode: null });
   const chunk = Buffer.alloc(16 * 1024, 97).toString("base64");
-  for (let index = 0; index < 84; index += 1) {
+  listeners[0]({ protocolVersion: 1, kind: "output", runId: "run-large", workspaceRoot: "/repo", sequence: 2, stream: "stdout", dataBase64: chunk });
+  const liveFrames = controller.state.outputs;
+  for (let index = 1; index < 84; index += 1) {
     listeners[0]({ protocolVersion: 1, kind: "output", runId: "run-large", workspaceRoot: "/repo", sequence: index + 2, stream: "stdout", dataBase64: chunk });
   }
+  assert.strictEqual(controller.state.outputs, liveFrames);
   listeners[0]({ protocolVersion: 1, kind: "status", runId: "run-large", workspaceRoot: "/repo", sequence: 86, status: "succeeded", message: null, exitCode: 0 });
   assert.equal(controller.state.outputBytes, 84 * 16 * 1024);
   assert.equal(controller.state.outputTruncated, false);
   assert.equal(controller.state.status, "succeeded");
+  assert.notStrictEqual(controller.state.outputs, liveFrames);
+  assert.equal(Object.isFrozen(controller.state.outputs), true);
 });
 
 test("task event decoding failures crash and cancel the active run", async () => {

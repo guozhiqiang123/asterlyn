@@ -39,17 +39,21 @@ function installation() {
 test("activates admitted external contributions and removes them on deactivation", async () => {
   const registry = new PluginContributionRegistry();
   const calls = [];
+  let selectedInstallation = installation();
   let eventListener = null;
   let notificationListener = null;
   let terminationListener = null;
   const bridge = {
     activate: async (...arguments_) => {
       calls.push(["activate", ...arguments_]);
+      const selected = selectedInstallation.plugins[0];
+      const version = selected.pendingVersion ?? selected.activeVersion;
+      const admitted = selected.versions.find((candidate) => candidate.version === version);
       return {
         pluginId,
-        pluginVersion: "1.2.3",
-        packageDigest: `sha256:${"a".repeat(64)}`,
-        sessionId: "session-1",
+        pluginVersion: version,
+        packageDigest: admitted.packageDigest,
+        sessionId: `session-${version}`,
         contributions: [{
           kind: "command",
           id: "fixture-command",
@@ -78,7 +82,7 @@ test("activates admitted external contributions and removes them on deactivation
   const runtime = new ExternalPluginRuntime({
     registry,
     bridge,
-    marketplace: { listPluginInstallations: async () => installation() },
+    marketplace: { listPluginInstallations: async () => selectedInstallation },
     locale: () => "zh-CN",
     reportError: (error) => { throw error; },
     notification: (event) => { notifications.push(event); },
@@ -97,6 +101,32 @@ test("activates admitted external contributions and removes them on deactivation
   assert.deepEqual(calls[0].slice(0, 4), ["activate", pluginId, "/repo", 7]);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(calls.some((call) => call[0] === "healthy"), true);
+
+  const changedEvidence = {
+    ...evidence,
+    files: [...evidence.files, { workspacePath: "generated/output.txt" }],
+  };
+  assert.deepEqual(await runtime.activate(identity, changedEvidence, () => true, true), [pluginId]);
+  assert.equal(calls.filter((call) => call[0] === "activate").length, 1);
+  assert.equal(calls.filter((call) => call[0] === "deactivate").length, 0);
+
+  selectedInstallation = {
+    ...selectedInstallation,
+    generation: 2,
+    plugins: [{
+      ...selectedInstallation.plugins[0],
+      pendingVersion: "1.2.4",
+      versions: [...selectedInstallation.plugins[0].versions, {
+        version: "1.2.4",
+        packageDigest: `sha256:${"b".repeat(64)}`,
+        admittedAtEpochMs: 2,
+        runtimeStatus: "pendingRuntime",
+      }],
+    }],
+  };
+  assert.deepEqual(await runtime.activate(identity, changedEvidence, () => true, true), [pluginId]);
+  assert.equal(calls.filter((call) => call[0] === "activate").length, 2);
+  assert.equal(calls.filter((call) => call[0] === "deactivate").length, 1);
 
   await runtime.deactivate();
   assert.equal(registry.get(`${pluginId}.fixture-command`), null);

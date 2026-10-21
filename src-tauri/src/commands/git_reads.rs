@@ -21,10 +21,16 @@ pub(crate) async fn read_history_page(
     limit: usize,
     window: tauri::WebviewWindow,
     active_workspaces: State<'_, ActiveWorkspaces>,
+    history_pages: State<'_, HistoryPageCacheRegistry>,
 ) -> Result<HistoryPage, GitError> {
     let root = active_workspaces.require_git(window.label(), &repository_root)?;
+    let owner = window.label().to_string();
+    let history_pages = history_pages.inner().clone();
     run_blocking("read history page", move || {
-        GitRepository::open(root)?.query_commit_history_page(&query, offset, limit)
+        let repository = GitRepository::open(&root)?;
+        history_pages.read_page(&owner, &root, &query, offset, limit, |target| {
+            repository.query_commit_history_page(&query, 0, target)
+        })
     })
     .await
 }

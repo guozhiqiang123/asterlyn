@@ -42,10 +42,10 @@ test("project files compact unary folders into one uncounted row", () => {
 });
 
 test("large project trees mount no more than the shared architecture budget", () => {
-  const paths = Array.from({ length: 1_000 }, (_, index) => `file-${String(index).padStart(4, "0")}.ts`);
+  const paths = Array.from({ length: 100_000 }, (_, index) => `file-${String(index).padStart(6, "0")}.ts`);
   const tree = buildProjectTree(paths);
-  const window = projectTreeRenderWindow(paths.length, PROJECT_TREE_ROW_HEIGHT * 700, 700);
-  const html = renderProjectNavigation(state(), tree, PROJECT_TREE_ROW_HEIGHT * 700, 700);
+  const window = projectTreeRenderWindow(paths.length, PROJECT_TREE_ROW_HEIGHT * 70_000, 700);
+  const html = renderProjectNavigation(state(), tree, PROJECT_TREE_ROW_HEIGHT * 70_000, 700);
   const mounted = html.match(/data-project-node=/g)?.length ?? 0;
 
   assert.ok(window.start > 0);

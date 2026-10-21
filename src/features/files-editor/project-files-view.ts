@@ -62,6 +62,7 @@ export function renderProjectNavigation(
   copy: ProjectFilesCopy = EN_US.projectFiles,
   operations: ProjectFilesOperationState | null = null,
   cutPath: string | null = null,
+  projectedRows: readonly ProjectTreeRow[] | null = null,
 ): string {
   if (tree.length === 0 && state.loading) {
     return `<div class="loading-block"><span class="spinner"></span><span>${escapeHtml(copy.loadingProjectFiles)}</span></div>`;
@@ -69,7 +70,7 @@ export function renderProjectNavigation(
   if (tree.length === 0 && state.error) {
     return `<div class="empty-state"><span class="empty-icon">${icon("folder", 24)}</span><strong>${escapeHtml(copy.listFailed)}</strong><p>${escapeHtml(state.error)}</p><button class="secondary-button retry-button" id="retry-project-files" type="button">${escapeHtml(copy.tryAgain)}</button></div>`;
   }
-  const rows = projectTreeRows(tree, state.expandedDirectories);
+  const rows = projectedRows ?? projectTreeRows(tree, state.expandedDirectories);
   const window = projectTreeRenderWindow(rows.length, scrollTop, clientHeight);
   const visible = window ? rows.slice(window.start, window.end) : rows;
   const edit = operations?.inlineEdit ?? null;

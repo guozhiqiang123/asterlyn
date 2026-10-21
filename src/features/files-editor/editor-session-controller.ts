@@ -35,6 +35,7 @@ import {
   failTextSave,
   isTextTabDirty,
   markTextExternalConflict,
+  markTextDirty,
   markTextEdited,
   openTextDocument,
   prepareEditorPathMutation,
@@ -203,6 +204,13 @@ export class EditorSessionController {
 
   markEdited(tabId: string, content: string): void {
     const next = markTextEdited(this.state.session, tabId, content);
+    if (next === this.state.session) return;
+    this.state.session = next;
+    this.emit({ reason: "edit", tabId, contentChanged: true });
+  }
+
+  markDirty(tabId: string, dirty: boolean): void {
+    const next = markTextDirty(this.state.session, tabId, dirty);
     if (next === this.state.session) return;
     this.state.session = next;
     this.emit({ reason: "edit", tabId, contentChanged: true });

@@ -192,6 +192,7 @@ dependencies = [
 name = "asterlyn-workspace"
 version = "0.1.17"
 dependencies = [
+ "base64 0.22.1",
  "glob",
  "libc",
  "memchr",

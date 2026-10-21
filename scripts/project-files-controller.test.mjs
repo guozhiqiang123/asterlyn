@@ -22,6 +22,23 @@ test("identical watch snapshots preserve tree identity and a collapsed folder", 
   assert.equal(events.some((event) => event.catalogChanged), false);
 });
 
+test("visible rows are reused until tree or disclosure changes", async () => {
+  const controller = new ProjectFilesController({
+    async listProjectFiles() { return catalog("/repo", ["src/one.ts", "src/two.ts"]); },
+  });
+  controller.installWorkspace("/repo");
+  await controller.refresh();
+
+  const collapsed = controller.rows();
+  assert.equal(controller.rows(), collapsed);
+  controller.setDirectoryExpanded("src", true);
+  const expanded = controller.rows();
+  assert.notEqual(expanded, collapsed);
+  assert.equal(controller.rows(), expanded);
+  assert.equal(controller.node("src/two.ts")?.kind, "file");
+  assert.equal(controller.fileForWorkspacePath("src/two.ts")?.path, "src/two.ts");
+});
+
 test("latest workspace owns project catalog completion", async () => {
   const first = deferred();
   const second = deferred();

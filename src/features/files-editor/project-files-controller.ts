@@ -8,7 +8,6 @@ import {
   ancestorProjectDirectories,
   buildProjectTree,
   descendantProjectDirectories,
-  findProjectTreeNode,
   projectTreeEntries,
   reconcileProjectTreeState,
   type ProjectTreeNode,
@@ -91,6 +90,17 @@ export class ProjectFilesController {
     changes: FileChange[];
     ignoredEntries: ProjectIgnoredEntry[];
     nodes: ProjectTreeNode[];
+    nodesByPath: Map<string, ProjectTreeNode>;
+  } | null = null;
+  private rowsCache: {
+    nodes: ProjectTreeNode[];
+    expandedDirectories: Set<string>;
+    rows: ProjectTreeRow[];
+  } | null = null;
+  private fileCache: {
+    files: ProjectFile[];
+    byWorkspacePath: Map<string, ProjectFile>;
+    byRepositoryPath: Map<string, ProjectFile>;
   } | null = null;
 
   constructor(
@@ -116,7 +126,7 @@ export class ProjectFilesController {
     if (!rootChanged) { this.updateChanges(changes); return; }
     this.state.root = root;
     this.changes = changes;
-    this.treeCache = null;
+    this.invalidateTree();
     if (rootChanged) {
       this.generation += 1;
       this.workspaceGeneration += 1;
@@ -151,7 +161,7 @@ export class ProjectFilesController {
     if (this.changes === changes || (this.changes.length === changes.length &&
       this.changes.every((previous, index) => sameChange(previous, changes[index]!)))) return;
     this.changes = changes;
-    this.treeCache = null;
+    this.invalidateTree();
     this.reconcileTreeState();
     this.emit({ reason: "status", catalogChanged: true });
   }
@@ -189,7 +199,7 @@ export class ProjectFilesController {
       if (!retained(path)) this.expandedDirectoryIntent.delete(path);
     }
     this.changes = nextChanges;
-    this.treeCache = null;
+    this.invalidateTree();
     this.reconcileTreeState();
     this.emit({
       reason: "mutation",
@@ -205,7 +215,7 @@ export class ProjectFilesController {
       .sort((left, right) => left.localeCompare(right))[0];
     const removed = this.removeAtOrBelow(paths);
     if (!removed || this.state.selection || !anchor) return removed;
-    const rows = projectTreeRows(this.tree(), this.state.expandedDirectories);
+    const rows = this.rows();
     const next = rows.find((row) => row.node.path.localeCompare(anchor) > 0) ?? rows.at(-1);
     if (next) this.select(next.node.path, next.node.kind);
     return removed;
@@ -254,7 +264,7 @@ export class ProjectFilesController {
       this.state.truncated = result.truncated;
       this.state.loading = false;
       this.state.error = null;
-      this.treeCache = null;
+      this.invalidateTree();
       this.state.directoryErrors.clear();
       this.loadedIgnoredDirectories.clear();
       if (this.catalogRoot !== result.root) {
@@ -304,12 +314,30 @@ export class ProjectFilesController {
       changes: this.changes,
       ignoredEntries: this.state.ignoredEntries,
       nodes,
+      nodesByPath: indexProjectTree(nodes),
     };
     return nodes;
   }
 
+  rows(): ProjectTreeRow[] {
+    const nodes = this.tree();
+    const cached = this.rowsCache;
+    if (
+      cached?.nodes === nodes &&
+      cached.expandedDirectories === this.state.expandedDirectories
+    ) return cached.rows;
+    const rows = projectTreeRows(nodes, this.state.expandedDirectories);
+    this.rowsCache = { nodes, expandedDirectories: this.state.expandedDirectories, rows };
+    return rows;
+  }
+
+  node(path: string): ProjectTreeNode | null {
+    this.tree();
+    return this.treeCache?.nodesByPath.get(path) ?? null;
+  }
+
   select(path: string, kind: ProjectTreeSelection["kind"]): boolean {
-    const node = findProjectTreeNode(this.tree(), path);
+    const node = this.node(path);
     if (!node || node.kind !== kind) return false;
     const next = selectSingle({ path, kind });
     const changed = this.state.selection?.path !== path ||
@@ -328,7 +356,7 @@ export class ProjectFilesController {
     mode: "single" | "toggle" | "range",
     visibleRows: readonly ProjectTreeRow[] = [],
   ): boolean {
-    const node = findProjectTreeNode(this.tree(), path);
+    const node = this.node(path);
     if (!node || node.kind !== kind) return false;
     const current: ProjectFilesSelectionState = {
       selection: this.state.selection,
@@ -361,7 +389,7 @@ export class ProjectFilesController {
   }
 
   setDirectoryExpanded(path: string, expanded: boolean): boolean {
-    const node = findProjectTreeNode(this.tree(), path);
+    const node = this.node(path);
     if (!node || node.kind !== "directory") return false;
     const changed = expanded
       ? !this.state.expandedDirectories.has(path)
@@ -373,6 +401,7 @@ export class ProjectFilesController {
       this.state.expandedDirectories.delete(path);
       this.expandedDirectoryIntent.delete(path);
     }
+    if (changed) this.rowsCache = null;
     if (changed) this.emit({ reason: "disclosure", disclosureChanged: true });
     if (expanded) void this.loadIgnoredDirectory(path);
     return changed;
@@ -383,7 +412,7 @@ export class ProjectFilesController {
     if (!root || this.disposed || this.loadedIgnoredDirectories.has(path)) {
       return Promise.resolve(Boolean(root && this.loadedIgnoredDirectories.has(path)));
     }
-    const node = findProjectTreeNode(this.tree(), path);
+    const node = this.node(path);
     const lazyIgnoredDirectory = node?.kind === "directory" && node.status === "ignored" &&
       this.state.ignoredEntries.some((entry) =>
         entry.kind === "directory" && entry.workspacePath === path
@@ -401,12 +430,13 @@ export class ProjectFilesController {
   }
 
   revealFile(path: string): boolean {
-    const node = findProjectTreeNode(this.tree(), path);
+    const node = this.node(path);
     if (!node || node.kind !== "file") return false;
     for (const directory of ancestorProjectDirectories(path)) {
       this.state.expandedDirectories.add(directory);
       this.expandedDirectoryIntent.add(directory);
     }
+    this.rowsCache = null;
     this.state.selection = { path, kind: "file" };
     this.state.selections = [{ path, kind: "file" }];
     this.state.selectionAnchor = { path, kind: "file" };
@@ -419,12 +449,13 @@ export class ProjectFilesController {
   }
 
   revealDirectory(path: string): boolean {
-    const node = findProjectTreeNode(this.tree(), path);
+    const node = this.node(path);
     if (!node || node.kind !== "directory") return false;
     for (const directory of ancestorProjectDirectories(path)) {
       this.state.expandedDirectories.add(directory);
       this.expandedDirectoryIntent.add(directory);
     }
+    this.rowsCache = null;
     this.state.selection = { path, kind: "directory" };
     this.state.selections = [{ path, kind: "directory" }];
     this.state.selectionAnchor = { path, kind: "directory" };
@@ -439,7 +470,7 @@ export class ProjectFilesController {
   setSelectedSubtreeExpanded(expanded: boolean): boolean {
     const selection = this.state.selection;
     if (!selection || selection.kind !== "directory") return false;
-    const node = findProjectTreeNode(this.tree(), selection.path);
+    const node = this.node(selection.path);
     if (!node || node.kind !== "directory") return false;
     for (const path of descendantProjectDirectories(node)) {
       if (expanded) {
@@ -450,19 +481,18 @@ export class ProjectFilesController {
         this.expandedDirectoryIntent.delete(path);
       }
     }
+    this.rowsCache = null;
     this.emit({ reason: "disclosure", disclosureChanged: true });
     if (expanded) void this.loadIgnoredDirectory(selection.path);
     return true;
   }
 
   fileForWorkspacePath(path: string): ProjectFile | null {
-    return this.state.files.find((file) => file.workspacePath === path) ?? null;
+    return this.fileIndexes().byWorkspacePath.get(path) ?? null;
   }
 
   fileForRepositoryPath(repositoryId: string, path: string): ProjectFile | null {
-    return this.state.files.find(
-      (file) => file.repositoryId === repositoryId && file.path === path,
-    ) ?? null;
+    return this.fileIndexes().byRepositoryPath.get(`${repositoryId}\0${path}`) ?? null;
   }
 
   dispose(): void {
@@ -471,7 +501,8 @@ export class ProjectFilesController {
     this.generation += 1;
     this.workspaceGeneration += 1;
     this.listeners.clear();
-    this.treeCache = null;
+    this.invalidateTree();
+    this.fileCache = null;
   }
 
   private reconcileTreeState(): void {
@@ -483,6 +514,7 @@ export class ProjectFilesController {
       this.state.selection,
     );
     this.state.expandedDirectories = reconciled.expandedDirectories;
+    this.rowsCache = null;
     this.state.selection = reconciled.selection;
     this.state.selections = reconcileSelections(this.state.selections, tree);
     if (this.state.selection && !this.state.selections.some((s) => s.path === this.state.selection?.path)) {
@@ -529,7 +561,7 @@ export class ProjectFilesController {
       this.state.truncated ||= result.truncated;
       this.state.loadingDirectories.delete(path);
       this.loadedIgnoredDirectories.add(path);
-      this.treeCache = null;
+      this.invalidateTree();
       this.reconcileTreeState();
       this.emit({ reason: "directory-load-complete", catalogChanged: true });
       return true;
@@ -551,6 +583,34 @@ export class ProjectFilesController {
     if (this.disposed) return;
     for (const listener of this.listeners) listener(change);
   }
+
+  private invalidateTree(): void {
+    this.treeCache = null;
+    this.rowsCache = null;
+  }
+
+  private fileIndexes(): NonNullable<ProjectFilesController["fileCache"]> {
+    if (this.fileCache?.files === this.state.files) return this.fileCache;
+    const byWorkspacePath = new Map<string, ProjectFile>();
+    const byRepositoryPath = new Map<string, ProjectFile>();
+    for (const file of this.state.files) {
+      byWorkspacePath.set(file.workspacePath, file);
+      byRepositoryPath.set(`${file.repositoryId}\0${file.path}`, file);
+    }
+    this.fileCache = { files: this.state.files, byWorkspacePath, byRepositoryPath };
+    return this.fileCache;
+  }
+}
+
+function indexProjectTree(nodes: readonly ProjectTreeNode[]): Map<string, ProjectTreeNode> {
+  const index = new Map<string, ProjectTreeNode>();
+  const pending = [...nodes];
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    index.set(node.path, node);
+    pending.push(...node.children);
+  }
+  return index;
 }
 
 function sameChange(a: FileChange, b: FileChange): boolean {

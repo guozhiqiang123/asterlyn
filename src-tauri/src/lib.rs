@@ -42,7 +42,7 @@ use adapters::system_file_clipboard::{
 };
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
-    ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator,
+    ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator, HistoryPageCacheRegistry,
     PendingRepositoryWindowReservation, PendingRepositoryWindows, PluginMarketplaceCoordinator,
     PluginProcessQueryManager, ScanRegistry, TaskManager, WorkspaceEntryInspection,
     WorkspaceMutationCoordinator, WorkspaceMutationPreview, WorkspaceReplacementDiff,
@@ -220,6 +220,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanRegistry::default())
         .manage(GitOperationCoordinator::new(writes.clone()))
+        .manage(HistoryPageCacheRegistry::default())
         .manage(ActiveWorkspaces::default())
         .manage(PendingRepositoryWindows::default())
         .manage(writes)

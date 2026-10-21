@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -472,20 +472,41 @@ fn collect(
         (value.stdout.take(), value.stderr.take())
     };
     let mut handles = Vec::new();
+    let output_budget = Arc::new(AtomicUsize::new(MAX_OUTPUT_BYTES));
     if let Some(pipe) = stdout {
         handles.push(std::thread::spawn({
             let sink = sink.clone();
+            let output_budget = output_budget.clone();
             let id = run_id.to_string();
             let workspace_root = root.to_string_lossy().into_owned();
-            move || collect_output(pipe, OutputStream::Stdout, id, workspace_root, sink)
+            move || {
+                collect_output(
+                    pipe,
+                    OutputStream::Stdout,
+                    id,
+                    workspace_root,
+                    sink,
+                    output_budget,
+                )
+            }
         }));
     }
     if let Some(pipe) = stderr {
         handles.push(std::thread::spawn({
             let sink = sink.clone();
+            let output_budget = output_budget.clone();
             let id = run_id.to_string();
             let workspace_root = root.to_string_lossy().into_owned();
-            move || collect_output(pipe, OutputStream::Stderr, id, workspace_root, sink)
+            move || {
+                collect_output(
+                    pipe,
+                    OutputStream::Stderr,
+                    id,
+                    workspace_root,
+                    sink,
+                    output_budget,
+                )
+            }
         }));
     }
     let status = loop {
@@ -546,37 +567,32 @@ fn collect_output<R: Read + Send + 'static>(
     id: String,
     workspace_root: String,
     sink: Arc<SerialSink>,
+    output_budget: Arc<AtomicUsize>,
 ) -> Result<(), String> {
-    let mut used = 0usize;
     let mut omitted = 0u64;
-    let mut buf = [0u8; 16 * 1024];
+    let mut buf = [0u8; 64 * 1024];
     loop {
         let n = match pipe.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => n,
             Err(error) => return Err(format!("read task output: {error}")),
         };
-        if used < MAX_OUTPUT_BYTES {
-            let allowed = n.min(MAX_OUTPUT_BYTES - used);
-            if allowed > 0 {
-                emit(
-                    &sink,
-                    TaskSessionEvent::Output {
-                        protocol_version: PROTOCOL_VERSION,
-                        run_id: id.clone(),
-                        workspace_root: workspace_root.clone(),
-                        stream: stream.clone(),
-                        data_base64: encode_output(&buf[..allowed]),
-                        sequence: 0,
-                    },
-                );
-                used += allowed;
-            }
-            if allowed < n {
-                omitted += (n - allowed) as u64;
-            }
-        } else {
-            omitted += n as u64;
+        let allowed = claim_output_budget(&output_budget, n);
+        if allowed > 0 {
+            emit(
+                &sink,
+                TaskSessionEvent::Output {
+                    protocol_version: PROTOCOL_VERSION,
+                    run_id: id.clone(),
+                    workspace_root: workspace_root.clone(),
+                    stream: stream.clone(),
+                    data_base64: encode_output(&buf[..allowed]),
+                    sequence: 0,
+                },
+            );
+        }
+        if allowed < n {
+            omitted += (n - allowed) as u64;
         }
     }
     if omitted > 0 {
@@ -593,6 +609,25 @@ fn collect_output<R: Read + Send + 'static>(
         );
     }
     Ok(())
+}
+
+fn claim_output_budget(budget: &AtomicUsize, requested: usize) -> usize {
+    let mut remaining = budget.load(Ordering::Relaxed);
+    loop {
+        let allowed = requested.min(remaining);
+        if allowed == 0 {
+            return 0;
+        }
+        match budget.compare_exchange_weak(
+            remaining,
+            remaining - allowed,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return allowed,
+            Err(actual) => remaining = actual,
+        }
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -930,13 +965,13 @@ mod tests {
     }
 
     #[test]
-    fn reports_nonzero_exit_and_bounded_output_truncation() {
+    fn reports_nonzero_exit_and_shares_the_output_budget_across_streams() {
         let directory = tempfile::tempdir().unwrap();
         let root = fs::canonicalize(directory.path()).unwrap();
         write_executable(
             &root,
             "tool",
-            "dd if=/dev/zero bs=1048576 count=3 2>/dev/null\nexit 7",
+            "dd if=/dev/zero bs=1048576 count=2 2>/dev/null\ndd if=/dev/zero bs=1048576 count=2 1>&2 2>/dev/null\nexit 7",
         );
         let manager = TaskManager::default();
         let review = prepare(&manager, "window-a", &root, 1, "tool", vec![]);
@@ -979,8 +1014,13 @@ mod tests {
                 _ => None,
             })
             .sum();
+        let output_events = captured
+            .iter()
+            .filter(|event| matches!(event, TaskSessionEvent::Output { .. }))
+            .count();
+        eprintln!("shared task output: {delivered} bytes in {output_events} events");
         assert_eq!(delivered, MAX_OUTPUT_BYTES);
-        assert_eq!(delivered as u64 + omitted, 3 * 1024 * 1024);
+        assert_eq!(delivered as u64 + omitted, 4 * 1024 * 1024);
     }
 
     #[test]

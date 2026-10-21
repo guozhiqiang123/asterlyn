@@ -78,7 +78,7 @@ export function projectTreeEntries(
       status: "ignored",
     });
   }
-  return [...entries.values()].sort((left, right) => left.path.localeCompare(right.path));
+  return [...entries.values()];
 }
 
 export function effectiveProjectFileStatus(change: FileChange): ChangeKind {
@@ -98,7 +98,7 @@ export function buildProjectTree(
       : entry,
   );
 
-  for (const entry of entries.sort((left, right) => left.path.localeCompare(right.path))) {
+  for (const entry of entries) {
     const segments = entry.path.split("/").filter(Boolean);
     if (segments.length === 0) continue;
     let children = root;

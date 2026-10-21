@@ -71,9 +71,10 @@ export class ExternalPluginRuntime {
     identity: PluginWorkspaceIdentity,
     evidence: PluginEvidenceSnapshot,
     enabled: (pluginId: string) => boolean,
+    preserveActive = false,
   ): Promise<readonly string[]> {
     const token = ++this.sequence;
-    await this.clearActive();
+    if (!preserveActive) await this.clearActive();
     if (this.disposed || token !== this.sequence) return [];
     await this.ensureSubscriptions();
     const snapshot = await this.options.marketplace.listPluginInstallations();
@@ -81,9 +82,23 @@ export class ExternalPluginRuntime {
     const candidates = snapshot.plugins
       .filter((plugin) => plugin.enabled && enabled(plugin.pluginId) && activatable(plugin))
       .sort((left, right) => left.pluginId.localeCompare(right.pluginId));
+    if (preserveActive) {
+      const desired = new Map(candidates.map((plugin) => [plugin.pluginId, plugin]));
+      for (const [pluginId, entry] of [...this.active]) {
+        const plugin = desired.get(pluginId);
+        if (!plugin || !reusableActivation(entry.activation, plugin)) {
+          await this.releaseActive(pluginId, entry);
+          if (this.disposed || token !== this.sequence) return [];
+        }
+      }
+    }
     const activated: string[] = [];
     for (const plugin of candidates) {
       if (this.disposed || token !== this.sequence) break;
+      if (this.active.has(plugin.pluginId)) {
+        activated.push(plugin.pluginId);
+        continue;
+      }
       await this.activatePlugin(plugin, identity, evidence, token).then((didActivate) => {
         if (didActivate) activated.push(plugin.pluginId);
       }, this.options.reportError);
@@ -172,19 +187,24 @@ export class ExternalPluginRuntime {
 
   private async clearActive(): Promise<void> {
     const entries = [...this.active.entries()].reverse();
-    this.active.clear();
     for (const [pluginId, entry] of entries) {
-      if (entry.healthTimer !== null) {
-        clearTimeout(entry.healthTimer);
-        entry.healthTimer = null;
-      }
-      if (!entry.healthy) {
-        await this.options.bridge.abandonActivation(entry.activation).catch(this.options.reportError);
-      }
-      try { await entry.release.dispose(); } catch (error) { this.options.reportError(error); }
-      entry.session.abort();
-      await this.deactivateBounded(pluginId);
+      await this.releaseActive(pluginId, entry);
     }
+  }
+
+  private async releaseActive(pluginId: string, entry: ActiveExternalPlugin): Promise<void> {
+    if (this.active.get(pluginId) !== entry) return;
+    this.active.delete(pluginId);
+    if (entry.healthTimer !== null) {
+      clearTimeout(entry.healthTimer);
+      entry.healthTimer = null;
+    }
+    if (!entry.healthy) {
+      await this.options.bridge.abandonActivation(entry.activation).catch(this.options.reportError);
+    }
+    try { await entry.release.dispose(); } catch (error) { this.options.reportError(error); }
+    entry.session.abort();
+    await this.deactivateBounded(pluginId);
   }
 
   private async confirmHealthy(entry: ActiveExternalPlugin): Promise<void> {
@@ -561,6 +581,16 @@ function activatable(plugin: InstalledPlugin): boolean {
     admitted.runtimeStatus === "active" ||
     admitted.runtimeStatus === "knownGood"
   );
+}
+
+function reusableActivation(
+  activation: InstalledPluginActivation,
+  plugin: InstalledPlugin,
+): boolean {
+  const version = plugin.pendingVersion ?? plugin.activeVersion;
+  if (!version || activation.pluginVersion !== version) return false;
+  const admitted = plugin.versions.find((candidate) => candidate.version === version);
+  return admitted?.packageDigest === activation.packageDigest;
 }
 
 function sameRuntimeSession(

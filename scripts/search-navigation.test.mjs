@@ -16,6 +16,7 @@ function tab(overrides = {}) {
     status: "ready",
     content: "alpha Browser omega",
     persistedContent: "alpha Browser omega",
+    dirty: false,
     utf8Bom: false,
     revision: "revision-1",
     loadEpoch: 2,
@@ -67,7 +68,7 @@ test("search navigation never applies disk offsets to dirty, saving, or stale ta
   assert.equal(
     evaluateSearchNavigation(
       "/repo",
-      tab({ content: "changed Browser omega", editVersion: 1 }),
+      tab({ content: "changed Browser omega", dirty: true, editVersion: 1 }),
       match(),
     ),
     "dirty",

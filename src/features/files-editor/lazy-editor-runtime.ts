@@ -26,7 +26,7 @@ type TextMount = {
   preferences: AppPreferences;
   blameSource: GitBlameSource | null;
   blameUnavailableReason: string | null;
-  onChange: (content: string) => void;
+  onChange: (content: string | null, dirty: boolean) => void;
 };
 
 type DiffMount = {
@@ -74,7 +74,7 @@ export class LazyTextEditor {
     preferences: AppPreferences,
     blameSource: GitBlameSource | null,
     blameUnavailableReason: string | null,
-    onChange: (content: string) => void,
+    onChange: (content: string | null, dirty: boolean) => void,
   ): void {
     const mount = {
       parent,

@@ -6,7 +6,7 @@ import {
 import { foldGutter, foldKeymap, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
-import { Compartment, EditorState, type TransactionSpec } from "@codemirror/state";
+import { Compartment, EditorState, type Text, type TransactionSpec } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -21,13 +21,17 @@ import type { EffectiveTheme } from "./presentation/presentation-environment";
 import { linkVerticalScrollProportionally } from "./presentation/linked-scroll";
 import type { AppPreferences } from "./preferences";
 import {
-  applyExactTextChanges,
   computeTextChange,
   decodeExactText,
   encodeExactText,
   type ExactTextContent,
-  type TextChange,
 } from "./features/files-editor/text-content";
+import {
+  applyLineSeparatorChanges,
+  countLineSeparators,
+  type LineSeparatorChange,
+  type LineSeparatorCounts,
+} from "./features/files-editor/text-line-separators.ts";
 import {
   editorGutterContextMenu,
   gitBlamePresentation,
@@ -60,8 +64,10 @@ interface CachedTextEditor {
   loadEpoch: number;
   path: string;
   exactContent: ExactTextContent;
+  separatorCounts: LineSeparatorCounts;
   serializedContent: string | null;
   state: EditorState;
+  baselineText: Text;
   view: EditorView | null;
   scrollLeft: number;
   scrollTop: number;
@@ -78,7 +84,7 @@ interface CachedTextEditor {
   languageActivation: number;
   languageName: string;
   languageStatus: EditorLanguageStatus | "loading";
-  onChange: (content: string) => void;
+  onChange: (content: string | null, dirty: boolean) => void;
   changePending: boolean;
   changeFrame: number | null;
   blameSource: GitBlameSource | null;
@@ -119,7 +125,7 @@ export class TextEditor {
     preferences: AppPreferences,
     blameSource: GitBlameSource | null,
     blameUnavailableReason: string | null,
-    onChange: (content: string) => void,
+    onChange: (content: string | null, dirty: boolean) => void,
   ): void {
     const active = this.activeEntry();
     if (
@@ -127,6 +133,7 @@ export class TextEditor {
       active.view?.dom.parentElement === parent &&
       active.path === path
     ) {
+      const loadEpochChanged = active.loadEpoch !== loadEpoch;
       active.loadEpoch = loadEpoch;
       active.onChange = onChange;
       active.changeIndicators.setBaseline(active.view, baselineContent);
@@ -134,12 +141,13 @@ export class TextEditor {
       this.updateBlameAvailability(active, blameSource, blameUnavailableReason);
       applyEditorPreferences(active.view, preferences);
 
-      const currentText = active.view.state.doc.toString();
-      const decoded = decodeExactText(content);
-      if (currentText !== decoded.text) {
+      if (loadEpochChanged || (active.serializedContent !== null && active.serializedContent !== content)) {
+        const currentText = active.view.state.doc.toString();
+        const decoded = decodeExactText(content);
         const prevScrollTop = active.view.scrollDOM.scrollTop;
         const prevScrollLeft = active.view.scrollDOM.scrollLeft;
         active.exactContent = decoded;
+        active.separatorCounts = countLineSeparators(decoded.separators);
         active.serializedContent = content;
         const change = computeTextChange(currentText, decoded.text);
         if (change) {
@@ -151,10 +159,8 @@ export class TextEditor {
           }
         }
         this.restoreScroll(active.view.scrollDOM, prevScrollTop, prevScrollLeft);
-      } else {
-        active.exactContent = decoded;
-        active.serializedContent = content;
       }
+      this.updateBaseline(active, baselineContent);
       active.view.requestMeasure();
       return;
     }
@@ -172,6 +178,7 @@ export class TextEditor {
       entry.loadEpoch = loadEpoch;
       const decoded = decodeExactText(content);
       entry.exactContent = decoded;
+      entry.separatorCounts = countLineSeparators(decoded.separators);
       entry.serializedContent = content;
       const currentText = entry.state.doc.toString();
       if (currentText !== decoded.text) {
@@ -204,6 +211,7 @@ export class TextEditor {
     this.activeId = tabId;
     applyEditorPreferences(view, preferences);
     mountedEntry.changeIndicators.setBaseline(view, baselineContent);
+    this.updateBaseline(mountedEntry, baselineContent);
     mountedEntry.changeIndicators.setCopy(view, editorChangeIndicatorCopy(this.blameCopy));
     this.updateLanguageDataset(mountedEntry);
     this.restoreScroll(view.scrollDOM, mountedEntry.scrollTop, mountedEntry.scrollLeft);
@@ -246,6 +254,7 @@ export class TextEditor {
     const entry = this.entries.get(tabId);
     if (!entry) return "";
     if (entry.serializedContent === null) {
+      entry.exactContent.text = entry.state.doc.toString();
       entry.serializedContent = encodeExactText(entry.exactContent);
     }
     return entry.serializedContent;
@@ -445,7 +454,7 @@ export class TextEditor {
     preferences: AppPreferences,
     blameSource: GitBlameSource | null,
     blameUnavailableReason: string | null,
-    onChange: (content: string) => void,
+    onChange: (content: string | null, dirty: boolean) => void,
   ): CachedTextEditor {
     const readOnly = new Compartment();
     const editable = new Compartment();
@@ -460,13 +469,16 @@ export class TextEditor {
       editorChangeIndicatorCopy(this.blameCopy),
       { patchPopover: true },
     );
+    const exactContent = decodeExactText(content);
     const entry: CachedTextEditor = {
       id,
       loadEpoch,
       path,
-      exactContent: decodeExactText(content),
+      exactContent,
+      separatorCounts: countLineSeparators(exactContent.separators),
       serializedContent: content,
       state: null as unknown as EditorState,
+      baselineText: null as unknown as Text,
       view: null,
       scrollLeft: 0,
       scrollTop: 0,
@@ -531,17 +543,26 @@ export class TextEditor {
           entry.state = update.state;
           if (!update.docChanged || this.synchronizing) return;
           this.invalidateBlameForEdit(entry);
-          const changes: TextChange[] = [];
+          const changes: LineSeparatorChange[] = [];
           update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
-            changes.push({ from, to, insert: inserted.toString() });
+            const fromLine = update.startState.doc.lineAt(from).number;
+            const toLine = update.startState.doc.lineAt(to).number;
+            changes.push({
+              separatorStart: fromLine - 1,
+              removedSeparators: toLine - fromLine,
+              insertedSeparators: inserted.lines - 1,
+            });
           });
-          entry.exactContent = applyExactTextChanges(entry.exactContent, changes);
+          applyLineSeparatorChanges(entry.exactContent, entry.separatorCounts, changes);
           entry.serializedContent = null;
           entry.changePending = true;
           this.scheduleEntryChange(entry);
         }),
       ],
     });
+    entry.baselineText = content === baselineContent
+      ? entry.state.doc
+      : EditorState.create({ doc: decodeExactText(baselineContent).text }).doc;
     return entry;
   }
 
@@ -708,7 +729,15 @@ export class TextEditor {
     }
     if (!entry.changePending) return;
     entry.changePending = false;
-    entry.onChange(this.content(entry.id));
+    entry.onChange(null, !entry.state.doc.eq(entry.baselineText));
+  }
+
+  private updateBaseline(entry: CachedTextEditor, baselineContent: string): void {
+    if (entry.serializedContent === baselineContent) {
+      entry.baselineText = entry.state.doc;
+      return;
+    }
+    entry.baselineText = EditorState.create({ doc: decodeExactText(baselineContent).text }).doc;
   }
 
   private dispatchEffects(

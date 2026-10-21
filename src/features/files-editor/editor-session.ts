@@ -33,6 +33,7 @@ export interface TextTabState {
   status: "loading" | "ready" | "error";
   content: string;
   persistedContent: string;
+  dirty: boolean;
   utf8Bom: boolean;
   revision: string | null;
   loadEpoch: number;
@@ -292,6 +293,7 @@ export function openTextDocument(
     status: "loading",
     content: "",
     persistedContent: "",
+    dirty: false,
     utf8Bom: false,
     revision: null,
     loadEpoch: 1,
@@ -330,6 +332,7 @@ export function completeTextLoad(
           status: "ready",
           content: snapshot.content,
           persistedContent: snapshot.content,
+          dirty: false,
           utf8Bom: snapshot.utf8Bom,
           revision: snapshot.revision,
           editVersion: 0,
@@ -372,6 +375,7 @@ export function reconcileExternalTextSnapshot(
       ...current,
       content: snapshot.content,
       persistedContent: snapshot.content,
+      dirty: false,
       utf8Bom: snapshot.utf8Bom,
       revision: snapshot.revision,
       loadEpoch: current.loadEpoch + 1,
@@ -465,11 +469,31 @@ export function markTextEdited(
   content: string,
 ): EditorSession {
   return updateMatchingTab(session, tabId, (tab) =>
-    tab.document.readOnly === true || tab.status !== "ready" || tab.content === content
+    tab.document.readOnly === true ||
+    tab.status !== "ready" ||
+    (tab.content === content && tab.dirty === (content !== tab.persistedContent))
       ? tab
       : {
           ...tab,
           content,
+          dirty: content !== tab.persistedContent,
+          editVersion: tab.editVersion + 1,
+          error: null,
+        },
+  );
+}
+
+export function markTextDirty(
+  session: EditorSession,
+  tabId: string,
+  dirty: boolean,
+): EditorSession {
+  return updateMatchingTab(session, tabId, (tab) =>
+    tab.document.readOnly === true || tab.status !== "ready"
+      ? tab
+      : {
+          ...tab,
+          dirty,
           editVersion: tab.editVersion + 1,
           error: null,
         },
@@ -492,9 +516,11 @@ export function captureTextContent(
   content: string,
 ): EditorSession {
   return updateMatchingTab(session, tabId, (tab) =>
-    tab.document.readOnly === true || tab.status !== "ready" || tab.content === content
+    tab.document.readOnly === true ||
+    tab.status !== "ready" ||
+    (tab.content === content && tab.dirty === (content !== tab.persistedContent))
       ? tab
-      : { ...tab, content },
+      : { ...tab, content, dirty: content !== tab.persistedContent },
   );
 }
 
@@ -553,6 +579,7 @@ export function completeTextSave(
       ...tab,
       revision: result.revision,
       persistedContent: tab.saveRequest.capturedContent,
+      dirty: tab.editVersion !== tab.saveRequest.capturedVersion,
       persistedVersion: tab.saveRequest.capturedVersion,
       saveRequest: null,
       error: null,
@@ -634,7 +661,7 @@ export function dirtyTextTabs(session: EditorSession): TextTabState[] {
 }
 
 export function isTextTabDirty(tab: TextTabState): boolean {
-  return tab.document.readOnly !== true && tab.content !== tab.persistedContent;
+  return tab.document.readOnly !== true && tab.dirty;
 }
 
 function leaseTab(tab: TextTabState): EditorPathMutationLeaseTab {

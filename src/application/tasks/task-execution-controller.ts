@@ -25,6 +25,7 @@ export class TaskExecutionController {
   private readonly listeners = new Set<Listener>();
   private unsubscribe: (() => void) | null = null;
   private cancelRequestedRunId: string | null = null;
+  private outputFrames: TaskExecutionOutput[] = [];
   private prepareRequest = 0;
   private disposed = false;
 
@@ -40,6 +41,7 @@ export class TaskExecutionController {
     if (previousRunId && ["queued", "running", "cancelling"].includes(this.value.status)) void this.cancelRunOnce(previousRunId, true);
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.outputFrames = [];
     this.value = { ...emptyState(), identity };
     this.emit();
   }
@@ -50,6 +52,7 @@ export class TaskExecutionController {
     if (runId && ["queued", "running", "cancelling"].includes(this.value.status)) void this.cancelRunOnce(runId, true);
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.outputFrames = [];
     this.value = emptyState();
     this.emit();
   }
@@ -74,6 +77,7 @@ export class TaskExecutionController {
       }
       confirmationMemory = confirmation.remembered ? "remembered" : "available";
     }
+    this.outputFrames = [];
     this.value = { ...emptyState(identity), status: "review", identity, review, confirmationMemory };
     this.emit();
     return review;
@@ -113,7 +117,8 @@ export class TaskExecutionController {
     const pending: TaskSessionEvent[] = [];
     let pendingStreamError: unknown = null;
     let startedRunId: string | null = null;
-    this.value = { ...this.value, status: "starting", error: null };
+    this.outputFrames = [];
+    this.value = { ...this.value, status: "starting", outputs: this.outputFrames, error: null };
     this.emit();
     this.unsubscribe?.();
     this.unsubscribe = await this.bridge.subscribeTaskSession((event) => {
@@ -156,6 +161,7 @@ export class TaskExecutionController {
     if (this.value.status === "review" || this.value.status === "starting") {
       this.unsubscribe?.();
       this.unsubscribe = null;
+      this.outputFrames = [];
       this.value = { ...emptyState(identity), identity };
       this.emit();
       return;
@@ -183,7 +189,7 @@ export class TaskExecutionController {
     this.cancelRequestedRunId = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
-    this.value = { ...this.value, status: "cancelled", error: null };
+    this.value = { ...this.value, status: "cancelled", outputs: this.outputSnapshot(), error: null };
     this.emit();
     return true;
   }
@@ -198,6 +204,7 @@ export class TaskExecutionController {
     this.value = {
       ...this.value,
       status: "crashed",
+      outputs: this.outputSnapshot(),
       error: error instanceof Error ? error.message : String(error),
     };
     this.emit();
@@ -212,6 +219,7 @@ export class TaskExecutionController {
     this.prepareRequest += 1;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.outputFrames = [];
     this.value = emptyState(identity);
     this.emit();
   }
@@ -229,7 +237,7 @@ export class TaskExecutionController {
   private acceptEvent(identity: TaskWorkspaceIdentity, event: TaskSessionEvent): void {
     if (this.disposed || !sameIdentity(this.value.identity, identity) || event.workspaceRoot !== identity.root || this.value.runId !== event.runId || event.sequence <= this.value.lastSequence) return;
     if (event.sequence !== this.value.lastSequence + 1) {
-      this.value = { ...this.value, status: "crashed", error: "Task session event sequence is discontinuous.", lastSequence: event.sequence };
+      this.value = { ...this.value, status: "crashed", outputs: this.outputSnapshot(), error: "Task session event sequence is discontinuous.", lastSequence: event.sequence };
       this.emit();
       void this.cancelRunOnce(event.runId, true);
       this.unsubscribe?.(); this.unsubscribe = null;
@@ -240,12 +248,18 @@ export class TaskExecutionController {
     if (event.kind === "output") {
       const bytes = estimateBase64Bytes(event.dataBase64);
       const status = next.status === "queued" ? "running" : next.status;
-      if (next.outputBytes + bytes <= MAX_OUTPUT_BYTES) next = { ...next, status, outputs: [...next.outputs, { stream: event.stream, dataBase64: event.dataBase64 }], outputBytes: next.outputBytes + bytes };
+      if (next.outputBytes + bytes <= MAX_OUTPUT_BYTES) {
+        this.outputFrames.push({ stream: event.stream, dataBase64: event.dataBase64 });
+        next = { ...next, status, outputs: this.outputFrames, outputBytes: next.outputBytes + bytes };
+      }
       else next = { ...next, status, outputTruncated: true };
     } else if (event.kind === "truncated") next = { ...next, outputTruncated: true };
     else {
       const status = next.status === "cancelling" && event.status === "running" ? "cancelling" : event.status;
       next = { ...next, status, error: event.status === "failed" || event.status === "crashed" ? event.message : null };
+      if (["succeeded", "failed", "cancelled", "crashed"].includes(status)) {
+        next = { ...next, outputs: this.outputSnapshot() };
+      }
     }
     this.value = next;
     this.emit();
@@ -267,6 +281,7 @@ export class TaskExecutionController {
   }
 
   private requireCurrent(identity: TaskWorkspaceIdentity): void { if (this.disposed || !sameIdentity(this.value.identity, identity)) throw new Error("Task operation belongs to a stale workspace."); }
+  private outputSnapshot(): readonly TaskExecutionOutput[] { return Object.freeze([...this.outputFrames]); }
   private emit(): void { for (const listener of this.listeners) listener(this.value); }
 }
 

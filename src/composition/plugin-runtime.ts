@@ -212,7 +212,7 @@ export class PluginCompositionRuntime {
     const evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
     if (evidenceKey === this.evidenceKey) return;
     const matched = matchingPluginIds(identity, evidence, plugins);
-    const report = await this.activatePlugins(identity, evidence, plugins);
+    const report = await this.activatePlugins(identity, evidence, plugins, true);
     this.management.setMatched(Object.freeze([...new Set([...matched, ...report.activated])]));
     this.management.setActivation(report);
     if (this.matches(identity) && !this.disposed) this.evidenceKey = evidenceKey;
@@ -338,6 +338,7 @@ export class PluginCompositionRuntime {
     identity: PluginWorkspaceIdentity,
     evidence: PluginWorkspaceCatalogEvidence,
     plugins: readonly BundledPlugin[],
+    preserveExternal = false,
   ): Promise<PluginActivationReport> {
     await this.runtime.deactivate();
     let externalActivated: readonly string[] = [];
@@ -347,6 +348,7 @@ export class PluginCompositionRuntime {
           identity,
           evidence,
           (pluginId) => this.preferences.isEnabled(pluginId),
+          preserveExternal,
         );
       } catch (error) {
         this.reportError(error);

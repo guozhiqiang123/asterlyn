@@ -430,7 +430,7 @@ export class EditorSurface {
     preferences: AppPreferences,
     blame: GitBlameAvailability,
     beforeTransition: () => void,
-    onContentChange: (tabId: string, content: string) => void,
+    onContentChange: (tabId: string, content: string | null, dirty: boolean) => void,
   ): void {
     const body = this.query("#content-body");
     const reuseTextSurface = this.textEditor.isMountedIn(body);
@@ -535,7 +535,7 @@ export class EditorSurface {
     preferences: AppPreferences,
     blame: GitBlameAvailability,
     beforeTransition: () => void,
-    onContentChange: (tabId: string, content: string) => void,
+    onContentChange: (tabId: string, content: string | null, dirty: boolean) => void,
   ): void {
     if (this.mountedEditorKey === key || (this.mountedTextTabId === tab.id && this.activeMarkdownMode === tab.markdownMode)) {
       this.mountedEditorKey = key;
@@ -629,7 +629,7 @@ export class EditorSurface {
     baselineContent: string,
     preferences: AppPreferences,
     blame: GitBlameAvailability,
-    onContentChange: (tabId: string, content: string) => void,
+    onContentChange: (tabId: string, content: string | null, dirty: boolean) => void,
   ): void {
     this.mountedTextLoadEpoch = tab.loadEpoch;
     this.textEditor.mount(
@@ -642,10 +642,11 @@ export class EditorSurface {
       preferences,
       blame.source,
       blame.unavailableReason,
-      (content) => {
+      (content, dirty) => {
         if (this.mountedTextTabId !== tab.id || this.mountedTextLoadEpoch !== tab.loadEpoch) return;
-        if (tab.markdownMode === "split") this.queueMarkdownPreview(tab.id, content);
-        onContentChange(tab.id, content);
+        const resolvedContent = tab.markdownMode === "split" ? this.textEditor.content(tab.id) : content;
+        if (tab.markdownMode === "split") this.queueMarkdownPreview(tab.id, resolvedContent ?? "");
+        onContentChange(tab.id, resolvedContent, dirty);
       },
     );
   }

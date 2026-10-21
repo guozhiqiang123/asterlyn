@@ -13,6 +13,7 @@ import {
   createEditorSession,
   dirtyTextTabs,
   failTextSave,
+  markTextDirty,
   markTextEdited,
   openTextDocument,
   prepareEditorPathMutation,
@@ -357,6 +358,20 @@ test("undoing exactly to the persisted content clears the dirty state", () => {
   session = markTextEdited(session, tabId, original);
   assert.equal(dirtyTextTabs(session).length, 0);
   assert.equal(beginTextSave(session, tabId, original, "save-after-undo").request, null);
+});
+
+test("lightweight editor dirty notifications do not serialize the document", () => {
+  let session = loaded(createEditorSession(), "large.ts");
+  const tabId = session.textTabs[0].id;
+  const original = session.textTabs[0].content;
+
+  session = markTextDirty(session, tabId, true);
+  assert.equal(dirtyTextTabs(session).length, 1);
+  assert.equal(session.textTabs[0].content, original);
+
+  session = markTextDirty(session, tabId, false);
+  assert.equal(dirtyTextTabs(session).length, 0);
+  assert.equal(session.textTabs[0].content, original);
 });
 
 test("external snapshots reload clean tabs but preserve dirty buffers as conflicts", () => {

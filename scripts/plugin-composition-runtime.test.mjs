@@ -88,7 +88,7 @@ test("installed plugin contributions replace the matching bundled fallback", asy
   runtime.dispose();
 });
 
-test("the production default activates only isolated packages and tracks workspace evidence", async () => {
+test("the production default preserves a healthy isolated package across catalog evidence", async () => {
   let activations = 0;
   const activation = {
     pluginId: "fixture",
@@ -128,7 +128,7 @@ test("the production default activates only isolated packages and tracks workspa
   await runtime.activateWorkspace(identity);
   await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
   await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle", "app/build.gradle"]));
-  assert.equal(activations, 2);
+  assert.equal(activations, 1);
   assert.equal(runtime.managementSnapshot.entries[0]?.matched, true);
   assert.equal(runtime.managementSnapshot.entries[0]?.active, true);
   runtime.dispose();

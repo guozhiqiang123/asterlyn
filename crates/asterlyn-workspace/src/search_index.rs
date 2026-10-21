@@ -2,11 +2,12 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs::Metadata;
 use std::time::UNIX_EPOCH;
 
+use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use serde::{Deserialize, Serialize};
 
 use crate::{SearchMode, SearchSkipReason};
 
-pub const SEARCH_INDEX_SCHEMA_VERSION: u32 = 1;
+pub const SEARCH_INDEX_SCHEMA_VERSION: u32 = 2;
 const BLOOM_WORDS: usize = 64;
 const BLOOM_BITS: u64 = (BLOOM_WORDS * u64::BITS as usize) as u64;
 const HASH_SEEDS: [u64; 3] = [
@@ -22,6 +23,8 @@ pub struct SearchContentIndex {
     entries: BTreeMap<String, SearchContentIndexEntry>,
     #[serde(skip)]
     dirty: bool,
+    #[serde(skip)]
+    revision: u64,
 }
 
 impl Default for SearchContentIndex {
@@ -33,24 +36,38 @@ impl Default for SearchContentIndex {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct SearchContentIndexEntry {
+    #[serde(rename = "i")]
     identity: SearchFileIdentity,
+    #[serde(rename = "b", with = "bloom_base64")]
     bloom: Vec<u64>,
+    #[serde(rename = "s", default, skip_serializing_if = "Option::is_none")]
     skip_reason: Option<SearchSkipReason>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct SearchFileIdentity {
+    #[serde(rename = "l")]
     length: u64,
+    #[serde(rename = "m", default, skip_serializing_if = "Option::is_none")]
     modified_nanos: Option<u128>,
+    #[serde(rename = "r")]
     read_only: bool,
+    #[serde(rename = "d", default, skip_serializing_if = "Option::is_none")]
     unix_device: Option<u64>,
+    #[serde(rename = "i", default, skip_serializing_if = "Option::is_none")]
     unix_inode: Option<u64>,
+    #[serde(rename = "o", default, skip_serializing_if = "Option::is_none")]
     unix_mode: Option<u32>,
+    #[serde(rename = "c", default, skip_serializing_if = "Option::is_none")]
     unix_change_seconds: Option<i64>,
+    #[serde(rename = "n", default, skip_serializing_if = "Option::is_none")]
     unix_change_nanos: Option<i64>,
+    #[serde(rename = "w", default, skip_serializing_if = "Option::is_none")]
     windows_creation_time: Option<u64>,
+    #[serde(rename = "t", default, skip_serializing_if = "Option::is_none")]
     windows_last_write_time: Option<u64>,
+    #[serde(rename = "a", default, skip_serializing_if = "Option::is_none")]
     windows_attributes: Option<u32>,
 }
 
@@ -64,6 +81,7 @@ impl SearchContentIndex {
             schema_version: SEARCH_INDEX_SCHEMA_VERSION,
             entries: BTreeMap::new(),
             dirty: false,
+            revision: 0,
         }
     }
 
@@ -96,12 +114,18 @@ impl SearchContentIndex {
         self.dirty = false;
     }
 
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn retain_paths<'a>(&mut self, paths: impl Iterator<Item = &'a str>) {
         let retained = paths.collect::<HashSet<_>>();
         let previous = self.entries.len();
         self.entries
             .retain(|workspace_path, _| retained.contains(workspace_path.as_str()));
-        self.dirty |= previous != self.entries.len();
+        if previous != self.entries.len() {
+            self.mark_dirty();
+        }
     }
 
     pub(crate) fn can_prune(
@@ -143,7 +167,7 @@ impl SearchContentIndex {
         };
         if self.entries.get(workspace_path) != Some(&entry) {
             self.entries.insert(workspace_path.to_string(), entry);
-            self.dirty = true;
+            self.mark_dirty();
         }
     }
 
@@ -161,12 +185,51 @@ impl SearchContentIndex {
         };
         if self.entries.get(workspace_path) != Some(&entry) {
             self.entries.insert(workspace_path.to_string(), entry);
-            self.dirty = true;
+            self.mark_dirty();
         }
     }
 
     pub(crate) fn remove(&mut self, workspace_path: &str) {
-        self.dirty |= self.entries.remove(workspace_path).is_some();
+        if self.entries.remove(workspace_path).is_some() {
+            self.mark_dirty();
+        }
+    }
+
+    fn mark_dirty(&mut self) {
+        self.dirty = true;
+        self.revision = self.revision.wrapping_add(1);
+    }
+}
+
+mod bloom_base64 {
+    use super::*;
+    use serde::de::Error as _;
+    use serde::{Deserializer, Serializer};
+
+    pub(super) fn serialize<S>(words: &[u64], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut bytes = Vec::with_capacity(words.len() * u64::BITS as usize / 8);
+        for word in words {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        serializer.serialize_str(&STANDARD_NO_PAD.encode(bytes))
+    }
+
+    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u64>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let encoded = String::deserialize(deserializer)?;
+        let bytes = STANDARD_NO_PAD.decode(encoded).map_err(D::Error::custom)?;
+        let chunks = bytes.chunks_exact(u64::BITS as usize / 8);
+        if !chunks.remainder().is_empty() {
+            return Err(D::Error::custom("Bloom signature byte length is invalid"));
+        }
+        Ok(chunks
+            .map(|chunk| u64::from_le_bytes(chunk.try_into().expect("exact u64 chunk")))
+            .collect())
     }
 }
 
@@ -355,5 +418,41 @@ mod tests {
 
         let query = index_query("definitely absent", SearchMode::Literal).expect("query");
         assert!(!index.can_prune("App.kt", &metadata, &query));
+    }
+
+    #[test]
+    fn maximum_valid_index_stays_within_the_desktop_cache_budget() {
+        let mut index = SearchContentIndex::empty();
+        let identity = SearchFileIdentity {
+            length: 4_096,
+            modified_nanos: Some(1_797_331_234_567_890_123),
+            read_only: false,
+            unix_device: Some(16_777_729),
+            unix_inode: Some(12_345_678),
+            unix_mode: Some(0o100644),
+            unix_change_seconds: Some(1_797_331_234),
+            unix_change_nanos: Some(567_890_123),
+            windows_creation_time: None,
+            windows_last_write_time: None,
+            windows_attributes: None,
+        };
+        for number in 0..100_000 {
+            index.entries.insert(
+                format!("src/generated/group-{}/File-{number:06}.kt", number / 100),
+                SearchContentIndexEntry {
+                    identity: identity.clone(),
+                    bloom: vec![u64::MAX; BLOOM_WORDS],
+                    skip_reason: None,
+                },
+            );
+        }
+
+        let encoded = serde_json::to_vec(&index).expect("serialize maximum index");
+        eprintln!("100k search index JSON: {} bytes", encoded.len());
+        assert!(encoded.len() < 128 * 1024 * 1024, "{} bytes", encoded.len());
+        let decoded: SearchContentIndex =
+            serde_json::from_slice(&encoded).expect("deserialize maximum index");
+        assert_eq!(decoded.len(), 100_000);
+        assert!(decoded.is_valid(100_000));
     }
 }

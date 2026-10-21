@@ -7,6 +7,10 @@ import {
   decodeExactText,
   encodeExactText,
 } from "../src/features/files-editor/text-content.ts";
+import {
+  applyLineSeparatorChanges,
+  countLineSeparators,
+} from "../src/features/files-editor/text-line-separators.ts";
 
 test("exact text codec preserves mixed endings, bare CR, and final newline", () => {
   const source = "one\r\ntwo\nthree\rlast\r\n";
@@ -44,6 +48,20 @@ test("multiple descending edits retain untouched mixed separators", () => {
     { from: 8, to: 13, insert: "THREE\n3.5" },
   ]);
   assert.equal(encodeExactText(edited), "ONE\r\ntwo\nTHREE\r\n3.5\r\nfour");
+});
+
+test("incremental separator metadata updates only changed line boundaries", () => {
+  const content = decodeExactText("one\r\ntwo\nthree\r\nfour");
+  const counts = countLineSeparators(content.separators);
+  applyLineSeparatorChanges(content, counts, [
+    { separatorStart: 0, removedSeparators: 0, insertedSeparators: 1 },
+    { separatorStart: 2, removedSeparators: 1, insertedSeparators: 2 },
+  ]);
+  content.text = "ONE\n1.5\ntwo\nTHREE\n3.5\nfour";
+
+  assert.deepEqual(content.separators, ["\r\n", "\r\n", "\n", "\r\n", "\r\n"]);
+  assert.deepEqual(counts, { lf: 1, crlf: 4 });
+  assert.equal(encodeExactText(content), "ONE\r\n1.5\r\ntwo\nTHREE\r\n3.5\r\nfour");
 });
 
 test("computeTextChange identifies minimal diff range or null for identical text", () => {

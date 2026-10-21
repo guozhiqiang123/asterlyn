@@ -177,7 +177,6 @@ import {
   projectTreeElementRepresentsPath,
   projectTreeRenderWindow,
   projectTreeRowRepresentsPath,
-  projectTreeRows,
   renderProjectNavigation,
   renderProjectToolbar,
 } from "./features/files-editor/project-files-view";
@@ -337,7 +336,6 @@ import {
   historyPathCandidates,
 } from "./features/git-history/history-path-selection";
 import {
-  findProjectTreeNode,
   isProjectWorkspaceRootPath,
   type ProjectTreeNode,
 } from "./presentation/project-tree";
@@ -1071,7 +1069,7 @@ export class AsterlynApp {
           ...contextFeedback,
           current: (target) => this.isCommitFolderContextTargetCurrent(target),
           policy: (target) => {
-            const node = findProjectTreeNode(this.projectTree(), target.workspacePath);
+            const node = this.filesEditorRuntime.files.node(target.workspacePath);
             return commitFolderContextPolicy(
               node?.kind === "directory",
               this.localization.catalog.history.commitFolderContextMenu.currentDirectoryUnavailable,
@@ -4211,7 +4209,7 @@ export class AsterlynApp {
     body.dataset.navigatorView = "files";
     const activePath = activeProjectWorkspacePath(workspaceRoot, this.activeDocument(), this.filesState.files);
     actions.innerHTML = renderProjectToolbar(this.filesState, tree, activePath, this.localization.catalog.projectFiles);
-    const projectRows = projectTreeRows(tree, this.filesState.expandedDirectories);
+    const projectRows = this.filesEditorRuntime.files.rows();
     const window = projectTreeRenderWindow(projectRows.length, scrollTop, body.clientHeight);
     this.projectTreeWindowStart = window?.start ?? 0;
     body.innerHTML = renderProjectNavigation(
@@ -4230,6 +4228,7 @@ export class AsterlynApp {
           this.windowSession.generation,
         )?.workspacePath ?? null
         : null,
+      projectRows,
     );
     body.onscroll = () => this.handleProjectTreeScroll(body);
     this.bindProjectEvents();
@@ -4333,7 +4332,7 @@ export class AsterlynApp {
     _outcome: WorkspaceMutationOutcome,
   ): void {
     if (!destination) return;
-    const node = findProjectTreeNode(this.projectTree(), destination);
+    const node = this.filesEditorRuntime.files.node(destination);
     if (node) {
       this.filesEditorRuntime.files.select(destination, node.kind);
       this.markProjectTreeSelection(destination);
@@ -4410,16 +4409,15 @@ export class AsterlynApp {
         this.markProjectTreeSelection(path);
       },
       onSelectMulti: (path, kind, mode) => {
-        const rows = projectTreeRows(this.projectTree(), this.filesState.expandedDirectories);
+        const rows = this.filesEditorRuntime.files.rows();
         this.filesEditorRuntime.files.selectWithMode(path, kind, mode, rows);
         this.markProjectTreeSelection();
       },
       onActivateFile: (path) => {
         const currentRoot = this.windowSession.workspace.state.root;
         if (!currentRoot) return;
-        const file = this.filesState.files.find(
-          (candidate) => candidate.workspacePath === path,
-        ) ?? { repositoryId: ".", path, workspacePath: path, readOnly: false };
+        const file = this.filesEditorRuntime.files.fileForWorkspacePath(path) ??
+          { repositoryId: ".", path, workspacePath: path, readOnly: false };
         void this.openProjectFile(currentRoot, file);
       },
       onToggleDirectory: (path) => this.toggleProjectDirectory(path),
@@ -4441,10 +4439,7 @@ export class AsterlynApp {
 
   private handleProjectTreeScroll(body: HTMLElement): void {
     if (this.shellState.layout.leftTool !== "files") return;
-    const rows = projectTreeRows(
-      this.projectTree(),
-      this.filesState.expandedDirectories,
-    );
+    const rows = this.filesEditorRuntime.files.rows();
     const window = projectTreeRenderWindow(rows.length, body.scrollTop, body.clientHeight);
     const nextStart = window?.start ?? 0;
     if (
@@ -4480,10 +4475,8 @@ export class AsterlynApp {
       this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" });
       this.applyWorkbenchLayout(true); this.renderActivityRail();
     }
-    const targetIndex = projectTreeRows(
-      this.projectTree(),
-      this.filesState.expandedDirectories,
-    ).findIndex(({ node }) => node.path === activePath);
+    const targetIndex = this.filesEditorRuntime.files.rows()
+      .findIndex(({ node }) => node.path === activePath);
     const body = this.query<HTMLElement>("#navigator-body");
     if (targetIndex >= 0) body.scrollTop = targetIndex * PROJECT_TREE_ROW_HEIGHT;
     this.renderLeftTool();
@@ -5652,10 +5645,8 @@ export class AsterlynApp {
     this.shellController.setLayout({ ...this.shellState.layout, leftTool: "files" }, true);
     this.applyWorkbenchLayout(true);
     this.renderActivityRail();
-    const targetIndex = projectTreeRows(
-      this.projectTree(),
-      this.filesState.expandedDirectories,
-    ).findIndex((row) => projectTreeRowRepresentsPath(row, target.workspacePath));
+    const targetIndex = this.filesEditorRuntime.files.rows()
+      .findIndex((row) => projectTreeRowRepresentsPath(row, target.workspacePath));
     this.renderLeftTool();
     const body = this.root.querySelector<HTMLElement>("#navigator-body");
     if (body && targetIndex >= 0) body.scrollTop = targetIndex * PROJECT_TREE_ROW_HEIGHT;
@@ -6559,10 +6550,15 @@ export class AsterlynApp {
     };
   }
 
-  private handleEditorContentChange(tabId: string, content: string): void {
+  private handleEditorContentChange(
+    tabId: string,
+    content: string | null,
+    dirty = true,
+  ): void {
     const previous = textTab(this.editorState.session, tabId);
     const wasDirty = previous ? isTextTabDirty(previous) : false;
-    this.filesEditorRuntime.editor.markEdited(tabId, content);
+    if (content === null) this.filesEditorRuntime.editor.markDirty(tabId, dirty);
+    else this.filesEditorRuntime.editor.markEdited(tabId, content);
     const current = textTab(this.editorState.session, tabId);
     if (
       previous &&
@@ -6676,7 +6672,7 @@ export class AsterlynApp {
   }
 
   private editorTabFileStatusClass(workspacePath: string): string {
-    const node = findProjectTreeNode(this.projectTree(), workspacePath);
+    const node = this.filesEditorRuntime.files.node(workspacePath);
     return `file-status-${node?.status ?? "unmodified"}`;
   }
 
