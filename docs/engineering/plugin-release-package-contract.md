@@ -1,8 +1,9 @@
 # Plugin Release package contract
 
-Runtime-installable plugins use package schema `2` and the filename suffix
+Runtime-installable plugins use package schema `3` and the filename suffix
 `.asterlyn-plugin.tgz`. Schema `1` remains a build-time contract for plugins already pinned into a
-host release; the marketplace must never treat it as installable.
+host release; the marketplace must never treat it as installable. Schema `2` packages no longer
+receive runtime authority; migrate them to schema `3` semantic host operations.
 
 ## Archive layout
 
@@ -23,11 +24,11 @@ WebView.
 
 ## Manifest additions
 
-Schema `2` retains the SDK plugin manifest fields and adds:
+Schema `3` retains the safe SDK plugin manifest fields and adds:
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "capabilities": ["tasks"],
   "permissions": ["host.tasks.execute"],
   "distribution": {
@@ -51,6 +52,11 @@ Schema `2` retains the SDK plugin manifest fields and adds:
   }
 }
 ```
+
+An installable package may declare `hostOperations` as an array of semantic IDs, for example
+`[{ "id": "adb.devices" }]`. It cannot declare `processQueries` or `toolOperations`: executable
+selection, arguments, parameter validation, timeouts, output limits, and environment are all owned
+by the host registry.
 
 - `distribution.repository` is the normalized lowercase GitHub source identity and must equal the
   source used to discover the Release.

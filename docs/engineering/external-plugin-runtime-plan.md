@@ -226,9 +226,11 @@ without exposing a bridge, path resolver, process handle, or storage object to p
 
 1. Bind every request to the active window, canonical workspace root, workspace generation,
    admitted plugin identity, and the permission required by that capability operation.
-2. Route `taskCache` through the existing bounded fingerprint/cache implementation and route
-   `processQueries` through the existing allow-listed process-query manager. The plugin continues
-   to receive SDK-shaped data rather than native command result objects.
+2. Route `taskCache` through the existing bounded fingerprint/cache implementation. Legacy
+   `processQueries` are fail-closed for external packages; only the exact pinned Android Release
+   identity is mapped to a host-owned fixed query definition, and package executable/argv templates
+   are ignored. The plugin continues to receive SDK-shaped data rather than native command result
+   objects.
 3. Store `workspaceState` in a host-owned, size-limited, atomic per-plugin/per-workspace store under
    the application data directory. Keys and values are data only; plugin input never becomes a
    path segment.

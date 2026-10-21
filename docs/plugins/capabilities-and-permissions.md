@@ -1,7 +1,13 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog for Asterlyn `0.1.13`, SDK `1.9.0`, package schema `2`, and
+Status: experimental public catalog rooted at Asterlyn `0.1.15`; current SDK `1.10.0`, package schema `3`, and
 plugin-host protocol `1`.
+
+Security containment in `0.1.15`: installable packages cannot receive authority from legacy raw
+`processQueries` or `toolOperations` executable/argv declarations. Every schema-2 authority package
+is rejected, including the formerly pinned Android `0.5.7` identity. Plugin authors declare only
+`hostOperations`; the host expands each admitted ID into a fixed operation owned by the registered
+plugin repository.
 
 ## Two declarations, one authority check
 
@@ -23,17 +29,16 @@ contributions remain available.
 | `tasks` | Contribute task snapshots, hierarchy, refresh and reviewed run plans | `host.tasks.discover`; `host.tasks.execute` only when executing | Host owns trust, terminal, cancellation, output, artifacts and task state |
 | `taskAuthorization` | Supply localization keys for host-rendered workspace trust and exact-task memory | `host.tasks.execute` for the eventual run | Declarative policy/copy only; it cannot self-approve a task |
 | `taskCache` | Fingerprint, read, write and dirty a plugin/provider task cache | `host.tasks.cache` | Current workspace and plugin namespace only |
-| `processQueries` | Execute a statically declared bounded query by ID | `host.process.query` | Fixed executable candidates/argv/timeout/output; no process handle |
-| `toolOperations` | Request a statically declared typed query or mutation during a reviewed Run phase | `host.tool.execute` | Fixed argument template and narrow host-validated parameter kinds |
+| `processQueries` | Runtime transport for admitted host-owned queries | `host.process.query` | Executable/argv declarations are blocked; only schema-3 `hostOperations` can populate this capability |
+| `toolOperations` | Runtime transport for admitted host-owned typed operations | `host.tool.execute` | Command construction stays in the repository-bound host registry |
 | `workspaceState` | Read/write bounded non-secret plugin state for the current workspace | `host.workspace.state` | Plugin/workspace namespace only; no repository file write |
 | `executionTargets` | Contribute transient execution targets such as attached devices | `host.execution-targets.read` | Bounded metadata; target validity is rechecked before use |
 | `runConfigurations` | Contribute configuration metadata and staged run plans | No additional metadata permission; each task/tool phase needs its own admitted permission | The host never guesses an ambiguous configuration or target |
 | `notifications` | Publish semantic info/success/warning/error by localization key | `host.notifications.publish` | Host owns resolved text, source attribution, timing, accessibility and dismissal |
 
-SDK `1.9.0` adds the explicit `androidSdkBuildTools` executable candidate for tools such as `aapt`.
-It resolves only an executable with the declared filename from canonical Android SDK Build Tools
-directories. The existing `environment`, `workspaceProperty`, and `path` candidates keep their
-literal meanings; plugins cannot submit a path or argv dynamically at runtime.
+SDK `1.10.0` retains legacy candidate types only so migration tooling can diagnose old source. The
+schema-3 package manifest forbids those fields, no bundled code executes in the WebView, and runtime
+authority is granted only through semantic IDs.
 
 Capabilities not listed here are not available to installable packages. Host presentation primitives,
 dialogs, arbitrary panels, search internals, Git writes, credentials, terminals, sockets, WebViews,
@@ -47,8 +52,8 @@ and raw filesystem/process/network APIs are not implicit capabilities.
 | `host.tasks.discover` | Publish task metadata and hierarchy | Task execution or shell access |
 | `host.tasks.execute` | Submit an exact reviewed task plan to the host lifecycle | Silent trust, unrestricted argv, PTY ownership, or execution after workspace change |
 | `host.tasks.cache` | Use bounded plugin/provider cache storage and fingerprints | General storage or another plugin's cache |
-| `host.process.query` | Run an admitted static read/query declaration | Dynamic executable, argv, environment, stdin, process handle, or mutation intent |
-| `host.tool.execute` | Run an admitted static typed tool operation in a supervised Run phase | Arbitrary command construction, shell interpolation, or unreviewed workspace mutation |
+| `host.process.query` | Request an admitted host-owned query ID declared through `hostOperations` | Package-selected executable, argv, environment, stdin, process handle, or mutation intent |
+| `host.tool.execute` | Request an admitted host-owned typed operation ID declared through `hostOperations` | Package-selected command construction, shell interpolation, or unreviewed workspace mutation |
 | `host.workspace.state` | Store bounded non-secret strings under plugin/workspace keys | Credentials, global state, repository files, or cross-plugin access |
 | `host.execution-targets.read` | Discover and describe bounded transient targets | Device mutation by itself; install/launch still requires admitted tool operations |
 | `host.notifications.publish` | Request one host-rendered localized notification | HTML, actions, custom duration, styling, notification history, or observation |
@@ -69,15 +74,11 @@ native implementation object behind a capability.
 
 ## Static query and operation rules
 
-Process queries and tool operations must be fully declared in `manifest.json`. Executables can be
-resolved only from an admitted environment variable plus relative path, a bounded workspace
-property plus relative path, or a fixed PATH name. Query argv is literal. Tool-operation argv may
-substitute only declared typed parameters: `executionTargetId`, `androidApplicationId`,
-`androidComponent`, or a workspace artifact with admitted suffixes.
-
-The package inspector rejects declarations outside the SDK limits. At runtime the host resolves the
-current workspace and values again, enforces query/mutation intent, bounds output, and cancels work
-on stale workspace, window/app shutdown, timeout, or user cancellation.
+The inspector still parses and bounds schema-2 legacy process-query/tool-operation declarations so
+old packages fail with a controlled migration diagnostic. Marketplace admission and activation
+reject schema-2 authority packages without an exception. Schema-3 packages expose only versioned
+semantic operation IDs and narrow typed values; unknown IDs or an unregistered repository/identity
+pair fail before activation.
 
 ## Public resource limits
 

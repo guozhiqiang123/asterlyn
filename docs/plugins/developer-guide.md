@@ -1,9 +1,9 @@
 # Asterlyn plugin developer guide
 
 - Status: experimental public baseline
-- Host baseline: Asterlyn `0.1.13`
-- Plugin SDK: `1.9.0` (SDK major `1`)
-- Package schema: `2`
+- Host baseline: Asterlyn `0.1.15`
+- Plugin SDK: `1.10.0` (SDK major `1`)
+- Package schema: `3`
 - Plugin-host protocol: `1`
 
 ## What a plugin is
@@ -50,7 +50,7 @@ runtime protocol, and package digest. Asterlyn rejects disagreement before activ
 
 ## Manifest ownership
 
-`manifest.json` owns static identity, localization, settings, declarative process/tool definitions,
+`manifest.json` owns static identity, localization, settings, semantic host-operation IDs,
 capabilities, permissions, host compatibility, license, runtime entry, and integrity. The package
 script owns generated integrity hashes; do not hand-edit them into the source manifest.
 
@@ -58,8 +58,8 @@ The exported `SdkPluginModule` owns runtime matching, activation, contributions,
 disposal. Activation is transactional: if validation or activation fails, none of that attempt's
 contributions become visible. Dispose every registered contribution when the plugin is stopped.
 
-Use type-only SDK imports in runtime source unless a bundled value is required. This keeps local
-tests executable without asking Node to execute TypeScript from `node_modules`:
+Use type-only SDK imports for declarations. Executable plugin modules are packaged and loaded by the
+isolated helper; the workbench does not import them from `node_modules`:
 
 ```ts
 import type { SdkPluginActivationContext, SdkPluginModule } from "@asterlyn/plugin-sdk";
