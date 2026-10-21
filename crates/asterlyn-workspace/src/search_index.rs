@@ -223,12 +223,13 @@ mod bloom_base64 {
     {
         let encoded = String::deserialize(deserializer)?;
         let bytes = STANDARD_NO_PAD.decode(encoded).map_err(D::Error::custom)?;
-        let chunks = bytes.chunks_exact(u64::BITS as usize / 8);
-        if !chunks.remainder().is_empty() {
+        let (chunks, remainder) = bytes.as_chunks::<8>();
+        if !remainder.is_empty() {
             return Err(D::Error::custom("Bloom signature byte length is invalid"));
         }
         Ok(chunks
-            .map(|chunk| u64::from_le_bytes(chunk.try_into().expect("exact u64 chunk")))
+            .iter()
+            .map(|chunk| u64::from_le_bytes(*chunk))
             .collect())
     }
 }
