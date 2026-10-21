@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { renderPluginWorkbenchView } from "../src/composition/plugin-workbench-view.ts";
+import { readBundledAndroidManifest } from "./plugin-package-fixture.mjs";
 
-const manifest = JSON.parse(await readFile(
-  new URL("../node_modules/@asterlyn/plugin-android-gradle/manifest.json", import.meta.url),
-  "utf8",
-));
+const manifest = await readBundledAndroidManifest();
 
 const entry = {
   id: manifest.id,

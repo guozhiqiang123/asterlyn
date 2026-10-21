@@ -4,6 +4,16 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+mod installation_identity;
+mod installation_recording;
+pub use installation_identity::AdmittedPluginIdentity;
+pub use installation_identity::INSTALLATION_SCHEMA_VERSION;
+use installation_identity::{
+    INSTALLATION_FILE, MAX_INSTALLATION_FILE_BYTES, NEXT_INSTALLATION_FILE,
+    PREVIOUS_INSTALLATION_FILE, PersistedInstallations, migrate_installations,
+    validate_installation_identity, validate_installations,
+};
+
 pub const SOURCE_SCHEMA_VERSION: u32 = 1;
 pub const MAX_SOURCES: usize = 64;
 pub const BUILT_IN_ANDROID_REPOSITORY: &str = "guozhiqiang123/asterlyn-plugin-android-gradle";
@@ -16,11 +26,6 @@ const MAX_DESCRIPTION_CHARACTERS: usize = 500;
 const MAX_RELEASE_METADATA_BYTES: usize = 1024 * 1024;
 const MAX_PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
 const PACKAGE_SUFFIX: &str = ".asterlyn-plugin.tgz";
-pub const INSTALLATION_SCHEMA_VERSION: u32 = 1;
-const INSTALLATION_FILE: &str = "installations.v1.json";
-const PREVIOUS_INSTALLATION_FILE: &str = "installations.v1.previous.json";
-const NEXT_INSTALLATION_FILE: &str = "installations.v1.next.json";
-const MAX_INSTALLATION_FILE_BYTES: u64 = 512 * 1024;
 const MAX_RETAINED_PLUGIN_VERSIONS: usize = 8;
 const MAX_RETAINED_QUARANTINED_VERSIONS: usize = 3;
 const QUARANTINE_RETENTION_MS: u64 = 30 * 24 * 60 * 60 * 1_000;
@@ -79,6 +84,8 @@ pub struct PluginSourceSnapshot {
 pub struct AdmittedPluginVersion {
     pub version: String,
     pub package_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_digest: Option<String>,
     pub admitted_at_epoch_ms: u64,
     pub runtime_status: PluginRuntimeStatus,
 }
@@ -115,14 +122,6 @@ pub struct PluginInstallationSnapshot {
     pub recovered: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PersistedInstallations {
-    schema_version: u32,
-    generation: u64,
-    plugins: Vec<InstalledPlugin>,
-}
-
 pub struct PluginInstallationStore {
     root: PathBuf,
 }
@@ -145,77 +144,6 @@ impl PluginInstallationStore {
         })
     }
 
-    pub fn record_admitted(
-        &self,
-        plugin_id: &str,
-        repository: &str,
-        version: &str,
-        package_digest: &str,
-        admitted_at_epoch_ms: u64,
-        bundled_fallback: bool,
-    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
-        validate_installation_identity(plugin_id, repository, version, package_digest)?;
-        let snapshot = self.snapshot()?;
-        if let Some(plugin) = snapshot
-            .plugins
-            .iter()
-            .find(|plugin| plugin.plugin_id == plugin_id)
-        {
-            if plugin.repository != repository {
-                return Err(MarketplaceError::Conflict(
-                    "plugin ID is already owned by another repository".into(),
-                ));
-            }
-            if let Some(existing) = plugin
-                .versions
-                .iter()
-                .find(|candidate| candidate.version == version)
-            {
-                if existing.package_digest != package_digest {
-                    return Err(MarketplaceError::Conflict(
-                        "plugin version was republished with different bytes".into(),
-                    ));
-                }
-                return Ok(snapshot);
-            }
-        }
-        let mut plugins = snapshot.plugins;
-        let plugin = if let Some(plugin) = plugins
-            .iter_mut()
-            .find(|plugin| plugin.plugin_id == plugin_id)
-        {
-            if plugin.repository != repository {
-                return Err(MarketplaceError::Conflict(
-                    "plugin ID is already owned by another repository".into(),
-                ));
-            }
-            plugin
-        } else {
-            plugins.push(InstalledPlugin {
-                plugin_id: plugin_id.into(),
-                repository: repository.into(),
-                enabled: true,
-                bundled_fallback,
-                active_version: None,
-                known_good_version: None,
-                pending_version: None,
-                versions: Vec::new(),
-            });
-            plugins.last_mut().expect("just inserted plugin")
-        };
-        plugin.versions.push(AdmittedPluginVersion {
-            version: version.into(),
-            package_digest: package_digest.into(),
-            admitted_at_epoch_ms,
-            runtime_status: PluginRuntimeStatus::PendingRestart,
-        });
-        plugin
-            .versions
-            .sort_by(|left, right| left.version.cmp(&right.version));
-        plugin.pending_version = Some(version.into());
-        self.write(snapshot.generation + 1, plugins)
-    }
-
     pub fn begin_activation(
         &self,
         plugin_id: &str,
@@ -226,6 +154,11 @@ impl PluginInstallationStore {
             if !plugin.enabled {
                 return Err(MarketplaceError::Conflict(
                     "installed plugin is disabled".into(),
+                ));
+            }
+            if admitted.content_digest.is_none() {
+                return Err(MarketplaceError::Conflict(
+                    "plugin version predates immutable content binding; reinstall it".into(),
                 ));
             }
             if plugin.pending_version.as_deref() != Some(version)
@@ -324,6 +257,44 @@ impl PluginInstallationStore {
             }
             if plugin.active_version.as_deref() == Some(version) {
                 plugin.active_version = plugin.known_good_version.clone();
+            }
+            Ok(true)
+        })
+    }
+
+    pub fn mark_runtime_crashed(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
+            if admitted.runtime_status == PluginRuntimeStatus::Quarantined {
+                return Ok(false);
+            }
+            if !matches!(
+                admitted.runtime_status,
+                PluginRuntimeStatus::Active | PluginRuntimeStatus::KnownGood
+            ) {
+                return Err(MarketplaceError::Conflict(
+                    "only an active plugin runtime can be quarantined after a crash".into(),
+                ));
+            }
+            admitted.runtime_status = PluginRuntimeStatus::Quarantined;
+            if plugin.pending_version.as_deref() == Some(version) {
+                plugin.pending_version = None;
+            }
+            let fallback = plugin
+                .versions
+                .iter()
+                .filter(|candidate| candidate.runtime_status == PluginRuntimeStatus::KnownGood)
+                .max_by_key(|candidate| candidate.admitted_at_epoch_ms)
+                .map(|candidate| candidate.version.clone());
+            if plugin.active_version.as_deref() == Some(version) {
+                plugin.active_version = fallback.clone();
+            }
+            if plugin.known_good_version.as_deref() == Some(version) {
+                plugin.known_good_version = fallback;
             }
             Ok(true)
         })
@@ -564,6 +535,15 @@ impl PluginInstallationStore {
         plugin_id: &str,
     ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
         let snapshot = self.snapshot()?;
+        if snapshot
+            .plugins
+            .iter()
+            .any(|plugin| plugin.plugin_id == plugin_id && plugin.bundled_fallback)
+        {
+            return Err(MarketplaceError::Conflict(
+                "host-bundled plugins can be disabled but not uninstalled".into(),
+            ));
+        }
         let mut plugins = snapshot.plugins;
         let previous_len = plugins.len();
         plugins.retain(|plugin| plugin.plugin_id != plugin_id);
@@ -651,8 +631,9 @@ impl PluginInstallationStore {
             ));
         }
         let bytes = fs::read(path).map_err(|error| io_error("read installation index", error))?;
-        let value: PersistedInstallations = serde_json::from_slice(&bytes)
+        let mut value: PersistedInstallations = serde_json::from_slice(&bytes)
             .map_err(|error| MarketplaceError::Corrupt(error.to_string()))?;
+        migrate_installations(&mut value)?;
         validate_installations(&value)?;
         Ok(Some(value))
     }
@@ -704,118 +685,6 @@ impl PluginInstallationStore {
             recovered: false,
         })
     }
-}
-
-fn validate_installation_identity(
-    plugin_id: &str,
-    repository: &str,
-    version: &str,
-    digest: &str,
-) -> Result<(), MarketplaceError> {
-    if plugin_id.is_empty()
-        || plugin_id.len() > 160
-        || !plugin_id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
-    {
-        return Err(MarketplaceError::Corrupt(
-            "invalid installed plugin ID".into(),
-        ));
-    }
-    normalize_github_repository(repository)?;
-    release_version_parts(version).map_err(|error| MarketplaceError::Corrupt(error.to_string()))?;
-    let value = digest.strip_prefix("sha256:").unwrap_or("");
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(MarketplaceError::Corrupt(
-            "invalid installed package digest".into(),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_installations(value: &PersistedInstallations) -> Result<(), MarketplaceError> {
-    if value.schema_version != INSTALLATION_SCHEMA_VERSION
-        || value.generation == 0
-        || value.plugins.len() > MAX_SOURCES
-    {
-        return Err(MarketplaceError::Corrupt(
-            "invalid installation index header".into(),
-        ));
-    }
-    let mut ids = std::collections::BTreeSet::new();
-    for plugin in &value.plugins {
-        if !ids.insert(plugin.plugin_id.as_str()) || plugin.versions.len() > 64 {
-            return Err(MarketplaceError::Corrupt(
-                "duplicate or oversized installed plugin entry".into(),
-            ));
-        }
-        let mut versions = std::collections::BTreeSet::new();
-        let mut active_attempts = 0;
-        for version in &plugin.versions {
-            if !versions.insert(version.version.as_str()) {
-                return Err(MarketplaceError::Corrupt(
-                    "duplicate installed plugin version".into(),
-                ));
-            }
-            validate_installation_identity(
-                &plugin.plugin_id,
-                &plugin.repository,
-                &version.version,
-                &version.package_digest,
-            )?;
-            if version.runtime_status == PluginRuntimeStatus::Active {
-                active_attempts += 1;
-            }
-        }
-        if active_attempts > 1 {
-            return Err(MarketplaceError::Corrupt(
-                "plugin has more than one active health attempt".into(),
-            ));
-        }
-        validate_version_pointer(plugin, plugin.pending_version.as_deref(), "pending")?;
-        let active = validate_version_pointer(plugin, plugin.active_version.as_deref(), "active")?;
-        let known_good =
-            validate_version_pointer(plugin, plugin.known_good_version.as_deref(), "known-good")?;
-        if active.is_some_and(|version| {
-            !matches!(
-                version.runtime_status,
-                PluginRuntimeStatus::Active | PluginRuntimeStatus::KnownGood
-            )
-        }) {
-            return Err(MarketplaceError::Corrupt(
-                "active plugin pointer has an invalid runtime state".into(),
-            ));
-        }
-        if known_good
-            .is_some_and(|version| version.runtime_status != PluginRuntimeStatus::KnownGood)
-        {
-            return Err(MarketplaceError::Corrupt(
-                "known-good plugin pointer has not passed its health checkpoint".into(),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn validate_version_pointer<'a>(
-    plugin: &'a InstalledPlugin,
-    value: Option<&str>,
-    label: &str,
-) -> Result<Option<&'a AdmittedPluginVersion>, MarketplaceError> {
-    let Some(value) = value else { return Ok(None) };
-    let version = plugin
-        .versions
-        .iter()
-        .find(|version| version.version == value)
-        .ok_or_else(|| {
-            MarketplaceError::Corrupt(format!("{label} plugin version is absent from the index"))
-        })?;
-    if version.runtime_status == PluginRuntimeStatus::Quarantined {
-        return Err(MarketplaceError::Corrupt(format!(
-            "{label} plugin version is quarantined"
-        )));
-    }
-    Ok(Some(version))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1511,6 +1380,10 @@ fn io_error(operation: &str, error: std::io::Error) -> MarketplaceError {
 mod tests {
     use super::*;
 
+    fn content_digest() -> String {
+        format!("sha256:{}", "c".repeat(64))
+    }
+
     #[test]
     fn normalizes_supported_github_repository_inputs() {
         assert_eq!(
@@ -1556,10 +1429,13 @@ mod tests {
         let store = PluginInstallationStore::open(directory.path()).unwrap();
         let snapshot = store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "1.2.3",
-                &format!("sha256:{}", "a".repeat(64)),
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.2.3",
+                    package_digest: &format!("sha256:{}", "a".repeat(64)),
+                    content_digest: &content_digest(),
+                },
                 42,
                 false,
             )
@@ -1569,6 +1445,7 @@ mod tests {
             Some("1.2.3")
         );
         assert_eq!(snapshot.plugins[0].active_version, None);
+        assert!(!snapshot.plugins[0].enabled);
         assert_eq!(
             snapshot.plugins[0].versions[0].runtime_status,
             PluginRuntimeStatus::PendingRestart
@@ -1583,10 +1460,13 @@ mod tests {
         );
         let repeated = store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "1.2.3",
-                &format!("sha256:{}", "a".repeat(64)),
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.2.3",
+                    package_digest: &format!("sha256:{}", "a".repeat(64)),
+                    content_digest: &content_digest(),
+                },
                 99,
                 false,
             )
@@ -1596,19 +1476,73 @@ mod tests {
     }
 
     #[test]
+    fn records_bundled_package_enabled_once_and_preserves_the_user_choice() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let package_digest = format!("sha256:{}", "a".repeat(64));
+        let content_digest = content_digest();
+        let identity = AdmittedPluginIdentity {
+            plugin_id: "dev.asterlyn.android-gradle",
+            repository: BUILT_IN_ANDROID_REPOSITORY,
+            version: "0.5.8",
+            package_digest: &package_digest,
+            content_digest: &content_digest,
+        };
+        let installed = store.record_bundled(identity, 42).unwrap();
+        assert!(installed.plugins[0].enabled);
+        assert!(installed.plugins[0].bundled_fallback);
+        assert!(store.remove_plugin("dev.asterlyn.android-gradle").is_err());
+
+        store
+            .set_plugin_enabled("dev.asterlyn.android-gradle", false)
+            .unwrap();
+        let repeated = store.record_bundled(identity, 99).unwrap();
+        assert!(!repeated.plugins[0].enabled);
+        assert!(repeated.plugins[0].bundled_fallback);
+    }
+
+    #[test]
+    fn bundled_record_upgrades_existing_source_install_without_reenabling_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let package_digest = format!("sha256:{}", "a".repeat(64));
+        let content_digest = content_digest();
+        let identity = AdmittedPluginIdentity {
+            plugin_id: "dev.asterlyn.android-gradle",
+            repository: BUILT_IN_ANDROID_REPOSITORY,
+            version: "0.5.8",
+            package_digest: &package_digest,
+            content_digest: &content_digest,
+        };
+        let external = store.record_admitted(identity, 42, false).unwrap();
+        assert!(!external.plugins[0].enabled);
+        assert!(!external.plugins[0].bundled_fallback);
+
+        let bundled = store.record_bundled(identity, 99).unwrap();
+        assert!(!bundled.plugins[0].enabled);
+        assert!(bundled.plugins[0].bundled_fallback);
+    }
+
+    #[test]
     fn promotes_only_the_exact_active_package_to_known_good() {
         let directory = tempfile::tempdir().unwrap();
         let store = PluginInstallationStore::open(directory.path()).unwrap();
         let digest = format!("sha256:{}", "a".repeat(64));
         store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "1.2.3",
-                &digest,
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.2.3",
+                    package_digest: &digest,
+                    content_digest: &content_digest(),
+                },
                 42,
                 false,
             )
+            .unwrap();
+        store
+            .set_plugin_enabled("dev.asterlyn.example", true)
             .unwrap();
         store.recover_interrupted_activations().unwrap();
 
@@ -1660,13 +1594,19 @@ mod tests {
         let update = format!("sha256:{}", "b".repeat(64));
         store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "1.0.0",
-                &first,
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.0.0",
+                    package_digest: &first,
+                    content_digest: &content_digest(),
+                },
                 1,
                 false,
             )
+            .unwrap();
+        store
+            .set_plugin_enabled("dev.asterlyn.example", true)
             .unwrap();
         store.recover_interrupted_activations().unwrap();
         store
@@ -1677,13 +1617,19 @@ mod tests {
             .unwrap();
         store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "2.0.0",
-                &update,
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "2.0.0",
+                    package_digest: &update,
+                    content_digest: &content_digest(),
+                },
                 2,
                 false,
             )
+            .unwrap();
+        store
+            .set_plugin_enabled("dev.asterlyn.example", true)
             .unwrap();
         store.recover_interrupted_activations().unwrap();
         store
@@ -1709,19 +1655,103 @@ mod tests {
     }
 
     #[test]
+    fn healthy_runtime_crash_is_quarantined_once_and_selects_newest_prior_known_good() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        let first = format!("sha256:{}", "a".repeat(64));
+        let update = format!("sha256:{}", "b".repeat(64));
+        store
+            .record_admitted(
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.0.0",
+                    package_digest: &first,
+                    content_digest: &content_digest(),
+                },
+                1,
+                false,
+            )
+            .unwrap();
+        store
+            .set_plugin_enabled("dev.asterlyn.example", true)
+            .unwrap();
+        store.recover_interrupted_activations().unwrap();
+        store
+            .begin_activation("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        store
+            .promote_healthy("dev.asterlyn.example", "1.0.0", &first)
+            .unwrap();
+        store
+            .record_admitted(
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "2.0.0",
+                    package_digest: &update,
+                    content_digest: &content_digest(),
+                },
+                2,
+                false,
+            )
+            .unwrap();
+        store.recover_interrupted_activations().unwrap();
+        store
+            .begin_activation("dev.asterlyn.example", "2.0.0", &update)
+            .unwrap();
+        store
+            .promote_healthy("dev.asterlyn.example", "2.0.0", &update)
+            .unwrap();
+
+        let crashed = store
+            .mark_runtime_crashed("dev.asterlyn.example", "2.0.0", &update)
+            .unwrap();
+        let plugin = &crashed.plugins[0];
+        assert_eq!(plugin.active_version.as_deref(), Some("1.0.0"));
+        assert_eq!(plugin.known_good_version.as_deref(), Some("1.0.0"));
+        assert_eq!(plugin.pending_version, None);
+        assert_eq!(
+            plugin
+                .versions
+                .iter()
+                .find(|candidate| candidate.version == "2.0.0")
+                .unwrap()
+                .runtime_status,
+            PluginRuntimeStatus::Quarantined
+        );
+        let repeated = store
+            .mark_runtime_crashed("dev.asterlyn.example", "2.0.0", &update)
+            .unwrap();
+        assert_eq!(repeated.generation, crashed.generation);
+        assert!(
+            store
+                .begin_activation("dev.asterlyn.example", "2.0.0", &update)
+                .is_err(),
+            "a quarantined digest must not reactivate automatically"
+        );
+    }
+
+    #[test]
     fn interrupted_attempt_is_quarantined_but_graceful_abandon_is_retryable() {
         let directory = tempfile::tempdir().unwrap();
         let store = PluginInstallationStore::open(directory.path()).unwrap();
         let digest = format!("sha256:{}", "a".repeat(64));
         store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "1.0.0",
-                &digest,
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.0.0",
+                    package_digest: &digest,
+                    content_digest: &content_digest(),
+                },
                 1,
                 false,
             )
+            .unwrap();
+        store
+            .set_plugin_enabled("dev.asterlyn.example", true)
             .unwrap();
         store.recover_interrupted_activations().unwrap();
         store
@@ -1769,13 +1799,19 @@ mod tests {
         let digest = format!("sha256:{}", "a".repeat(64));
         store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "1.0.0",
-                &digest,
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.0.0",
+                    package_digest: &digest,
+                    content_digest: &content_digest(),
+                },
                 1,
                 false,
             )
+            .unwrap();
+        store
+            .set_plugin_enabled("dev.asterlyn.example", true)
             .unwrap();
         store.recover_interrupted_activations().unwrap();
         store
@@ -1808,13 +1844,19 @@ mod tests {
         let update = format!("sha256:{}", "b".repeat(64));
         store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "1.0.0",
-                &first,
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "1.0.0",
+                    package_digest: &first,
+                    content_digest: &content_digest(),
+                },
                 1,
                 false,
             )
+            .unwrap();
+        store
+            .set_plugin_enabled("dev.asterlyn.example", true)
             .unwrap();
         store.recover_interrupted_activations().unwrap();
         store
@@ -1825,10 +1867,13 @@ mod tests {
             .unwrap();
         store
             .record_admitted(
-                "dev.asterlyn.example",
-                "asterlyn/example",
-                "2.0.0",
-                &update,
+                AdmittedPluginIdentity {
+                    plugin_id: "dev.asterlyn.example",
+                    repository: "asterlyn/example",
+                    version: "2.0.0",
+                    package_digest: &update,
+                    content_digest: &content_digest(),
+                },
                 2,
                 false,
             )

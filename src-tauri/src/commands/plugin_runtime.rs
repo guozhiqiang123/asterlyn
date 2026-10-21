@@ -11,9 +11,10 @@ use tauri::{Emitter, State, WebviewWindow};
 
 use crate::application::{
     ActiveWorkspaces, PluginMarketplaceCoordinator, PluginProcessQueryManager,
+    PluginToolAuthorityIdentity,
 };
 use crate::commands::plugin_marketplace::{
-    admission_context, installation_store, installed_package_root,
+    admission_context, installation_store, installed_package_root, verify_installed_package_archive,
 };
 
 const PLUGIN_RUNTIME_EVENT: &str = "asterlyn://plugin-runtime-event";
@@ -68,6 +69,12 @@ pub(crate) async fn activate_installed_plugin_runtime(
             &selection.version,
             &selection.package_digest,
         )?;
+        verify_installed_package_archive(
+            &app,
+            &plugin_id,
+            &selection.version,
+            &selection.package_digest,
+        )?;
         store
             .begin_activation(&plugin_id, &selection.version, &selection.package_digest)
             .map_err(|error| error.to_string())?;
@@ -83,6 +90,7 @@ pub(crate) async fn activate_installed_plugin_runtime(
     let selected_plugin_id = plugin_id.clone();
     let selected_version = selection.version.clone();
     let selected_digest = selection.package_digest.clone();
+    let selected_content_digest = selection.content_digest.clone();
     let selected_repository = selection.repository.clone();
     let activation_result =
         tauri::async_runtime::spawn_blocking(move || -> Result<ActivatedPlugin, String> {
@@ -93,11 +101,22 @@ pub(crate) async fn activate_installed_plugin_runtime(
             if report.plugin_id != selected_plugin_id || report.plugin_version != selected_version {
                 return Err("installed plugin identity changed after admission".to_owned());
             }
+            if report.content_digest != selected_content_digest {
+                return Err(
+                    "installed plugin content changed after admission; reinstall the plugin"
+                        .to_owned(),
+                );
+            }
             process_queries.admit_authority(
                 &owner,
-                &selected_plugin_id,
-                &selected_version,
-                &selected_digest,
+                PluginToolAuthorityIdentity {
+                    repository: &selected_repository,
+                    plugin_id: &selected_plugin_id,
+                    plugin_version: &selected_version,
+                    package_digest: &selected_digest,
+                },
+                report.management_manifest.schema_version,
+                &report.management_manifest.host_operations,
                 &report.management_manifest.process_queries,
                 &report.management_manifest.tool_operations,
             )?;
@@ -194,7 +213,7 @@ pub(crate) fn fail_installed_plugin_runtime_activation(
     process_queries: State<'_, PluginProcessQueryManager>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) -> Result<PluginInstallationSnapshot, String> {
-    supervisor
+    if supervisor
         .assert_active_session(
             window.label(),
             &plugin_id,
@@ -202,12 +221,24 @@ pub(crate) fn fail_installed_plugin_runtime_activation(
             &package_digest,
             &session_id,
         )
-        .map_err(|error| error.to_string())?;
-    supervisor.stop_plugin(
-        window.label(),
-        &plugin_id,
-        ShutdownReason::ProtocolViolation,
-    );
+        .is_ok()
+    {
+        supervisor.stop_plugin(
+            window.label(),
+            &plugin_id,
+            ShutdownReason::ProtocolViolation,
+        );
+    } else {
+        supervisor
+            .consume_termination(
+                window.label(),
+                &plugin_id,
+                &plugin_version,
+                &package_digest,
+                &session_id,
+            )
+            .map_err(|error| error.to_string())?;
+    }
     process_queries.revoke_authority(window.label(), &plugin_id);
     marketplace.run(|| {
         installation_store(&app)?
@@ -317,6 +348,7 @@ struct InstalledPluginSelection {
     repository: String,
     version: String,
     package_digest: String,
+    content_digest: String,
 }
 
 fn select_installed_plugin(
@@ -344,10 +376,14 @@ fn select_installed_plugin(
     if version.runtime_status == PluginRuntimeStatus::Quarantined {
         return Err("installed plugin version is quarantined".to_owned());
     }
+    let content_digest = version.content_digest.clone().ok_or_else(|| {
+        "installed plugin predates immutable content binding; reinstall it".to_owned()
+    })?;
     Ok(InstalledPluginSelection {
         repository: plugin.repository.clone(),
         version: version.version.clone(),
         package_digest: version.package_digest.clone(),
+        content_digest,
     })
 }
 
@@ -401,6 +437,7 @@ mod tests {
                 versions: vec![AdmittedPluginVersion {
                     version: "1.0.0".to_owned(),
                     package_digest: format!("sha256:{}", "a".repeat(64)),
+                    content_digest: Some(format!("sha256:{}", "b".repeat(64))),
                     admitted_at_epoch_ms: 1,
                     runtime_status: status,
                 }],
@@ -435,6 +472,17 @@ mod tests {
             )
             .unwrap_err()
             .contains("quarantined")
+        );
+    }
+
+    #[test]
+    fn rejects_installation_without_admission_content_binding() {
+        let mut legacy = snapshot(true, PluginRuntimeStatus::PendingRuntime);
+        legacy.plugins[0].versions[0].content_digest = None;
+        assert!(
+            select_installed_plugin(&legacy, "dev.asterlyn.fixture")
+                .unwrap_err()
+                .contains("reinstall")
         );
     }
 }

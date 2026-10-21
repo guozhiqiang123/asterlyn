@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.9.0" as const;
+export const PLUGIN_SDK_VERSION = "1.10.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -103,6 +103,11 @@ export interface SdkPluginWorkspaceToolDescriptor {
   readonly icon: "device" | "list" | "puzzle";
   readonly views: readonly SdkWorkspaceToolViewDescriptor[];
   readonly defaultView: string;
+}
+
+/** A semantic operation whose executable, arguments, limits, and validation are owned by the host. */
+export interface SdkHostOperationDeclaration {
+  readonly id: string;
 }
 
 export type SdkProcessExecutableCandidate =
@@ -237,6 +242,8 @@ export interface SdkPluginManifest {
   readonly settings: readonly SdkSettingDescriptor[];
   readonly taskAuthorization?: SdkTaskAuthorizationDescriptor;
   readonly workspaceTool?: SdkPluginWorkspaceToolDescriptor;
+  /** Runtime-installable plugins declare only reviewed semantic operation IDs. */
+  readonly hostOperations?: readonly SdkHostOperationDeclaration[];
   /** Static, host-admitted external-tool queries. */
   readonly processQueries?: readonly SdkProcessQueryDeclaration[];
   /** Static, typed operations executable only through a host-supervised Run phase. */
@@ -265,11 +272,13 @@ export interface SdkPluginLicenseDistribution {
 }
 
 /**
- * Static schema-2 metadata for a GitHub Release package. The host validates this manifest and every
+ * Static schema-3 metadata for a GitHub Release package. The host validates this manifest and every
  * integrity entry before extracting or executing the self-contained runtime artifact.
  */
 export interface SdkInstallablePluginPackageManifest extends SdkPluginManifest {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
+  readonly processQueries?: never;
+  readonly toolOperations?: never;
   readonly capabilities: readonly string[];
   readonly permissions: readonly string[];
   readonly distribution: {

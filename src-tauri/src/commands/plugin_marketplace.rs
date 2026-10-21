@@ -3,9 +3,9 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use asterlyn_plugin_marketplace::{
-    PluginInstallationSnapshot, PluginInstallationStore, PluginSource, PluginSourceCatalog,
-    PluginSourceCatalogStatus, PluginSourceSnapshot, PluginSourceStore, compare_release_versions,
-    parse_github_release,
+    AdmittedPluginIdentity, BUILT_IN_ANDROID_REPOSITORY, PluginInstallationSnapshot,
+    PluginInstallationStore, PluginSource, PluginSourceCatalog, PluginSourceCatalogStatus,
+    PluginSourceSnapshot, PluginSourceStore, compare_release_versions, parse_github_release,
 };
 use asterlyn_plugin_package::{
     AdmissionContext, AdmittedPluginManifest, SUPPORTED_CAPABILITIES, SUPPORTED_PERMISSIONS,
@@ -22,12 +22,20 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_RELEASE_METADATA_BYTES: u64 = 1024 * 1024;
+const BUNDLED_ANDROID_PLUGIN_ID: &str = "dev.asterlyn.android-gradle";
+const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.5.8";
+const BUNDLED_ANDROID_PACKAGE_DIGEST: &str =
+    "sha256:dfc945c1fe70ab633eeefb68a391513499991382e355b1efc7df0c6209bb4394";
+const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
+    "../../resources/plugins/asterlyn-plugin-android-gradle-0.5.8.asterlyn-plugin.tgz"
+);
 
 use crate::application::{
-    PendingPluginAdmission, PluginMarketplaceCoordinator, PluginProcessQueryManager, TaskManager,
+    PendingPluginAdmission, PluginMarketplaceCoordinator, PluginProcessQueryManager,
+    PluginToolAuthorityIdentity, TaskManager, validate_external_tool_authority,
 };
 
-use super::plugin_marketplace_cleanup::cleanup_marketplace_storage;
+use super::plugin_marketplace_cleanup::{cleanup_marketplace_storage, remove_marketplace_entry};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +51,8 @@ pub(crate) struct PluginPackageAdmissionReview {
     license_expression: String,
     capabilities: Vec<String>,
     permissions: Vec<String>,
+    host_operations: Vec<String>,
+    enabled_after_install: bool,
     expanded_bytes: u64,
 }
 
@@ -183,11 +193,24 @@ pub(crate) fn list_installed_plugin_manifests(
                     &version.package_digest,
                 )
                 .and_then(|root| {
-                    inspect_extracted_package(
+                    verify_installed_package_archive(
+                        &app,
+                        &plugin.plugin_id,
+                        &version.version,
+                        &version.package_digest,
+                    )?;
+                    let report = inspect_extracted_package(
                         &root,
                         &admission_context(&plugin.repository, &version.version),
                     )
-                    .map_err(|error| error.to_string())
+                    .map_err(|error| error.to_string())?;
+                    if version.content_digest.as_deref() != Some(report.content_digest.as_str()) {
+                        return Err(
+                            "installed plugin content is not bound to its admitted package; reinstall it"
+                                .to_owned(),
+                        );
+                    }
+                    Ok(report)
                 });
                 let (manifest, error) = match inspected {
                     Ok(report) => (Some(report.management_manifest), None),
@@ -344,11 +367,14 @@ pub(crate) fn uninstall_installed_plugin(
     marketplace.run(|| {
         let installation = installation_store(&app)?;
         let snapshot = installation.snapshot().map_err(|error| error.to_string())?;
-        snapshot
+        let plugin = snapshot
             .plugins
             .iter()
             .find(|plugin| plugin.plugin_id == plugin_id)
             .ok_or_else(|| "installed plugin was not found".to_string())?;
+        if plugin.bundled_fallback {
+            return Err("Host-bundled plugins can be disabled but not uninstalled.".into());
+        }
         tasks.cancel_plugin(&plugin_id);
         process_queries.cancel_plugin(&plugin_id);
         supervisor.stop_plugin_all(&plugin_id, ShutdownReason::Disabled);
@@ -363,7 +389,7 @@ pub(crate) fn uninstall_installed_plugin(
         match installation.remove_plugin(&plugin_id) {
             Ok(snapshot) => {
                 if tombstone.exists() {
-                    let _ = fs::remove_dir_all(&tombstone);
+                    let _ = remove_marketplace_entry(&tombstone);
                 }
                 Ok(snapshot)
             }
@@ -484,6 +510,21 @@ fn download_and_inspect(
         let _ = fs::remove_file(&staging_path);
         error.to_string()
     })?;
+    validate_external_tool_authority(
+        PluginToolAuthorityIdentity {
+            repository: &binding.repository,
+            plugin_id: &report.plugin_id,
+            plugin_version: &report.plugin_version,
+            package_digest: &binding.digest,
+        },
+        report.management_manifest.schema_version,
+        &report.management_manifest.host_operations,
+        &report.management_manifest.process_queries,
+        &report.management_manifest.tool_operations,
+    )
+    .inspect_err(|_| {
+        let _ = fs::remove_file(&staging_path);
+    })?;
     Ok(PendingPluginAdmission {
         token,
         repository: binding.repository,
@@ -543,19 +584,113 @@ fn commit_admission(
         let context = admission_context(&admission.repository, &admission.version);
         extract_admitted_package(&bytes, &context, &temporary)
             .map_err(|error| error.to_string())?;
-        fs::rename(&temporary, &final_dir).map_err(|error| {
-            let _ = fs::remove_dir_all(&temporary);
-            format!("publish immutable plugin package: {error}")
-        })?;
+        publish_sealed_package_tree(&temporary, &final_dir, "immutable plugin package")?;
     }
+    let archive = installed_package_archive(
+        app,
+        &admission.report.plugin_id,
+        &admission.version,
+        &admission.digest,
+    )?;
+    retain_package_archive(&archive, &bytes, &admission.digest)?;
     installation_store(app)?
         .record_admitted(
-            &admission.report.plugin_id,
-            &admission.repository,
-            &admission.version,
-            &admission.digest,
+            AdmittedPluginIdentity {
+                plugin_id: &admission.report.plugin_id,
+                repository: &admission.repository,
+                version: &admission.version,
+                package_digest: &admission.digest,
+                content_digest: &admission.report.content_digest,
+            },
             now_ms(),
             source.built_in,
+        )
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn ensure_bundled_plugins(
+    app: &tauri::AppHandle,
+) -> Result<PluginInstallationSnapshot, String> {
+    ensure_bundled_android_package(&marketplace_root(app)?, BUNDLED_ANDROID_PACKAGE)
+}
+
+fn ensure_bundled_android_package(
+    marketplace_root: &std::path::Path,
+    bytes: &[u8],
+) -> Result<PluginInstallationSnapshot, String> {
+    let package_digest = format!("sha256:{:x}", Sha256::digest(bytes));
+    if package_digest != BUNDLED_ANDROID_PACKAGE_DIGEST {
+        return Err("bundled Android plugin package does not match the host-pinned digest".into());
+    }
+    let context = admission_context(BUILT_IN_ANDROID_REPOSITORY, BUNDLED_ANDROID_PLUGIN_VERSION);
+    let report = inspect_package(bytes, &context).map_err(|error| error.to_string())?;
+    if report.plugin_id != BUNDLED_ANDROID_PLUGIN_ID
+        || report.plugin_version != BUNDLED_ANDROID_PLUGIN_VERSION
+    {
+        return Err("bundled Android plugin identity does not match the host binding".into());
+    }
+    validate_external_tool_authority(
+        PluginToolAuthorityIdentity {
+            repository: BUILT_IN_ANDROID_REPOSITORY,
+            plugin_id: &report.plugin_id,
+            plugin_version: &report.plugin_version,
+            package_digest: &package_digest,
+        },
+        report.management_manifest.schema_version,
+        &report.management_manifest.host_operations,
+        &report.management_manifest.process_queries,
+        &report.management_manifest.tool_operations,
+    )?;
+
+    let digest_key = package_digest
+        .strip_prefix("sha256:")
+        .expect("computed package digest has a prefix");
+    let package_root = marketplace_root
+        .join("packages")
+        .join(BUNDLED_ANDROID_PLUGIN_ID)
+        .join(BUNDLED_ANDROID_PLUGIN_VERSION)
+        .join(digest_key);
+    let installed_is_valid = package_root.exists()
+        && inspect_extracted_package(&package_root, &context)
+            .is_ok_and(|installed| installed.content_digest == report.content_digest);
+    if package_root.exists() && !installed_is_valid {
+        remove_marketplace_entry(&package_root)?;
+    }
+    if !package_root.exists() {
+        fs::create_dir_all(
+            package_root
+                .parent()
+                .ok_or("invalid bundled plugin storage path")?,
+        )
+        .map_err(|error| format!("create bundled plugin storage: {error}"))?;
+        let temporary = package_root.with_extension(format!("bundled-staging-{}", now_ms()));
+        extract_admitted_package(bytes, &context, &temporary).map_err(|error| error.to_string())?;
+        publish_sealed_package_tree(&temporary, &package_root, "bundled plugin package")?;
+    } else {
+        seal_package_tree(&package_root)?;
+    }
+
+    let archive = package_root.with_file_name(format!("{digest_key}.asterlyn-plugin.tgz"));
+    if archive.exists() {
+        let retained =
+            fs::read(&archive).map_err(|error| format!("read bundled plugin archive: {error}"))?;
+        if format!("sha256:{:x}", Sha256::digest(&retained)) != package_digest {
+            remove_marketplace_entry(&archive)?;
+        }
+    }
+    retain_package_archive(&archive, bytes, &package_digest)?;
+
+    PluginInstallationStore::open(marketplace_root.join("installation-state"))
+        .map_err(|error| error.to_string())?
+        .record_bundled(
+            AdmittedPluginIdentity {
+                plugin_id: BUNDLED_ANDROID_PLUGIN_ID,
+                repository: BUILT_IN_ANDROID_REPOSITORY,
+                version: BUNDLED_ANDROID_PLUGIN_VERSION,
+                package_digest: &package_digest,
+                content_digest: &report.content_digest,
+            },
+            now_ms(),
         )
         .map_err(|error| error.to_string())
 }
@@ -573,6 +708,14 @@ fn review_from(admission: &PendingPluginAdmission) -> PluginPackageAdmissionRevi
         license_expression: admission.report.license_expression.clone(),
         capabilities: admission.report.capabilities.clone(),
         permissions: admission.report.permissions.clone(),
+        host_operations: admission
+            .report
+            .management_manifest
+            .host_operations
+            .iter()
+            .map(|operation| operation.id.clone())
+            .collect(),
+        enabled_after_install: false,
         expanded_bytes: admission.report.expanded_bytes,
     }
 }
@@ -623,6 +766,110 @@ pub(crate) fn installed_package_root(
         .join(plugin_id)
         .join(version)
         .join(digest))
+}
+
+pub(crate) fn installed_package_archive(
+    app: &tauri::AppHandle,
+    plugin_id: &str,
+    version: &str,
+    package_digest: &str,
+) -> Result<std::path::PathBuf, String> {
+    let root = installed_package_root(app, plugin_id, version, package_digest)?;
+    let digest = root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "installed plugin digest is invalid".to_owned())?;
+    Ok(root.with_file_name(format!("{digest}.asterlyn-plugin.tgz")))
+}
+
+pub(crate) fn verify_installed_package_archive(
+    app: &tauri::AppHandle,
+    plugin_id: &str,
+    version: &str,
+    package_digest: &str,
+) -> Result<(), String> {
+    let archive = installed_package_archive(app, plugin_id, version, package_digest)?;
+    let bytes =
+        fs::read(&archive).map_err(|error| format!("read retained plugin archive: {error}"))?;
+    if format!("sha256:{:x}", Sha256::digest(&bytes)) == package_digest {
+        Ok(())
+    } else {
+        Err("retained plugin archive does not match its admitted digest".into())
+    }
+}
+
+fn retain_package_archive(
+    path: &std::path::Path,
+    bytes: &[u8],
+    digest: &str,
+) -> Result<(), String> {
+    if path.exists() {
+        let retained =
+            fs::read(path).map_err(|error| format!("read retained plugin archive: {error}"))?;
+        if format!("sha256:{:x}", Sha256::digest(&retained)) != digest {
+            return Err("retained plugin archive does not match its admitted digest".into());
+        }
+        return Ok(());
+    }
+    let temporary = path.with_extension(format!("tgz.staging-{}", now_ms()));
+    fs::write(&temporary, bytes).map_err(|error| format!("retain plugin archive: {error}"))?;
+    set_read_only(&temporary)?;
+    fs::rename(&temporary, path).map_err(|error| {
+        let _ = fs::remove_file(&temporary);
+        format!("publish retained plugin archive: {error}")
+    })
+}
+
+fn seal_package_tree(root: &std::path::Path) -> Result<(), String> {
+    seal_package_tree_contents(root)?;
+    set_read_only(root)
+}
+
+fn seal_package_tree_contents(root: &std::path::Path) -> Result<(), String> {
+    for entry in fs::read_dir(root).map_err(|error| format!("seal plugin package: {error}"))? {
+        let path = entry
+            .map_err(|error| format!("seal plugin package: {error}"))?
+            .path();
+        let metadata =
+            fs::symlink_metadata(&path).map_err(|error| format!("seal plugin package: {error}"))?;
+        if metadata.file_type().is_symlink() {
+            return Err("plugin package sealing rejected a symbolic link".into());
+        }
+        if metadata.is_dir() {
+            seal_package_tree(&path)?;
+        } else if metadata.is_file() {
+            set_read_only(&path)?;
+        } else {
+            return Err("plugin package sealing rejected an unsupported entry".into());
+        }
+    }
+    Ok(())
+}
+
+fn publish_sealed_package_tree(
+    temporary: &std::path::Path,
+    destination: &std::path::Path,
+    label: &str,
+) -> Result<(), String> {
+    seal_package_tree_contents(temporary)?;
+    fs::rename(temporary, destination).map_err(|error| {
+        let _ = remove_marketplace_entry(temporary);
+        format!("publish {label}: {error}")
+    })?;
+    if let Err(error) = set_read_only(destination) {
+        let _ = remove_marketplace_entry(destination);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn set_read_only(path: &std::path::Path) -> Result<(), String> {
+    let mut permissions = fs::metadata(path)
+        .map_err(|error| format!("inspect plugin package permissions: {error}"))?
+        .permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(path, permissions)
+        .map_err(|error| format!("seal plugin package permissions: {error}"))
 }
 
 pub(crate) fn recover_interrupted_plugin_activations(
@@ -915,6 +1162,54 @@ mod tests {
     use asterlyn_plugin_marketplace::PluginRuntimeStatus;
 
     #[test]
+    fn bundled_android_package_is_admitted_enabled_and_content_bound_offline() {
+        let directory = tempfile::tempdir().unwrap();
+        let snapshot =
+            ensure_bundled_android_package(directory.path(), BUNDLED_ANDROID_PACKAGE).unwrap();
+        let plugin = snapshot
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == BUNDLED_ANDROID_PLUGIN_ID)
+            .unwrap();
+        assert!(plugin.enabled);
+        assert!(plugin.bundled_fallback);
+        assert_eq!(
+            plugin.pending_version.as_deref(),
+            Some(BUNDLED_ANDROID_PLUGIN_VERSION)
+        );
+        let version = plugin
+            .versions
+            .iter()
+            .find(|version| version.version == BUNDLED_ANDROID_PLUGIN_VERSION)
+            .unwrap();
+        assert_eq!(version.package_digest, BUNDLED_ANDROID_PACKAGE_DIGEST);
+        assert!(version.content_digest.is_some());
+
+        let repeated =
+            ensure_bundled_android_package(directory.path(), BUNDLED_ANDROID_PACKAGE).unwrap();
+        assert_eq!(repeated.generation, snapshot.generation);
+        assert!(
+            directory
+                .path()
+                .join("packages")
+                .join(BUNDLED_ANDROID_PLUGIN_ID)
+                .join(BUNDLED_ANDROID_PLUGIN_VERSION)
+                .join(BUNDLED_ANDROID_PACKAGE_DIGEST.trim_start_matches("sha256:"))
+                .join("runtime/plugin.js")
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn bundled_android_package_rejects_bytes_outside_the_host_binding() {
+        let directory = tempfile::tempdir().unwrap();
+        assert!(
+            ensure_bundled_android_package(directory.path(), b"not the bundled package").is_err()
+        );
+        assert!(!directory.path().join("packages").exists());
+    }
+
+    #[test]
     fn offline_and_rate_limited_discovery_preserve_only_stale_bound_release_metadata() {
         let source = source_with_cached_release();
 
@@ -974,6 +1269,35 @@ mod tests {
     }
 
     #[test]
+    fn admitted_package_generation_and_retained_archive_are_sealed_read_only() {
+        let directory = tempfile::tempdir().unwrap();
+        let package = directory.path().join("package");
+        fs::create_dir_all(package.join("runtime")).unwrap();
+        fs::write(package.join("manifest.json"), b"manifest").unwrap();
+        fs::write(package.join("runtime/plugin.js"), b"runtime").unwrap();
+
+        seal_package_tree(&package).unwrap();
+        assert!(fs::metadata(&package).unwrap().permissions().readonly());
+        assert!(
+            fs::metadata(package.join("runtime/plugin.js"))
+                .unwrap()
+                .permissions()
+                .readonly()
+        );
+
+        let archive = directory.path().join("package.asterlyn-plugin.tgz");
+        let bytes = b"verified archive";
+        let digest = format!("sha256:{:x}", Sha256::digest(bytes));
+        retain_package_archive(&archive, bytes, &digest).unwrap();
+        assert!(fs::metadata(&archive).unwrap().permissions().readonly());
+        assert_eq!(fs::read(&archive).unwrap(), bytes);
+        assert!(retain_package_archive(&archive, b"replacement", &digest).is_ok());
+
+        remove_marketplace_entry(&package).unwrap();
+        remove_marketplace_entry(&archive).unwrap();
+    }
+
+    #[test]
     #[ignore = "requires live public GitHub Releases and network access"]
     fn public_fixture_releases_are_discoverable_downloadable_and_admitted() {
         for (repository, version, plugin_id) in [
@@ -1030,10 +1354,13 @@ mod tests {
                 .expect("installation lifecycle store");
             let recorded = lifecycle
                 .record_admitted(
-                    plugin_id,
-                    repository,
-                    version,
-                    &admission.digest,
+                    AdmittedPluginIdentity {
+                        plugin_id,
+                        repository,
+                        version,
+                        package_digest: &admission.digest,
+                        content_digest: &admission.report.content_digest,
+                    },
                     now_ms(),
                     false,
                 )
@@ -1049,6 +1376,9 @@ mod tests {
                 runtime_status(&restarted, plugin_id, version),
                 PluginRuntimeStatus::PendingRuntime
             );
+            lifecycle
+                .set_plugin_enabled(plugin_id, true)
+                .expect("explicitly enable admitted package");
             let active = lifecycle
                 .begin_activation(plugin_id, version, &admission.digest)
                 .expect("begin installed runtime activation");

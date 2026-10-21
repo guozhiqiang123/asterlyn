@@ -1,12 +1,14 @@
 use std::env;
 #[cfg(unix)]
 use std::fs;
-use std::io::{self, BufReader, BufWriter};
+use std::io::{self, BufReader, BufWriter, Write};
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::process::ExitCode;
 #[cfg(unix)]
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 use asterlyn_plugin_runtime_protocol::{
     ActivationReady, ContributionKind, Event, Hello, OperationResult, PluginHostMessage,
@@ -77,6 +79,42 @@ fn run() -> Result<(), String> {
             }],
         }),
     )?;
+    if let Some(delay) = activate
+        .evidence
+        .get("idleCrashAfterMs")
+        .and_then(serde_json::Value::as_u64)
+    {
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(delay));
+            eprintln!("fixture: intentional idle crash");
+            std::process::exit(17);
+        });
+    }
+    let crash_on_invoke = activate
+        .evidence
+        .get("crashOnInvoke")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let mismatch_on_invoke = activate
+        .evidence
+        .get("mismatchOnInvoke")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let mismatch_sequence_on_invoke = activate
+        .evidence
+        .get("mismatchSequenceOnInvoke")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let malformed_frame_on_invoke = activate
+        .evidence
+        .get("malformedFrameOnInvoke")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let stderr_flood_on_invoke = activate
+        .evidence
+        .get("stderrFloodOnInvokeBytes")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
     #[cfg(unix)]
     let _descendant = if tree_mode {
         let child = Command::new("/bin/sleep")
@@ -99,6 +137,33 @@ fn run() -> Result<(), String> {
         let envelope = receive(&mut reader)?;
         match envelope.message {
             PluginHostMessage::Invoke(request) => {
+                if stderr_flood_on_invoke > 0 {
+                    let mut stderr = io::stderr().lock();
+                    let chunk = [b'x'; 8 * 1024];
+                    let mut remaining = stderr_flood_on_invoke;
+                    while remaining > 0 {
+                        let count = remaining.min(chunk.len() as u64) as usize;
+                        stderr
+                            .write_all(&chunk[..count])
+                            .map_err(|error| format!("write stderr flood: {error}"))?;
+                        remaining -= count as u64;
+                    }
+                    stderr
+                        .flush()
+                        .map_err(|error| format!("flush stderr flood: {error}"))?;
+                }
+                if crash_on_invoke {
+                    eprintln!("fixture: intentional invoke crash");
+                    std::process::exit(23);
+                }
+                if malformed_frame_on_invoke {
+                    writer
+                        .write_all(&(3_u32.to_be_bytes()))
+                        .and_then(|_| writer.write_all(b"bad"))
+                        .and_then(|_| writer.flush())
+                        .map_err(|error| format!("write malformed frame: {error}"))?;
+                    continue;
+                }
                 let payload = if request.operation == "subscribe" {
                     send(
                         &mut writer,
@@ -112,11 +177,18 @@ fn run() -> Result<(), String> {
                 } else {
                     request.payload
                 };
+                if mismatch_sequence_on_invoke {
+                    sequence += 1;
+                }
                 send(
                     &mut writer,
                     &mut sequence,
                     PluginHostMessage::InvocationResult(OperationResult {
-                        request_id: request.request_id,
+                        request_id: if mismatch_on_invoke {
+                            format!("{}-mismatched", request.request_id)
+                        } else {
+                            request.request_id
+                        },
                         payload,
                     }),
                 )?

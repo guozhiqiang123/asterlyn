@@ -30,10 +30,10 @@ test("public capability catalog contains every native admitted capability and pe
 
 test("public guides pin independent version axes and immutable Release workflow", () => {
   for (const guide of [developerGuide, capabilityGuide, migrationGuide]) {
-    assert.match(guide, /0\.1\.13/);
+    assert.match(guide, /0\.1\.15/);
   }
-  assert.match(developerGuide, /Plugin SDK: `1\.9\.0`/);
-  assert.match(developerGuide, /Package schema: `2`/);
+  assert.match(developerGuide, /Plugin SDK: `1\.10\.0`/);
+  assert.match(developerGuide, /Package schema: `3`/);
   assert.match(developerGuide, /Plugin-host protocol: `1`/);
   assert.match(developerGuide, /never .*replace Release bytes/is);
   assert.match(migrationGuide, /SDK major/);

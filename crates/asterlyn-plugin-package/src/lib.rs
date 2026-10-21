@@ -16,7 +16,8 @@ pub use tool_authority::{
 };
 use tool_authority::{validate_process_queries, validate_tool_operations};
 
-pub const PACKAGE_SCHEMA_VERSION: u32 = 2;
+pub const PACKAGE_SCHEMA_VERSION: u32 = 3;
+pub const LEGACY_PACKAGE_SCHEMA_VERSION: u32 = 2;
 pub const PACKAGE_ASSET_SUFFIX: &str = ".asterlyn-plugin.tgz";
 pub const MAX_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_ARCHIVE_ENTRIES: usize = 2_048;
@@ -76,11 +77,13 @@ pub struct AdmissionReport {
     pub management_manifest: AdmittedPluginManifest,
     pub files: Vec<AdmittedFile>,
     pub expanded_bytes: u64,
+    pub content_digest: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdmittedPluginManifest {
+    pub schema_version: u32,
     pub sdk_major: u32,
     pub id: String,
     pub version: String,
@@ -92,6 +95,8 @@ pub struct AdmittedPluginManifest {
     pub task_authorization: Option<TaskAuthorization>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_tool: Option<WorkspaceTool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub host_operations: Vec<HostOperationDeclaration>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub process_queries: Vec<ProcessQuery>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -179,6 +184,8 @@ struct PackageManifest {
     #[serde(default)]
     workspace_tool: Option<WorkspaceTool>,
     #[serde(default)]
+    host_operations: Vec<HostOperationDeclaration>,
+    #[serde(default)]
     process_queries: Vec<ProcessQuery>,
     #[serde(default)]
     tool_operations: Vec<ToolOperation>,
@@ -186,6 +193,12 @@ struct PackageManifest {
     #[serde(default)]
     permissions: Vec<String>,
     distribution: Distribution,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HostOperationDeclaration {
+    pub id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -359,6 +372,7 @@ fn report_from(
     manifest: PackageManifest,
     files: &BTreeMap<String, ArchiveFile>,
 ) -> AdmissionReport {
+    let content_digest = canonical_content_digest(files);
     let admitted_files = files
         .iter()
         .map(|(path, file)| AdmittedFile {
@@ -369,6 +383,7 @@ fn report_from(
         .collect::<Vec<_>>();
     let expanded_bytes = admitted_files.iter().map(|file| file.size).sum();
     let management_manifest = AdmittedPluginManifest {
+        schema_version: manifest.schema_version,
         sdk_major: manifest.sdk_major,
         id: manifest.id.clone(),
         version: manifest.version.clone(),
@@ -378,6 +393,7 @@ fn report_from(
         settings: manifest.settings,
         task_authorization: manifest.task_authorization,
         workspace_tool: manifest.workspace_tool,
+        host_operations: manifest.host_operations,
         process_queries: manifest.process_queries,
         tool_operations: manifest.tool_operations,
     };
@@ -392,7 +408,21 @@ fn report_from(
         management_manifest,
         files: admitted_files,
         expanded_bytes,
+        content_digest,
     }
+}
+
+fn canonical_content_digest(files: &BTreeMap<String, ArchiveFile>) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"asterlyn-plugin-content-v1\0");
+    for (path, file) in files {
+        digest.update((path.len() as u64).to_be_bytes());
+        digest.update(path.as_bytes());
+        digest.update(b"\0regular\0");
+        digest.update(file.size.to_be_bytes());
+        digest.update(file.sha256.as_bytes());
+    }
+    format!("sha256:{:x}", digest.finalize())
 }
 
 /// Expands a package only after the complete admission contract has succeeded.
@@ -626,8 +656,13 @@ fn validate_manifest(
     context: &AdmissionContext<'_>,
     files: &BTreeMap<String, ArchiveFile>,
 ) -> Result<(), AdmissionError> {
-    if manifest.schema_version != PACKAGE_SCHEMA_VERSION {
-        return Err(contract("runtime installation requires package schema 2"));
+    if !matches!(
+        manifest.schema_version,
+        LEGACY_PACKAGE_SCHEMA_VERSION | PACKAGE_SCHEMA_VERSION
+    ) {
+        return Err(contract(
+            "runtime installation requires package schema 2 or 3",
+        ));
     }
     if manifest.sdk_major != context.sdk_major {
         return Err(contract("plugin SDK major is not supported"));
@@ -681,6 +716,7 @@ fn validate_manifest(
         &manifest.permissions,
         "host.process.query",
     )?;
+    require_host_operation_authority(manifest)?;
     require_declared_authority(
         !manifest.tool_operations.is_empty(),
         &manifest.capabilities,
@@ -846,8 +882,24 @@ fn validate_management_manifest(manifest: &PackageManifest) -> Result<(), Admiss
         }
     }
 
-    validate_process_queries(&manifest.process_queries)?;
-    validate_tool_operations(&manifest.tool_operations)?;
+    match manifest.schema_version {
+        LEGACY_PACKAGE_SCHEMA_VERSION => {
+            if !manifest.host_operations.is_empty() {
+                return Err(contract("package schema 2 cannot declare hostOperations"));
+            }
+            validate_process_queries(&manifest.process_queries)?;
+            validate_tool_operations(&manifest.tool_operations)?;
+        }
+        PACKAGE_SCHEMA_VERSION => {
+            if !manifest.process_queries.is_empty() || !manifest.tool_operations.is_empty() {
+                return Err(contract(
+                    "package schema 3 forbids package-authored processQueries and toolOperations",
+                ));
+            }
+            validate_host_operations(&manifest.host_operations)?;
+        }
+        _ => unreachable!("schema version was validated before management metadata"),
+    }
 
     if referenced
         .into_iter()
@@ -856,6 +908,46 @@ fn validate_management_manifest(manifest: &PackageManifest) -> Result<(), Admiss
         return Err(contract(
             "plugin default locale is missing a referenced message",
         ));
+    }
+    Ok(())
+}
+
+fn validate_host_operations(operations: &[HostOperationDeclaration]) -> Result<(), AdmissionError> {
+    if operations.len() > 64 {
+        return Err(contract("too many host operations"));
+    }
+    let mut ids = BTreeSet::new();
+    for operation in operations {
+        validate_identifier(&operation.id, "host operation ID")?;
+        if !ids.insert(operation.id.as_str()) {
+            return Err(contract("duplicate host operation ID"));
+        }
+    }
+    Ok(())
+}
+
+fn require_host_operation_authority(manifest: &PackageManifest) -> Result<(), AdmissionError> {
+    for operation in &manifest.host_operations {
+        let (capability, permission) = match operation.id.as_str() {
+            "adb.devices" => ("processQueries", "host.process.query"),
+            "android.apk.inspect"
+            | "android.adb.install"
+            | "android.adb.uninstall"
+            | "android.adb.launch" => ("toolOperations", "host.tool.execute"),
+            _ => {
+                return Err(contract(format!(
+                    "unsupported host operation: {}",
+                    operation.id
+                )));
+            }
+        };
+        require_declared_authority(
+            true,
+            &manifest.capabilities,
+            capability,
+            &manifest.permissions,
+            permission,
+        )?;
     }
     Ok(())
 }
@@ -1069,7 +1161,7 @@ mod tests {
 
     fn manifest(overrides: impl FnOnce(&mut serde_json::Value)) -> Vec<u8> {
         let mut value = json!({
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "sdkMajor": 1,
             "id": "dev.asterlyn.example",
             "version": "1.2.3",
@@ -1176,8 +1268,9 @@ mod tests {
     }
 
     #[test]
-    fn projects_bounded_native_tool_authority() {
+    fn retains_schema_two_declarations_only_for_the_legacy_compatibility_gate() {
         let declared = manifest(|value| {
+            value["schemaVersion"] = json!(2);
             value["capabilities"] = json!(["tasks", "processQueries", "toolOperations"]);
             value["permissions"] = json!([
                 "host.tasks.execute",
@@ -1224,6 +1317,7 @@ mod tests {
         );
 
         let undeclared_permission = manifest(|value| {
+            value["schemaVersion"] = json!(2);
             value["capabilities"] = json!(["tasks", "processQueries"]);
             value["processQueries"] = json!([{
                 "id": "fixture.version",
@@ -1245,12 +1339,63 @@ mod tests {
     }
 
     #[test]
+    fn schema_three_admits_only_semantic_host_operation_ids() {
+        let declared = manifest(|value| {
+            value["capabilities"] = json!(["tasks", "processQueries", "toolOperations"]);
+            value["permissions"] = json!([
+                "host.tasks.execute",
+                "host.process.query",
+                "host.tool.execute"
+            ]);
+            value["hostOperations"] = json!([
+                { "id": "adb.devices" },
+                { "id": "android.adb.install" }
+            ]);
+        });
+        let package = archive(&[
+            (MANIFEST_PATH, &declared, EntryType::Regular),
+            ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+            ("LICENSE", LICENSE, EntryType::Regular),
+        ]);
+        let report = inspect_package(&package, &context()).unwrap();
+        assert_eq!(report.management_manifest.schema_version, 3);
+        assert_eq!(
+            report.management_manifest.host_operations[0].id,
+            "adb.devices"
+        );
+        assert!(report.management_manifest.process_queries.is_empty());
+
+        let raw = manifest(|value| {
+            value["capabilities"] = json!(["processQueries"]);
+            value["permissions"] = json!(["host.process.query"]);
+            value["processQueries"] = json!([{
+                "id": "fixture.version",
+                "args": [],
+                "timeoutMs": 1000,
+                "maxOutputBytes": 1024,
+                "executables": [{ "type": "path", "name": "fixture-tool" }]
+            }]);
+        });
+        let package = archive(&[
+            (MANIFEST_PATH, &raw, EntryType::Regular),
+            ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+            ("LICENSE", LICENSE, EntryType::Regular),
+        ]);
+        assert!(matches!(
+            inspect_package(&package, &context()),
+            Err(AdmissionError::Contract(message)) if message.contains("forbids package-authored")
+        ));
+    }
+
+    #[test]
     fn revalidates_extracted_packages_and_rejects_local_tampering() {
         let directory = tempfile::tempdir().unwrap();
         let destination = directory.path().join("admitted");
-        extract_admitted_package(&valid_package(), &context(), &destination).unwrap();
+        let admitted =
+            extract_admitted_package(&valid_package(), &context(), &destination).unwrap();
         let report = inspect_extracted_package(&destination, &context()).unwrap();
         assert_eq!(report.plugin_id, "dev.asterlyn.example");
+        assert_eq!(report.content_digest, admitted.content_digest);
 
         fs::write(
             destination.join("runtime/plugin.js"),
@@ -1263,6 +1408,29 @@ mod tests {
                 .to_string()
                 .contains("SHA-256 mismatch")
         );
+    }
+
+    #[test]
+    fn canonical_content_digest_detects_coordinated_manifest_and_runtime_tampering() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("admitted");
+        let admitted =
+            extract_admitted_package(&valid_package(), &context(), &destination).unwrap();
+        let changed_runtime = b"export function activate() { return 'changed'; }";
+        fs::write(destination.join("runtime/plugin.js"), changed_runtime).unwrap();
+        let manifest_path = destination.join(MANIFEST_PATH);
+        let mut changed_manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        changed_manifest["distribution"]["integrity"]["runtime/plugin.js"] =
+            serde_json::Value::String(digest(changed_runtime));
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&changed_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let self_consistent = inspect_extracted_package(&destination, &context()).unwrap();
+        assert_ne!(self_consistent.content_digest, admitted.content_digest);
     }
 
     #[test]

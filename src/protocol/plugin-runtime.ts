@@ -61,8 +61,29 @@ export interface InstalledPluginNotificationEvent {
   readonly messageKey: string;
 }
 
+export type PluginSessionTerminationReason =
+  | "unexpectedExit"
+  | "protocolViolation"
+  | "timeout"
+  | "hostIoFailure"
+  | "resourceLimit"
+  | "peerSessionFailure";
+
+export interface InstalledPluginRuntimeTermination {
+  readonly owner: string;
+  readonly pluginId: string;
+  readonly pluginVersion: string;
+  readonly packageDigest: string;
+  readonly sessionId: string;
+  readonly reason: PluginSessionTerminationReason;
+  readonly detail: string;
+  readonly recoveryPersisted: boolean;
+  readonly diagnostics: InstalledPluginRuntimeDiagnostics;
+}
+
 export const PLUGIN_RUNTIME_EVENT = "asterlyn://plugin-runtime-event";
 export const PLUGIN_NOTIFICATION_EVENT = "asterlyn://plugin-notification";
+export const PLUGIN_RUNTIME_TERMINATED_EVENT = "asterlyn://plugin-runtime-terminated";
 
 export interface InstalledPluginRuntimeBridge {
   activate(
@@ -87,6 +108,9 @@ export interface InstalledPluginRuntimeBridge {
   subscribe(listener: (event: InstalledPluginRuntimeEvent) => void): Promise<() => void>;
   subscribeNotifications(
     listener: (event: InstalledPluginNotificationEvent) => void,
+  ): Promise<() => void>;
+  subscribeTerminations(
+    listener: (event: InstalledPluginRuntimeTermination) => void,
   ): Promise<() => void>;
 }
 
@@ -197,6 +221,51 @@ export function parseInstalledPluginNotificationEvent(
     "plugin notification message key is invalid",
   );
   return value as InstalledPluginNotificationEvent;
+}
+
+export function parseInstalledPluginRuntimeTermination(
+  value: unknown,
+): InstalledPluginRuntimeTermination {
+  const command = "invoke_installed_plugin_callback";
+  const termination = record(value, command);
+  assert(
+    typeof termination.owner === "string" &&
+    termination.owner.length > 0 && termination.owner.length <= 256,
+    command,
+    "runtime termination owner is invalid",
+  );
+  for (const field of ["pluginId", "sessionId"] as const) {
+    assertRuntimeIdentifier(termination[field], command, `termination ${field}`, true);
+  }
+  assertNonEmptyString(termination.pluginVersion, command, "termination pluginVersion");
+  assert(
+    typeof termination.packageDigest === "string" &&
+    /^sha256:[0-9a-f]{64}$/u.test(termination.packageDigest),
+    command,
+    "runtime termination package digest is invalid",
+  );
+  assert(
+    termination.reason === "unexpectedExit" ||
+    termination.reason === "protocolViolation" ||
+    termination.reason === "timeout" ||
+    termination.reason === "hostIoFailure" ||
+    termination.reason === "resourceLimit" ||
+    termination.reason === "peerSessionFailure",
+    command,
+    "runtime termination reason is invalid",
+  );
+  assert(
+    typeof termination.detail === "string" && termination.detail.length <= 4_096,
+    command,
+    "runtime termination detail is invalid",
+  );
+  assert(
+    typeof termination.recoveryPersisted === "boolean",
+    command,
+    "runtime termination recovery state is invalid",
+  );
+  validateInstalledPluginRuntimeDiagnostics(termination.diagnostics, command);
+  return value as InstalledPluginRuntimeTermination;
 }
 
 function validateRuntimeValue(

@@ -50,6 +50,7 @@ export class PluginManagementBinding {
   private restartRequired = false;
   private busyPlugin: string | null = null;
   private confirmUninstallPlugin: string | null = null;
+  private confirmEnablePlugin: string | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -83,6 +84,7 @@ export class PluginManagementBinding {
       restartRequired: this.restartRequired,
       busyPlugin: this.busyPlugin,
       confirmUninstallPlugin: this.confirmUninstallPlugin,
+      confirmEnablePlugin: this.confirmEnablePlugin,
     });
   }
 
@@ -186,11 +188,32 @@ export class PluginManagementBinding {
     this.root.querySelectorAll<HTMLInputElement>("[data-installed-plugin-enabled]").forEach((input) => {
       input.addEventListener("change", () => {
         const pluginId = input.dataset.installedPluginEnabled;
-        if (pluginId) void this.mutateInstallation(
+        if (!pluginId) return;
+        if (input.checked) {
+          this.confirmEnablePlugin = pluginId;
+          this.confirmUninstallPlugin = null;
+          this.options.render("[data-installed-plugin-enable-confirm]");
+          return;
+        }
+        this.confirmEnablePlugin = null;
+        void this.mutateInstallation(
           pluginId,
-          () => this.marketplace.setInstalledPluginEnabled(pluginId, input.checked),
+          () => this.marketplace.setInstalledPluginEnabled(pluginId, false),
         );
       });
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-installed-plugin-enable-cancel]")?.addEventListener("click", () => {
+      const pluginId = this.confirmEnablePlugin;
+      this.confirmEnablePlugin = null;
+      this.options.render(pluginId ? `[data-installed-plugin-enabled="${CSS.escape(pluginId)}"]` : undefined);
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-installed-plugin-enable-confirm]")?.addEventListener("click", (event) => {
+      const pluginId = (event.currentTarget as HTMLButtonElement).dataset.installedPluginEnableConfirm;
+      if (pluginId) void this.mutateInstallation(
+        pluginId,
+        () => this.marketplace.setInstalledPluginEnabled(pluginId, true),
+        () => { this.confirmEnablePlugin = null; },
+      );
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-rollback]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -206,6 +229,7 @@ export class PluginManagementBinding {
     this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-uninstall]").forEach((button) => {
       button.addEventListener("click", () => {
         this.confirmUninstallPlugin = button.dataset.installedPluginUninstall ?? null;
+        this.confirmEnablePlugin = null;
         this.options.render("[data-installed-plugin-uninstall-cancel]");
       });
     });

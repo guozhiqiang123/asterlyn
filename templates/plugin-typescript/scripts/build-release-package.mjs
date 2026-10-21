@@ -9,8 +9,8 @@ import { c as createTar } from "tar";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 const manifest = JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8"));
-if (manifest.schemaVersion !== 2 || manifest.version !== packageJson.version) {
-  throw new Error("package.json and schema-2 manifest versions must match");
+if (manifest.schemaVersion !== 3 || manifest.version !== packageJson.version) {
+  throw new Error("package.json and schema-3 manifest versions must match");
 }
 if (Object.keys(manifest.distribution?.integrity ?? {}).length !== 0) {
   throw new Error("source manifest integrity must remain empty; packaging owns generated hashes");

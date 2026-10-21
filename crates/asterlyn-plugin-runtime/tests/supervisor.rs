@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use asterlyn_plugin_runtime::{PluginActivation, PluginHostSupervisor, PluginRuntimeIdentity};
+use asterlyn_plugin_runtime::{
+    PluginActivation, PluginHostSupervisor, PluginRuntimeIdentity, PluginSessionTerminationReason,
+};
 use asterlyn_plugin_runtime_protocol::{HostTheme, ShutdownReason};
 use serde_json::json;
 use tempfile::TempDir;
@@ -119,6 +121,332 @@ fn disabling_plugin_stops_its_sessions_in_every_window() {
 
     supervisor.stop_plugin_all("dev.asterlyn.fixture", ShutdownReason::Disabled);
     assert_eq!(supervisor.active_count(), 0);
+}
+
+#[test]
+fn fatal_identity_stop_evicts_every_window_and_reports_each_exact_session_once() {
+    use std::collections::BTreeMap;
+    use std::sync::mpsc::RecvTimeoutError;
+    use std::time::Duration;
+
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let terminations = supervisor.observe_terminations();
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    let first = supervisor
+        .activate(activation(plugin.path()))
+        .expect("first window activation");
+    let mut second_request = activation(plugin.path());
+    second_request.owner = "window-second".to_owned();
+    let second = supervisor
+        .activate(second_request)
+        .expect("second window activation");
+
+    supervisor.terminate_plugin_identity_all(
+        "dev.asterlyn.fixture",
+        "1.0.0",
+        &format!("sha256:{}", "a".repeat(64)),
+        "peer runtime crashed",
+    );
+
+    let mut events = BTreeMap::new();
+    for _ in 0..2 {
+        let event = terminations
+            .recv_timeout(Duration::from_secs(2))
+            .expect("every window receives an exact termination");
+        assert_eq!(
+            event.reason,
+            PluginSessionTerminationReason::PeerSessionFailure
+        );
+        assert_eq!(event.detail, "peer runtime crashed");
+        events.insert(event.owner, event.session_id);
+    }
+    assert_eq!(events.get("window-main"), Some(&first.session_id));
+    assert_eq!(events.get("window-second"), Some(&second.session_id));
+    assert_eq!(supervisor.active_count(), 0);
+    assert_eq!(
+        terminations.recv_timeout(Duration::from_millis(200)),
+        Err(RecvTimeoutError::Timeout),
+        "the peer stop must not publish duplicate terminal events"
+    );
+}
+
+#[test]
+fn idle_helper_exit_is_evicted_and_reported_exactly_once() {
+    use std::sync::mpsc::RecvTimeoutError;
+    use std::time::Duration;
+
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let terminations = supervisor.observe_terminations();
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    let mut request = activation(plugin.path());
+    request.evidence = json!({"idleCrashAfterMs": 75});
+    let activated = supervisor
+        .activate(request)
+        .expect("activate crash fixture");
+
+    let termination = terminations
+        .recv_timeout(Duration::from_secs(2))
+        .expect("idle crash is reported without an invocation");
+    assert_eq!(termination.owner, "window-main");
+    assert_eq!(termination.plugin_id, "dev.asterlyn.fixture");
+    assert_eq!(termination.plugin_version, "1.0.0");
+    assert_eq!(termination.session_id, activated.session_id);
+    assert_eq!(
+        termination.reason,
+        PluginSessionTerminationReason::UnexpectedExit
+    );
+    assert!(termination.detail.contains("17"));
+    assert_eq!(supervisor.active_count(), 0);
+    supervisor
+        .consume_termination(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "1.0.0",
+            &format!("sha256:{}", "a".repeat(64)),
+            &activated.session_id,
+        )
+        .expect("exact termination receipt is consumed");
+    assert!(
+        supervisor
+            .consume_termination(
+                "window-main",
+                "dev.asterlyn.fixture",
+                "1.0.0",
+                &format!("sha256:{}", "a".repeat(64)),
+                &activated.session_id,
+            )
+            .is_err(),
+        "a termination receipt cannot be replayed"
+    );
+    assert_eq!(
+        terminations.recv_timeout(Duration::from_millis(200)),
+        Err(RecvTimeoutError::Timeout),
+        "one process exit must produce only one terminal event"
+    );
+}
+
+#[test]
+fn invoke_crash_evicts_only_the_faulty_helper_and_keeps_the_peer_usable() {
+    use std::sync::mpsc::RecvTimeoutError;
+    use std::time::Duration;
+
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let terminations = supervisor.observe_terminations();
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+
+    let mut faulty = activation(plugin.path());
+    faulty.evidence = json!({"crashOnInvoke": true});
+    let faulty_session = supervisor.activate(faulty).expect("faulty activation");
+    let mut peer = activation(plugin.path());
+    peer.owner = "window-peer".to_owned();
+    supervisor.activate(peer).expect("peer activation");
+
+    let error = supervisor
+        .invoke(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "callback-1",
+            "execute",
+            json!({"arguments": []}),
+        )
+        .expect_err("invoke crash must fail");
+    assert!(error.to_string().contains("crashed"));
+    let termination = terminations
+        .recv_timeout(Duration::from_secs(2))
+        .expect("invoke crash termination");
+    assert_eq!(termination.session_id, faulty_session.session_id);
+    assert_eq!(
+        termination.reason,
+        PluginSessionTerminationReason::UnexpectedExit
+    );
+    assert_eq!(supervisor.active_count(), 1);
+    let peer_result = supervisor
+        .invoke(
+            "window-peer",
+            "dev.asterlyn.fixture",
+            "callback-1",
+            "execute",
+            json!({"peer": "still-alive"}),
+        )
+        .expect("unrelated peer remains usable");
+    assert_eq!(peer_result, json!({"peer": "still-alive"}));
+    assert_eq!(
+        terminations.recv_timeout(Duration::from_millis(200)),
+        Err(RecvTimeoutError::Timeout),
+        "one invoke crash emits one terminal event"
+    );
+}
+
+#[test]
+fn protocol_fault_with_stderr_flood_is_bounded_and_evicts_the_session() {
+    use std::time::Duration;
+
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let terminations = supervisor.observe_terminations();
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    let mut request = activation(plugin.path());
+    request.evidence = json!({
+        "mismatchOnInvoke": true,
+        "stderrFloodOnInvokeBytes": 384 * 1024,
+    });
+    supervisor
+        .activate(request)
+        .expect("activate flood fixture");
+
+    let error = supervisor
+        .invoke(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "callback-1",
+            "execute",
+            json!({"arguments": []}),
+        )
+        .expect_err("mismatched response must fail closed");
+    assert!(error.to_string().contains("protocol"));
+    let termination = terminations
+        .recv_timeout(Duration::from_secs(2))
+        .expect("protocol termination");
+    assert_eq!(
+        termination.reason,
+        PluginSessionTerminationReason::ProtocolViolation
+    );
+    assert!(termination.diagnostics.stderr_truncated);
+    assert_eq!(termination.diagnostics.stderr.len(), 256 * 1024);
+    assert_eq!(supervisor.active_count(), 0);
+}
+
+#[test]
+fn malformed_frame_is_a_protocol_fault_and_evicts_the_session() {
+    use std::time::Duration;
+
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let terminations = supervisor.observe_terminations();
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    let mut request = activation(plugin.path());
+    request.evidence = json!({"malformedFrameOnInvoke": true});
+    supervisor
+        .activate(request)
+        .expect("activate malformed fixture");
+
+    let error = supervisor
+        .invoke(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "callback-1",
+            "execute",
+            json!({"arguments": []}),
+        )
+        .expect_err("malformed frame must fail closed");
+    assert!(error.to_string().contains("protocol"));
+    let termination = terminations
+        .recv_timeout(Duration::from_secs(2))
+        .expect("malformed-frame termination");
+    assert_eq!(
+        termination.reason,
+        PluginSessionTerminationReason::ProtocolViolation
+    );
+    assert_eq!(supervisor.active_count(), 0);
+}
+
+#[test]
+fn non_contiguous_plugin_sequence_is_rejected() {
+    use std::time::Duration;
+
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let terminations = supervisor.observe_terminations();
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    let mut request = activation(plugin.path());
+    request.evidence = json!({"mismatchSequenceOnInvoke": true});
+    supervisor
+        .activate(request)
+        .expect("activate sequence fixture");
+
+    let error = supervisor
+        .invoke(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "callback-1",
+            "execute",
+            json!({"arguments": []}),
+        )
+        .expect_err("sequence gap must fail closed");
+    assert!(error.to_string().contains("sequence mismatch"));
+    let termination = terminations
+        .recv_timeout(Duration::from_secs(2))
+        .expect("sequence termination");
+    assert_eq!(
+        termination.reason,
+        PluginSessionTerminationReason::ProtocolViolation
+    );
+    assert_eq!(supervisor.active_count(), 0);
+}
+
+#[test]
+fn expected_replacement_does_not_report_a_crash_or_remove_the_new_session() {
+    use std::sync::mpsc::RecvTimeoutError;
+    use std::time::Duration;
+
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let terminations = supervisor.observe_terminations();
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    let first = supervisor
+        .activate(activation(plugin.path()))
+        .expect("first activation");
+    let second = supervisor
+        .activate(activation(plugin.path()))
+        .expect("replacement activation");
+
+    assert_ne!(first.session_id, second.session_id);
+    assert_eq!(supervisor.active_count(), 1);
+    supervisor
+        .assert_active_session(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "1.0.0",
+            &format!("sha256:{}", "a".repeat(64)),
+            &second.session_id,
+        )
+        .expect("replacement remains active");
+    assert_eq!(
+        terminations.recv_timeout(Duration::from_millis(200)),
+        Err(RecvTimeoutError::Timeout),
+        "expected replacement must not publish a crash"
+    );
 }
 
 #[test]

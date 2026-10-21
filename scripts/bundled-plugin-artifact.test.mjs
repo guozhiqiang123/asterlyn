@@ -3,32 +3,36 @@ import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  ANDROID_GRADLE_PLUGIN,
-  ANDROID_GRADLE_PLUGIN_MANIFEST,
-} from "@asterlyn/plugin-android-gradle";
+  BUNDLED_ANDROID_PACKAGE_URL,
+  readBundledAndroidManifest,
+} from "./plugin-package-fixture.mjs";
 
-const metadataUrl = new URL("../vendor/plugins/android-gradle-0.5.3.json", import.meta.url);
-
-test("bundled Android plugin artifact matches the reviewed release identity", async () => {
-  const metadata = JSON.parse(await readFile(metadataUrl, "utf8"));
-  const artifact = await readFile(new URL(`../vendor/plugins/${metadata.artifact}`, import.meta.url));
-  assert.equal(createHash("sha256").update(artifact).digest("hex"), metadata.sha256);
-  assert.equal(metadata.pluginId, "dev.asterlyn.android-gradle");
-  assert.equal(metadata.pluginVersion, "0.5.3");
-  assert.equal(metadata.sdkVersion, "1.7.0");
-  assert.equal(metadata.size, artifact.byteLength);
-  assert.equal(ANDROID_GRADLE_PLUGIN.id, metadata.pluginId);
-  assert.equal(ANDROID_GRADLE_PLUGIN.version, metadata.pluginVersion);
-  assert.equal(ANDROID_GRADLE_PLUGIN.manifest, ANDROID_GRADLE_PLUGIN_MANIFEST);
-  assert.equal(ANDROID_GRADLE_PLUGIN.manifest.localization.defaultLocale, "en-US");
-  assert.equal(ANDROID_GRADLE_PLUGIN.manifest.taskAuthorization.workspaceTrust.id, "workspaceTrust");
+test("bundled Android plugin artifact matches the host-pinned isolated identity", async () => {
+  const artifact = await readFile(BUNDLED_ANDROID_PACKAGE_URL);
+  const manifest = await readBundledAndroidManifest();
+  const hostSource = await readFile(new URL("../src-tauri/src/commands/plugin_marketplace.rs", import.meta.url), "utf8");
+  const digest = createHash("sha256").update(artifact).digest("hex");
+  assert.equal(digest, "dfc945c1fe70ab633eeefb68a391513499991382e355b1efc7df0c6209bb4394");
+  assert.match(hostSource, new RegExp(`sha256:${digest}`, "u"));
+  assert.equal(manifest.id, "dev.asterlyn.android-gradle");
+  assert.equal(manifest.version, "0.5.8");
+  assert.equal(manifest.schemaVersion, 3);
+  assert.equal(manifest.sdkMajor, 1);
+  assert.deepEqual(manifest.hostOperations.map(({ id }) => id), [
+    "adb.devices", "android.apk.inspect", "android.adb.install", "android.adb.uninstall", "android.adb.launch",
+  ]);
+  assert.equal(manifest.processQueries, undefined);
+  assert.equal(manifest.toolOperations, undefined);
+  assert.equal(manifest.localization.defaultLocale, "en-US");
+  assert.equal(manifest.taskAuthorization.workspaceTrust.id, "workspaceTrust");
   assert.equal(
-    ANDROID_GRADLE_PLUGIN.manifest.taskAuthorization.taskConfirmation.rememberLabelKey,
+    manifest.taskAuthorization.taskConfirmation.rememberLabelKey,
     "authorization.rememberTask.label",
   );
   assert.equal(
-    ANDROID_GRADLE_PLUGIN.manifest.localization.locales["zh-CN"]["authorization.workspaceTrust.label"],
+    manifest.localization.locales["zh-CN"]["authorization.workspaceTrust.label"],
     "信任此工作区中的 Gradle 任务",
   );
+  await assert.rejects(access(new URL("../node_modules/@asterlyn/plugin-android-gradle/", import.meta.url)));
   await assert.rejects(access(new URL("../src/plugins/android-gradle/", import.meta.url)));
 });

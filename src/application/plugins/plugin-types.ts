@@ -218,6 +218,7 @@ export interface PluginManagementEntry {
   readonly settingDescriptors: readonly PluginSettingDescriptor[];
   readonly settings: Readonly<Record<string, PluginSettingValue>>;
   readonly taskAuthorization?: PluginTaskAuthorizationDescriptor;
+  readonly hostOperations?: readonly string[];
   readonly workspaceTrust?: PluginWorkspaceTrustPresentation;
   readonly diagnostics: readonly PluginDiagnostic[];
 }

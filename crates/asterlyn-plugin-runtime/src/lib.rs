@@ -1,11 +1,11 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fmt;
 use std::io::{BufReader, BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -16,11 +16,18 @@ use asterlyn_plugin_runtime_protocol::{
 };
 use serde_json::Value as JsonValue;
 
+mod resource_policy;
+mod termination;
+
+pub use termination::{PluginSessionTermination, PluginSessionTerminationReason};
+use termination::{TerminationObservers, bounded_termination_detail};
+
 const ACTIVATION_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 const MAX_STDERR_BYTES: usize = 256 * 1024;
 const MAX_IN_FLIGHT_CALLS: usize = 64;
+const MAX_RECENT_TERMINATIONS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SessionKey {
@@ -63,7 +70,7 @@ pub struct PluginInvocation {
     pub events: Vec<Event>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginDiagnostics {
     pub stderr: String,
@@ -161,6 +168,8 @@ struct SupervisorInner {
     transition: Mutex<()>,
     sequence: AtomicU64,
     capabilities: Arc<dyn CapabilityHandler>,
+    termination_observers: TerminationObservers,
+    recent_terminations: Mutex<VecDeque<PluginSessionTermination>>,
 }
 
 struct ManagedSession {
@@ -177,12 +186,15 @@ struct ManagedSession {
     receiver: Mutex<Receiver<Result<ProtocolEnvelope, String>>>,
     request_gate: Mutex<()>,
     child: Arc<Mutex<Option<Child>>>,
+    _resource_guard: resource_policy::ProcessResourceGuard,
     pid: u32,
     outgoing_sequence: AtomicU64,
+    incoming_sequence: AtomicU64,
     request_sequence: AtomicU64,
     in_flight: AtomicU64,
     stopping: AtomicBool,
     process_cleaned: AtomicBool,
+    termination_reported: AtomicBool,
     diagnostics: Arc<Mutex<DiagnosticBuffer>>,
     capabilities: Arc<dyn CapabilityHandler>,
 }
@@ -232,6 +244,8 @@ impl PluginHostSupervisor {
                 transition: Mutex::new(()),
                 sequence: AtomicU64::new(0),
                 capabilities,
+                termination_observers: TerminationObservers::default(),
+                recent_terminations: Mutex::new(VecDeque::new()),
             }),
         })
     }
@@ -257,12 +271,47 @@ impl PluginHostSupervisor {
             session_id.clone(),
             self.inner.capabilities.clone(),
         )?;
+        let session = Arc::new(session);
         let activated = ActivatedPlugin {
-            session_id,
+            session_id: session_id.clone(),
             contributions: session.contributions.clone(),
         };
-        lock(&self.inner.sessions, "runtime sessions")?.insert(key, Arc::new(session));
+        lock(&self.inner.sessions, "runtime sessions")?.insert(key, session.clone());
+        if let Err(error) = spawn_process_watcher(Arc::downgrade(&self.inner), session.clone()) {
+            self.inner.remove_if_current(&session);
+            session.stop(ShutdownReason::ProtocolViolation);
+            return Err(error);
+        }
         Ok(activated)
+    }
+
+    pub fn observe_terminations(&self) -> Receiver<PluginSessionTermination> {
+        self.inner.termination_observers.subscribe()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn consume_termination(
+        &self,
+        owner: &str,
+        plugin_id: &str,
+        plugin_version: &str,
+        package_digest: &str,
+        session_id: &str,
+    ) -> Result<PluginSessionTermination, PluginRuntimeError> {
+        let mut terminations = lock(
+            &self.inner.recent_terminations,
+            "plugin termination receipts",
+        )?;
+        let position = terminations.iter().position(|termination| {
+            termination.owner == owner
+                && termination.plugin_id == plugin_id
+                && termination.plugin_version == plugin_version
+                && termination.package_digest == package_digest
+                && termination.session_id == session_id
+        });
+        position
+            .and_then(|position| terminations.remove(position))
+            .ok_or_else(|| PluginRuntimeError::NotActive(format!("{plugin_id} / {session_id}")))
     }
 
     pub fn invoke(
@@ -287,17 +336,11 @@ impl PluginHostSupervisor {
     ) -> Result<PluginInvocation, PluginRuntimeError> {
         let session = self.session(owner, plugin_id)?;
         let result = session.invoke(callback_handle, operation, payload);
-        if matches!(
-            result,
-            Err(PluginRuntimeError::Timeout(_)
-                | PluginRuntimeError::Protocol(_)
-                | PluginRuntimeError::Crashed(_))
-        ) && let Ok(mut sessions) = self.inner.sessions.lock()
+        if let Err(error) = &result
+            && let Some(reason) = termination_reason(error)
         {
-            sessions.remove(&SessionKey {
-                owner: owner.to_owned(),
-                plugin_id: plugin_id.to_owned(),
-            });
+            self.inner
+                .terminate_current(&session, reason, error.to_string());
         }
         result
     }
@@ -361,6 +404,38 @@ impl PluginHostSupervisor {
         }
     }
 
+    pub fn terminate_plugin_identity_all(
+        &self,
+        plugin_id: &str,
+        plugin_version: &str,
+        package_digest: &str,
+        detail: &str,
+    ) {
+        let sessions = self
+            .inner
+            .sessions
+            .lock()
+            .map(|sessions| {
+                sessions
+                    .values()
+                    .filter(|session| {
+                        session.identity.plugin_id == plugin_id
+                            && session.identity.plugin_version == plugin_version
+                            && session.identity.package_digest == package_digest
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for session in sessions {
+            self.inner.terminate_current(
+                &session,
+                PluginSessionTerminationReason::PeerSessionFailure,
+                detail,
+            );
+        }
+    }
+
     pub fn cancel_owner(&self, owner: &str, reason: ShutdownReason) {
         let sessions = if let Ok(mut sessions) = self.inner.sessions.lock() {
             let keys = sessions
@@ -412,6 +487,61 @@ impl PluginHostSupervisor {
             .get(&key)
             .cloned()
             .ok_or_else(|| PluginRuntimeError::NotActive(plugin_id.to_owned()))
+    }
+}
+
+impl SupervisorInner {
+    fn remove_if_current(&self, session: &ManagedSession) -> bool {
+        let Ok(mut sessions) = self.sessions.lock() else {
+            return false;
+        };
+        let is_current = sessions
+            .get(&session.key)
+            .is_some_and(|current| current.session_id == session.session_id);
+        if is_current {
+            sessions.remove(&session.key);
+        }
+        is_current
+    }
+
+    fn terminate_current(
+        &self,
+        session: &ManagedSession,
+        reason: PluginSessionTerminationReason,
+        detail: impl Into<String>,
+    ) {
+        if session.termination_reported.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let diagnostics = session
+            .diagnostics()
+            .unwrap_or_else(|error| PluginDiagnostics {
+                protocol_diagnostics: vec![bounded_termination_detail(error.to_string())],
+                ..PluginDiagnostics::default()
+            });
+        let was_current = self.remove_if_current(session);
+        session.stopping.store(true, Ordering::Release);
+        session.force_stop();
+        if !was_current {
+            return;
+        }
+        let termination = PluginSessionTermination {
+            owner: session.key.owner.clone(),
+            plugin_id: session.identity.plugin_id.clone(),
+            plugin_version: session.identity.plugin_version.clone(),
+            package_digest: session.identity.package_digest.clone(),
+            session_id: session.session_id.clone(),
+            reason,
+            detail: bounded_termination_detail(detail),
+            diagnostics,
+        };
+        if let Ok(mut terminations) = self.recent_terminations.lock() {
+            if terminations.len() == MAX_RECENT_TERMINATIONS {
+                terminations.pop_front();
+            }
+            terminations.push_back(termination.clone());
+        }
+        self.termination_observers.publish(termination);
     }
 }
 
@@ -485,8 +615,16 @@ impl ManagedSession {
             const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
             command.creation_flags(CREATE_NEW_PROCESS_GROUP);
         }
+        resource_policy::configure(&mut command);
         let mut child = command.spawn().map_err(|error| {
             PluginRuntimeError::Io(format!("start isolated plugin helper: {error}"))
+        })?;
+        let resource_guard = resource_policy::attach(&child).map_err(|error| {
+            let _ = child.kill();
+            let _ = child.wait();
+            PluginRuntimeError::InvalidConfiguration(format!(
+                "establish plugin process resource policy: {error}"
+            ))
         })?;
         let pid = child.id();
         let stdin = child.stdin.take().ok_or_else(|| {
@@ -521,12 +659,15 @@ impl ManagedSession {
             receiver: Mutex::new(receiver),
             request_gate: Mutex::new(()),
             child,
+            _resource_guard: resource_guard,
             pid,
             outgoing_sequence: AtomicU64::new(1),
+            incoming_sequence: AtomicU64::new(0),
             request_sequence: AtomicU64::new(0),
             in_flight: AtomicU64::new(0),
             stopping: AtomicBool::new(false),
             process_cleaned: AtomicBool::new(false),
+            termination_reported: AtomicBool::new(false),
             diagnostics,
             capabilities,
         };
@@ -630,14 +771,6 @@ impl ManagedSession {
         }
         let result = self.invoke_serial(callback_handle, operation, payload);
         self.in_flight.fetch_sub(1, Ordering::AcqRel);
-        if matches!(
-            result,
-            Err(PluginRuntimeError::Timeout(_)
-                | PluginRuntimeError::Protocol(_)
-                | PluginRuntimeError::Crashed(_))
-        ) {
-            self.force_stop();
-        }
         result
     }
 
@@ -755,7 +888,16 @@ impl ManagedSession {
         }
         let receiver = lock(&self.receiver, "plugin protocol reader")?;
         match receiver.recv_timeout(timeout) {
-            Ok(Ok(envelope)) => Ok(envelope),
+            Ok(Ok(envelope)) => {
+                let expected = self.incoming_sequence.fetch_add(1, Ordering::AcqRel) + 1;
+                if envelope.sequence != expected {
+                    return Err(PluginRuntimeError::Protocol(format!(
+                        "plugin message sequence mismatch: expected {expected}, received {}",
+                        envelope.sequence
+                    )));
+                }
+                Ok(envelope)
+            }
             Ok(Err(error)) => Err(PluginRuntimeError::Protocol(error)),
             Err(RecvTimeoutError::Timeout) => Err(PluginRuntimeError::Timeout(operation)),
             Err(RecvTimeoutError::Disconnected) => Err(PluginRuntimeError::Crashed(
@@ -900,6 +1042,99 @@ fn spawn_stderr_reader(stderr: impl Read + Send + 'static, buffer: Arc<Mutex<Dia
             }
         }
     });
+}
+
+fn spawn_process_watcher(
+    supervisor: Weak<SupervisorInner>,
+    session: Arc<ManagedSession>,
+) -> Result<(), PluginRuntimeError> {
+    thread::Builder::new()
+        .name(format!("plugin-watch-{}", session.session_id))
+        .spawn(move || {
+            loop {
+                if session.stopping.load(Ordering::Acquire)
+                    || session.process_cleaned.load(Ordering::Acquire)
+                {
+                    return;
+                }
+                match resource_policy::limit_violation(session.pid) {
+                    Ok(Some(detail)) => {
+                        if let Some(supervisor) = supervisor.upgrade() {
+                            supervisor.terminate_current(
+                                &session,
+                                PluginSessionTerminationReason::ResourceLimit,
+                                detail,
+                            );
+                        }
+                        return;
+                    }
+                    Err(error) => {
+                        if let Some(supervisor) = supervisor.upgrade() {
+                            supervisor.terminate_current(
+                                &session,
+                                PluginSessionTerminationReason::HostIoFailure,
+                                format!("inspect plugin resource usage: {error}"),
+                            );
+                        }
+                        return;
+                    }
+                    Ok(None) => {}
+                }
+                let status = match session.child.lock() {
+                    Ok(mut child) => match child.as_mut() {
+                        Some(child) => child.try_wait(),
+                        None => return,
+                    },
+                    Err(_) => {
+                        if let Some(supervisor) = supervisor.upgrade() {
+                            supervisor.terminate_current(
+                                &session,
+                                PluginSessionTerminationReason::HostIoFailure,
+                                "plugin child-process handle became unavailable",
+                            );
+                        }
+                        return;
+                    }
+                };
+                match status {
+                    Ok(Some(status)) => {
+                        if let Some(supervisor) = supervisor.upgrade() {
+                            supervisor.terminate_current(
+                                &session,
+                                PluginSessionTerminationReason::UnexpectedExit,
+                                format!("plugin helper exited with {status}"),
+                            );
+                        }
+                        return;
+                    }
+                    Ok(None) => thread::sleep(Duration::from_millis(25)),
+                    Err(error) => {
+                        if let Some(supervisor) = supervisor.upgrade() {
+                            supervisor.terminate_current(
+                                &session,
+                                PluginSessionTerminationReason::HostIoFailure,
+                                format!("observe plugin helper exit: {error}"),
+                            );
+                        }
+                        return;
+                    }
+                }
+            }
+        })
+        .map(|_| ())
+        .map_err(|error| PluginRuntimeError::Io(format!("start plugin process watcher: {error}")))
+}
+
+fn termination_reason(error: &PluginRuntimeError) -> Option<PluginSessionTerminationReason> {
+    match error {
+        PluginRuntimeError::Timeout(_) => Some(PluginSessionTerminationReason::Timeout),
+        PluginRuntimeError::Protocol(_) => Some(PluginSessionTerminationReason::ProtocolViolation),
+        PluginRuntimeError::Crashed(_) => Some(PluginSessionTerminationReason::UnexpectedExit),
+        PluginRuntimeError::InvalidConfiguration(_)
+        | PluginRuntimeError::Io(_)
+        | PluginRuntimeError::NotActive(_)
+        | PluginRuntimeError::Remote(_) => None,
+    }
 }
 
 fn terminate_process_tree(pid: u32, child: &Arc<Mutex<Option<Child>>>) {

@@ -12,6 +12,7 @@ import type {
   InstalledPluginNotificationEvent,
   InstalledPluginRuntimeBridge,
   InstalledPluginRuntimeEvent,
+  InstalledPluginRuntimeTermination,
   PluginRuntimeTheme,
   PluginRuntimeValue,
 } from "../protocol/plugin-runtime.ts";
@@ -24,6 +25,7 @@ import type { SdkPluginContribution } from "../../packages/plugin-sdk/index.ts";
 
 const REMOTE_CALLBACK_MARKER = "$asterlynCallback";
 const HEALTH_CHECKPOINT_MS = 3_000;
+const TRANSITION_STOP_TIMEOUT_MS = 750;
 
 export interface ExternalPluginRuntimeOptions {
   readonly registry: PluginContributionRegistry;
@@ -33,7 +35,9 @@ export interface ExternalPluginRuntimeOptions {
   readonly theme?: () => PluginRuntimeTheme;
   readonly reportError: (error: unknown) => void;
   readonly notification?: (event: InstalledPluginNotificationEvent) => void | Promise<void>;
+  readonly terminated?: (event: InstalledPluginRuntimeTermination) => void | Promise<void>;
   readonly healthCheckpointMs?: number;
+  readonly transitionStopTimeoutMs?: number;
 }
 
 interface ActiveExternalPlugin {
@@ -48,9 +52,11 @@ interface ActiveExternalPlugin {
 export class ExternalPluginRuntime {
   private readonly options: ExternalPluginRuntimeOptions;
   private readonly healthCheckpointMs: number;
+  private readonly transitionStopTimeoutMs: number;
   private readonly active = new Map<string, ActiveExternalPlugin>();
   private releaseEvents: (() => void) | null = null;
   private releaseNotifications: (() => void) | null = null;
+  private releaseTerminations: (() => void) | null = null;
   private subscriptionPromise: Promise<void> | null = null;
   private sequence = 0;
   private disposed = false;
@@ -58,6 +64,7 @@ export class ExternalPluginRuntime {
   constructor(options: ExternalPluginRuntimeOptions) {
     this.options = options;
     this.healthCheckpointMs = options.healthCheckpointMs ?? HEALTH_CHECKPOINT_MS;
+    this.transitionStopTimeoutMs = options.transitionStopTimeoutMs ?? TRANSITION_STOP_TIMEOUT_MS;
   }
 
   async activate(
@@ -98,6 +105,8 @@ export class ExternalPluginRuntime {
     this.releaseEvents = null;
     this.releaseNotifications?.();
     this.releaseNotifications = null;
+    this.releaseTerminations?.();
+    this.releaseTerminations = null;
   }
 
   private async activatePlugin(
@@ -155,8 +164,8 @@ export class ExternalPluginRuntime {
         if (activation && !failed) {
           await this.options.bridge.abandonActivation(activation).catch(this.options.reportError);
         }
-        await session?.dispose();
-        await this.options.bridge.deactivate(plugin.pluginId).catch(this.options.reportError);
+        session?.abort();
+        await this.deactivateBounded(plugin.pluginId);
       }
     }
   }
@@ -173,8 +182,8 @@ export class ExternalPluginRuntime {
         await this.options.bridge.abandonActivation(entry.activation).catch(this.options.reportError);
       }
       try { await entry.release.dispose(); } catch (error) { this.options.reportError(error); }
-      await entry.session.dispose();
-      await this.options.bridge.deactivate(pluginId).catch(this.options.reportError);
+      entry.session.abort();
+      await this.deactivateBounded(pluginId);
     }
   }
 
@@ -188,8 +197,8 @@ export class ExternalPluginRuntime {
       this.active.delete(entry.activation.pluginId);
       try { await entry.release.dispose(); } catch (releaseError) { this.options.reportError(releaseError); }
       await this.options.bridge.failActivation(entry.activation).catch(this.options.reportError);
-      await entry.session.dispose();
-      await this.options.bridge.deactivate(entry.activation.pluginId).catch(this.options.reportError);
+      entry.session.abort();
+      await this.deactivateBounded(entry.activation.pluginId);
       throw error;
     }
   }
@@ -198,14 +207,17 @@ export class ExternalPluginRuntime {
     this.subscriptionPromise ??= Promise.all([
       this.options.bridge.subscribe((event) => this.handleEvent(event)),
       this.options.bridge.subscribeNotifications((event) => this.handleNotification(event)),
-    ]).then(([releaseEvents, releaseNotifications]) => {
+      this.options.bridge.subscribeTerminations((event) => this.handleTermination(event)),
+    ]).then(([releaseEvents, releaseNotifications, releaseTerminations]) => {
       if (this.disposed) {
         releaseEvents();
         releaseNotifications();
+        releaseTerminations();
         return;
       }
       this.releaseEvents = releaseEvents;
       this.releaseNotifications = releaseNotifications;
+      this.releaseTerminations = releaseTerminations;
     });
     return this.subscriptionPromise;
   }
@@ -217,6 +229,32 @@ export class ExternalPluginRuntime {
   private handleNotification(event: InstalledPluginNotificationEvent): void {
     if (!this.active.has(event.pluginId) || !this.options.notification) return;
     Promise.resolve(this.options.notification(event)).catch(this.options.reportError);
+  }
+
+  private handleTermination(event: InstalledPluginRuntimeTermination): void {
+    const entry = this.active.get(event.pluginId);
+    if (!entry || !sameRuntimeSession(entry.activation, event)) return;
+    this.active.delete(event.pluginId);
+    if (entry.healthTimer !== null) {
+      clearTimeout(entry.healthTimer);
+      entry.healthTimer = null;
+    }
+    entry.session.abort();
+    try { entry.release.dispose(); } catch (error) { this.options.reportError(error); }
+    if (!entry.healthy) {
+      void this.options.bridge.failActivation(entry.activation).catch(this.options.reportError);
+    }
+    if (this.options.terminated) {
+      Promise.resolve(this.options.terminated(event)).catch(this.options.reportError);
+    }
+  }
+
+  private async deactivateBounded(pluginId: string): Promise<void> {
+    const deactivation = this.options.bridge.deactivate(pluginId).catch(this.options.reportError);
+    await Promise.race([
+      deactivation,
+      new Promise<void>((resolve) => setTimeout(resolve, this.transitionStopTimeoutMs)),
+    ]);
   }
 }
 
@@ -305,6 +343,17 @@ class ExternalPluginSession {
     if (!this.disposed) this.eventHandlers.get(event.subscriptionHandle)?.();
   }
 
+  abort(): void {
+    if (this.disposed) return;
+    this.closing = true;
+    this.disposed = true;
+    for (const projection of [...this.projections].reverse()) projection.abort();
+    this.projections.splice(0);
+    this.eventHandlers.clear();
+    this.pending.clear();
+    this.closing = false;
+  }
+
   async dispose(): Promise<void> {
     if (this.disposed || this.closing) return;
     this.closing = true;
@@ -371,6 +420,12 @@ class RemoteContributionProjection {
     this.listeners.clear();
     try { void this.remoteSubscription?.dispose(); } catch { /* Session shutdown is authoritative. */ }
     this.remoteSubscription = null;
+  }
+
+  abort(): void {
+    this.listeners.clear();
+    this.remoteSubscription = null;
+    this.refreshPromise = null;
   }
 
   private async projectCommand(payload: RuntimeRecord): Promise<PluginContribution> {
@@ -506,6 +561,16 @@ function activatable(plugin: InstalledPlugin): boolean {
     admitted.runtimeStatus === "active" ||
     admitted.runtimeStatus === "knownGood"
   );
+}
+
+function sameRuntimeSession(
+  activation: InstalledPluginActivation,
+  termination: InstalledPluginRuntimeTermination,
+): boolean {
+  return activation.pluginId === termination.pluginId &&
+    activation.pluginVersion === termination.pluginVersion &&
+    activation.packageDigest === termination.packageDigest &&
+    activation.sessionId === termination.sessionId;
 }
 
 function runtimeEvidence(evidence: PluginEvidenceSnapshot): PluginRuntimeValue {

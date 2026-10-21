@@ -61,6 +61,8 @@ export interface PluginManagementCopy {
   readonly admissionTitle: string;
   readonly permissions: string;
   readonly capabilities: string;
+  readonly hostOperations: string;
+  hostOperationSummary(id: string): string;
   readonly license: string;
   readonly pendingRuntimeNote: string;
   readonly admittedPackage: string;
@@ -69,6 +71,8 @@ export interface PluginManagementCopy {
   readonly restartToApply: string;
   readonly restarting: string;
   readonly enableInstalledPlugin: string;
+  readonly enableReviewTitle: string;
+  readonly confirmEnablePlugin: string;
   readonly knownGood: string;
   readonly quarantined: string;
   readonly rollback: string;
@@ -91,6 +95,7 @@ export interface PluginMarketplaceViewState {
   readonly restartRequired: boolean;
   readonly busyPlugin: string | null;
   readonly confirmUninstallPlugin: string | null;
+  readonly confirmEnablePlugin?: string | null;
 }
 
 export type PluginManagementTab = "installed" | "marketplace";
@@ -122,10 +127,15 @@ export function renderPluginManagementSection(
     busyRepository: null, form: null, confirmDeleteRepository: null, admissionReview: null, installations: null,
     restarting: false,
     restartRequired: false, busyPlugin: null, confirmUninstallPlugin: null,
+    confirmEnablePlugin: null,
   },
 ): string {
-  const cards = snapshot.entries.map((entry) => renderPluginEntry(entry, copy)).join("");
-  const admitted = renderAdmittedPackages(marketplace, copy);
+  const admittedIds = new Set(marketplace.installations?.plugins.map((plugin) => plugin.pluginId) ?? []);
+  const cards = snapshot.entries
+    .filter((entry) => !admittedIds.has(entry.id))
+    .map((entry) => renderPluginEntry(entry, copy))
+    .join("");
+  const admitted = renderAdmittedPackages(marketplace, copy, snapshot);
   const restart = renderPluginRestart(marketplace, copy);
   const installedError = marketplace.error
     ? `<div class="plugin-marketplace-error" role="alert">${escapeHtml(marketplace.error)}</div>`
@@ -142,8 +152,13 @@ export function renderPluginManagementSection(
   </section>`;
 }
 
-function renderAdmittedPackages(state: PluginMarketplaceViewState, copy: PluginManagementCopy): string {
+function renderAdmittedPackages(
+  state: PluginMarketplaceViewState,
+  copy: PluginManagementCopy,
+  management: PluginManagementSnapshot,
+): string {
   return state.installations?.plugins.map((plugin) => {
+    const entry = management.entries.find((candidate) => candidate.id === plugin.pluginId);
     const pending = plugin.pendingVersion;
     const selected = pending ?? plugin.activeVersion;
     const version = selected ? plugin.versions.find((candidate) => candidate.version === selected) : null;
@@ -159,11 +174,40 @@ function renderAdmittedPackages(state: PluginMarketplaceViewState, copy: PluginM
         : "";
       return `<li><span><code>${escapeHtml(candidate.version)}</code><small>${escapeHtml(versionStatus(candidate.runtimeStatus, copy))}</small></span>${rollback}</li>`;
     }).join("");
-    const uninstallReview = state.confirmUninstallPlugin === plugin.pluginId
+    const uninstallReview = !plugin.bundledFallback && state.confirmUninstallPlugin === plugin.pluginId
       ? `<div class="plugin-installed-uninstall-review" role="alert"><div><strong>${escapeHtml(copy.confirmUninstallPlugin)}</strong><span>${escapeHtml(copy.uninstallKeepsData)}</span></div><button class="secondary-button" type="button" data-installed-plugin-uninstall-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-installed-plugin-uninstall-confirm="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`
       : "";
-    return `<article class="plugin-management-card plugin-installed-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}"><div class="plugin-management-card-header"><div><h3>${escapeHtml(plugin.pluginId)}</h3><p><code>${escapeHtml(plugin.repository)}</code></p></div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableInstalledPlugin)}</span>${renderToggle(`<input data-installed-plugin-enabled="${escapeAttribute(plugin.pluginId)}" type="checkbox" role="switch" ${plugin.enabled ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="${escapeAttribute(copy.enableInstalledPlugin)}" />`)}</div></div><div class="plugin-management-meta"><span>${escapeHtml(copy.admittedPackage)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(selected ?? "—")}</code></span><span>${escapeHtml(status)}</span></div><ul class="plugin-installed-versions">${versions}</ul><div class="plugin-installed-actions"><button class="danger-button" type="button" data-installed-plugin-uninstall="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>${uninstallReview}</article>`;
+    const name = entry ? pluginMessage(entry, copy, entry.nameKey) : plugin.pluginId;
+    const description = entry ? pluginMessage(entry, copy, entry.descriptionKey) : plugin.repository;
+    const identity = entry
+      ? `<p>${escapeHtml(description)}</p><small><code>${escapeHtml(plugin.pluginId)}</code> · <code>${escapeHtml(plugin.repository)}</code></small>`
+      : `<p><code>${escapeHtml(plugin.repository)}</code></p>`;
+    const operational = entry
+      ? `<div class="plugin-management-meta">${renderPluginState(entry, copy)}</div>${renderPluginOperationalDetails(entry, copy)}`
+      : "";
+    const enableReview = state.confirmEnablePlugin === plugin.pluginId && !plugin.enabled
+      ? renderEnableReview(plugin.pluginId, selected, version?.packageDigest ?? null, entry, copy, busy)
+      : "";
+    const uninstall = plugin.bundledFallback
+      ? ""
+      : `<div class="plugin-installed-actions"><button class="danger-button" type="button" data-installed-plugin-uninstall="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`;
+    return `<article class="plugin-management-card plugin-installed-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}" data-plugin-id="${escapeAttribute(plugin.pluginId)}" tabindex="-1"><div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3>${identity}</div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableInstalledPlugin)}</span>${renderToggle(`<input data-installed-plugin-enabled="${escapeAttribute(plugin.pluginId)}" type="checkbox" role="switch" ${plugin.enabled ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="${escapeAttribute(copy.enableInstalledPlugin)}" />`)}</div></div><div class="plugin-management-meta"><span>${escapeHtml(copy.admittedPackage)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(selected ?? "—")}</code></span><span>${escapeHtml(status)}</span></div>${enableReview}${operational}<ul class="plugin-installed-versions">${versions}</ul>${uninstall}${uninstallReview}</article>`;
   }).join("") ?? "";
+}
+
+function renderEnableReview(
+  pluginId: string,
+  version: string | null,
+  digest: string | null,
+  entry: PluginManagementEntry | undefined,
+  copy: PluginManagementCopy,
+  busy: boolean,
+): string {
+  const operations = entry?.hostOperations ?? [];
+  const authority = operations.length === 0
+    ? "—"
+    : `<ul>${operations.map((operation) => `<li><code>${escapeHtml(operation)}</code><span>${escapeHtml(copy.hostOperationSummary(operation))}</span></li>`).join("")}</ul>`;
+  return `<div class="plugin-installed-uninstall-review plugin-installed-enable-review" role="alertdialog" aria-labelledby="plugin-enable-review-title"><div><strong id="plugin-enable-review-title">${escapeHtml(copy.enableReviewTitle)}</strong><span>${escapeHtml(copy.version)}: <code>${escapeHtml(version ?? "—")}</code></span><span><code>${escapeHtml(digest ?? "—")}</code></span><span>${escapeHtml(copy.hostOperations)}</span>${authority}<span>${escapeHtml(copy.pendingRuntimeNote)}</span></div><button class="secondary-button" type="button" data-installed-plugin-enable-cancel>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="button" data-installed-plugin-enable-confirm="${escapeAttribute(pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.confirmEnablePlugin)}</button></div>`;
 }
 
 function versionStatus(status: string | undefined, copy: PluginManagementCopy): string {
@@ -202,7 +246,10 @@ function renderMarketplace(state: PluginMarketplaceViewState, copy: PluginManage
 
 function renderAdmissionReview(review: PluginPackageAdmissionReview, copy: PluginManagementCopy, busy: boolean): string {
   const list = (values: readonly string[]) => values.length ? values.map((value) => `<code>${escapeHtml(value)}</code>`).join(" ") : "—";
-  return `<section class="plugin-source-form plugin-admission-review" role="dialog" aria-labelledby="plugin-admission-title"><h3 id="plugin-admission-title">${escapeHtml(copy.admissionTitle)}</h3><div class="plugin-management-meta"><span><b>${escapeHtml(review.pluginId)}</b></span><span>v${escapeHtml(review.version)}</span><span>${escapeHtml(formatBytes(review.assetSizeBytes))}</span></div><dl><div><dt>${escapeHtml(copy.license)}</dt><dd>${escapeHtml(review.licenseExpression)}</dd></div><div><dt>${escapeHtml(copy.capabilities)}</dt><dd>${list(review.capabilities)}</dd></div><div><dt>${escapeHtml(copy.permissions)}</dt><dd>${list(review.permissions)}</dd></div></dl><p>${escapeHtml(copy.pendingRuntimeNote)}</p><div class="plugin-source-form-actions"><button class="secondary-button" type="button" data-plugin-admission-cancel ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="button" data-plugin-admission-confirm="${escapeAttribute(review.reviewToken)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.confirmAdmission)}</button></div></section>`;
+  const operations = review.hostOperations.length === 0
+    ? "—"
+    : `<ul>${review.hostOperations.map((operation) => `<li><code>${escapeHtml(operation)}</code><span>${escapeHtml(copy.hostOperationSummary(operation))}</span></li>`).join("")}</ul>`;
+  return `<section class="plugin-source-form plugin-admission-review" role="dialog" aria-labelledby="plugin-admission-title"><h3 id="plugin-admission-title">${escapeHtml(copy.admissionTitle)}</h3><div class="plugin-management-meta"><span><b>${escapeHtml(review.pluginId)}</b></span><span>v${escapeHtml(review.version)}</span><span>${escapeHtml(formatBytes(review.assetSizeBytes))}</span><span><code>${escapeHtml(review.digest)}</code></span></div><dl><div><dt>${escapeHtml(copy.license)}</dt><dd>${escapeHtml(review.licenseExpression)}</dd></div><div><dt>${escapeHtml(copy.capabilities)}</dt><dd>${list(review.capabilities)}</dd></div><div><dt>${escapeHtml(copy.permissions)}</dt><dd>${list(review.permissions)}</dd></div><div><dt>${escapeHtml(copy.hostOperations)}</dt><dd>${operations}</dd></div></dl><p>${escapeHtml(copy.pendingRuntimeNote)}</p><div class="plugin-source-form-actions"><button class="secondary-button" type="button" data-plugin-admission-cancel ${busy ? "disabled" : ""}>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="button" data-plugin-admission-confirm="${escapeAttribute(review.reviewToken)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.confirmAdmission)}</button></div></section>`;
 }
 
 function renderSourceForm(
@@ -251,26 +298,33 @@ function formatBytes(bytes: number): string {
 function renderPluginEntry(entry: PluginManagementEntry, copy: PluginManagementCopy): string {
   const name = pluginMessage(entry, copy, entry.nameKey);
   const description = pluginMessage(entry, copy, entry.descriptionKey);
-  const state = [
-    entry.origin === "bundled" ? `<span class="plugin-management-status plugin-management-status-enabled" data-plugin-status="${entry.enabled ? "enabled" : "disabled"}" aria-label="${escapeAttribute(entry.enabled ? copy.enabled : copy.disabled)}">${escapeHtml(entry.enabled ? copy.enabled : copy.disabled)}</span>` : "",
-    `<span class="plugin-management-status plugin-management-status-match" data-plugin-status="${entry.matched ? "matched" : "not-matched"}" aria-label="${escapeAttribute(entry.matched ? copy.matched : copy.notMatched)}">${escapeHtml(entry.matched ? copy.matched : copy.notMatched)}</span>`,
-    `<span class="plugin-management-status plugin-management-status-active" data-plugin-status="${entry.active ? "active" : "inactive"}" aria-label="${escapeAttribute(entry.active ? copy.active : copy.inactive)}">${escapeHtml(entry.active ? copy.active : copy.inactive)}</span>`,
-  ].join("");
+  const state = renderPluginState(entry, copy);
   const enableControl = entry.origin === "bundled"
     ? `<label class="plugin-management-enabled"><input id="plugin-enabled-${escapeAttribute(entry.id)}" data-plugin-id="${escapeAttribute(entry.id)}" data-plugin-setting="enabled" type="checkbox" ${entry.enabled ? "checked" : ""} aria-label="${escapeAttribute(copy.enablePlugin)}" /><span>${escapeHtml(copy.enablePlugin)}</span></label>`
     : "";
   const origin = entry.origin === "installed" ? copy.admittedPackage : copy.builtIn;
+  return `<article class="plugin-management-card" data-plugin-id="${escapeAttribute(entry.id)}" tabindex="-1">
+    <div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3><p>${escapeHtml(description)}</p></div>${enableControl}</div>
+    <div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(origin)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(entry.version)}</code></span>${state}</div>
+    ${renderPluginOperationalDetails(entry, copy)}
+  </article>`;
+}
+
+function renderPluginState(entry: PluginManagementEntry, copy: PluginManagementCopy): string {
+  return [
+    entry.origin === "bundled" ? `<span class="plugin-management-status plugin-management-status-enabled" data-plugin-status="${entry.enabled ? "enabled" : "disabled"}" aria-label="${escapeAttribute(entry.enabled ? copy.enabled : copy.disabled)}">${escapeHtml(entry.enabled ? copy.enabled : copy.disabled)}</span>` : "",
+    `<span class="plugin-management-status plugin-management-status-match" data-plugin-status="${entry.matched ? "matched" : "not-matched"}" aria-label="${escapeAttribute(entry.matched ? copy.matched : copy.notMatched)}">${escapeHtml(entry.matched ? copy.matched : copy.notMatched)}</span>`,
+    `<span class="plugin-management-status plugin-management-status-active" data-plugin-status="${entry.active ? "active" : "inactive"}" aria-label="${escapeAttribute(entry.active ? copy.active : copy.inactive)}">${escapeHtml(entry.active ? copy.active : copy.inactive)}</span>`,
+  ].join("");
+}
+
+function renderPluginOperationalDetails(entry: PluginManagementEntry, copy: PluginManagementCopy): string {
   const diagnostics = entry.diagnostics.length > 0
     ? `<div class="plugin-management-diagnostics" role="alert"><strong>${escapeHtml(copy.diagnostics)}</strong><ul>${entry.diagnostics.slice(0, MAX_DIAGNOSTICS).map((diagnostic) => `<li>${escapeHtml(boundedDiagnostic(diagnostic.message))}</li>`).join("")}</ul></div>`
     : "";
   const settings = entry.settingDescriptors.map((descriptor) => renderSetting(entry, descriptor, copy)).join("");
   const authorization = renderWorkspaceTrust(entry, copy);
-  return `<article class="plugin-management-card" data-plugin-id="${escapeAttribute(entry.id)}" tabindex="-1">
-    <div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3><p>${escapeHtml(description)}</p></div>${enableControl}</div>
-    <div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(origin)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(entry.version)}</code></span>${state}</div>
-    ${diagnostics}
-    <div class="plugin-management-settings" data-plugin-settings="${escapeAttribute(entry.id)}"><h4>${escapeHtml(copy.settings)}</h4>${settings}${authorization}${!settings && !authorization ? `<p class="plugin-management-no-settings">${escapeHtml(copy.noSettings)}</p>` : ""}</div>
-  </article>`;
+  return `${diagnostics}<div class="plugin-management-settings" data-plugin-settings="${escapeAttribute(entry.id)}"><h4>${escapeHtml(copy.settings)}</h4>${settings}${authorization}${!settings && !authorization ? `<p class="plugin-management-no-settings">${escapeHtml(copy.noSettings)}</p>` : ""}</div>`;
 }
 
 function renderWorkspaceTrust(entry: PluginManagementEntry, copy: PluginManagementCopy): string {

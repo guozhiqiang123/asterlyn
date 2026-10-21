@@ -57,6 +57,7 @@ use application::{
     prepare_workspace_mutation_plan, read_session_text_file, reauthorize_session_file_for_read,
     resolve_workspace_entry, rollback_replacement, rollback_workspace_mutation_recovery,
     save_session_text_file, search_authorized_workspace_with_index,
+    supervise_plugin_host_terminations,
 };
 #[cfg(test)]
 use application::{
@@ -233,8 +234,11 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .setup(|app| {
+            ensure_bundled_plugins(app.handle()).map_err(std::io::Error::other)?;
             recover_interrupted_plugin_activations(app.handle()).map_err(std::io::Error::other)?;
             let plugin_hosts = build_plugin_host_supervisor(app.handle().clone())
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            supervise_plugin_host_terminations(app.handle().clone(), &plugin_hosts)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
             app.manage(plugin_hosts);
             build_project_window(app.handle(), "main", "Asterlyn")?;

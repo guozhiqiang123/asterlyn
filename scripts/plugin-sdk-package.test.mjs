@@ -12,7 +12,7 @@ const packageRoot = path.join(repositoryRoot, "packages/plugin-sdk");
 test("public Plugin SDK pack exposes only the reviewed types and metadata", async () => {
   const packageJson = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8"));
   assert.equal(packageJson.name, "@asterlyn/plugin-sdk");
-  assert.equal(packageJson.version, "1.9.0");
+  assert.equal(packageJson.version, "1.10.0");
   assert.equal(packageJson.private, undefined);
   assert.equal(packageJson.license, "MIT");
   assert.equal(packageJson.sideEffects, false);
@@ -40,7 +40,7 @@ test("Plugin SDK packer emits the reviewed canonical artifact with a matching ch
   );
   assert.equal(packed.status, 0, packed.stderr || packed.stdout);
   const summary = JSON.parse(packed.stdout);
-  assert.equal(summary.artifact, "asterlyn-plugin-sdk-1.9.0.tgz");
+  assert.equal(summary.artifact, "asterlyn-plugin-sdk-1.10.0.tgz");
   const bytes = await readFile(path.join(output, summary.artifact));
   const canonical = await readFile(path.join(
     repositoryRoot,

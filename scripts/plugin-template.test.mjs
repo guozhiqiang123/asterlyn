@@ -10,11 +10,11 @@ const templateRoot = path.join(repositoryRoot, "templates/plugin-typescript");
 test("public TypeScript plugin template is version-locked and authority-free", () => {
   const manifest = json("manifest.json");
   const packageJson = json("package.json");
-  assert.equal(manifest.schemaVersion, 2);
+  assert.equal(manifest.schemaVersion, 3);
   assert.equal(manifest.sdkMajor, 1);
   assert.equal(manifest.version, packageJson.version);
   assert.equal(manifest.distribution.runtime.protocol, 1);
-  assert.equal(packageJson.dependencies["@asterlyn/plugin-sdk"], "file:vendor/asterlyn-plugin-sdk-1.9.0.tgz");
+  assert.equal(packageJson.dependencies["@asterlyn/plugin-sdk"], "file:vendor/asterlyn-plugin-sdk-1.10.0.tgz");
   assert.deepEqual(manifest.capabilities, []);
   assert.deepEqual(manifest.permissions, []);
 
@@ -24,7 +24,7 @@ test("public TypeScript plugin template is version-locked and authority-free", (
 });
 
 test("template vendors the exact public SDK artifact and immutable dependency graph", () => {
-  const artifact = "vendor/asterlyn-plugin-sdk-1.9.0.tgz";
+  const artifact = "vendor/asterlyn-plugin-sdk-1.10.0.tgz";
   assert.equal(existsSync(path.join(templateRoot, artifact)), true);
   assert.equal(existsSync(path.join(templateRoot, "package-lock.json")), true);
   const expected = read("vendor/plugin-sdk.sha256").trim().split(/\s+/)[0];

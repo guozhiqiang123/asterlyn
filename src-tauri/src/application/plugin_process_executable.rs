@@ -1,9 +1,43 @@
 use asterlyn_plugin_package::ProcessExecutableCandidate;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const MAX_PROPERTIES_BYTES: u64 = 64 * 1024;
 const MAX_REQUEST_ID_LENGTH: usize = 256;
+
+#[derive(Debug)]
+pub(super) struct ApprovedExecutableRoots {
+    android_sdk: Vec<PathBuf>,
+}
+
+impl Default for ApprovedExecutableRoots {
+    fn default() -> Self {
+        Self::from_host_environment()
+    }
+}
+
+impl ApprovedExecutableRoots {
+    pub(super) fn from_host_environment() -> Self {
+        let mut android_sdk = Vec::new();
+        for variable in ["ANDROID_SDK_ROOT", "ANDROID_HOME"] {
+            let Some(value) = std::env::var_os(variable) else {
+                continue;
+            };
+            let Ok(root) = std::fs::canonicalize(value) else {
+                continue;
+            };
+            if root.is_dir() && !android_sdk.contains(&root) {
+                android_sdk.push(root);
+            }
+        }
+        Self { android_sdk }
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_android_sdk(root: &Path) -> Self {
+        Self {
+            android_sdk: vec![std::fs::canonicalize(root).unwrap()],
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(super) enum ToolOperationParameterKind {
@@ -103,7 +137,7 @@ fn valid_android_name(value: &str) -> bool {
 }
 
 pub(super) fn resolve_executable(
-    root: &Path,
+    approved: &ApprovedExecutableRoots,
     candidates: &[ProcessExecutableCandidate],
 ) -> Result<PathBuf, String> {
     for candidate in candidates {
@@ -111,42 +145,31 @@ pub(super) fn resolve_executable(
             ProcessExecutableCandidate::Environment {
                 variable,
                 relative_path,
-            } => std::env::var_os(variable)
-                .map(|base| vec![PathBuf::from(base).join(relative_path)])
-                .unwrap_or_default(),
-            ProcessExecutableCandidate::WorkspaceProperty {
-                path,
-                key,
-                relative_path,
-            } => workspace_property(root, path, key)
-                .map(|base| vec![PathBuf::from(base).join(relative_path)])
-                .unwrap_or_default(),
+            } if matches!(variable.as_str(), "ANDROID_SDK_ROOT" | "ANDROID_HOME") => approved
+                .android_sdk
+                .iter()
+                .map(|base| base.join(relative_path))
+                .collect(),
             ProcessExecutableCandidate::AndroidSdkBuildTools { name } => {
-                android_sdk_build_tools_candidates(root, name)
+                android_sdk_build_tools_candidates(approved, name)
             }
-            ProcessExecutableCandidate::Path { name } => path_candidates(root, name),
+            ProcessExecutableCandidate::Environment { .. }
+            | ProcessExecutableCandidate::WorkspaceProperty { .. }
+            | ProcessExecutableCandidate::Path { .. } => Vec::new(),
         };
-        if let Some(executable) = first_executable(paths) {
+        if let Some(executable) = first_executable(approved, paths) {
             return Ok(executable);
         }
     }
     Err("No admitted executable candidate is available for this workspace.".into())
 }
 
-fn path_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
+fn android_sdk_build_tools_candidates(
+    approved: &ApprovedExecutableRoots,
+    name: &str,
+) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-    if let Some(path) = std::env::var_os("PATH") {
-        candidates.extend(std::env::split_paths(&path).map(|entry| entry.join(name)));
-    }
-    if name == executable_name("aapt") {
-        candidates.extend(android_sdk_build_tools_candidates(root, name));
-    }
-    candidates
-}
-
-fn android_sdk_build_tools_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    for sdk in android_sdk_roots(root) {
+    for sdk in &approved.android_sdk {
         let Ok(entries) = std::fs::read_dir(sdk.join("build-tools")) else {
             continue;
         };
@@ -161,74 +184,25 @@ fn android_sdk_build_tools_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
     candidates
 }
 
-fn first_executable(candidates: Vec<PathBuf>) -> Option<PathBuf> {
+fn first_executable(
+    approved: &ApprovedExecutableRoots,
+    candidates: Vec<PathBuf>,
+) -> Option<PathBuf> {
     for candidate in candidates {
         let Ok(canonical) = std::fs::canonicalize(candidate) else {
             continue;
         };
-        if canonical.is_file() && executable_file(&canonical) {
+        if approved
+            .android_sdk
+            .iter()
+            .any(|root| canonical.starts_with(root))
+            && canonical.is_file()
+            && executable_file(&canonical)
+        {
             return Some(canonical);
         }
     }
     None
-}
-
-fn android_sdk_roots(root: &Path) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Some(sdk) = workspace_android_sdk(root) {
-        candidates.push(sdk);
-    }
-    for variable in ["ANDROID_SDK_ROOT", "ANDROID_HOME"] {
-        if let Some(value) = std::env::var_os(variable) {
-            candidates.push(PathBuf::from(value));
-        }
-    }
-    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
-        let home = PathBuf::from(home);
-        if cfg!(target_os = "macos") {
-            candidates.push(home.join("Library/Android/sdk"));
-        } else if cfg!(windows) {
-            if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-                candidates.push(PathBuf::from(local).join("Android/Sdk"));
-            }
-        } else {
-            candidates.push(home.join("Android/Sdk"));
-        }
-    }
-    candidates
-}
-
-fn workspace_property(root: &Path, relative_path: &str, property_key: &str) -> Option<String> {
-    let file = std::fs::File::open(root.join(relative_path)).ok()?;
-    if file.metadata().ok()?.len() > MAX_PROPERTIES_BYTES {
-        return None;
-    }
-    let mut text = String::new();
-    file.take(MAX_PROPERTIES_BYTES + 1)
-        .read_to_string(&mut text)
-        .ok()?;
-    for raw in text.lines() {
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=').or_else(|| line.split_once(':')) else {
-            continue;
-        };
-        if key.trim() != property_key {
-            continue;
-        }
-        let value = value.trim().replace("\\:", ":").replace("\\\\", "\\");
-        if value.is_empty() || value.contains('\0') {
-            return None;
-        }
-        return Some(value);
-    }
-    None
-}
-
-fn workspace_android_sdk(root: &Path) -> Option<PathBuf> {
-    workspace_property(root, "local.properties", "sdk.dir").map(PathBuf::from)
 }
 
 #[cfg(unix)]

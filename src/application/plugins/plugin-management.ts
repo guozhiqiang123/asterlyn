@@ -84,6 +84,9 @@ export class PluginManagementRuntime {
       ...(plugin.manifest.taskAuthorization === undefined
         ? {}
         : { taskAuthorization: plugin.manifest.taskAuthorization }),
+      ...(plugin.manifest.hostOperations === undefined
+        ? {}
+        : { hostOperations: Object.freeze(plugin.manifest.hostOperations.map((operation) => operation.id)) }),
       diagnostics: Object.freeze([...(this.diagnostics.get(plugin.id) ?? [])]),
     }));
     this.value = Object.freeze({ schemaVersion: 1, entries: Object.freeze(entries) });

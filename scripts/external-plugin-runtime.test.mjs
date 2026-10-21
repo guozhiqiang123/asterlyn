@@ -41,6 +41,7 @@ test("activates admitted external contributions and removes them on deactivation
   const calls = [];
   let eventListener = null;
   let notificationListener = null;
+  let terminationListener = null;
   const bridge = {
     activate: async (...arguments_) => {
       calls.push(["activate", ...arguments_]);
@@ -71,6 +72,7 @@ test("activates admitted external contributions and removes them on deactivation
     diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
     subscribe: async (listener) => { eventListener = listener; return () => { eventListener = null; }; },
     subscribeNotifications: async (listener) => { notificationListener = listener; return () => { notificationListener = null; }; },
+    subscribeTerminations: async (listener) => { terminationListener = listener; return () => { terminationListener = null; }; },
   };
   const notifications = [];
   const runtime = new ExternalPluginRuntime({
@@ -91,6 +93,7 @@ test("activates admitted external contributions and removes them on deactivation
   notificationListener({ pluginId, kind: "success", messageKey: "run.completed" });
   assert.deepEqual(notifications, [{ pluginId, kind: "success", messageKey: "run.completed" }]);
   assert.equal(typeof eventListener, "function");
+  assert.equal(typeof terminationListener, "function");
   assert.deepEqual(calls[0].slice(0, 4), ["activate", pluginId, "/repo", 7]);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(calls.some((call) => call[0] === "healthy"), true);
@@ -98,6 +101,129 @@ test("activates admitted external contributions and removes them on deactivation
   await runtime.deactivate();
   assert.equal(registry.get(`${pluginId}.fixture-command`), null);
   assert.equal(calls.some((call) => call[0] === "deactivate"), true);
+  await runtime.dispose();
+});
+
+test("workspace transition removes contributions and returns within its budget despite stale RPCs", async () => {
+  const registry = new PluginContributionRegistry();
+  const never = new Promise(() => undefined);
+  const bridge = {
+    activate: async () => ({
+      pluginId,
+      pluginVersion: "1.2.3",
+      packageDigest: `sha256:${"a".repeat(64)}`,
+      sessionId: "session-stale-rpc",
+      contributions: [{
+        kind: "command",
+        id: "fixture-command",
+        payload: {},
+        callbacks: { title: "title", detail: "detail", execute: "execute" },
+      }],
+    }),
+    invoke: async (_pluginId, handle) => {
+      if (handle === "title") return "Fixture command";
+      if (handle === "detail") return "Stale RPC fixture";
+      if (handle === "execute") return never;
+      throw new Error(`Unexpected callback: ${handle}`);
+    },
+    deactivate: async () => never,
+    confirmHealthy: async () => installation(),
+    failActivation: async () => installation(),
+    abandonActivation: async () => installation(),
+    diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
+    subscribe: async () => () => undefined,
+    subscribeNotifications: async () => () => undefined,
+    subscribeTerminations: async () => () => undefined,
+  };
+  const runtime = new ExternalPluginRuntime({
+    registry,
+    bridge,
+    marketplace: { listPluginInstallations: async () => installation() },
+    locale: () => "en-US",
+    reportError: (error) => { throw error; },
+    healthCheckpointMs: 0,
+    transitionStopTimeoutMs: 20,
+  });
+  await runtime.activate(identity, evidence, () => true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const command = registry.get(`${pluginId}.fixture-command`);
+  void command.execute();
+
+  const started = Date.now();
+  const stopped = runtime.deactivate();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(registry.get(`${pluginId}.fixture-command`), null);
+  await stopped;
+  assert.ok(Date.now() - started < 200, "deactivation exceeded the host transition budget");
+  await runtime.dispose();
+});
+
+test("exact native termination aborts the session and removes its complete contribution batch", async () => {
+  const registry = new PluginContributionRegistry();
+  const calls = [];
+  const incidents = [];
+  let terminationListener = null;
+  const activation = {
+    pluginId,
+    pluginVersion: "1.2.3",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "session-crashed",
+    contributions: [{
+      kind: "command",
+      id: "fixture-command",
+      payload: {},
+      callbacks: { title: "title", detail: "detail", execute: "execute" },
+    }],
+  };
+  const bridge = {
+    activate: async () => activation,
+    invoke: async (_pluginId, handle) => {
+      if (handle === "title") return "Fixture command";
+      if (handle === "detail") return "Crash fixture";
+      if (handle === "execute") return new Promise(() => undefined);
+      throw new Error(`Unexpected callback: ${handle}`);
+    },
+    deactivate: async () => undefined,
+    confirmHealthy: async () => installation(),
+    failActivation: async (failed) => { calls.push(["failed", failed.sessionId]); return installation(); },
+    abandonActivation: async () => installation(),
+    diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
+    subscribe: async () => () => undefined,
+    subscribeNotifications: async () => () => undefined,
+    subscribeTerminations: async (listener) => { terminationListener = listener; return () => undefined; },
+  };
+  const runtime = new ExternalPluginRuntime({
+    registry,
+    bridge,
+    marketplace: { listPluginInstallations: async () => installation() },
+    locale: () => "en-US",
+    reportError: (error) => { throw error; },
+    terminated: (event) => { incidents.push(event); },
+    healthCheckpointMs: 60_000,
+  });
+  await runtime.activate(identity, evidence, () => true);
+  const command = registry.get(`${pluginId}.fixture-command`);
+  assert.notEqual(command, null);
+  void command.execute();
+  const termination = {
+    owner: "main",
+    pluginId,
+    pluginVersion: "1.2.3",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "session-crashed",
+    reason: "unexpectedExit",
+    detail: "plugin helper exited with status 17",
+    recoveryPersisted: true,
+    diagnostics: { stderr: "fixture crash", stderrTruncated: false, protocolDiagnostics: [] },
+  };
+  terminationListener({ ...termination, sessionId: "stale-session" });
+  assert.notEqual(registry.get(`${pluginId}.fixture-command`), null);
+
+  terminationListener(termination);
+  assert.equal(registry.get(`${pluginId}.fixture-command`), null);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(calls, [["failed", "session-crashed"]]);
+  assert.deepEqual(incidents, [termination]);
   await runtime.dispose();
 });
 
@@ -138,6 +264,7 @@ test("refreshes cached task projections from isolated runtime events", async () 
     diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
     subscribe: async (listener) => { runtimeEvent = listener; return () => undefined; },
     subscribeNotifications: async () => () => undefined,
+    subscribeTerminations: async () => () => undefined,
   };
   const runtime = new ExternalPluginRuntime({
     registry,
@@ -176,6 +303,7 @@ test("skips disabled installations before starting a process", async () => {
       diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
       subscribe: async () => () => undefined,
       subscribeNotifications: async () => () => undefined,
+      subscribeTerminations: async () => () => undefined,
     },
     marketplace: { listPluginInstallations: async () => installation() },
     locale: () => "en-US",
@@ -224,6 +352,7 @@ test("quarantines an activation whose projected contribution violates the host c
       diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
       subscribe: async () => () => undefined,
       subscribeNotifications: async () => () => undefined,
+      subscribeTerminations: async () => () => undefined,
     },
     marketplace: { listPluginInstallations: async () => installation() },
     locale: () => "en-US",

@@ -29,9 +29,12 @@ pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use plugin_marketplace::{PendingPluginAdmission, PluginMarketplaceCoordinator};
 pub(crate) use plugin_process_query::{
-    PluginProcessQueryManager, PluginProcessQueryResult, PluginToolOperationResult,
+    ExactPluginProcessQuery, PluginProcessQueryManager, PluginProcessQueryResult,
+    PluginToolAuthorityIdentity, PluginToolOperationExecution, PluginToolOperationResult,
+    validate_external_tool_authority,
 };
 pub(crate) use plugin_runtime::build_plugin_host_supervisor;
+pub(crate) use plugin_runtime::supervise_plugin_host_terminations;
 pub(crate) use search_session::{WorkspaceReplacementRegistry, WorkspaceSearchRegistry};
 pub(crate) use task::TaskManager;
 pub(crate) use task_artifacts::{TaskArtifactDiscovery, scan_task_artifacts};

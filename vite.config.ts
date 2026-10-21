@@ -84,7 +84,7 @@ export default defineConfig({
           groups: [
             {
               name: "features",
-              test: /[/\\]src[/\\](?:features[/\\]|composition[/\\](?:external-plugin-runtime|plugin-(?:tasks|runtime|contribution|run-session)-runtime)\.ts$|presentation[/\\]host-presentation\.ts$|localization[/\\]task-execution-copy\.ts$)/,
+              test: /[/\\]src[/\\](?:features[/\\]|application[/\\]plugins[/\\]|composition[/\\](?:external-plugin-runtime|plugin-(?:tasks|runtime|contribution|run-session)-runtime)\.ts$|presentation[/\\]host-presentation\.ts$|localization[/\\]task-execution-copy\.ts$)/,
               maxSize: STARTUP_BUNDLE_POLICY.featureChunk.maxSize,
               includeDependenciesRecursively:
                 STARTUP_BUNDLE_POLICY.featureChunk.includeDependenciesRecursively,

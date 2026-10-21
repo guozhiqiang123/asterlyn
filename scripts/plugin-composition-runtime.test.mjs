@@ -88,6 +88,52 @@ test("installed plugin contributions replace the matching bundled fallback", asy
   runtime.dispose();
 });
 
+test("the production default activates only isolated packages and tracks workspace evidence", async () => {
+  let activations = 0;
+  const activation = {
+    pluginId: "fixture",
+    pluginVersion: "1.0.0",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "external-session",
+    contributions: [{
+      kind: "taskProvider", id: "tasks", payload: { label: "External" },
+      callbacks: { snapshot: "snapshot" },
+    }],
+  };
+  const bridge = externalBridge(activation);
+  bridge.activate = async () => {
+    activations += 1;
+    return { ...activation, sessionId: `external-session-${activations}` };
+  };
+  const manifest = {
+    sdkMajor: 1, id: "fixture", version: "1.0.0", nameKey: "name", descriptionKey: "description",
+    localization: { defaultLocale: "en-US", locales: { "en-US": { name: "Fixture", description: "Fixture plugin" } } },
+    settings: [],
+  };
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    installedPluginRuntimeBridge: bridge,
+    pluginMarketplaceBridge: {
+      listPluginInstallations: async () => installation("fixture"),
+      listInstalledPluginManifests: async () => ({
+        schemaVersion: 1,
+        generation: 1,
+        manifests: [{ pluginId: "fixture", pluginVersion: "1.0.0", packageDigest: activation.packageDigest, manifest, error: null }],
+      }),
+    },
+  });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle", "app/build.gradle"]));
+  assert.equal(activations, 2);
+  assert.equal(runtime.managementSnapshot.entries[0]?.matched, true);
+  assert.equal(runtime.managementSnapshot.entries[0]?.active, true);
+  runtime.dispose();
+});
+
 test("failed installed plugin activation falls back to bundled contributions", async () => {
   let bundledActivations = 0;
   let providers = [];
@@ -118,6 +164,106 @@ test("failed installed plugin activation falls back to bundled contributions", a
   runtime.dispose();
 });
 
+test("a persisted healthy-runtime crash reconciles once to the selected known-good fallback", async () => {
+  let terminationListener;
+  let activationCount = 0;
+  let currentInstallations = crashInstallation(false);
+  const bridge = externalBridge(null);
+  bridge.activate = async () => {
+    activationCount += 1;
+    const fallback = activationCount > 1;
+    return {
+      pluginId: "fixture",
+      pluginVersion: fallback ? "1.0.0" : "2.0.0",
+      packageDigest: `sha256:${(fallback ? "a" : "b").repeat(64)}`,
+      sessionId: fallback ? "fallback-session" : "crashed-session",
+      contributions: [{
+        kind: "taskProvider", id: "tasks", payload: { label: fallback ? "Fallback" : "Current" },
+        callbacks: { snapshot: "snapshot" },
+      }],
+    };
+  };
+  bridge.subscribeTerminations = async (listener) => {
+    terminationListener = listener;
+    return () => undefined;
+  };
+  bridge.confirmHealthy = async () => currentInstallations;
+  bridge.failActivation = async () => currentInstallations;
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    loadPlugins: async () => [fixturePlugin("fixture", () => undefined)],
+    installedPluginRuntimeBridge: bridge,
+    pluginMarketplaceBridge: {
+      listPluginInstallations: async () => currentInstallations,
+      listInstalledPluginManifests: async () => ({ schemaVersion: 1, generation: 1, manifests: [] }),
+    },
+    installedPluginHealthCheckpointMs: 0,
+  });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(runtime.contributionRegistry.get("fixture.tasks")?.pluginVersion, "2.0.0");
+
+  currentInstallations = crashInstallation(true);
+  terminationListener({
+    owner: "main", pluginId: "fixture", pluginVersion: "2.0.0",
+    packageDigest: `sha256:${"b".repeat(64)}`, sessionId: "crashed-session",
+    reason: "unexpectedExit", detail: "fixture crash", recoveryPersisted: true,
+    diagnostics: { stderr: "", stderrTruncated: false, protocolDiagnostics: [] },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(activationCount, 2);
+  assert.equal(runtime.contributionRegistry.get("fixture.tasks")?.pluginVersion, "1.0.0");
+  runtime.dispose();
+});
+
+test("recovery persistence failure leaves the crashed plugin stopped instead of hot-restarting it", async () => {
+  let terminationListener;
+  let activationCount = 0;
+  const installations = crashInstallation(false);
+  const bridge = externalBridge(null);
+  bridge.activate = async () => {
+    activationCount += 1;
+    return {
+      pluginId: "fixture", pluginVersion: "2.0.0",
+      packageDigest: `sha256:${"b".repeat(64)}`, sessionId: "crashed-session",
+      contributions: [{ kind: "taskProvider", id: "tasks", payload: { label: "Current" }, callbacks: { snapshot: "snapshot" } }],
+    };
+  };
+  bridge.subscribeTerminations = async (listener) => { terminationListener = listener; return () => undefined; };
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    loadPlugins: async () => [fixturePlugin("fixture", () => undefined)],
+    installedPluginRuntimeBridge: bridge,
+    pluginMarketplaceBridge: {
+      listPluginInstallations: async () => installations,
+      listInstalledPluginManifests: async () => ({ schemaVersion: 1, generation: 1, manifests: [] }),
+    },
+    installedPluginHealthCheckpointMs: 0,
+  });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  terminationListener({
+    owner: "main", pluginId: "fixture", pluginVersion: "2.0.0",
+    packageDigest: `sha256:${"b".repeat(64)}`, sessionId: "crashed-session",
+    reason: "unexpectedExit", detail: "fixture crash", recoveryPersisted: false,
+    diagnostics: { stderr: "", stderrTruncated: false, protocolDiagnostics: [] },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(activationCount, 1);
+  assert.equal(runtime.contributionRegistry.get("fixture.tasks"), null);
+  runtime.dispose();
+});
+
 test("installed plugin notifications resolve only through the admitted external manifest", async () => {
   let notifications;
   const published = [];
@@ -136,6 +282,7 @@ test("installed plugin notifications resolve only through the admitted external 
     notifications = listener;
     return () => undefined;
   };
+  bridge.subscribeTerminations = async () => () => undefined;
   const manifest = {
     sdkMajor: 1,
     id: "fixture.external",
@@ -219,6 +366,20 @@ function installation(pluginId) {
   };
 }
 
+function crashInstallation(crashed) {
+  return {
+    schemaVersion: 2, generation: crashed ? 2 : 1, recovered: false,
+    plugins: [{
+      pluginId: "fixture", repository: "asterlyn/plugin-fixture", enabled: true, bundledFallback: true,
+      activeVersion: crashed ? "1.0.0" : "2.0.0", knownGoodVersion: crashed ? "1.0.0" : "2.0.0", pendingVersion: null,
+      versions: [
+        { version: "1.0.0", packageDigest: `sha256:${"a".repeat(64)}`, contentDigest: `sha256:${"c".repeat(64)}`, admittedAtEpochMs: 1, runtimeStatus: "knownGood" },
+        { version: "2.0.0", packageDigest: `sha256:${"b".repeat(64)}`, contentDigest: `sha256:${"d".repeat(64)}`, admittedAtEpochMs: 2, runtimeStatus: crashed ? "quarantined" : "knownGood" },
+      ],
+    }],
+  };
+}
+
 function marketplace(pluginId) {
   return {
     listPluginInstallations: async () => installation(pluginId),
@@ -240,5 +401,6 @@ function externalBridge(activation) {
     diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
     subscribe: async () => () => undefined,
     subscribeNotifications: async () => () => undefined,
+    subscribeTerminations: async () => () => undefined,
   };
 }

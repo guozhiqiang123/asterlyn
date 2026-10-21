@@ -54,12 +54,12 @@ export interface PluginMarketplaceBridge {
 }
 
 export type PluginRuntimeStatus = "pendingRuntime" | "pendingRestart" | "active" | "knownGood" | "quarantined";
-export interface AdmittedPluginVersion { readonly version: string; readonly packageDigest: string; readonly admittedAtEpochMs: number; readonly runtimeStatus: PluginRuntimeStatus; }
+export interface AdmittedPluginVersion { readonly version: string; readonly packageDigest: string; readonly contentDigest?: string | null; readonly admittedAtEpochMs: number; readonly runtimeStatus: PluginRuntimeStatus; }
 export interface InstalledPlugin { readonly pluginId: string; readonly repository: string; readonly enabled: boolean; readonly bundledFallback: boolean; readonly activeVersion: string | null; readonly knownGoodVersion: string | null; readonly pendingVersion: string | null; readonly versions: readonly AdmittedPluginVersion[]; }
-export interface PluginInstallationSnapshot { readonly schemaVersion: 1; readonly generation: number; readonly plugins: readonly InstalledPlugin[]; readonly recovered: boolean; }
+export interface PluginInstallationSnapshot { readonly schemaVersion: 1 | 2; readonly generation: number; readonly plugins: readonly InstalledPlugin[]; readonly recovered: boolean; }
 export interface InstalledPluginManifestEntry { readonly pluginId: string; readonly pluginVersion: string; readonly packageDigest: string; readonly manifest: SdkPluginManifest | null; readonly error: string | null; }
 export interface InstalledPluginManifestSnapshot { readonly schemaVersion: 1; readonly generation: number; readonly manifests: readonly InstalledPluginManifestEntry[]; }
-export interface PluginPackageAdmissionReview { readonly reviewToken: string; readonly repository: string; readonly sourceGeneration: number; readonly assetName: string; readonly assetSizeBytes: number; readonly digest: string; readonly pluginId: string; readonly version: string; readonly licenseExpression: string; readonly capabilities: readonly string[]; readonly permissions: readonly string[]; readonly expandedBytes: number; }
+export interface PluginPackageAdmissionReview { readonly reviewToken: string; readonly repository: string; readonly sourceGeneration: number; readonly assetName: string; readonly assetSizeBytes: number; readonly digest: string; readonly pluginId: string; readonly version: string; readonly licenseExpression: string; readonly capabilities: readonly string[]; readonly permissions: readonly string[]; readonly hostOperations: readonly string[]; readonly enabledAfterInstall: boolean; readonly expandedBytes: number; }
 
 export function validatePluginSourceSnapshot(value: unknown, command: DesktopCommandName): PluginSourceSnapshot {
   const snapshot = record(value, command);
@@ -118,7 +118,7 @@ function validateCatalog(value: unknown, command: DesktopCommandName): void {
 
 export function validatePluginInstallationSnapshot(value: unknown, command: DesktopCommandName): PluginInstallationSnapshot {
   const snapshot = record(value, command);
-  assert(snapshot.schemaVersion === 1, command, "expected plugin installation schema 1");
+  assert(snapshot.schemaVersion === 1 || snapshot.schemaVersion === 2, command, "expected plugin installation schema 1 or 2");
   assert(typeof snapshot.generation === "number" && Number.isSafeInteger(snapshot.generation) && snapshot.generation > 0, command, "invalid installation generation");
   assert(typeof snapshot.recovered === "boolean", command, "recovered must be a boolean");
   assert(Array.isArray(snapshot.plugins) && snapshot.plugins.length <= 64, command, "invalid installed plugin list");
@@ -132,6 +132,7 @@ export function validatePluginInstallationSnapshot(value: unknown, command: Desk
     for (const item of plugin.versions) {
       const version = record(item, command);
       assert(typeof version.version === "string" && typeof version.packageDigest === "string" && /^sha256:[a-f0-9]{64}$/u.test(version.packageDigest), command, "invalid admitted version");
+      assert(version.contentDigest === undefined || version.contentDigest === null || (typeof version.contentDigest === "string" && /^sha256:[a-f0-9]{64}$/u.test(version.contentDigest)), command, "invalid admitted content digest");
       assert(typeof version.admittedAtEpochMs === "number" && Number.isSafeInteger(version.admittedAtEpochMs), command, "invalid admission time");
       assert(["pendingRuntime", "pendingRestart", "active", "knownGood", "quarantined"].includes(String(version.runtimeStatus)), command, "invalid runtime status");
     }
@@ -231,6 +232,30 @@ function validateManagementManifest(value: unknown, entry: Record<string, unknow
   }
   validateProcessQueries(manifest.processQueries, command);
   validateToolOperations(manifest.toolOperations, command);
+  validateHostOperations(manifest.hostOperations, command);
+}
+
+function validateHostOperations(value: unknown, command: DesktopCommandName): void {
+  if (value === undefined) return;
+  assert(Array.isArray(value) && value.length <= 64, command, "invalid installed host operations");
+  const ids = new Set<string>();
+  const supported = new Set([
+    "adb.devices",
+    "android.apk.inspect",
+    "android.adb.install",
+    "android.adb.uninstall",
+    "android.adb.launch",
+  ]);
+  for (const rawOperation of value) {
+    const operation = record(rawOperation, command);
+    assert(
+      Object.keys(operation).length === 1 && validManifestText(operation.id) &&
+        supported.has(String(operation.id)) && !ids.has(String(operation.id)),
+      command,
+      "invalid installed host operation",
+    );
+    ids.add(String(operation.id));
+  }
 }
 
 function validateProcessQueries(value: unknown, command: DesktopCommandName): void {
@@ -328,6 +353,7 @@ export function validatePluginPackageAdmissionReview(value: unknown, command: De
   assert(/^[a-f0-9]{64}$/u.test(String(review.reviewToken)), command, "invalid review token");
   assert(/^sha256:[a-f0-9]{64}$/u.test(String(review.digest)), command, "invalid package digest");
   for (const field of ["sourceGeneration", "assetSizeBytes", "expandedBytes"] as const) assert(typeof review[field] === "number" && Number.isSafeInteger(review[field]) && review[field] > 0, command, `${field} must be positive`);
-  for (const field of ["capabilities", "permissions"] as const) assert(Array.isArray(review[field]) && review[field].every((item) => typeof item === "string"), command, `${field} must be strings`);
+  for (const field of ["capabilities", "permissions", "hostOperations"] as const) assert(Array.isArray(review[field]) && review[field].every((item) => typeof item === "string"), command, `${field} must be strings`);
+  assert(review.enabledAfterInstall === false, command, "new plugins must remain disabled after admission");
   return value as PluginPackageAdmissionReview;
 }

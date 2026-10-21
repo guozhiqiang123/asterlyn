@@ -62,17 +62,18 @@ export interface PluginCompositionRuntimeOptions {
   readonly workspaceStateStorage?: PluginWorkspaceStateStorage;
   readonly installedPluginRuntimeBridge?: InstalledPluginRuntimeBridge;
   readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests">;
+  readonly installedPluginHealthCheckpointMs?: number;
   readonly locale?: () => string;
   readonly mutationBlocked?: () => boolean;
 }
 
-/** Window-scoped orchestration. Bundled plugin code stays behind a lazy project-evidence gate. */
+/** Window-scoped orchestration. Production plugins execute only through the isolated sidecar. */
 export class PluginCompositionRuntime {
   private readonly runtime: PluginRuntime;
   private readonly contributions: PluginContributionRuntime;
   private readonly external: ExternalPluginRuntime | null;
   private readonly loadPlugins: () => Promise<readonly BundledPlugin[]>;
-  private readonly marketplace: Pick<PluginMarketplaceBridge, "listInstalledPluginManifests"> | null;
+  private readonly marketplace: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests"> | null;
   private readonly reportError: (error: unknown) => void;
   private catalogManifests = new Map<string, PluginCatalogEntry>();
   readonly preferences: PluginPreferenceStore;
@@ -135,6 +136,32 @@ export class PluginCompositionRuntime {
               source: `plugin:${event.pluginId}`,
             });
           },
+          terminated: async (event) => {
+            options.reportDiagnostic({
+              kind: "activation-failed",
+              pluginId: event.pluginId,
+              message: event.recoveryPersisted
+                ? `Isolated plugin runtime stopped safely and was quarantined (${event.reason}).`
+                : `Isolated plugin runtime stopped safely, but recovery state could not be persisted (${event.reason}).`,
+            });
+            options.notificationPublisher?.publish({
+              kind: "error",
+              message: event.recoveryPersisted
+                ? (options.locale?.() ?? "en-US").toLowerCase().startsWith("zh")
+                  ? `插件 ${event.pluginId} 已安全停止并隔离，宿主仍可继续使用。`
+                  : `Plugin ${event.pluginId} stopped and was quarantined; Asterlyn remains available.`
+                : (options.locale?.() ?? "en-US").toLowerCase().startsWith("zh")
+                  ? `插件 ${event.pluginId} 已安全停止，但恢复状态保存失败；宿主仍可继续使用。`
+                  : `Plugin ${event.pluginId} stopped safely, but recovery state could not be saved; Asterlyn remains available.`,
+              source: `plugin:${event.pluginId}`,
+            });
+            this.preferenceTransition = this.preferenceTransition
+              .then(() => this.reconcileAfterTermination(event), () => this.reconcileAfterTermination(event))
+              .catch(options.reportError);
+          },
+          ...(options.installedPluginHealthCheckpointMs === undefined
+            ? {}
+            : { healthCheckpointMs: options.installedPluginHealthCheckpointMs }),
         })
       : null;
     this.preferences = options.preferenceStore ?? new PluginPreferenceStore(
@@ -149,9 +176,7 @@ export class PluginCompositionRuntime {
         .then(() => this.reactivateCurrent(), () => this.reactivateCurrent())
         .catch(options.reportError);
     });
-    this.loadPlugins = options.loadPlugins ?? (async () => {
-      return (await import("../plugins/bundled-plugins.ts")).loadBundledPlugins(options.reportDiagnostic);
-    });
+    this.loadPlugins = options.loadPlugins ?? (async () => []);
   }
 
   pluginSettingsTargets(): PluginSettingsTargetResolution {
@@ -186,8 +211,9 @@ export class PluginCompositionRuntime {
     this.evidence = evidence;
     const evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
     if (evidenceKey === this.evidenceKey) return;
-    this.management.setMatched(matchingPluginIds(identity, evidence, plugins));
+    const matched = matchingPluginIds(identity, evidence, plugins);
     const report = await this.activatePlugins(identity, evidence, plugins);
+    this.management.setMatched(Object.freeze([...new Set([...matched, ...report.activated])]));
     this.management.setActivation(report);
     if (this.matches(identity) && !this.disposed) this.evidenceKey = evidenceKey;
   }
@@ -283,12 +309,29 @@ export class PluginCompositionRuntime {
     if (!this.matches(identity) || this.disposed) return;
     this.preferences.setManifests(catalog.map((plugin) => plugin.manifest), false);
     this.management.setCatalog(catalog);
-    this.management.setMatched(matchingPluginIds(identity, evidence, plugins));
+    const matched = matchingPluginIds(identity, evidence, plugins);
     const report = await this.activatePlugins(identity, evidence, plugins);
     if (this.matches(identity) && !this.disposed) {
       this.evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
+      this.management.setMatched(Object.freeze([...new Set([...matched, ...report.activated])]));
       this.management.setActivation(report);
     }
+  }
+
+  private async reconcileAfterTermination(
+    event: { readonly pluginId: string; readonly pluginVersion: string; readonly packageDigest: string },
+  ): Promise<void> {
+    if (!this.marketplace || this.disposed) return;
+    const snapshot = await this.marketplace.listPluginInstallations();
+    const plugin = snapshot.plugins.find((candidate) => candidate.pluginId === event.pluginId);
+    const failed = plugin?.versions.find((candidate) =>
+      candidate.version === event.pluginVersion && candidate.packageDigest === event.packageDigest
+    );
+    if (!plugin?.enabled || failed?.runtimeStatus !== "quarantined") return;
+    const selected = plugin.pendingVersion ?? plugin.activeVersion;
+    const fallback = plugin.versions.find((candidate) => candidate.version === selected);
+    if (!fallback || fallback.packageDigest === event.packageDigest) return;
+    await this.reactivateCurrent();
   }
 
   private async activatePlugins(
@@ -406,9 +449,10 @@ function pluginEvidenceKey(
   plugins: readonly BundledPlugin[],
 ): string {
   const fallback = catalogEvidenceKey(evidence);
-  return JSON.stringify(plugins.map((plugin) => {
+  const scoped = plugins.map((plugin) => {
     if (!plugin.evidenceKey) return [plugin.id, fallback];
     try { return [plugin.id, plugin.evidenceKey({ identity, evidence })]; }
     catch { return [plugin.id, fallback]; }
-  }));
+  });
+  return scoped.length === 0 ? fallback : JSON.stringify(scoped);
 }

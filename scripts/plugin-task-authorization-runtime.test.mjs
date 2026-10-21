@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { PluginTasksRuntime } from "../src/composition/plugin-tasks-runtime.ts";
+import { readBundledAndroidManifest } from "./plugin-package-fixture.mjs";
 
 test("plugin task authorization loads per workspace and revokes through the host bridge", async () => {
+  const manifest = await readBundledAndroidManifest();
   const reads = [];
   const writes = [];
   const bridge = {
@@ -38,6 +40,20 @@ test("plugin task authorization loads per workspace and revokes through the host
     executionBridge: bridge,
     artifactBridge: bridge,
     taskCacheBridge: bridge,
+    pluginMarketplaceBridge: {
+      listPluginInstallations: async () => ({ schemaVersion: 2, generation: 1, plugins: [], recovered: false }),
+      listInstalledPluginManifests: async () => ({
+        schemaVersion: 1,
+        generation: 1,
+        manifests: [{
+          pluginId: manifest.id,
+          pluginVersion: manifest.version,
+          packageDigest: `sha256:${"a".repeat(64)}`,
+          manifest,
+          error: null,
+        }],
+      }),
+    },
   });
 
   await runtime.activateWorkspace({ root: "/repo-a", generation: 1 });

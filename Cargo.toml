@@ -23,4 +23,4 @@ spdx = "0.10"
 tar = "0.4"
 tempfile = "3.27"
 trash = { version = "=5.2.9", default-features = false, features = ["coinit_multithreaded"] }
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading"] }

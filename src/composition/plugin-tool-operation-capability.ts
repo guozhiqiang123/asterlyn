@@ -5,6 +5,7 @@ import type {
   PluginWorkspaceIdentity,
 } from "../application/plugins/index.ts";
 import type { PluginToolOperationBridge } from "../protocol/plugin-tool-operation.ts";
+import { hostToolOperationContracts } from "../application/plugins/host-operation-contract.ts";
 
 export interface PluginToolOperationExecutor {
   execute(requestId: string, request: PluginToolOperationRequest): Promise<PluginToolOperationResult>;
@@ -17,8 +18,11 @@ export function createPluginToolOperationExecutor(
   identity: PluginWorkspaceIdentity,
 ): PluginToolOperationExecutor | undefined {
   const declarations = plugin.manifest.toolOperations;
-  if (!bridge || !declarations || declarations.length === 0) return undefined;
-  const admitted = new Map(declarations.map((operation) => [operation.id, operation]));
+  const admitted = new Map([
+    ...(declarations ?? []).map((operation) => [operation.id, operation] as const),
+    ...hostToolOperationContracts(plugin.manifest.hostOperations).map((operation) => [operation.id, operation] as const),
+  ]);
+  if (!bridge || admitted.size === 0) return undefined;
   return Object.freeze({
     execute: async (requestId: string, request: PluginToolOperationRequest) => {
       const declaration = admitted.get(request.operationId);

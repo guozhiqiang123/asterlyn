@@ -12,7 +12,7 @@
     "verify": "npm run check && npm test && npm run package:release && npm run package:inspect"
   },
   "dependencies": {
-    "@asterlyn/plugin-sdk": "file:vendor/asterlyn-plugin-sdk-1.9.0.tgz"
+    "@asterlyn/plugin-sdk": "file:vendor/asterlyn-plugin-sdk-1.10.0.tgz"
   },
   "devDependencies": {
     "@types/node": "22.20.2",

@@ -7,6 +7,7 @@ import { validateDesktopResult } from "../src/protocol/validate-desktop-result.t
 import {
   parseInstalledPluginNotificationEvent,
   parseInstalledPluginRuntimeEvent,
+  parseInstalledPluginRuntimeTermination,
   pluginRuntimeListenerValue,
 } from "../src/protocol/plugin-runtime.ts";
 
@@ -105,6 +106,41 @@ test("external plugin runtime results validate transactional contributions", () 
   );
 });
 
+test("plugin installation schema 2 validates admission content binding", () => {
+  const snapshot = {
+    schemaVersion: 2,
+    generation: 3,
+    recovered: false,
+    plugins: [{
+      pluginId: "dev.asterlyn.fixture",
+      repository: "asterlyn/fixture",
+      enabled: true,
+      bundledFallback: false,
+      activeVersion: null,
+      knownGoodVersion: null,
+      pendingVersion: "1.0.0",
+      versions: [{
+        version: "1.0.0",
+        packageDigest: `sha256:${"a".repeat(64)}`,
+        contentDigest: `sha256:${"b".repeat(64)}`,
+        admittedAtEpochMs: 1,
+        runtimeStatus: "pendingRuntime",
+      }],
+    }],
+  };
+  assert.deepEqual(validateDesktopResult("list_plugin_installations", snapshot), snapshot);
+  assert.throws(
+    () => validateDesktopResult("list_plugin_installations", {
+      ...snapshot,
+      plugins: [{
+        ...snapshot.plugins[0],
+        versions: [{ ...snapshot.plugins[0].versions[0], contentDigest: "sha256:invalid" }],
+      }],
+    }),
+    /invalid admitted content digest/u,
+  );
+});
+
 test("external plugin runtime listener and event values are strictly bounded", () => {
   assert.deepEqual(pluginRuntimeListenerValue("subscription-1"), {
     $asterlynListener: { subscriptionHandle: "subscription-1" },
@@ -138,6 +174,42 @@ test("external plugin notification events reject untrusted presentation text", (
   assert.throws(
     () => parseInstalledPluginNotificationEvent({ ...event, messageKey: "raw message!" }),
     /notification message key is invalid/u,
+  );
+});
+
+test("plugin termination events require exact host-owned session identity", () => {
+  const event = {
+    owner: "main",
+    pluginId: "dev.asterlyn.fixture",
+    pluginVersion: "1.0.0",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "plugin-session-1",
+    reason: "unexpectedExit",
+    detail: "plugin helper exited with status 17",
+    recoveryPersisted: true,
+    diagnostics: {
+      stderr: "fixture crash",
+      stderrTruncated: false,
+      protocolDiagnostics: [],
+    },
+  };
+  assert.deepEqual(parseInstalledPluginRuntimeTermination(event), event);
+  assert.throws(
+    () => parseInstalledPluginRuntimeTermination({ ...event, reason: "pluginSupplied" }),
+    /termination reason is invalid/u,
+  );
+  assert.throws(
+    () => parseInstalledPluginRuntimeTermination({ ...event, packageDigest: "sha256:invalid" }),
+    /package digest is invalid/u,
+  );
+  assert.equal(
+    parseInstalledPluginRuntimeTermination({ ...event, reason: "resourceLimit" }).reason,
+    "resourceLimit",
+  );
+  const { recoveryPersisted: _removed, ...missingRecovery } = event;
+  assert.throws(
+    () => parseInstalledPluginRuntimeTermination(missingRecovery),
+    /recovery state is invalid/u,
   );
 });
 

@@ -1,6 +1,6 @@
-use crate::application::{ActiveWorkspaces, TaskManager, trust};
+use crate::application::{ActiveWorkspaces, PluginProcessQueryManager, TaskManager, trust};
 use asterlyn_task::TrustState;
-use tauri::{Manager, State};
+use tauri::State;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -9,14 +9,6 @@ pub(crate) struct WorkspaceTrustResult {
     workspace_root: String,
     plugin_id: String,
     state: TrustState,
-}
-
-const TRUST_FILE: &str = "task-trust-v1.json";
-fn path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    app.path()
-        .app_local_data_dir()
-        .map(|dir| dir.join(TRUST_FILE))
-        .map_err(|e| format!("resolve local task trust store: {e}"))
 }
 
 #[tauri::command]
@@ -33,12 +25,14 @@ pub(crate) fn read_workspace_trust(
     Ok(WorkspaceTrustResult {
         protocol_version: 1,
         workspace_root: root.to_string_lossy().into_owned(),
-        state: trust::read(&path(&app)?, &root, &plugin_id)?,
+        state: trust::read(&trust::app_store_path(&app)?, &root, &plugin_id)?,
         plugin_id,
     })
 }
 
 #[tauri::command]
+// Tauri injects the window, app handle, and managed states beside the three stable IPC fields.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn set_workspace_trust(
     workspace_root: String,
     plugin_id: String,
@@ -47,13 +41,15 @@ pub(crate) fn set_workspace_trust(
     app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
     tasks: State<'_, TaskManager>,
+    process_queries: State<'_, PluginProcessQueryManager>,
 ) -> Result<WorkspaceTrustResult, String> {
     let root = active
         .resolve(window.label(), &workspace_root)
         .map_err(|e| e.to_string())?;
-    let result = trust::set(&path(&app)?, &root, &plugin_id, state)?;
+    let result = trust::set(&trust::app_store_path(&app)?, &root, &plugin_id, state)?;
     if result != TrustState::Trusted {
         tasks.cancel_workspace(&root);
+        process_queries.cancel_session_operations(window.label(), &plugin_id);
     }
     Ok(WorkspaceTrustResult {
         protocol_version: 1,

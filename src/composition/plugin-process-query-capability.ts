@@ -7,6 +7,7 @@ import type {
   PluginProcessQueryBridge,
   PluginProcessQueryResult,
 } from "../protocol/plugin-process-query.ts";
+import { hostProcessQueryIds } from "../application/plugins/host-operation-contract.ts";
 
 export function createPluginProcessQueriesCapability(
   bridge: PluginProcessQueryBridge | undefined,
@@ -14,8 +15,11 @@ export function createPluginProcessQueriesCapability(
   identity: PluginWorkspaceIdentity,
 ): PluginProcessQueriesCapability | undefined {
   const declarations = plugin.manifest.processQueries;
-  if (!bridge || !declarations || declarations.length === 0) return undefined;
-  const admitted = new Set(declarations.map((query) => query.id));
+  const admitted = new Set([
+    ...(declarations ?? []).map((query) => query.id),
+    ...hostProcessQueryIds(plugin.manifest.hostOperations),
+  ]);
+  if (!bridge || admitted.size === 0) return undefined;
   return Object.freeze({
     execute: async (queryId: string) => {
       if (!admitted.has(queryId)) throw new Error(`Plugin process query is not declared: ${queryId}`);

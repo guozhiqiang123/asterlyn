@@ -57,6 +57,9 @@ export function adaptPluginManifest(manifest: SdkPluginManifest): BundledPluginM
       ? {}
       : { taskAuthorization: adaptTaskAuthorization(manifest.taskAuthorization) }),
     ...(manifest.workspaceTool === undefined ? {} : { workspaceTool: adaptWorkspaceTool(manifest.workspaceTool) }),
+    ...(manifest.hostOperations === undefined
+      ? {}
+      : { hostOperations: Object.freeze(manifest.hostOperations.map((operation) => Object.freeze({ id: operation.id }))) }),
     ...(manifest.processQueries === undefined ? {} : { processQueries: adaptProcessQueries(manifest.processQueries) }),
     ...(manifest.toolOperations === undefined ? {} : { toolOperations: adaptToolOperations(manifest.toolOperations) }),
   };

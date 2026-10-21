@@ -7,6 +7,11 @@
       "maximumLines": 2100,
       "disposition": "MKT7 reviewed lifecycle boundary; extract installation persistence before adding another marketplace domain"
     },
+    "crates/asterlyn-plugin-package/src/lib.rs": {
+      "owner": "immutable plugin archive admission and public manifest contract",
+      "maximumLines": 1600,
+      "disposition": "schema-3 authority and content-binding boundary; move archive IO or manifest validation into a dedicated module before adding another package concern"
+    },
     "crates/asterlyn-git/src/operation.rs": {
       "owner": "reviewed and recoverable Git operation domain",
       "maximumLines": 2232,

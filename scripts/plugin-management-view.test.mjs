@@ -14,9 +14,9 @@ const copy = {
   installedTab: "Installed", marketplaceTab: "Marketplace", marketplaceDescription: "Discover plugins.", addSource: "Add source", editSource: "Edit source", deleteSource: "Remove source", confirmDeleteSource: "Remove this source?", cancel: "Cancel", save: "Save",
   repository: "GitHub repository", sourceName: "Display name", sourceDescription: "Description", sourceRepositoryPlaceholder: "owner/repository", sourceNamePlaceholder: "Plugin name", sourceDescriptionPlaceholder: "Description",
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading sources…", noSources: "No sources.", notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ", marketplaceSecurityNote: "Packages are verified before installation.",
-  inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", license: "License", pendingRuntimeNote: "Pending isolated runtime.",
+  inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", hostOperations: "Host operations", hostOperationSummary: (id) => `${id} · reviewed query or mutation · trusted workspace required`, license: "License", pendingRuntimeNote: "Pending isolated runtime.",
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
-  enableInstalledPlugin: "Enable installed package", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin data is retained.",
+  enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin data is retained.",
 };
 
 const entry = {
@@ -139,10 +139,12 @@ test("plugin marketplace renders a host-owned admission review", () => {
   const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy, false, {
     tab: "marketplace", loading: false, error: null, busyRepository: null, form: null,
     confirmDeleteRepository: null, installations: null, snapshot: { schemaVersion: 1, generation: 2, recovered: false, sources: [] },
-    admissionReview: { reviewToken: "b".repeat(64), repository: "asterlyn/example", sourceGeneration: 2, assetName: "example.asterlyn-plugin.tgz", assetSizeBytes: 1024, digest: `sha256:${"a".repeat(64)}`, pluginId: "dev.asterlyn.example", version: "1.2.3", licenseExpression: "MIT", capabilities: ["tasks"], permissions: ["host.tasks.execute"], expandedBytes: 2048 },
+    admissionReview: { reviewToken: "b".repeat(64), repository: "asterlyn/example", sourceGeneration: 2, assetName: "example.asterlyn-plugin.tgz", assetSizeBytes: 1024, digest: `sha256:${"a".repeat(64)}`, pluginId: "dev.asterlyn.example", version: "1.2.3", licenseExpression: "MIT", capabilities: ["tasks"], permissions: ["host.tasks.execute"], hostOperations: ["adb.devices"], enabledAfterInstall: false, expandedBytes: 2048 },
   });
   assert.match(html, /Review plugin package/u);
   assert.match(html, /host\.tasks\.execute/u);
+  assert.match(html, /adb\.devices · reviewed query or mutation · trusted workspace required/u);
+  assert.match(html, /sha256:a{64}/u);
   assert.match(html, /data-plugin-admission-confirm/u);
   assert.match(html, /Pending isolated runtime/u);
 });
@@ -163,6 +165,59 @@ test("installed plugins require a controlled restart before activation", () => {
   assert.match(html, /Restart Asterlyn/u);
   assert.match(html, /data-installed-plugin-enabled/u);
   assert.match(html, /data-installed-plugin-uninstall/u);
+});
+
+test("installed lifecycle and manifest state render as one plugin identity card", () => {
+  const installedEntry = { ...entry, origin: "installed", id: "dev.asterlyn.example", version: "1.2.3", hostOperations: ["adb.devices"] };
+  const html = renderPluginManagementSection({ schemaVersion: 1, entries: [installedEntry] }, copy, false, {
+    tab: "installed", loading: false, error: null, busyRepository: null, form: null,
+    confirmDeleteRepository: null, admissionReview: null, snapshot: null, restarting: false,
+    restartRequired: false, busyPlugin: null, confirmUninstallPlugin: null,
+    installations: { schemaVersion: 2, generation: 3, recovered: false, plugins: [{
+      pluginId: "dev.asterlyn.example", repository: "asterlyn/example", enabled: false,
+      bundledFallback: false, activeVersion: null, knownGoodVersion: null, pendingVersion: "1.2.3",
+      versions: [{ version: "1.2.3", packageDigest: `sha256:${"a".repeat(64)}`, contentDigest: `sha256:${"b".repeat(64)}`, admittedAtEpochMs: 42, runtimeStatus: "pendingRuntime" }],
+    }] },
+  });
+  assert.equal((html.match(/data-installed-plugin-id="dev\.asterlyn\.example"/gu) ?? []).length, 1);
+  assert.equal((html.match(/<article[^>]*data-plugin-id="dev\.asterlyn\.example"/gu) ?? []).length, 1);
+  assert.match(html, /data-plugin-settings="dev\.asterlyn\.example"/u);
+  assert.match(html, /data-installed-plugin-enabled="dev\.asterlyn\.example"/u);
+  assert.match(html, /data-installed-plugin-uninstall="dev\.asterlyn\.example"/u);
+});
+
+test("host-bundled isolated plugins can be disabled but are not offered for uninstall", () => {
+  const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy, false, {
+    tab: "installed", loading: false, error: null, busyRepository: null, form: null,
+    confirmDeleteRepository: null, admissionReview: null, snapshot: null, restarting: false,
+    restartRequired: false, busyPlugin: null, confirmUninstallPlugin: "dev.asterlyn.android-gradle",
+    installations: { schemaVersion: 2, generation: 3, recovered: false, plugins: [{
+      pluginId: "dev.asterlyn.android-gradle", repository: "guozhiqiang123/asterlyn-plugin-android-gradle", enabled: true,
+      bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.5.8",
+      versions: [{ version: "0.5.8", packageDigest: `sha256:${"a".repeat(64)}`, contentDigest: `sha256:${"b".repeat(64)}`, admittedAtEpochMs: 42, runtimeStatus: "pendingRuntime" }],
+    }] },
+  });
+  assert.match(html, /data-installed-plugin-enabled="dev\.asterlyn\.android-gradle"/u);
+  assert.doesNotMatch(html, /data-installed-plugin-uninstall/u);
+});
+
+test("enabling an admitted plugin reviews its exact digest and semantic authority", () => {
+  const installedEntry = { ...entry, origin: "installed", id: "dev.asterlyn.example", version: "1.2.3", hostOperations: ["adb.devices"] };
+  const html = renderPluginManagementSection({ schemaVersion: 1, entries: [installedEntry] }, copy, false, {
+    tab: "installed", loading: false, error: null, busyRepository: null, form: null,
+    confirmDeleteRepository: null, admissionReview: null, snapshot: null, restarting: false,
+    restartRequired: false, busyPlugin: null, confirmUninstallPlugin: null,
+    confirmEnablePlugin: "dev.asterlyn.example",
+    installations: { schemaVersion: 2, generation: 3, recovered: false, plugins: [{
+      pluginId: "dev.asterlyn.example", repository: "asterlyn/example", enabled: false,
+      bundledFallback: false, activeVersion: null, knownGoodVersion: null, pendingVersion: "1.2.3",
+      versions: [{ version: "1.2.3", packageDigest: `sha256:${"a".repeat(64)}`, contentDigest: `sha256:${"b".repeat(64)}`, admittedAtEpochMs: 42, runtimeStatus: "pendingRuntime" }],
+    }] },
+  });
+  assert.match(html, /Review exact package authority before enabling/u);
+  assert.match(html, /sha256:a{64}/u);
+  assert.match(html, /adb\.devices · reviewed query or mutation · trusted workspace required/u);
+  assert.match(html, /data-installed-plugin-enable-confirm="dev\.asterlyn\.example"/u);
 });
 
 test("installed plugin history exposes exact rollback and explicit retained-data uninstall review", () => {

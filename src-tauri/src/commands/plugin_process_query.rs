@@ -1,6 +1,6 @@
 use crate::application::{
     ActiveWorkspaces, PluginProcessQueryManager, PluginProcessQueryResult,
-    PluginToolOperationResult,
+    PluginToolOperationExecution, PluginToolOperationResult, trust,
 };
 use std::collections::HashMap;
 use tauri::State;
@@ -11,6 +11,7 @@ pub(crate) async fn execute_plugin_process_query(
     plugin_id: String,
     query_id: String,
     window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
     queries: State<'_, PluginProcessQueryManager>,
 ) -> Result<PluginProcessQueryResult, String> {
@@ -19,8 +20,9 @@ pub(crate) async fn execute_plugin_process_query(
         .map_err(|error| error.to_string())?;
     let owner = window.label().to_string();
     let manager = queries.inner().clone();
+    let trust_store = trust::app_store_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        manager.execute(&owner, &root, &plugin_id, &query_id)
+        manager.execute(&owner, &root, &trust_store, &plugin_id, &query_id)
     })
     .await
     .map_err(|error| format!("process query worker could not complete: {error}"))
@@ -36,6 +38,7 @@ pub(crate) async fn execute_plugin_tool_operation(
     operation_id: String,
     parameters: HashMap<String, String>,
     window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
     queries: State<'_, PluginProcessQueryManager>,
 ) -> Result<PluginToolOperationResult, String> {
@@ -44,15 +47,17 @@ pub(crate) async fn execute_plugin_tool_operation(
         .map_err(|error| error.to_string())?;
     let owner = window.label().to_string();
     let manager = queries.inner().clone();
+    let trust_store = trust::app_store_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        manager.execute_tool_operation(
-            &owner,
-            &root,
-            &plugin_id,
-            &request_id,
-            &operation_id,
-            &parameters,
-        )
+        manager.execute_tool_operation(PluginToolOperationExecution {
+            owner: &owner,
+            root: &root,
+            trust_store: &trust_store,
+            plugin_id: &plugin_id,
+            request_id: &request_id,
+            operation_id: &operation_id,
+            parameters: &parameters,
+        })
     })
     .await
     .map_err(|error| format!("plugin tool-operation worker could not complete: {error}"))

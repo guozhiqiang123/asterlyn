@@ -4,6 +4,7 @@ import {
   SDK_PLUGIN_WORKSPACE_TOOL_LIMITS,
 } from "../../../packages/plugin-sdk/index.ts";
 import type { BundledPlugin } from "./plugin-types.ts";
+import { HOST_OPERATION_IDS } from "./host-operation-contract.ts";
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 
@@ -11,6 +12,19 @@ export function validateOptionalPluginManifest(plugin: BundledPlugin): void {
   validateWorkspaceTool(plugin.id, plugin.manifest.workspaceTool);
   validateProcessQueries(plugin.id, plugin.manifest.processQueries);
   validateToolOperations(plugin.id, plugin.manifest.toolOperations);
+  validateHostOperations(plugin.id, plugin.manifest.hostOperations);
+}
+
+function validateHostOperations(pluginId: string, operations: BundledPlugin["manifest"]["hostOperations"]): void {
+  if (operations === undefined) return;
+  if (!Array.isArray(operations) || operations.length > 64) throw new Error(`Invalid plugin host operations: ${pluginId}`);
+  const ids = new Set<string>();
+  for (const operation of operations) {
+    if (!identifier(operation.id, 128) || ids.has(operation.id) || !HOST_OPERATION_IDS.has(operation.id)) {
+      throw new Error(`Invalid plugin host operation: ${pluginId}.${operation.id}`);
+    }
+    ids.add(operation.id);
+  }
 }
 
 function validateToolOperations(pluginId: string, operations: BundledPlugin["manifest"]["toolOperations"]): void {

@@ -7,7 +7,9 @@ import {
   createSilentPluginPreferenceSync,
 } from "../src/application/plugins/index.ts";
 import { PluginCompositionRuntime } from "../src/composition/plugin-runtime.ts";
-import { ANDROID_GRADLE_PLUGIN } from "@asterlyn/plugin-android-gradle";
+import { readBundledAndroidManifest } from "./plugin-package-fixture.mjs";
+
+const androidManifest = await readBundledAndroidManifest();
 
 class MemoryStorage {
   value = null;
@@ -19,14 +21,14 @@ test("plugin preferences default enabled and use the Android task-tree default",
   const storage = new MemoryStorage();
   const store = new PluginPreferenceStore(
     storage,
-    [ANDROID_GRADLE_PLUGIN.manifest],
+    [androidManifest],
     createSilentPluginPreferenceSync(),
   );
-  assert.equal(store.isEnabled(ANDROID_GRADLE_PLUGIN.id), true);
-  assert.equal(store.setting(ANDROID_GRADLE_PLUGIN.id, "taskPresentation"), "all-tasks-tree");
-  assert.equal(store.setSetting(ANDROID_GRADLE_PLUGIN.id, "taskPresentation", "quick-actions-tree"), true);
-  assert.equal(store.setting(ANDROID_GRADLE_PLUGIN.id, "taskPresentation"), "quick-actions-tree");
-  assert.equal(store.setSetting(ANDROID_GRADLE_PLUGIN.id, "taskPresentation", "not-a-mode"), false);
+  assert.equal(store.isEnabled(androidManifest.id), true);
+  assert.equal(store.setting(androidManifest.id, "taskPresentation"), "all-tasks-tree");
+  assert.equal(store.setSetting(androidManifest.id, "taskPresentation", "quick-actions-tree"), true);
+  assert.equal(store.setting(androidManifest.id, "taskPresentation"), "quick-actions-tree");
+  assert.equal(store.setSetting(androidManifest.id, "taskPresentation", "not-a-mode"), false);
   store.dispose();
 });
 
@@ -43,11 +45,11 @@ test("corrupt and unknown plugin preferences fail safe per known manifest", () =
       },
     },
   });
-  const store = new PluginPreferenceStore(storage, [ANDROID_GRADLE_PLUGIN.manifest], createSilentPluginPreferenceSync());
-  assert.equal(store.isEnabled(ANDROID_GRADLE_PLUGIN.id), true);
-  assert.equal(store.setting(ANDROID_GRADLE_PLUGIN.id, "taskPresentation"), "all-tasks-tree");
-  assert.deepEqual(store.preferences.enabled, { [ANDROID_GRADLE_PLUGIN.id]: true });
-  assert.deepEqual(Object.keys(store.preferences.settings[ANDROID_GRADLE_PLUGIN.id]), ["taskPresentation"]);
+  const store = new PluginPreferenceStore(storage, [androidManifest], createSilentPluginPreferenceSync());
+  assert.equal(store.isEnabled(androidManifest.id), true);
+  assert.equal(store.setting(androidManifest.id, "taskPresentation"), "all-tasks-tree");
+  assert.deepEqual(store.preferences.enabled, { [androidManifest.id]: true });
+  assert.deepEqual(Object.keys(store.preferences.settings[androidManifest.id]), ["taskPresentation"]);
   store.dispose();
 });
 
@@ -55,13 +57,13 @@ test("silently loading a plugin catalog preserves persisted preferences", () => 
   const storage = new MemoryStorage();
   storage.value = JSON.stringify({
     version: 1,
-    enabled: { [ANDROID_GRADLE_PLUGIN.id]: false },
-    settings: { [ANDROID_GRADLE_PLUGIN.id]: { taskPresentation: "quick-actions-tree" } },
+    enabled: { [androidManifest.id]: false },
+    settings: { [androidManifest.id]: { taskPresentation: "quick-actions-tree" } },
   });
   const store = new PluginPreferenceStore(storage, [], createSilentPluginPreferenceSync());
-  store.setManifests([ANDROID_GRADLE_PLUGIN.manifest], false);
-  assert.equal(store.isEnabled(ANDROID_GRADLE_PLUGIN.id), false);
-  assert.equal(store.setting(ANDROID_GRADLE_PLUGIN.id, "taskPresentation"), "quick-actions-tree");
+  store.setManifests([androidManifest], false);
+  assert.equal(store.isEnabled(androidManifest.id), false);
+  assert.equal(store.setting(androidManifest.id, "taskPresentation"), "quick-actions-tree");
   store.dispose();
 });
 
@@ -114,17 +116,31 @@ test("independently installed manifests populate host-owned plugin settings with
   runtime.dispose();
 });
 
-test("management catalog is available without activating a workspace", async () => {
+test("bundled isolated manifest is available without activating a workspace", async () => {
   const runtime = new PluginCompositionRuntime({
     registerCommand: () => () => undefined,
     replaceProviders: () => undefined,
     reportDiagnostic: () => undefined,
     reportError: (error) => { throw error; },
-    loadPlugins: async () => [ANDROID_GRADLE_PLUGIN],
+    pluginMarketplaceBridge: {
+      listPluginInstallations: async () => ({ schemaVersion: 2, generation: 1, recovered: false, plugins: [] }),
+      listInstalledPluginManifests: async () => ({
+        schemaVersion: 1,
+        generation: 1,
+        manifests: [{
+          pluginId: androidManifest.id,
+          pluginVersion: androidManifest.version,
+          packageDigest: `sha256:${"a".repeat(64)}`,
+          manifest: androidManifest,
+          error: null,
+        }],
+      }),
+    },
   });
   const snapshot = await runtime.loadManagementCatalog();
   assert.equal(snapshot.entries.length, 1);
-  assert.equal(snapshot.entries[0].id, ANDROID_GRADLE_PLUGIN.id);
+  assert.equal(snapshot.entries[0].id, androidManifest.id);
+  assert.equal(snapshot.entries[0].origin, "installed");
   assert.equal(snapshot.entries[0].matched, false);
   assert.equal(snapshot.entries[0].active, false);
   assert.equal(snapshot.entries[0].settingDescriptors[0].id, "taskPresentation");

@@ -11,10 +11,16 @@ export const EN_US_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   repository: "GitHub repository", sourceName: "Display name", sourceDescription: "Description", sourceRepositoryPlaceholder: "owner/repository or GitHub URL", sourceNamePlaceholder: "Plugin name", sourceDescriptionPlaceholder: "What this plugin provides",
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading plugin sources…", noSources: "No plugin sources are configured.",
   notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ",
-  marketplaceSecurityNote: "A GitHub Release is only a download source. Asterlyn verifies its repository identity, SHA-256, package structure, compatibility, license, permissions, and isolated runtime contract before installation.",
-  inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", license: "License", pendingRuntimeNote: "The admitted package is stored immutably. Restart Asterlyn to activate it through the isolated runtime health check; it does not replace the current plugin before then.",
+  marketplaceSecurityNote: "Experimental public catalog: arbitrary untrusted third-party packages are not supported yet. Package-selected executables and arguments are blocked; the pinned Android compatibility package can use only fixed host-owned operations.",
+  inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", hostOperations: "Host operations", hostOperationSummary: (id) => ({
+    "adb.devices": "Query · list Android devices through host-approved adb · trusted workspace required · bounded time and output",
+    "android.apk.inspect": "Query · inspect one selected .apk through host-approved Android SDK tools · trusted workspace required · bounded time and output",
+    "android.adb.install": "Mutation · install one selected .apk on one selected device through host-approved adb · trusted workspace required · bounded time and output",
+    "android.adb.uninstall": "Mutation · uninstall one validated application ID from one selected device through host-approved adb · trusted workspace required · bounded time and output",
+    "android.adb.launch": "Mutation · launch one validated Android component on one selected device through host-approved adb · trusted workspace required · bounded time and output",
+  } as Record<string, string>)[id] ?? "Unknown host operation; installation is blocked by package admission.", license: "License", pendingRuntimeNote: "The admitted package is retained under its verified Release digest and remains disabled. Enable it explicitly, then restart Asterlyn to revalidate it and run the isolated-runtime health check.",
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required to apply plugin changes", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
-  enableInstalledPlugin: "Enable installed package", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin settings, trust decisions, and caches will be retained for a later reinstall.",
+  enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin settings, trust decisions, and caches will be retained for a later reinstall.",
 };
 
 export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
@@ -28,8 +34,14 @@ export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   repository: "GitHub 仓库", sourceName: "显示名称", sourceDescription: "描述", sourceRepositoryPlaceholder: "owner/repository 或 GitHub 地址", sourceNamePlaceholder: "插件名称", sourceDescriptionPlaceholder: "说明插件提供的能力",
   officialSource: "官方源", customSource: "自定义源", enableSource: "启用源", refreshSource: "检查 Release", refreshingSource: "检查中…", loadingMarketplace: "正在加载插件源…", noSources: "尚未配置插件源。",
   notChecked: "尚未检查", releaseAvailable: "发现 Release", noRelease: "没有稳定 Release", staleRelease: "缓存", packageLabel: "安装包：", checkedLabel: "检查时间：",
-  marketplaceSecurityNote: "GitHub Release 只负责提供下载来源。安装前，Asterlyn 还会校验仓库身份、SHA-256、包结构、兼容性、许可证、权限和隔离运行时契约。",
-  inspectPackage: "审查安装包", inspectingPackage: "正在检查…", confirmAdmission: "准入安装包", admissionTitle: "审查插件安装包", permissions: "权限", capabilities: "能力", license: "许可证", pendingRuntimeNote: "准入后的安装包会进入不可变存储。重启 Asterlyn 后才会进入隔离运行时健康检查；在此之前不会替换当前插件。",
+  marketplaceSecurityNote: "公开插件目录仍处于实验阶段，暂不支持任意不受信任的第三方安装包。插件自选的可执行文件和参数会被拦截；固定版本的 Android 兼容包也只能使用宿主定义的操作。",
+  inspectPackage: "审查安装包", inspectingPackage: "正在检查…", confirmAdmission: "准入安装包", admissionTitle: "审查插件安装包", permissions: "权限", capabilities: "能力", hostOperations: "宿主操作", hostOperationSummary: (id) => ({
+    "adb.devices": "查询 · 通过宿主批准的 adb 列出 Android 设备 · 需要受信任工作区 · 时间与输出受限",
+    "android.apk.inspect": "查询 · 通过宿主批准的 Android SDK 工具检查一个已选择的 .apk · 需要受信任工作区 · 时间与输出受限",
+    "android.adb.install": "变更 · 通过宿主批准的 adb 向一个已选择设备安装一个已选择的 .apk · 需要受信任工作区 · 时间与输出受限",
+    "android.adb.uninstall": "变更 · 通过宿主批准的 adb 从一个已选择设备卸载一个已校验应用 ID · 需要受信任工作区 · 时间与输出受限",
+    "android.adb.launch": "变更 · 通过宿主批准的 adb 在一个已选择设备启动一个已校验组件 · 需要受信任工作区 · 时间与输出受限",
+  } as Record<string, string>)[id] ?? "未知宿主操作；安装包准入会拦截该操作。", license: "许可证", pendingRuntimeNote: "准入后的安装包会按已验证的 Release 摘要保留，并保持禁用。请明确启用后再重启 Asterlyn，系统会重新校验并进入隔离运行时健康检查。",
   admittedPackage: "已准入安装包", pendingRuntime: "等待隔离运行时", pendingRestart: "需要重启以应用插件变更", restartToApply: "重启 Asterlyn", restarting: "正在重启…",
-  enableInstalledPlugin: "启用已安装插件", knownGood: "已验证可用", quarantined: "已隔离", rollback: "回滚", uninstallPlugin: "卸载", confirmUninstallPlugin: "确定卸载此插件安装包吗？", uninstallKeepsData: "插件设置、信任记录和缓存会保留，重新安装后可继续使用。",
+  enableInstalledPlugin: "启用已安装插件", enableReviewTitle: "启用前审查此安装包的确切权限", confirmEnablePlugin: "重启后启用", knownGood: "已验证可用", quarantined: "已隔离", rollback: "回滚", uninstallPlugin: "卸载", confirmUninstallPlugin: "确定卸载此插件安装包吗？", uninstallKeepsData: "插件设置、信任记录和缓存会保留，重新安装后可继续使用。",
 };

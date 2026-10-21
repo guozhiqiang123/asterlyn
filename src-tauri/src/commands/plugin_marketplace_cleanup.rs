@@ -170,14 +170,30 @@ fn cleanup_version_packages(
     let mut removed = 0;
     for entry in entries {
         let path = entry.path();
-        let digest = file_name(&path);
-        let keep = digest.as_ref().is_some_and(|digest| {
-            referenced.contains(&(plugin_id.to_owned(), version.to_owned(), digest.clone()))
+        let name = file_name(&path);
+        let directory_digest = name.as_ref().filter(|name| {
+            referenced.contains(&(plugin_id.to_owned(), version.to_owned(), (*name).clone()))
         });
-        if keep {
+        let archive_digest = name.as_deref().and_then(|name| {
+            name.strip_suffix(".asterlyn-plugin.tgz").filter(|digest| {
+                referenced.contains(&(
+                    plugin_id.to_owned(),
+                    version.to_owned(),
+                    (*digest).to_owned(),
+                ))
+            })
+        });
+        if directory_digest.is_some() {
             if !is_safe_directory(&path)? {
                 return Err(format!(
                     "referenced plugin package is not a safe directory: {}",
+                    path.display()
+                ));
+            }
+        } else if archive_digest.is_some() {
+            if !is_safe_file(&path)? {
+                return Err(format!(
+                    "referenced plugin archive is not a safe file: {}",
                     path.display()
                 ));
             }
@@ -228,17 +244,73 @@ fn is_safe_directory(path: &Path) -> Result<bool, String> {
         .map_err(|error| format!("inspect {}: {error}", path.display()))
 }
 
-fn remove_entry(path: &Path) -> Result<(), String> {
+fn is_safe_file(path: &Path) -> Result<bool, String> {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+        .map_err(|error| format!("inspect {}: {error}", path.display()))
+}
+
+pub(crate) fn remove_marketplace_entry(path: &Path) -> Result<(), String> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(format!("inspect {}: {error}", path.display())),
     };
+    clear_read_only(path, &metadata)?;
     if metadata.is_dir() && !metadata.file_type().is_symlink() {
         fs::remove_dir_all(path).map_err(|error| format!("remove {}: {error}", path.display()))
     } else {
         fs::remove_file(path).map_err(|error| format!("remove {}: {error}", path.display()))
     }
+}
+
+fn remove_entry(path: &Path) -> Result<(), String> {
+    remove_marketplace_entry(path)
+}
+
+#[cfg(windows)]
+fn clear_read_only(path: &Path, metadata: &fs::Metadata) -> Result<(), String> {
+    if metadata.is_dir() && !metadata.file_type().is_symlink() {
+        for entry in
+            fs::read_dir(path).map_err(|error| format!("read {}: {error}", path.display()))?
+        {
+            let child = entry
+                .map_err(|error| format!("read {}: {error}", path.display()))?
+                .path();
+            let child_metadata = fs::symlink_metadata(&child)
+                .map_err(|error| format!("inspect {}: {error}", child.display()))?;
+            clear_read_only(&child, &child_metadata)?;
+        }
+    }
+    let mut permissions = metadata.permissions();
+    permissions.set_readonly(false);
+    fs::set_permissions(path, permissions)
+        .map_err(|error| format!("prepare {} for removal: {error}", path.display()))
+}
+
+#[cfg(unix)]
+fn clear_read_only(path: &Path, metadata: &fs::Metadata) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    if metadata.is_dir() && !metadata.file_type().is_symlink() {
+        for entry in
+            fs::read_dir(path).map_err(|error| format!("read {}: {error}", path.display()))?
+        {
+            let child = entry
+                .map_err(|error| format!("read {}: {error}", path.display()))?
+                .path();
+            let child_metadata = fs::symlink_metadata(&child)
+                .map_err(|error| format!("inspect {}: {error}", child.display()))?;
+            clear_read_only(&child, &child_metadata)?;
+        }
+    }
+    if !metadata.file_type().is_symlink() {
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(permissions.mode() | 0o200);
+        fs::set_permissions(path, permissions)
+            .map_err(|error| format!("prepare {} for removal: {error}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn remove_empty_directory(path: &Path) -> Result<(), String> {
@@ -275,8 +347,12 @@ mod tests {
         let referenced = root
             .join("packages/dev.asterlyn.example/1.0.0")
             .join(&digest);
+        let retained_archive = root
+            .join("packages/dev.asterlyn.example/1.0.0")
+            .join(format!("{digest}.asterlyn-plugin.tgz"));
         fs::create_dir_all(&referenced).unwrap();
         fs::write(referenced.join("plugin.json"), b"kept").unwrap();
+        fs::write(&retained_archive, b"verified archive").unwrap();
         fs::create_dir_all(root.join("packages/dev.asterlyn.example/1.0.0/orphan")).unwrap();
         fs::create_dir_all(root.join("packages/dev.asterlyn.example/2.0.0/unused")).unwrap();
         fs::create_dir_all(root.join("packages/dev.asterlyn.orphan/1.0.0/unused")).unwrap();
@@ -291,6 +367,7 @@ mod tests {
         assert!(report.package_entries >= 4);
         assert_eq!(report.restored_tombstones, 0);
         assert_eq!(fs::read(referenced.join("plugin.json")).unwrap(), b"kept");
+        assert_eq!(fs::read(retained_archive).unwrap(), b"verified archive");
         assert!(
             !root
                 .join("packages/dev.asterlyn.example/1.0.0/orphan")
@@ -360,6 +437,7 @@ mod tests {
                 versions: vec![AdmittedPluginVersion {
                     version: "1.0.0".into(),
                     package_digest: format!("sha256:{digest}"),
+                    content_digest: Some(format!("sha256:{}", "b".repeat(64))),
                     admitted_at_epoch_ms: 1,
                     runtime_status: PluginRuntimeStatus::KnownGood,
                 }],

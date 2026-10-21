@@ -1,6 +1,8 @@
 use std::fs;
 
-use asterlyn_plugin_marketplace::{PluginInstallationStore, PluginRuntimeStatus};
+use asterlyn_plugin_marketplace::{
+    AdmittedPluginIdentity, PluginInstallationStore, PluginRuntimeStatus,
+};
 
 const PLUGIN_ID: &str = "dev.asterlyn.recovery-test";
 const REPOSITORY: &str = "asterlyn/recovery-test";
@@ -102,14 +104,18 @@ fn admit_and_promote(
 ) {
     store
         .record_admitted(
-            PLUGIN_ID,
-            REPOSITORY,
-            version,
-            package_digest,
+            AdmittedPluginIdentity {
+                plugin_id: PLUGIN_ID,
+                repository: REPOSITORY,
+                version,
+                package_digest,
+                content_digest: &content_digest(),
+            },
             admitted_at_epoch_ms,
             false,
         )
         .unwrap();
+    store.set_plugin_enabled(PLUGIN_ID, true).unwrap();
     store.recover_interrupted_activations().unwrap();
     store
         .begin_activation(PLUGIN_ID, version, package_digest)
@@ -127,10 +133,13 @@ fn admit_and_quarantine(
 ) {
     store
         .record_admitted(
-            PLUGIN_ID,
-            REPOSITORY,
-            version,
-            package_digest,
+            AdmittedPluginIdentity {
+                plugin_id: PLUGIN_ID,
+                repository: REPOSITORY,
+                version,
+                package_digest,
+                content_digest: &content_digest(),
+            },
             admitted_at_epoch_ms,
             false,
         )
@@ -146,4 +155,8 @@ fn admit_and_quarantine(
 
 fn digest(value: usize) -> String {
     format!("sha256:{value:064x}")
+}
+
+fn content_digest() -> String {
+    format!("sha256:{}", "f".repeat(64))
 }

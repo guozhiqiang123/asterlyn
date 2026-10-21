@@ -1,6 +1,5 @@
 use asterlyn_plugin_package::{
-    ProcessExecutableCandidate, ProcessQuery, ToolOperation,
-    ToolOperationArgument as PackageToolArgument,
+    HostOperationDeclaration, ProcessExecutableCandidate, ProcessQuery, ToolOperation,
 };
 use asterlyn_task::encode_output;
 use serde::Serialize;
@@ -14,12 +13,19 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[path = "plugin_tool_authority.rs"]
+mod authority;
 #[path = "plugin_process_executable.rs"]
 mod executable;
 
+use authority::{
+    AdmittedQuery, AdmittedToolOperation, PluginToolAuthority, ToolOperationArgument,
+    ToolOperationParameter,
+};
+pub(crate) use authority::{PluginToolAuthorityIdentity, validate_external_tool_authority};
 use executable::{
-    ToolOperationParameterKind, executable_name, resolve_executable, valid_request_id,
-    validate_tool_parameter,
+    ApprovedExecutableRoots, ToolOperationParameterKind, executable_name, resolve_executable,
+    valid_request_id, validate_tool_parameter,
 };
 
 const PROTOCOL_VERSION: u8 = 1;
@@ -69,154 +75,24 @@ pub(crate) struct PluginToolOperationResult {
     pub(crate) error: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-struct AdmittedQuery {
-    args: Vec<String>,
-    timeout: Duration,
-    max_output_bytes: usize,
-    executables: Vec<ProcessExecutableCandidate>,
+pub(crate) struct ExactPluginProcessQuery<'a> {
+    pub(crate) owner: &'a str,
+    pub(crate) root: &'a Path,
+    pub(crate) trust_store: &'a Path,
+    pub(crate) plugin_id: &'a str,
+    pub(crate) plugin_version: &'a str,
+    pub(crate) package_digest: &'a str,
+    pub(crate) query_id: &'a str,
 }
 
-#[derive(Debug, Clone)]
-struct AdmittedToolOperation {
-    args: Vec<ToolOperationArgument>,
-    parameters: Vec<ToolOperationParameter>,
-    timeout: Duration,
-    max_output_bytes: usize,
-    executables: Vec<ProcessExecutableCandidate>,
-}
-
-#[derive(Debug, Clone)]
-enum ToolOperationArgument {
-    Literal(String),
-    Parameter(String),
-}
-
-#[derive(Debug, Clone)]
-struct ToolOperationParameter {
-    name: String,
-    kind: ToolOperationParameterKind,
-}
-
-impl AdmittedToolOperation {
-    fn resolve_arguments(
-        &self,
-        root: &Path,
-        values: &HashMap<String, String>,
-    ) -> Result<Vec<String>, String> {
-        if values.len() != self.parameters.len() {
-            return Err("tool-operation parameters do not match the admitted declaration".into());
-        }
-        let mut resolved = HashMap::new();
-        for parameter in &self.parameters {
-            let value = values
-                .get(parameter.name.as_str())
-                .ok_or_else(|| format!("missing tool-operation parameter: {}", parameter.name))?;
-            let value = validate_tool_parameter(root, &parameter.kind, value)?;
-            resolved.insert(parameter.name.as_str(), value);
-        }
-        self.args
-            .iter()
-            .map(|argument| match argument {
-                ToolOperationArgument::Literal(value) => Ok(value.clone()),
-                ToolOperationArgument::Parameter(name) => resolved
-                    .get(name.as_str())
-                    .cloned()
-                    .ok_or_else(|| format!("unresolved tool-operation parameter: {name}")),
-            })
-            .collect()
-    }
-}
-
-#[derive(Debug, Clone)]
-struct PluginToolAuthority {
-    plugin_version: String,
-    package_digest: String,
-    queries: HashMap<String, AdmittedQuery>,
-    operations: HashMap<String, AdmittedToolOperation>,
-}
-
-impl PluginToolAuthority {
-    fn from_package(
-        plugin_version: &str,
-        package_digest: &str,
-        queries: &[ProcessQuery],
-        operations: &[ToolOperation],
-    ) -> Result<Self, String> {
-        let queries = queries
-            .iter()
-            .map(|query| {
-                Ok((
-                    query.id.clone(),
-                    AdmittedQuery {
-                        args: query.args.clone(),
-                        timeout: Duration::from_millis(query.timeout_ms),
-                        max_output_bytes: query.max_output_bytes,
-                        executables: query.executables.clone(),
-                    },
-                ))
-            })
-            .collect::<Result<HashMap<_, _>, String>>()?;
-        let operations = operations
-            .iter()
-            .map(|operation| {
-                let args = operation
-                    .args
-                    .iter()
-                    .map(|argument| match argument {
-                        PackageToolArgument::Literal { value } => {
-                            ToolOperationArgument::Literal(value.clone())
-                        }
-                        PackageToolArgument::Parameter { name } => {
-                            ToolOperationArgument::Parameter(name.clone())
-                        }
-                    })
-                    .collect();
-                let parameters = operation
-                    .parameters
-                    .iter()
-                    .map(|parameter| {
-                        let kind = match parameter.kind.as_str() {
-                            "executionTargetId" => ToolOperationParameterKind::ExecutionTargetId,
-                            "androidApplicationId" => {
-                                ToolOperationParameterKind::AndroidApplicationId
-                            }
-                            "androidComponent" => ToolOperationParameterKind::AndroidComponent,
-                            "workspaceArtifact" => ToolOperationParameterKind::WorkspaceArtifact(
-                                parameter.suffixes.clone().unwrap_or_default(),
-                            ),
-                            _ => {
-                                return Err(format!(
-                                    "unsupported tool-operation parameter kind: {}",
-                                    parameter.kind
-                                ));
-                            }
-                        };
-                        Ok(ToolOperationParameter {
-                            name: parameter.name.clone(),
-                            kind,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, String>>()?;
-                Ok((
-                    operation.id.clone(),
-                    AdmittedToolOperation {
-                        args,
-                        parameters,
-                        timeout: Duration::from_millis(operation.timeout_ms),
-                        max_output_bytes: operation.max_output_bytes,
-                        executables: operation.executables.clone(),
-                    },
-                ))
-            })
-            .collect::<Result<HashMap<_, _>, String>>()?;
-        Ok(Self {
-            plugin_version: plugin_version.to_owned(),
-            package_digest: package_digest.to_owned(),
-            queries,
-            operations,
-        })
-    }
+pub(crate) struct PluginToolOperationExecution<'a> {
+    pub(crate) owner: &'a str,
+    pub(crate) root: &'a Path,
+    pub(crate) trust_store: &'a Path,
+    pub(crate) plugin_id: &'a str,
+    pub(crate) request_id: &'a str,
+    pub(crate) operation_id: &'a str,
+    pub(crate) parameters: &'a HashMap<String, String>,
 }
 
 struct RunningQuery {
@@ -238,25 +114,31 @@ struct PluginProcessQueryManagerInner {
     sequence: std::sync::atomic::AtomicU64,
     running: Mutex<HashMap<String, RunningQuery>>,
     authorities: Mutex<HashMap<(String, String), PluginToolAuthority>>,
+    approved_executables: ApprovedExecutableRoots,
 }
 
 impl PluginProcessQueryManager {
     pub(crate) fn admit_authority(
         &self,
         owner: &str,
-        plugin_id: &str,
-        plugin_version: &str,
-        package_digest: &str,
+        identity: PluginToolAuthorityIdentity<'_>,
+        schema_version: u32,
+        host_operations: &[HostOperationDeclaration],
         queries: &[ProcessQuery],
         operations: &[ToolOperation],
     ) -> Result<(), String> {
-        let authority =
-            PluginToolAuthority::from_package(plugin_version, package_digest, queries, operations)?;
+        let authority = PluginToolAuthority::from_external_package(
+            identity,
+            schema_version,
+            host_operations,
+            queries,
+            operations,
+        )?;
         self.inner
             .authorities
             .lock()
             .map_err(|_| "plugin tool-authority registry is unavailable".to_owned())?
-            .insert((owner.to_owned(), plugin_id.to_owned()), authority);
+            .insert((owner.to_owned(), identity.plugin_id.to_owned()), authority);
         Ok(())
     }
 
@@ -270,6 +152,7 @@ impl PluginProcessQueryManager {
         &self,
         owner: &str,
         root: &Path,
+        trust_store: &Path,
         plugin_id: &str,
         query_id: &str,
     ) -> PluginProcessQueryResult {
@@ -283,28 +166,40 @@ impl PluginProcessQueryManager {
                 ),
             );
         };
-        let executable = match resolve_executable(root, &query.executables) {
-            Ok(value) => value,
-            Err(error) => {
-                return result(
-                    plugin_id,
-                    query_id,
-                    CollectedOutput::with_error(PluginProcessQueryStatus::Unavailable, error),
-                );
-            }
-        };
+        let executable =
+            match resolve_executable(&self.inner.approved_executables, &query.executables) {
+                Ok(value) => value,
+                Err(error) => {
+                    return result(
+                        plugin_id,
+                        query_id,
+                        CollectedOutput::with_error(PluginProcessQueryStatus::Unavailable, error),
+                    );
+                }
+            };
+        if let Err(error) = super::trust::require_trusted(trust_store, root, plugin_id) {
+            return result(
+                plugin_id,
+                query_id,
+                CollectedOutput::with_error(PluginProcessQueryStatus::Unavailable, error),
+            );
+        }
         self.execute_resolved(owner, root, plugin_id, query_id, &executable, &query)
     }
 
     pub(crate) fn execute_exact(
         &self,
-        owner: &str,
-        root: &Path,
-        plugin_id: &str,
-        plugin_version: &str,
-        package_digest: &str,
-        query_id: &str,
+        execution: ExactPluginProcessQuery<'_>,
     ) -> PluginProcessQueryResult {
+        let ExactPluginProcessQuery {
+            owner,
+            root,
+            trust_store,
+            plugin_id,
+            plugin_version,
+            package_digest,
+            query_id,
+        } = execution;
         let Some(query) = self.admitted_query(
             owner,
             plugin_id,
@@ -320,16 +215,24 @@ impl PluginProcessQueryManager {
                 ),
             );
         };
-        let executable = match resolve_executable(root, &query.executables) {
-            Ok(value) => value,
-            Err(error) => {
-                return result(
-                    plugin_id,
-                    query_id,
-                    CollectedOutput::with_error(PluginProcessQueryStatus::Unavailable, error),
-                );
-            }
-        };
+        let executable =
+            match resolve_executable(&self.inner.approved_executables, &query.executables) {
+                Ok(value) => value,
+                Err(error) => {
+                    return result(
+                        plugin_id,
+                        query_id,
+                        CollectedOutput::with_error(PluginProcessQueryStatus::Unavailable, error),
+                    );
+                }
+            };
+        if let Err(error) = super::trust::require_trusted(trust_store, root, plugin_id) {
+            return result(
+                plugin_id,
+                query_id,
+                CollectedOutput::with_error(PluginProcessQueryStatus::Unavailable, error),
+            );
+        }
         self.execute_resolved(owner, root, plugin_id, query_id, &executable, &query)
     }
 
@@ -434,15 +337,30 @@ impl PluginProcessQueryManager {
         }
     }
 
+    pub(crate) fn cancel_session(&self, owner: &str, plugin_id: &str) {
+        self.cancel_session_operations(owner, plugin_id);
+        if let Ok(mut authorities) = self.inner.authorities.lock() {
+            authorities.remove(&(owner.to_owned(), plugin_id.to_owned()));
+        }
+    }
+
+    pub(crate) fn cancel_session_operations(&self, owner: &str, plugin_id: &str) {
+        self.cancel_matching(|value| value.owner == owner && value.plugin_id == plugin_id);
+    }
+
     pub(crate) fn execute_tool_operation(
         &self,
-        owner: &str,
-        root: &Path,
-        plugin_id: &str,
-        request_id: &str,
-        operation_id: &str,
-        parameters: &HashMap<String, String>,
+        execution: PluginToolOperationExecution<'_>,
     ) -> PluginToolOperationResult {
+        let PluginToolOperationExecution {
+            owner,
+            root,
+            trust_store,
+            plugin_id,
+            request_id,
+            operation_id,
+            parameters,
+        } = execution;
         if !valid_request_id(request_id) {
             return tool_result(
                 plugin_id,
@@ -476,17 +394,26 @@ impl PluginProcessQueryManager {
                 );
             }
         };
-        let executable = match resolve_executable(root, &operation.executables) {
-            Ok(value) => value,
-            Err(error) => {
-                return tool_result(
-                    plugin_id,
-                    request_id,
-                    operation_id,
-                    CollectedOutput::with_error(PluginProcessQueryStatus::Failed, error),
-                );
-            }
-        };
+        let executable =
+            match resolve_executable(&self.inner.approved_executables, &operation.executables) {
+                Ok(value) => value,
+                Err(error) => {
+                    return tool_result(
+                        plugin_id,
+                        request_id,
+                        operation_id,
+                        CollectedOutput::with_error(PluginProcessQueryStatus::Failed, error),
+                    );
+                }
+            };
+        if let Err(error) = super::trust::require_trusted(trust_store, root, plugin_id) {
+            return tool_result(
+                plugin_id,
+                request_id,
+                operation_id,
+                CollectedOutput::with_error(PluginProcessQueryStatus::Failed, error),
+            );
+        }
         let key = format!(
             "operation-{}",
             self.inner
@@ -622,11 +549,7 @@ impl PluginProcessQueryManager {
             }
             return authority.queries.get(query_id).cloned();
         }
-        if exact_identity.is_some() {
-            None
-        } else {
-            bundled_query(plugin_id, query_id)
-        }
+        None
     }
 
     fn admitted_tool_operation(
@@ -642,10 +565,7 @@ impl PluginProcessQueryManager {
             .ok()?
             .get(&(owner.to_owned(), plugin_id.to_owned()))
             .cloned();
-        match authority {
-            Some(value) => value.operations.get(operation_id).cloned(),
-            None => bundled_tool_operation(plugin_id, operation_id),
-        }
+        authority.and_then(|value| value.operations.get(operation_id).cloned())
     }
 
     fn cancel_matching(&self, predicate: impl Fn(&RunningQuery) -> bool) {
@@ -779,11 +699,6 @@ fn bundled_tool_operation(plugin_id: &str, operation_id: &str) -> Option<Admitte
 
 fn android_adb_candidates() -> Vec<ProcessExecutableCandidate> {
     vec![
-        ProcessExecutableCandidate::WorkspaceProperty {
-            path: "local.properties".into(),
-            key: "sdk.dir".into(),
-            relative_path: platform_tool_path("adb"),
-        },
         ProcessExecutableCandidate::Environment {
             variable: "ANDROID_SDK_ROOT".into(),
             relative_path: platform_tool_path("adb"),
@@ -791,9 +706,6 @@ fn android_adb_candidates() -> Vec<ProcessExecutableCandidate> {
         ProcessExecutableCandidate::Environment {
             variable: "ANDROID_HOME".into(),
             relative_path: platform_tool_path("adb"),
-        },
-        ProcessExecutableCandidate::Path {
-            name: executable_name("adb"),
         },
     ]
 }
@@ -1109,21 +1021,28 @@ mod tests {
     #[test]
     fn package_authority_is_scoped_to_owner_and_exact_identity() {
         let manager = PluginProcessQueryManager::default();
+        let plugin_id = "dev.asterlyn.android-gradle";
+        let plugin_version = "0.5.8";
+        let package_digest = "sha256:bundled-android-package";
         manager
             .admit_authority(
                 "window-a",
-                "dev.example.fixture",
-                "1.2.3",
-                "sha256:fixture",
-                &[ProcessQuery {
-                    id: "fixture.query".into(),
-                    args: vec!["--version".into()],
-                    timeout_ms: 1_000,
-                    max_output_bytes: 1_024,
-                    executables: vec![ProcessExecutableCandidate::Path {
-                        name: "fixture-tool".into(),
-                    }],
-                }],
+                PluginToolAuthorityIdentity {
+                    repository: "guozhiqiang123/asterlyn-plugin-android-gradle",
+                    plugin_id,
+                    plugin_version,
+                    package_digest,
+                },
+                asterlyn_plugin_package::PACKAGE_SCHEMA_VERSION,
+                &[
+                    HostOperationDeclaration {
+                        id: "adb.devices".into(),
+                    },
+                    HostOperationDeclaration {
+                        id: "android.adb.install".into(),
+                    },
+                ],
+                &[],
                 &[],
             )
             .unwrap();
@@ -1132,9 +1051,9 @@ mod tests {
             manager
                 .admitted_query(
                     "window-a",
-                    "dev.example.fixture",
-                    "fixture.query",
-                    Some(("1.2.3", "sha256:fixture")),
+                    plugin_id,
+                    "adb.devices",
+                    Some((plugin_version, package_digest)),
                 )
                 .is_some()
         );
@@ -1142,9 +1061,9 @@ mod tests {
             manager
                 .admitted_query(
                     "window-b",
-                    "dev.example.fixture",
-                    "fixture.query",
-                    Some(("1.2.3", "sha256:fixture")),
+                    plugin_id,
+                    "adb.devices",
+                    Some((plugin_version, package_digest)),
                 )
                 .is_none()
         );
@@ -1152,83 +1071,23 @@ mod tests {
             manager
                 .admitted_query(
                     "window-a",
-                    "dev.example.fixture",
-                    "fixture.query",
-                    Some(("1.2.4", "sha256:fixture")),
+                    plugin_id,
+                    "adb.devices",
+                    Some(("0.5.9", package_digest)),
                 )
                 .is_none()
         );
-        manager.revoke_authority("window-a", "dev.example.fixture");
+        manager.revoke_authority("window-a", plugin_id);
         assert!(
             manager
-                .admitted_query("window-a", "dev.example.fixture", "fixture.query", None)
+                .admitted_query("window-a", plugin_id, "adb.devices", None)
                 .is_none()
         );
-    }
-
-    #[test]
-    fn package_authority_executes_declared_query_and_operation_without_host_catalog_entry() {
-        let directory = tempfile::tempdir().unwrap();
-        executable(directory.path(), "fixture-tool", "printf '%s\\n' \"$*\"");
-        fs::write(
-            directory.path().join("fixture.properties"),
-            format!("tool.dir={}\n", directory.path().display()),
-        )
-        .unwrap();
-        let executable = ProcessExecutableCandidate::WorkspaceProperty {
-            path: "fixture.properties".into(),
-            key: "tool.dir".into(),
-            relative_path: "fixture-tool".into(),
-        };
-        let manager = PluginProcessQueryManager::default();
-        manager
-            .admit_authority(
-                "window-a",
-                "dev.example.fixture",
-                "1.0.0",
-                "sha256:fixture",
-                &[ProcessQuery {
-                    id: "fixture.query".into(),
-                    args: vec!["query".into()],
-                    timeout_ms: 1_000,
-                    max_output_bytes: 1_024,
-                    executables: vec![executable.clone()],
-                }],
-                &[ToolOperation {
-                    id: "fixture.operation".into(),
-                    intent: "query".into(),
-                    args: vec![PackageToolArgument::Literal {
-                        value: "operation".into(),
-                    }],
-                    parameters: vec![],
-                    timeout_ms: 1_000,
-                    max_output_bytes: 1_024,
-                    executables: vec![executable],
-                }],
-            )
-            .unwrap();
-
-        let query = manager.execute_exact(
-            "window-a",
-            directory.path(),
-            "dev.example.fixture",
-            "1.0.0",
-            "sha256:fixture",
-            "fixture.query",
+        assert!(
+            manager
+                .admitted_tool_operation("window-a", plugin_id, "android.adb.install")
+                .is_none()
         );
-        assert_eq!(query.status, PluginProcessQueryStatus::Succeeded);
-        assert_eq!(query.stdout_base64, encode_output(b"query\n"));
-
-        let operation = manager.execute_tool_operation(
-            "window-a",
-            directory.path(),
-            "dev.example.fixture",
-            "request-1",
-            "fixture.operation",
-            &HashMap::new(),
-        );
-        assert_eq!(operation.status, PluginProcessQueryStatus::Succeeded);
-        assert_eq!(operation.stdout_base64, encode_output(b"operation\n"));
     }
 
     #[test]
@@ -1237,9 +1096,14 @@ mod tests {
         manager
             .admit_authority(
                 "window-a",
-                "dev.asterlyn.android-gradle",
-                "9.0.0",
-                "sha256:fixture",
+                PluginToolAuthorityIdentity {
+                    repository: "example/fixture",
+                    plugin_id: "dev.asterlyn.android-gradle",
+                    plugin_version: "9.0.0",
+                    package_digest: "sha256:fixture",
+                },
+                asterlyn_plugin_package::PACKAGE_SCHEMA_VERSION,
+                &[],
                 &[],
                 &[],
             )
@@ -1303,20 +1167,43 @@ mod tests {
     }
 
     #[test]
-    fn workspace_sdk_property_resolves_adb() {
+    fn approved_sdk_root_resolves_adb_without_consulting_workspace_properties() {
         let directory = tempfile::tempdir().unwrap();
         let sdk = directory.path().join("sdk");
         fs::create_dir_all(sdk.join("platform-tools")).unwrap();
         let adb = executable(&sdk.join("platform-tools"), "adb", "exit 0");
-        fs::write(
-            directory.path().join("local.properties"),
-            format!("sdk.dir={}\n", sdk.display()),
-        )
-        .unwrap();
+        let approved = ApprovedExecutableRoots::for_android_sdk(&sdk);
         assert_eq!(
-            resolve_executable(directory.path(), &android_adb_candidates()).unwrap(),
+            resolve_executable(&approved, &android_adb_candidates()).unwrap(),
             fs::canonicalize(adb).unwrap()
         );
+        let unapproved = ApprovedExecutableRoots::default();
+        assert!(
+            resolve_executable(
+                &unapproved,
+                &[ProcessExecutableCandidate::WorkspaceProperty {
+                    path: "local.properties".into(),
+                    key: "sdk.dir".into(),
+                    relative_path: platform_tool_path("adb"),
+                }]
+            )
+            .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn approved_sdk_root_rejects_an_executable_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempfile::tempdir().unwrap();
+        let sdk = directory.path().join("sdk");
+        fs::create_dir_all(sdk.join("platform-tools")).unwrap();
+        let outside = executable(directory.path(), "outside-adb", "exit 0");
+        symlink(&outside, sdk.join("platform-tools/adb")).unwrap();
+        let approved = ApprovedExecutableRoots::for_android_sdk(&sdk);
+
+        assert!(resolve_executable(&approved, &android_adb_candidates()).is_err());
     }
 
     #[test]
@@ -1329,11 +1216,6 @@ mod tests {
             "aapt",
             "printf '%s\\n' \"$*\"",
         );
-        fs::write(
-            directory.path().join("local.properties"),
-            format!("sdk.dir={}\n", sdk.display()),
-        )
-        .unwrap();
         fs::create_dir_all(directory.path().join("app/build/outputs/apk/debug")).unwrap();
         fs::write(
             directory
@@ -1342,17 +1224,65 @@ mod tests {
             b"apk",
         )
         .unwrap();
-        let output = PluginProcessQueryManager::default().execute_tool_operation(
-            "window-a",
+        let manager = PluginProcessQueryManager {
+            inner: Arc::new(PluginProcessQueryManagerInner {
+                approved_executables: ApprovedExecutableRoots::for_android_sdk(&sdk),
+                ..PluginProcessQueryManagerInner::default()
+            }),
+        };
+        manager
+            .admit_authority(
+                "window-a",
+                PluginToolAuthorityIdentity {
+                    repository: "guozhiqiang123/asterlyn-plugin-android-gradle",
+                    plugin_id: "dev.asterlyn.android-gradle",
+                    plugin_version: "0.5.8",
+                    package_digest: "sha256:fixture",
+                },
+                asterlyn_plugin_package::PACKAGE_SCHEMA_VERSION,
+                &[HostOperationDeclaration {
+                    id: "android.apk.inspect".into(),
+                }],
+                &[],
+                &[],
+            )
+            .unwrap();
+        let trust_store = directory.path().join("trust.json");
+        let denied_parameters = HashMap::from([(
+            "artifact".into(),
+            "app/build/outputs/apk/debug/app-debug.apk".into(),
+        )]);
+        let denied = manager.execute_tool_operation(PluginToolOperationExecution {
+            owner: "window-a",
+            root: directory.path(),
+            trust_store: &trust_store,
+            plugin_id: "dev.asterlyn.android-gradle",
+            request_id: "run-denied",
+            operation_id: "android.apk.inspect",
+            parameters: &denied_parameters,
+        });
+        assert_eq!(denied.status, PluginProcessQueryStatus::Failed);
+        assert!(denied.error.unwrap().contains("trusted plugin workspace"));
+        crate::application::trust::set(
+            &trust_store,
             directory.path(),
             "dev.asterlyn.android-gradle",
-            "run-1",
-            "android.apk.inspect",
-            &HashMap::from([(
-                "artifact".into(),
-                "app/build/outputs/apk/debug/app-debug.apk".into(),
-            )]),
-        );
+            asterlyn_task::TrustState::Trusted,
+        )
+        .unwrap();
+        let parameters = HashMap::from([(
+            "artifact".into(),
+            "app/build/outputs/apk/debug/app-debug.apk".into(),
+        )]);
+        let output = manager.execute_tool_operation(PluginToolOperationExecution {
+            owner: "window-a",
+            root: directory.path(),
+            trust_store: &trust_store,
+            plugin_id: "dev.asterlyn.android-gradle",
+            request_id: "run-1",
+            operation_id: "android.apk.inspect",
+            parameters: &parameters,
+        });
         assert_eq!(output.status, PluginProcessQueryStatus::Succeeded);
         assert!(
             String::from_utf8(

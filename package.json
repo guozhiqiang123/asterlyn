@@ -1,7 +1,7 @@
 {
   "name": "asterlyn",
   "private": true,
-  "version": "0.1.14",
+  "version": "0.1.15",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
@@ -22,7 +22,6 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@asterlyn/plugin-android-gradle": "file:vendor/plugins/asterlyn-plugin-android-gradle-0.5.3.tgz",
     "@asterlyn/plugin-sdk": "file:packages/plugin-sdk",
     "@codemirror/commands": "^6.11.0",
     "@codemirror/language": "^6.12.4",

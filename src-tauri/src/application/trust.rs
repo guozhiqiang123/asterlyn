@@ -8,15 +8,32 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 
 use super::task::TaskAuthorizationScope;
 
 const VERSION: u8 = 2;
+const TRUST_FILE: &str = "task-trust-v1.json";
 const MAX_WORKSPACE_ENTRIES: usize = 512;
 const MAX_TASK_GRANTS: usize = 1_024;
 const MAX_BYTES: u64 = 256 * 1024;
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static STORE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+pub(crate) fn app_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_local_data_dir()
+        .map(|dir| dir.join(TRUST_FILE))
+        .map_err(|error| format!("resolve local task trust store: {error}"))
+}
+
+pub(crate) fn require_trusted(path: &Path, root: &Path, plugin_id: &str) -> Result<(), String> {
+    if read(path, root, plugin_id)? == TrustState::Trusted {
+        Ok(())
+    } else {
+        Err("trusted plugin workspace is required for local process execution".into())
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TrustFile {

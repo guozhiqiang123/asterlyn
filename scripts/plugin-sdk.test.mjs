@@ -31,7 +31,7 @@ const manifest = {
 
 test("host adapter accepts the supported SDK major and preserves declarative metadata", () => {
   assert.equal(PLUGIN_SDK_MAJOR, 1);
-  assert.equal(PLUGIN_SDK_VERSION, "1.9.0");
+  assert.equal(PLUGIN_SDK_VERSION, "1.10.0");
   assert.equal(Object.isFrozen(SDK_PLUGIN_LOCALIZATION_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_NOTIFICATION_LIMITS), true);
   assert.equal(Object.isFrozen(SDK_PLUGIN_WORKSPACE_TOOL_LIMITS), true);

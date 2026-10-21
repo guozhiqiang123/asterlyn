@@ -12,9 +12,11 @@ use tauri::{Emitter, Manager};
 use super::plugin_process_query::{PluginProcessQueryResult, PluginProcessQueryStatus};
 use super::plugin_task_cache::{self, CacheMutationStatus, CacheReadStatus};
 use super::plugin_workspace_state;
-use super::{ActiveWorkspaces, PluginProcessQueryManager};
+use super::{ActiveWorkspaces, PluginMarketplaceCoordinator, PluginProcessQueryManager, trust};
+use crate::commands::installation_store;
 
 pub(crate) const PLUGIN_NOTIFICATION_EVENT: &str = "asterlyn://plugin-notification";
+pub(crate) const PLUGIN_RUNTIME_TERMINATED_EVENT: &str = "asterlyn://plugin-runtime-terminated";
 
 const TASK_CACHE_PERMISSION: &str = "host.tasks.cache";
 const PROCESS_QUERY_PERMISSION: &str = "host.process.query";
@@ -52,6 +54,57 @@ pub(crate) fn build_plugin_host_supervisor(
         installation_root,
         Arc::new(NativePluginCapabilityHandler { app }),
     )
+}
+
+pub(crate) fn supervise_plugin_host_terminations(
+    app: tauri::AppHandle,
+    supervisor: &PluginHostSupervisor,
+) -> Result<(), PluginRuntimeError> {
+    let terminations = supervisor.observe_terminations();
+    let supervisor = supervisor.clone();
+    std::thread::Builder::new()
+        .name("plugin-termination-observer".to_owned())
+        .spawn(move || {
+            while let Ok(termination) = terminations.recv() {
+                app.state::<PluginProcessQueryManager>()
+                    .cancel_session(&termination.owner, &termination.plugin_id);
+                let quarantined = app.state::<PluginMarketplaceCoordinator>().run(|| {
+                    installation_store(&app)?
+                        .mark_runtime_crashed(
+                            &termination.plugin_id,
+                            &termination.plugin_version,
+                            &termination.package_digest,
+                        )
+                        .map_err(|error| error.to_string())
+                });
+                let recovery_persisted = quarantined.is_ok();
+                supervisor.terminate_plugin_identity_all(
+                    &termination.plugin_id,
+                    &termination.plugin_version,
+                    &termination.package_digest,
+                    if recovery_persisted {
+                        "another window reported a fatal runtime failure for this plugin identity"
+                    } else {
+                        "runtime recovery could not be persisted; the plugin identity was stopped fail-closed"
+                    },
+                );
+                let owner = termination.owner.clone();
+                let Ok(mut event) = serde_json::to_value(termination) else {
+                    continue;
+                };
+                if let Some(event) = event.as_object_mut() {
+                    event.insert(
+                        "recoveryPersisted".to_owned(),
+                        JsonValue::Bool(recovery_persisted),
+                    );
+                }
+                let _ = app.emit_to(&owner, PLUGIN_RUNTIME_TERMINATED_EVENT, event);
+            }
+        })
+        .map(|_| ())
+        .map_err(|error| {
+            PluginRuntimeError::Io(format!("start plugin termination observer: {error}"))
+        })
 }
 
 struct NativePluginCapabilityHandler {
@@ -143,13 +196,18 @@ impl CapabilityHandler for NativePluginCapabilityHandler {
             ("processQueries", "execute") => {
                 expect_count(arguments, 1)?;
                 let query_id = string_argument(&arguments[0], "query ID")?;
+                let trust_store = trust::app_store_path(&self.app)
+                    .map_err(|error| failure("capability.trust-unavailable", error))?;
                 let result = self.app.state::<PluginProcessQueryManager>().execute_exact(
-                    context.owner,
-                    &root,
-                    context.plugin_id,
-                    context.plugin_version,
-                    context.package_digest,
-                    query_id,
+                    super::ExactPluginProcessQuery {
+                        owner: context.owner,
+                        root: &root,
+                        trust_store: &trust_store,
+                        plugin_id: context.plugin_id,
+                        plugin_version: context.plugin_version,
+                        package_digest: context.package_digest,
+                        query_id,
+                    },
                 );
                 Ok(process_query_value(result))
             }

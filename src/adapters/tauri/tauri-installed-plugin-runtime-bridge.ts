@@ -3,6 +3,7 @@ import type {
   InstalledPluginRuntimeBridge,
   InstalledPluginRuntimeDiagnostics,
   InstalledPluginRuntimeEvent,
+  InstalledPluginRuntimeTermination,
   InstalledPluginNotificationEvent,
   PluginRuntimeTheme,
   PluginRuntimeValue,
@@ -10,8 +11,10 @@ import type {
 import {
   PLUGIN_NOTIFICATION_EVENT,
   PLUGIN_RUNTIME_EVENT,
+  PLUGIN_RUNTIME_TERMINATED_EVENT,
   parseInstalledPluginNotificationEvent,
   parseInstalledPluginRuntimeEvent,
+  parseInstalledPluginRuntimeTermination,
 } from "../../protocol/plugin-runtime.ts";
 import { invokeDesktopCommand as invoke } from "./desktop-command-adapter.ts";
 
@@ -77,6 +80,12 @@ export const tauriInstalledPluginRuntimeBridge: InstalledPluginRuntimeBridge = {
     const { listen } = await import("@tauri-apps/api/event");
     return listen<unknown>(PLUGIN_NOTIFICATION_EVENT, (event) => {
       listener(parseInstalledPluginNotificationEvent(event.payload));
+    });
+  },
+  async subscribeTerminations(listener: (event: InstalledPluginRuntimeTermination) => void) {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<unknown>(PLUGIN_RUNTIME_TERMINATED_EVENT, (event) => {
+      listener(parseInstalledPluginRuntimeTermination(event.payload));
     });
   },
 };
