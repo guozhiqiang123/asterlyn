@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
+const hostVersion = JSON.parse(read("package.json")).version;
 const packageSource = read("crates/asterlyn-plugin-package/src/lib.rs");
 const capabilityGuide = read("docs/plugins/capabilities-and-permissions.md");
 const developerGuide = read("docs/plugins/developer-guide.md");
@@ -30,7 +31,11 @@ test("public capability catalog contains every native admitted capability and pe
 
 test("public guides pin independent version axes and immutable Release workflow", () => {
   for (const guide of [developerGuide, capabilityGuide, migrationGuide]) {
-    assert.match(guide, /0\.1\.15/);
+    assert.equal(
+      guide.includes(`Asterlyn \`${hostVersion}\``),
+      true,
+      `public guide does not reference current host version ${hostVersion}`,
+    );
   }
   assert.match(developerGuide, /Plugin SDK: `1\.10\.0`/);
   assert.match(developerGuide, /Package schema: `3`/);
