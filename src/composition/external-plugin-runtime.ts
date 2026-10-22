@@ -26,6 +26,11 @@ import type { SdkPluginContribution } from "../../packages/plugin-sdk/index.ts";
 const REMOTE_CALLBACK_MARKER = "$asterlynCallback";
 const HEALTH_CHECKPOINT_MS = 3_000;
 const TRANSITION_STOP_TIMEOUT_MS = 750;
+const MAX_REMOTE_CUSTOM_COLLECTION_TASKS = 4_096;
+// Stay below the native protocol's 16 MiB activation ceiling so serializer differences
+// cannot turn a renderer-bounded catalog into a rejected native message.
+export const INSTALLED_PLUGIN_ACTIVATION_EVIDENCE_LIMIT_BYTES = 15 * 1024 * 1024;
+const UTF8_ENCODER = new TextEncoder();
 
 export interface ExternalPluginRuntimeOptions {
   readonly registry: PluginContributionRegistry;
@@ -139,7 +144,7 @@ export class ExternalPluginRuntime {
         plugin.pluginId,
         identity.root,
         identity.generation,
-        runtimeEvidence(evidence),
+        boundedRuntimeEvidence(evidence),
         this.options.locale(),
         this.options.theme?.() ?? "dark",
       );
@@ -477,7 +482,9 @@ class RemoteContributionProjection {
         ? {}
         : { settingsFocus: optionalText(payload.settingsFocus)! }),
       snapshot: () => this.snapshot,
-      ...(this.has("collections") ? { collections: () => this.collections } : {}),
+      ...(this.has("collections") ? {
+        collections: () => Array.isArray(this.collections) ? this.collections : [],
+      } : {}),
       ...(this.has("subscribe") ? { subscribe: (listener: () => void) => this.listen(listener) } : {}),
       ...(this.has("refresh") ? { refresh: () => this.session.invoke(this.source, "refresh", []) } : {}),
       ...(this.has("invalidate") ? { invalidate: (value: unknown) => this.session.invoke(this.source, "invalidate", [value]).then(() => undefined) } : {}),
@@ -537,7 +544,11 @@ class RemoteContributionProjection {
   private async reload(): Promise<void> {
     this.snapshot = await this.session.invoke(this.source, "snapshot", []);
     if (this.has("collections")) {
-      this.collections = await this.session.invoke(this.source, "collections", []);
+      if (remoteCustomCollectionIsBounded(this.snapshot)) {
+        this.collections = await this.session.invoke(this.source, "collections", []);
+      } else {
+        this.collections = [];
+      }
     }
   }
 
@@ -550,6 +561,12 @@ class RemoteContributionProjection {
   private has(operation: string): boolean {
     return typeof this.source.callbacks[operation] === "string";
   }
+}
+
+function remoteCustomCollectionIsBounded(snapshot: unknown): boolean {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return false;
+  const tasks = (snapshot as { readonly tasks?: unknown }).tasks;
+  return Array.isArray(tasks) && tasks.length <= MAX_REMOTE_CUSTOM_COLLECTION_TASKS;
 }
 
 type RuntimeRecord = Readonly<Record<string, PluginRuntimeValue>>;
@@ -603,7 +620,10 @@ function sameRuntimeSession(
     activation.sessionId === termination.sessionId;
 }
 
-function runtimeEvidence(evidence: PluginEvidenceSnapshot): PluginRuntimeValue {
+export function boundedRuntimeEvidence(
+  evidence: PluginEvidenceSnapshot,
+  maximumBytes = INSTALLED_PLUGIN_ACTIVATION_EVIDENCE_LIMIT_BYTES,
+): PluginRuntimeValue {
   if (evidence.kind === "workspace-catalog") {
     const platform = evidence.platform === "windows" ? "windows" : "posix";
     const files = Array.isArray(evidence.files)
@@ -612,12 +632,61 @@ function runtimeEvidence(evidence: PluginEvidenceSnapshot): PluginRuntimeValue {
         ? [(file as { workspacePath: string }).workspacePath]
         : [])
       : [];
-    return [{
-      kind: "workspace-catalog",
-      values: { platform, truncated: evidence.truncated === true, files },
-    }];
+    return boundedCatalogEvidence(
+      platform,
+      evidence.truncated === true,
+      files,
+      maximumBytes,
+    );
   }
-  return Object.entries(evidence).map(([kind, value]) => ({ kind, values: { value: String(value) } }));
+  const value = Object.entries(evidence)
+    .map(([kind, item]) => ({ kind, values: { value: String(item) } }));
+  return runtimeValueBytes(value) <= maximumBytes ? value : [];
+}
+
+function boundedCatalogEvidence(
+  platform: "posix" | "windows",
+  catalogTruncated: boolean,
+  files: readonly string[],
+  maximumBytes: number,
+): PluginRuntimeValue {
+  const retained: string[] = [];
+  const emptyBytes = Math.max(
+    runtimeValueBytes(catalogRuntimeEvidence(platform, false, retained)),
+    runtimeValueBytes(catalogRuntimeEvidence(platform, true, retained)),
+  );
+  let bytes = emptyBytes;
+  let truncated = catalogTruncated;
+  for (const file of files) {
+    const nextBytes = runtimeValueBytes(file) + (retained.length === 0 ? 0 : 1);
+    if (bytes + nextBytes > maximumBytes) {
+      truncated = true;
+      break;
+    }
+    retained.push(file);
+    bytes += nextBytes;
+  }
+  let result = catalogRuntimeEvidence(platform, truncated, retained);
+  while (runtimeValueBytes(result) > maximumBytes && retained.length > 0) {
+    retained.pop();
+    result = catalogRuntimeEvidence(platform, true, retained);
+  }
+  return runtimeValueBytes(result) <= maximumBytes ? result : [];
+}
+
+function catalogRuntimeEvidence(
+  platform: "posix" | "windows",
+  truncated: boolean,
+  files: readonly string[],
+): PluginRuntimeValue {
+  return [{
+    kind: "workspace-catalog",
+    values: { platform, truncated, files },
+  }];
+}
+
+function runtimeValueBytes(value: PluginRuntimeValue): number {
+  return UTF8_ENCODER.encode(JSON.stringify(value)).byteLength;
 }
 
 function toRuntimeValue(value: unknown, depth = 0): PluginRuntimeValue {

@@ -1,3 +1,5 @@
+mod runtime_codecs;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
@@ -11,12 +13,11 @@ use asterlyn_plugin_runtime_protocol::{
 };
 use boa_engine::builtins::promise::{PromiseState, ResolvingFunctions};
 use boa_engine::gc::{Finalize, Gc, GcRefCell, Trace};
-use boa_engine::object::builtins::{JsArray, JsPromise, JsUint8Array};
+use boa_engine::object::builtins::{JsArray, JsPromise};
 use boa_engine::object::{JsObject, ObjectInitializer};
 use boa_engine::property::{Attribute, PropertyKey};
 use boa_engine::{
-    Context, JsError, JsNativeError, JsResult, JsString, JsValue, Module, NativeFunction, Source,
-    js_string,
+    Context, JsError, JsNativeError, JsString, JsValue, Module, NativeFunction, Source, js_string,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
@@ -27,42 +28,6 @@ const STACK_SIZE_LIMIT: usize = 8 * 1024;
 const BACKTRACE_LIMIT: usize = 20;
 const MAX_CAPABILITY_REQUESTS_PER_TURN: usize = 64;
 const MAX_EVENTS_PER_TURN: usize = 64;
-
-const SAFE_TEXT_CODEC_BOOTSTRAP: &str = r#"
-(() => {
-  const utf8Encode = globalThis.__asterlynUtf8Encode;
-  const utf8Decode = globalThis.__asterlynUtf8Decode;
-  delete globalThis.__asterlynUtf8Encode;
-  delete globalThis.__asterlynUtf8Decode;
-
-  class SafeTextEncoder {
-    get encoding() { return "utf-8"; }
-    encode(input = "") { return utf8Encode(String(input)); }
-  }
-  class SafeTextDecoder {
-    constructor(label = "utf-8", options = {}) {
-      const normalized = String(label).trim().toLowerCase();
-      if (normalized !== "utf-8" && normalized !== "utf8" && normalized !== "unicode-1-1-utf-8") {
-        throw new RangeError("Only UTF-8 TextDecoder is supported by the plugin host.");
-      }
-      this.fatal = Boolean(options.fatal);
-      this.ignoreBOM = Boolean(options.ignoreBOM);
-    }
-    get encoding() { return "utf-8"; }
-    decode(input = new Uint8Array(), options = {}) {
-      if (options.stream) throw new TypeError("Streaming TextDecoder is not supported by the plugin host.");
-      return utf8Decode(input, this.fatal, this.ignoreBOM);
-    }
-  }
-  Object.freeze(SafeTextEncoder.prototype);
-  Object.freeze(SafeTextDecoder.prototype);
-  Object.defineProperties(globalThis, {
-    TextEncoder: { value: SafeTextEncoder, writable: false, enumerable: false, configurable: false },
-    TextDecoder: { value: SafeTextDecoder, writable: false, enumerable: false, configurable: false },
-  });
-})();
-"#;
-
 const CAPABILITY_METHODS: &[(&str, &[&str])] = &[
     (
         "taskCache",
@@ -192,7 +157,7 @@ impl PluginEngine {
         let source = read_bounded_source(entry)?;
         let mut context = Context::default();
         configure_limits(&mut context);
-        install_safe_text_codecs(&mut context)?;
+        runtime_codecs::install(&mut context)?;
 
         let module = Module::parse(Source::from_bytes(&source), None, &mut context)
             .map_err(|error| js_error("parse module", error, &mut context))?;
@@ -354,61 +319,6 @@ fn configure_limits(context: &mut Context) {
     limits.set_recursion_limit(RECURSION_LIMIT);
     limits.set_stack_size_limit(STACK_SIZE_LIMIT);
     limits.set_backtrace_limit(BACKTRACE_LIMIT);
-}
-
-fn install_safe_text_codecs(context: &mut Context) -> Result<(), PluginEngineError> {
-    context
-        .register_global_builtin_callable(
-            js_string!("__asterlynUtf8Encode"),
-            1,
-            NativeFunction::from_fn_ptr(utf8_encode),
-        )
-        .map_err(|error| js_error("register UTF-8 encoder", error, context))?;
-    context
-        .register_global_builtin_callable(
-            js_string!("__asterlynUtf8Decode"),
-            3,
-            NativeFunction::from_fn_ptr(utf8_decode),
-        )
-        .map_err(|error| js_error("register UTF-8 decoder", error, context))?;
-    context
-        .eval(Source::from_bytes(SAFE_TEXT_CODEC_BOOTSTRAP))
-        .map_err(|error| js_error("install safe text codecs", error, context))?;
-    Ok(())
-}
-
-fn utf8_encode(_this: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let text = arguments
-        .first()
-        .cloned()
-        .unwrap_or_default()
-        .to_string(context)?
-        .to_std_string_escaped();
-    JsUint8Array::from_iter(text.into_bytes(), context).map(Into::into)
-}
-
-fn utf8_decode(_this: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let value = arguments.first().cloned().unwrap_or_default();
-    let object = value.as_object().ok_or_else(|| {
-        JsNativeError::typ().with_message("TextDecoder input must be a Uint8Array")
-    })?;
-    let array = JsUint8Array::from_object(object)?;
-    let mut bytes = array.iter(context).collect::<Vec<_>>();
-    let fatal = arguments.get(1).is_some_and(JsValue::to_boolean);
-    let ignore_bom = arguments.get(2).is_some_and(JsValue::to_boolean);
-    if !ignore_bom && bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        bytes.drain(..3);
-    }
-    let decoded = if fatal {
-        std::str::from_utf8(&bytes)
-            .map(str::to_owned)
-            .map_err(|_| {
-                JsNativeError::typ().with_message("TextDecoder input is not valid UTF-8")
-            })?
-    } else {
-        String::from_utf8_lossy(&bytes).into_owned()
-    };
-    Ok(JsString::from(decoded).into())
 }
 
 fn find_plugin_export(
@@ -1099,7 +1009,7 @@ mod tests {
     }
 
     #[test]
-    fn exposes_bounded_utf8_text_codecs_without_native_handles() {
+    fn exposes_bounded_text_and_base64_codecs_without_native_handles() {
         let (_directory, entry) = write_fixture(
             r#"
             export const FIXTURE = Object.freeze({
@@ -1121,7 +1031,14 @@ mod tests {
                     try { new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array([0xff])); }
                     catch { fatal = true; }
                     const bom = new TextDecoder().decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41]));
-                    return { bytes: Array.from(encoded), decoded, replacement, fatal, bom };
+                    const base64 = btoa(String.fromCharCode(0, 65, 255));
+                    const binary = Array.from(atob(base64), (value) => value.charCodeAt(0));
+                    let invalidBase64 = false;
+                    let invalidBinary = false;
+                    try { atob("not base64!"); } catch { invalidBase64 = true; }
+                    try { btoa("🙂"); } catch { invalidBinary = true; }
+                    return { bytes: Array.from(encoded), decoded, replacement, fatal, bom,
+                      base64, binary, invalidBase64, invalidBinary };
                   },
                 });
               },
@@ -1150,6 +1067,10 @@ mod tests {
         assert_eq!(result["replacement"], "�");
         assert_eq!(result["fatal"], true);
         assert_eq!(result["bom"], "A");
+        assert_eq!(result["base64"], "AEH/");
+        assert_eq!(result["binary"], json!([0, 65, 255]));
+        assert_eq!(result["invalidBase64"], true);
+        assert_eq!(result["invalidBinary"], true);
     }
 
     #[test]

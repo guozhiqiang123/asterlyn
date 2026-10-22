@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { PluginContributionRegistry } from "../src/application/plugins/plugin-registry.ts";
-import { ExternalPluginRuntime } from "../src/composition/external-plugin-runtime.ts";
+import {
+  ExternalPluginRuntime,
+  INSTALLED_PLUGIN_ACTIVATION_EVIDENCE_LIMIT_BYTES,
+  boundedRuntimeEvidence,
+} from "../src/composition/external-plugin-runtime.ts";
 
 const pluginId = "dev.asterlyn.fixture";
 const identity = { root: "/repo", generation: 7 };
@@ -12,6 +16,32 @@ const evidence = {
   files: [{ workspacePath: "settings.gradle.kts" }],
   truncated: false,
 };
+
+test("keeps a boostCleaner-sized workspace catalog complete for plugin activation", () => {
+  const files = Array.from({ length: 7_086 }, (_, index) => ({
+    workspacePath: `feature-${index}/src/main/java/com/example/boostcleaner/feature/cleanup/Feature${index}.kt`,
+  }));
+  const encoded = boundedRuntimeEvidence({ ...evidence, files });
+  const encodedBytes = new TextEncoder().encode(JSON.stringify(encoded)).byteLength;
+  assert.ok(encodedBytes > 512 * 1024, "fixture must exceed the former protocol ceiling");
+  assert.ok(
+    encodedBytes < INSTALLED_PLUGIN_ACTIVATION_EVIDENCE_LIMIT_BYTES,
+  );
+  assert.equal(encoded[0].values.truncated, false);
+  assert.equal(encoded[0].values.files.length, files.length);
+});
+
+test("bounds oversized activation evidence and marks the catalog incomplete", () => {
+  const files = Array.from({ length: 100 }, (_, index) => ({
+    workspacePath: `模块-${index}/src/main/Feature-${index}.kt`,
+  }));
+  const maximumBytes = 512;
+  const encoded = boundedRuntimeEvidence({ ...evidence, files }, maximumBytes);
+  assert.ok(new TextEncoder().encode(JSON.stringify(encoded)).byteLength <= maximumBytes);
+  assert.equal(encoded[0].values.truncated, true);
+  assert.ok(encoded[0].values.files.length > 0);
+  assert.ok(encoded[0].values.files.length < files.length);
+});
 
 function installation() {
   return {
@@ -317,6 +347,59 @@ test("refreshes cached task projections from isolated runtime events", async () 
   release.dispose();
   await runtime.dispose();
   assert.equal(calls.some(([handle]) => handle === "dispose"), true);
+});
+
+test("uses the host task hierarchy when a remote custom collection would duplicate a large snapshot", async () => {
+  const registry = new PluginContributionRegistry();
+  const calls = [];
+  const tasks = Array.from({ length: 4_097 }, (_, index) => ({
+    id: `:app:task${index}`,
+    label: `:app:task${index}`,
+    group: "Other tasks",
+    projectPath: ":app",
+    runnable: false,
+  }));
+  const runtime = new ExternalPluginRuntime({
+    registry,
+    bridge: {
+      activate: async () => ({
+        pluginId,
+        pluginVersion: "1.2.3",
+        packageDigest: `sha256:${"a".repeat(64)}`,
+        sessionId: "session-large-collection",
+        contributions: [{
+          kind: "taskProvider",
+          id: "tasks",
+          payload: { label: "Fixture" },
+          callbacks: { snapshot: "snapshot", collections: "collections" },
+        }],
+      }),
+      invoke: async (_pluginId, handle) => {
+        calls.push(handle);
+        if (handle === "snapshot") return { status: "ready", tasks };
+        if (handle === "collections") throw new Error("large custom collection must be skipped");
+        throw new Error(`Unexpected callback: ${handle}`);
+      },
+      deactivate: async () => undefined,
+      confirmHealthy: async () => installation(),
+      failActivation: async () => installation(),
+      abandonActivation: async () => installation(),
+      diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
+      subscribe: async () => () => undefined,
+      subscribeNotifications: async () => () => undefined,
+      subscribeTerminations: async () => () => undefined,
+    },
+    marketplace: { listPluginInstallations: async () => installation() },
+    locale: () => "en-US",
+    reportError: (error) => { throw error; },
+  });
+
+  assert.deepEqual(await runtime.activate(identity, evidence, () => true), [pluginId]);
+  const provider = registry.get(`${pluginId}.tasks`);
+  assert.equal(provider.snapshot().tasks.length, 4_097);
+  assert.deepEqual(provider.collections(), []);
+  assert.deepEqual(calls, ["snapshot"]);
+  await runtime.dispose();
 });
 
 test("skips disabled installations before starting a process", async () => {

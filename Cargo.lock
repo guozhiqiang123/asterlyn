@@ -122,6 +122,7 @@ dependencies = [
  "asterlyn-plugin-package",
  "asterlyn-plugin-runtime",
  "asterlyn-plugin-runtime-protocol",
+ "base64 0.22.1",
  "boa_engine",
  "boa_gc",
  "serde_json",

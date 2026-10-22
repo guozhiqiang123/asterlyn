@@ -87,7 +87,7 @@ pair fail before activation.
 | Downloaded package | 64 MiB |
 | Archive | 2,048 entries; 128 MiB expanded; 32 MiB per file |
 | Manifest | 1 MiB |
-| Runtime protocol | 1 MiB frame; 128-byte identifier; 4 KiB diagnostic; 64 contributions |
+| Runtime protocol | 1 MiB physical frame; 25 MiB reassembled message; 24 MiB operation payload; 512 KiB activation/event payload; 128-byte identifier; 4 KiB diagnostic; 64 contributions |
 | Runtime turn | 64 capability requests and 64 events |
 | Localization | 16 locales; 512 messages/locale; 4,096 characters/value; 262,144 total characters |
 | Notifications | 128-character key; 512-character resolved message |
@@ -101,6 +101,24 @@ pair fail before activation.
 Exact field-level bounds are exported as `SDK_*_LIMITS` from `@asterlyn/plugin-sdk`; native package,
 runtime, cache, and workspace-state limits remain authoritative in the host. A tighter bound is a
 compatibility/security change and requires migration and rejection evidence.
+
+Operation requests and results larger than one physical frame are segmented by the native
+host/helper transport and reassembled before JSON and runtime-value validation. The 24 MiB logical
+payload ceiling accommodates the base64 representation of the 16 MiB task-cache entry limit plus
+bounded metadata. Activation evidence, notifications/events, identifiers, and diagnostics retain
+their smaller limits. A missing segment, an oversized physical frame, or a message above the logical
+ceiling fails the runtime session closed.
+
+The isolated JavaScript helper supplies UTF-8 `TextEncoder`/`TextDecoder` and Latin-1
+`atob`/`btoa` compatibility primitives required by the SDK cache and task-output contracts. Base64
+decoding and encoding are capped at 16 MiB of binary data and expose no filesystem, process, or
+network handle.
+
+An isolated task provider may return an optional custom hierarchical collection for snapshots up to
+4,096 tasks. Above that threshold the host preserves the complete validated task snapshot and builds
+its standard module/group hierarchy from each task's `projectPath` and `group`; it does not request
+and duplicate tens of thousands of collection nodes across the helper boundary. This fallback
+changes presentation metadata only and never drops or enables a task.
 
 ## Failure behavior
 

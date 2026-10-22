@@ -62,6 +62,21 @@ The 15,980-task snapshot remains below the 32,768-task and 16 MiB decoded-payloa
 1.36 MiB Gradle output remains below the 2 MiB discovery-output limit. Rendering is batched, so the
 complete task set is searchable without mounting 15,980 task rows at once.
 
+The later isolated-runtime migration exposed a transport mismatch in this same fixture: the
+5,239,820-byte base64 cache result exceeded the original 512 KiB operation-payload and 1 MiB frame
+limits even though it satisfied the documented cache limit. The runtime transport now retains the
+1 MiB physical-frame boundary, segments bounded operation messages, and caps the reassembled message
+at 25 MiB with a 24 MiB operation-payload ceiling. Protocol and end-to-end helper regressions cover
+multi-frame task-cache-sized payloads; ordinary activation and event payloads remain capped at
+512 KiB. The helper also provides bounded `atob`/`btoa` compatibility so the plugin can decode the
+same cache format after moving out of the WebView.
+
+For this 15,980-task fixture the isolated host uses the standard task hierarchy derived from the
+validated snapshot instead of requesting a second, nearly task-for-task custom collection from the
+helper. Small custom collections remain plugin-owned; large snapshots keep all task identities,
+module paths, groups, searchability, and execution state while avoiding a redundant callback and
+payload.
+
 Reproduce the projection measurement with:
 
 ```text

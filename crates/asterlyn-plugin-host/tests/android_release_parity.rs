@@ -13,6 +13,8 @@ use asterlyn_plugin_runtime::{
 use asterlyn_plugin_runtime_protocol::{
     CapabilityRequest, ContributionKind, HostTheme, RemoteFailure, ShutdownReason,
 };
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::{Value as JsonValue, json};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -22,8 +24,9 @@ const PACKAGE_ENV: &str = "ASTERLYN_ANDROID_PLUGIN_PACKAGE";
 const PLUGIN_VERSION_ENV: &str = "ASTERLYN_ANDROID_PLUGIN_VERSION";
 const HOST_VERSION_ENV: &str = "ASTERLYN_HOST_VERSION";
 
-#[derive(Default)]
-struct AndroidParityCapabilities;
+struct AndroidParityCapabilities {
+    cache_payload_base64: String,
+}
 
 impl CapabilityHandler for AndroidParityCapabilities {
     fn execute(
@@ -44,14 +47,14 @@ impl CapabilityHandler for AndroidParityCapabilities {
             })),
             ("taskCache", "read") => Ok(json!({
                 "protocolVersion": 1,
-                "status": "miss",
+                "status": "stale",
                 "pluginId": PLUGIN_ID,
                 "providerId": "gradle-tasks",
                 "fingerprint": null,
-                "payloadBase64": null,
-                "updatedAtEpochMs": null,
-                "lastAccessEpochMs": null,
-                "staleReason": null,
+                "payloadBase64": self.cache_payload_base64,
+                "updatedAtEpochMs": 1_792_000_000_000_u64,
+                "lastAccessEpochMs": 1_792_000_000_000_u64,
+                "staleReason": "expired",
                 "dirtyReason": null,
             })),
             ("taskCache", "computeFingerprint") => Ok(json!({
@@ -122,7 +125,9 @@ fn released_android_plugin_activates_with_first_party_parity() {
     let supervisor = PluginHostSupervisor::from_verified_helper_with_capabilities(
         &helper,
         installation,
-        Arc::new(AndroidParityCapabilities),
+        Arc::new(AndroidParityCapabilities {
+            cache_payload_base64: filesrecovery_scale_cache_payload(&plugin_version),
+        }),
     )
     .expect("create plugin supervisor");
     let package_digest = format!("sha256:{:x}", Sha256::digest(&package));
@@ -180,8 +185,10 @@ fn released_android_plugin_activates_with_first_party_parity() {
     let task_snapshot = invoke(&supervisor, tasks, "snapshot");
     assert_eq!(task_snapshot["status"], "ready");
     assert_eq!(task_snapshot["cache"]["status"], "stale");
-    let collections = invoke(&supervisor, tasks, "collections");
-    assert_eq!(collections.as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        task_snapshot["tasks"].as_array().map(Vec::len),
+        Some(15_980)
+    );
 
     let devices = contribution(contributions, "android-devices");
     let device_snapshot = invoke(&supervisor, devices, "snapshot");
@@ -196,6 +203,33 @@ fn released_android_plugin_activates_with_first_party_parity() {
 
     supervisor.cancel_owner("window-android-parity", ShutdownReason::WindowClosed);
     assert_eq!(supervisor.active_count(), 0);
+}
+
+fn filesrecovery_scale_cache_payload(plugin_version: &str) -> String {
+    let tasks = (0..15_980)
+        .map(|index| {
+            let id = format!(":app:generatedTask{index:05}");
+            json!({
+                "id": id,
+                "label": id,
+                "group": "Other tasks",
+                "projectPath": ":app",
+                "runnable": false,
+            })
+        })
+        .collect::<Vec<_>>();
+    let payload = serde_json::to_vec(&json!({
+        "schemaVersion": 1,
+        "pluginId": PLUGIN_ID,
+        "pluginVersion": plugin_version,
+        "providerId": "gradle-tasks",
+        "parserVersion": 1,
+        "discoveryProtocolVersion": 1,
+        "tasks": tasks,
+    }))
+    .expect("serialize FilesRecovery-scale cache fixture");
+    assert!(payload.len() > 1024 * 1024, "fixture must cross one frame");
+    BASE64.encode(payload)
 }
 
 fn contribution<'a>(

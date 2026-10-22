@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 pub const PROTOCOL_VERSION: u32 = 1;
+/// Maximum size of one physical pipe frame. Larger bounded protocol messages are segmented.
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
+/// Maximum size of one reassembled protocol message, including its envelope.
+pub const MAX_MESSAGE_BYTES: usize = 25 * 1024 * 1024;
 pub const MAX_IDENTIFIER_BYTES: usize = 128;
 pub const MAX_DIAGNOSTIC_BYTES: usize = 4 * 1024;
 pub const MAX_CONTRIBUTIONS: usize = 64;
@@ -19,8 +22,15 @@ pub const REMOTE_LISTENER_MARKER: &str = "$asterlynListener";
 pub const MAX_LIST_ITEMS: usize = 64;
 const MAX_VERSION_BYTES: usize = 64;
 const MAX_RUNTIME_ENTRY_BYTES: usize = 512;
-const MAX_PAYLOAD_BYTES: usize = 512 * 1024;
+const MAX_STANDARD_PAYLOAD_BYTES: usize = 512 * 1024;
+/// Workspace catalogs can legitimately contain tens of thousands of bounded relative paths.
+/// Keep activation below the reassembled message ceiling while allowing the host catalog limit.
+pub const MAX_ACTIVATION_EVIDENCE_BYTES: usize = 16 * 1024 * 1024;
+/// Covers a 16 MiB decoded task-cache entry after base64 encoding plus result metadata.
+const MAX_OPERATION_PAYLOAD_BYTES: usize = 24 * 1024 * 1024;
 const MAX_CONTRIBUTION_PAYLOAD_BYTES: usize = 256 * 1024;
+const FRAME_CONTINUATION_BIT: u32 = 1 << 31;
+const FRAME_LENGTH_MASK: u32 = !FRAME_CONTINUATION_BIT;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -171,7 +181,11 @@ impl Activate {
             ));
         }
         validate_short_text("workspaceRoot", &self.workspace_root, 4 * 1024)?;
-        validate_json_size("activation evidence", &self.evidence, MAX_PAYLOAD_BYTES)?;
+        validate_json_size(
+            "activation evidence",
+            &self.evidence,
+            MAX_ACTIVATION_EVIDENCE_BYTES,
+        )?;
         validate_short_text("locale", &self.locale, 32)
     }
 }
@@ -264,7 +278,7 @@ impl Invoke {
         validate_identifier("callbackHandle", &self.callback_handle)?;
         validate_name("operation", &self.operation)?;
         validate_runtime_value(&self.payload, false, true)?;
-        validate_json_size("invoke payload", &self.payload, MAX_PAYLOAD_BYTES)
+        validate_json_size("invoke payload", &self.payload, MAX_OPERATION_PAYLOAD_BYTES)
     }
 }
 
@@ -291,7 +305,11 @@ impl CapabilityRequest {
         validate_name("capability", &self.capability)?;
         validate_name("operation", &self.operation)?;
         validate_runtime_value(&self.payload, false, false)?;
-        validate_json_size("capability payload", &self.payload, MAX_PAYLOAD_BYTES)
+        validate_json_size(
+            "capability payload",
+            &self.payload,
+            MAX_OPERATION_PAYLOAD_BYTES,
+        )
     }
 }
 
@@ -306,7 +324,7 @@ impl OperationResult {
     fn validate(&self, allow_remote_callbacks: bool) -> Result<(), ProtocolError> {
         validate_identifier("requestId", &self.request_id)?;
         validate_runtime_value(&self.payload, allow_remote_callbacks, false)?;
-        validate_json_size("result payload", &self.payload, MAX_PAYLOAD_BYTES)
+        validate_json_size("result payload", &self.payload, MAX_OPERATION_PAYLOAD_BYTES)
     }
 }
 
@@ -360,7 +378,7 @@ impl Event {
     fn validate(&self) -> Result<(), ProtocolError> {
         validate_identifier("subscriptionHandle", &self.subscription_handle)?;
         validate_runtime_value(&self.payload, false, false)?;
-        validate_json_size("event payload", &self.payload, MAX_PAYLOAD_BYTES)
+        validate_json_size("event payload", &self.payload, MAX_STANDARD_PAYLOAD_BYTES)
     }
 }
 
@@ -455,6 +473,7 @@ pub enum ProtocolError {
     Io(io::Error),
     EmptyFrame,
     FrameTooLarge(usize),
+    MessageTooLarge(usize),
     TruncatedFrame { expected: usize, actual: usize },
     InvalidJson(String),
     UnsupportedProtocol(u32),
@@ -472,6 +491,10 @@ impl fmt::Display for ProtocolError {
             Self::FrameTooLarge(size) => write!(
                 formatter,
                 "plugin runtime protocol frame exceeds {MAX_FRAME_BYTES} bytes: {size}"
+            ),
+            Self::MessageTooLarge(size) => write!(
+                formatter,
+                "plugin runtime protocol message exceeds {MAX_MESSAGE_BYTES} bytes: {size}"
             ),
             Self::TruncatedFrame { expected, actual } => write!(
                 formatter,
@@ -522,43 +545,80 @@ pub fn write_frame(
     if payload.is_empty() {
         return Err(ProtocolError::EmptyFrame);
     }
-    if payload.len() > MAX_FRAME_BYTES {
-        return Err(ProtocolError::FrameTooLarge(payload.len()));
+    if payload.len() > MAX_MESSAGE_BYTES {
+        return Err(ProtocolError::MessageTooLarge(payload.len()));
     }
-    let length =
-        u32::try_from(payload.len()).map_err(|_| ProtocolError::FrameTooLarge(payload.len()))?;
-    writer
-        .write_all(&length.to_be_bytes())
-        .map_err(ProtocolError::Io)?;
-    writer.write_all(&payload).map_err(ProtocolError::Io)?;
+    let chunk_count = payload.len().div_ceil(MAX_FRAME_BYTES);
+    for (index, chunk) in payload.chunks(MAX_FRAME_BYTES).enumerate() {
+        let mut length =
+            u32::try_from(chunk.len()).map_err(|_| ProtocolError::FrameTooLarge(chunk.len()))?;
+        if index + 1 < chunk_count {
+            length |= FRAME_CONTINUATION_BIT;
+        }
+        writer
+            .write_all(&length.to_be_bytes())
+            .map_err(ProtocolError::Io)?;
+        writer.write_all(chunk).map_err(ProtocolError::Io)?;
+    }
     writer.flush().map_err(ProtocolError::Io)
 }
 
 pub fn read_frame(reader: &mut impl Read) -> Result<Option<ProtocolEnvelope>, ProtocolError> {
+    let Some(mut header) = read_frame_header(reader, true)? else {
+        return Ok(None);
+    };
+    let mut payload = Vec::new();
+    loop {
+        let continued = header & FRAME_CONTINUATION_BIT != 0;
+        let length = (header & FRAME_LENGTH_MASK) as usize;
+        if length == 0 {
+            return Err(ProtocolError::EmptyFrame);
+        }
+        if length > MAX_FRAME_BYTES {
+            return Err(ProtocolError::FrameTooLarge(length));
+        }
+        let next_size = payload
+            .len()
+            .checked_add(length)
+            .ok_or(ProtocolError::MessageTooLarge(usize::MAX))?;
+        if next_size > MAX_MESSAGE_BYTES {
+            return Err(ProtocolError::MessageTooLarge(next_size));
+        }
+        let offset = payload.len();
+        payload.resize(next_size, 0);
+        read_exact_counted(reader, &mut payload[offset..], length, 0)?;
+        if !continued {
+            break;
+        }
+        header = read_frame_header(reader, false)?.expect("required continuation header");
+    }
+    let envelope: ProtocolEnvelope = serde_json::from_slice(&payload)
+        .map_err(|error| ProtocolError::InvalidJson(error.to_string()))?;
+    envelope.validate()?;
+    Ok(Some(envelope))
+}
+
+fn read_frame_header(
+    reader: &mut impl Read,
+    allow_clean_end: bool,
+) -> Result<Option<u32>, ProtocolError> {
     let mut length_bytes = [0_u8; 4];
     loop {
         match reader.read(&mut length_bytes[..1]) {
-            Ok(0) => return Ok(None),
+            Ok(0) if allow_clean_end => return Ok(None),
+            Ok(0) => {
+                return Err(ProtocolError::TruncatedFrame {
+                    expected: 4,
+                    actual: 0,
+                });
+            }
             Ok(_) => break,
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(error) => return Err(ProtocolError::Io(error)),
         }
     }
     read_exact_counted(reader, &mut length_bytes[1..], 4, 1)?;
-    let length = u32::from_be_bytes(length_bytes) as usize;
-    if length == 0 {
-        return Err(ProtocolError::EmptyFrame);
-    }
-    if length > MAX_FRAME_BYTES {
-        return Err(ProtocolError::FrameTooLarge(length));
-    }
-
-    let mut payload = vec![0_u8; length];
-    read_exact_counted(reader, &mut payload, length, 0)?;
-    let envelope: ProtocolEnvelope = serde_json::from_slice(&payload)
-        .map_err(|error| ProtocolError::InvalidJson(error.to_string()))?;
-    envelope.validate()?;
-    Ok(Some(envelope))
+    Ok(Some(u32::from_be_bytes(length_bytes)))
 }
 
 fn read_exact_counted(
@@ -852,6 +912,99 @@ mod tests {
     }
 
     #[test]
+    fn large_operation_messages_are_segmented_without_expanding_physical_frames() {
+        let cache_payload = "a".repeat(2 * 1024 * 1024);
+        let expected = ProtocolEnvelope::new(
+            7,
+            PluginHostMessage::CapabilityResult(OperationResult {
+                request_id: "capability-1".to_owned(),
+                payload: serde_json::json!({"payloadBase64": cache_payload}),
+            }),
+        );
+        let mut bytes = Vec::new();
+        write_frame(&mut bytes, &expected).expect("write segmented message");
+
+        let mut offset = 0;
+        let mut frame_count = 0;
+        while offset < bytes.len() {
+            let header = u32::from_be_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .expect("physical frame header"),
+            );
+            offset += 4;
+            let continued = header & FRAME_CONTINUATION_BIT != 0;
+            let length = (header & FRAME_LENGTH_MASK) as usize;
+            assert!(length <= MAX_FRAME_BYTES);
+            offset += length;
+            frame_count += 1;
+            assert_eq!(continued, offset < bytes.len());
+        }
+        assert_eq!(offset, bytes.len());
+        assert!(frame_count > 1);
+
+        let actual = read_frame(&mut Cursor::new(bytes))
+            .expect("read segmented message")
+            .expect("segmented message");
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn activation_evidence_has_a_catalog_specific_budget() {
+        let activation = Activate {
+            session_id: "session-1".to_owned(),
+            workspace_id: "workspace-1".to_owned(),
+            workspace_generation: 1,
+            workspace_root: "/workspace".to_owned(),
+            evidence: serde_json::json!({
+                "files": ["a".repeat(MAX_STANDARD_PAYLOAD_BYTES + 1)]
+            }),
+            locale: "en-US".to_owned(),
+            theme: HostTheme::Dark,
+        };
+        activation
+            .validate()
+            .expect("a catalog larger than a standard event remains valid");
+
+        let oversized = Activate {
+            evidence: serde_json::json!({
+                "files": ["a".repeat(MAX_ACTIVATION_EVIDENCE_BYTES + 1)]
+            }),
+            ..activation
+        };
+        assert!(matches!(
+            oversized.validate(),
+            Err(ProtocolError::LimitExceeded("activation evidence"))
+        ));
+    }
+
+    #[test]
+    fn large_payload_allowance_is_limited_to_operation_messages() {
+        let payload = serde_json::json!({
+            "payloadBase64": "a".repeat(MAX_STANDARD_PAYLOAD_BYTES + 1)
+        });
+        CapabilityRequest {
+            request_id: "capability-1".to_owned(),
+            workspace_id: "workspace-1".to_owned(),
+            workspace_generation: 1,
+            capability: "taskCache".to_owned(),
+            operation: "write".to_owned(),
+            payload: payload.clone(),
+        }
+        .validate()
+        .expect("bounded task-cache operation payload");
+
+        let event = Event {
+            subscription_handle: "subscription-1".to_owned(),
+            payload,
+        };
+        assert!(matches!(
+            event.validate(),
+            Err(ProtocolError::LimitExceeded("event payload"))
+        ));
+    }
+
+    #[test]
     fn clean_end_of_stream_is_not_a_truncated_frame() {
         assert!(
             read_frame(&mut Cursor::new(Vec::<u8>::new()))
@@ -883,6 +1036,17 @@ mod tests {
             Err(ProtocolError::TruncatedFrame {
                 expected: 10,
                 actual: 5
+            })
+        ));
+
+        let continued = (1_u32 | FRAME_CONTINUATION_BIT).to_be_bytes();
+        let mut bytes = continued.to_vec();
+        bytes.push(b'{');
+        assert!(matches!(
+            read_frame(&mut Cursor::new(bytes)),
+            Err(ProtocolError::TruncatedFrame {
+                expected: 4,
+                actual: 0
             })
         ));
     }

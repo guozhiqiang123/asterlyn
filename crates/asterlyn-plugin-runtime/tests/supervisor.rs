@@ -101,6 +101,35 @@ fn activates_invokes_and_shuts_down_an_isolated_session() {
 }
 
 #[test]
+fn large_operation_payload_round_trips_through_the_isolated_helper() {
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let installation = fixture.parent().expect("fixture parent");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, installation).expect("supervisor");
+    let plugin = TempDir::new().expect("plugin root");
+    fs::create_dir(plugin.path().join("runtime")).expect("runtime directory");
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").expect("runtime entry");
+    supervisor
+        .activate(activation(plugin.path()))
+        .expect("activate");
+
+    let payload = json!({"payloadBase64": "a".repeat(6 * 1024 * 1024)});
+    let result = supervisor
+        .invoke(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "callback-1",
+            "execute",
+            payload.clone(),
+        )
+        .expect("large segmented invoke");
+    assert_eq!(result, payload);
+
+    supervisor.cancel_owner("window-main", ShutdownReason::WindowClosed);
+    assert_eq!(supervisor.active_count(), 0);
+}
+
+#[test]
 fn disabling_plugin_stops_its_sessions_in_every_window() {
     let fixture = fixture_path().canonicalize().expect("fixture path");
     let installation = fixture.parent().expect("fixture parent");
