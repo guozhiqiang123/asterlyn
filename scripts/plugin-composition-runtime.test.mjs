@@ -34,6 +34,47 @@ test("composition lazily loads plugins, deduplicates evidence, and rejects stale
   runtime.dispose();
 });
 
+test("concurrent matching evidence updates share one isolated plugin activation", async () => {
+  let activations = 0;
+  let releaseActivation;
+  let markActivationStarted;
+  const activationStarted = new Promise((resolve) => { markActivationStarted = resolve; });
+  const activationGate = new Promise((resolve) => { releaseActivation = resolve; });
+  const activation = {
+    pluginId: "fixture",
+    pluginVersion: "1.0.0",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "external-session",
+    contributions: [{
+      kind: "taskProvider", id: "tasks", payload: { label: "External" },
+      callbacks: { snapshot: "snapshot" },
+    }],
+  };
+  const bridge = externalBridge(activation);
+  bridge.activate = async () => {
+    activations += 1;
+    markActivationStarted();
+    await activationGate;
+    return { ...activation, sessionId: `external-session-${activations}` };
+  };
+  const runtime = new PluginCompositionRuntime({
+    registerCommand: () => () => undefined,
+    replaceProviders: () => undefined,
+    reportDiagnostic: () => undefined,
+    reportError: (error) => { throw error; },
+    installedPluginRuntimeBridge: bridge,
+    pluginMarketplaceBridge: marketplace("fixture"),
+  });
+  await runtime.activateWorkspace(identity);
+  const first = runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  await activationStarted;
+  const second = runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  releaseActivation();
+  await Promise.all([first, second]);
+  assert.equal(activations, 1);
+  runtime.dispose();
+});
+
 test("plugin-scoped evidence keys preserve activation across unrelated generated files", async () => {
   let activations = 0;
   const runtime = new PluginCompositionRuntime({

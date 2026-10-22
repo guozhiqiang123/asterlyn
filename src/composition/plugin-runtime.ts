@@ -82,6 +82,7 @@ export class PluginCompositionRuntime {
   private evidence: PluginWorkspaceCatalogEvidence | null = null;
   private evidenceKey: string | null = null;
   private pluginsPromise: Promise<readonly BundledPlugin[]> | null = null;
+  private lifecycleTransition: Promise<void> = Promise.resolve();
   private preferenceTransition: Promise<void> = Promise.resolve();
   private readonly releasePreferences: () => void;
   private disposed = false;
@@ -193,11 +194,22 @@ export class PluginCompositionRuntime {
     this.contributions.activateWorkspace(this.identity);
     this.management.setMatched([]);
     this.management.setActivation(null);
-    await this.runtime.deactivate();
-    await this.external?.deactivate();
+    await this.serializeLifecycle(async () => {
+      if (this.disposed) return;
+      await this.runtime.deactivate();
+      await this.external?.deactivate();
+    });
   }
 
   async updateWorkspaceEvidence(
+    identity: PluginWorkspaceIdentity,
+    evidence: PluginWorkspaceCatalogEvidence,
+  ): Promise<void> {
+    if (!this.matches(identity) || this.disposed) return;
+    await this.serializeLifecycle(() => this.updateWorkspaceEvidenceSerialized(identity, evidence));
+  }
+
+  private async updateWorkspaceEvidenceSerialized(
     identity: PluginWorkspaceIdentity,
     evidence: PluginWorkspaceCatalogEvidence,
   ): Promise<void> {
@@ -213,9 +225,10 @@ export class PluginCompositionRuntime {
     if (evidenceKey === this.evidenceKey) return;
     const matched = matchingPluginIds(identity, evidence, plugins);
     const report = await this.activatePlugins(identity, evidence, plugins, true);
+    if (!this.matches(identity) || this.disposed) return;
     this.management.setMatched(Object.freeze([...new Set([...matched, ...report.activated])]));
     this.management.setActivation(report);
-    if (this.matches(identity) && !this.disposed) this.evidenceKey = evidenceKey;
+    this.evidenceKey = evidenceKey;
   }
 
   async loadManagementCatalog(): Promise<PluginManagementSnapshot> {
@@ -299,7 +312,11 @@ export class PluginCompositionRuntime {
     return this.pluginsPromise;
   }
 
-  private async reactivateCurrent(): Promise<void> {
+  private reactivateCurrent(): Promise<void> {
+    return this.serializeLifecycle(() => this.reactivateCurrentSerialized());
+  }
+
+  private async reactivateCurrentSerialized(): Promise<void> {
     const identity = this.identity;
     const evidence = this.evidence;
     if (!identity || !evidence || this.disposed) return;
@@ -316,6 +333,12 @@ export class PluginCompositionRuntime {
       this.management.setMatched(Object.freeze([...new Set([...matched, ...report.activated])]));
       this.management.setActivation(report);
     }
+  }
+
+  private serializeLifecycle(operation: () => Promise<void>): Promise<void> {
+    const transition = this.lifecycleTransition.then(operation, operation);
+    this.lifecycleTransition = transition.then(() => undefined, () => undefined);
+    return transition;
   }
 
   private async reconcileAfterTermination(

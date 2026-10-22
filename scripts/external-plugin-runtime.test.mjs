@@ -349,6 +349,62 @@ test("refreshes cached task projections from isolated runtime events", async () 
   assert.equal(calls.some(([handle]) => handle === "dispose"), true);
 });
 
+test("closes remote subscriptions before deactivation without surfacing shutdown failures", async () => {
+  const registry = new PluginContributionRegistry();
+  const calls = [];
+  const errors = [];
+  let active = true;
+  const runtime = new ExternalPluginRuntime({
+    registry,
+    bridge: {
+      activate: async () => ({
+        pluginId,
+        pluginVersion: "1.2.3",
+        packageDigest: `sha256:${"a".repeat(64)}`,
+        sessionId: "session-cleanup-order",
+        contributions: [{
+          kind: "taskProvider",
+          id: "tasks",
+          payload: { label: "Fixture" },
+          callbacks: { snapshot: "snapshot", subscribe: "subscribe" },
+        }],
+      }),
+      invoke: async (_pluginId, handle) => {
+        if (handle === "snapshot") return { status: "ready", tasks: [] };
+        if (handle === "subscribe") {
+          return { dispose: { $asterlynCallback: { handle: "dispose", operation: "dispose" } } };
+        }
+        if (handle === "dispose") {
+          calls.push("dispose");
+          assert.equal(active, true, "remote cleanup ran after the plugin runtime stopped");
+          throw new Error("plugin runtime is not active: cleanup fixture");
+        }
+        throw new Error(`Unexpected callback: ${handle}`);
+      },
+      deactivate: async () => { calls.push("deactivate"); active = false; },
+      confirmHealthy: async () => installation(),
+      failActivation: async () => installation(),
+      abandonActivation: async () => installation(),
+      diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
+      subscribe: async () => () => undefined,
+      subscribeNotifications: async () => () => undefined,
+      subscribeTerminations: async () => () => undefined,
+    },
+    marketplace: { listPluginInstallations: async () => installation() },
+    locale: () => "en-US",
+    reportError: (error) => { errors.push(error); },
+  });
+
+  await runtime.activate(identity, evidence, () => true);
+  const provider = registry.get(`${pluginId}.tasks`);
+  provider.subscribe(() => undefined);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await runtime.deactivate();
+  assert.deepEqual(calls, ["dispose", "deactivate"]);
+  assert.deepEqual(errors, []);
+  await runtime.dispose();
+});
+
 test("uses the host task hierarchy when a remote custom collection would duplicate a large snapshot", async () => {
   const registry = new PluginContributionRegistry();
   const calls = [];

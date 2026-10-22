@@ -207,7 +207,12 @@ export class ExternalPluginRuntime {
     if (!entry.healthy) {
       await this.options.bridge.abandonActivation(entry.activation).catch(this.options.reportError);
     }
+    const closing = entry.session.dispose().catch(this.options.reportError);
     try { await entry.release.dispose(); } catch (error) { this.options.reportError(error); }
+    await Promise.race([
+      closing,
+      new Promise<void>((resolve) => setTimeout(resolve, this.transitionStopTimeoutMs)),
+    ]);
     entry.session.abort();
     await this.deactivateBounded(pluginId);
   }
@@ -220,7 +225,12 @@ export class ExternalPluginRuntime {
       entry.healthy = true;
     } catch (error) {
       this.active.delete(entry.activation.pluginId);
+      const closing = entry.session.dispose().catch(this.options.reportError);
       try { await entry.release.dispose(); } catch (releaseError) { this.options.reportError(releaseError); }
+      await Promise.race([
+        closing,
+        new Promise<void>((resolve) => setTimeout(resolve, this.transitionStopTimeoutMs)),
+      ]);
       await this.options.bridge.failActivation(entry.activation).catch(this.options.reportError);
       entry.session.abort();
       await this.deactivateBounded(entry.activation.pluginId);
@@ -356,9 +366,9 @@ class ExternalPluginSession {
         this.eventHandlers.delete(subscriptionHandle);
         try {
           const result = remote?.dispose();
-          if (result instanceof Promise) this.track(result.catch(this.reportError));
+          if (result instanceof Promise) this.track(result.catch((error) => this.reportCleanupError(error)));
         } catch (error) {
-          this.reportError(error);
+          this.reportCleanupError(error);
         }
       },
     };
@@ -414,6 +424,10 @@ class ExternalPluginSession {
     this.pending.add(promise);
     void promise.finally(() => this.pending.delete(promise)).catch(() => undefined);
     return promise;
+  }
+
+  private reportCleanupError(error: unknown): void {
+    if (!this.closing && !this.disposed) this.reportError(error);
   }
 }
 
