@@ -176,10 +176,13 @@ contains the pre-signing `.app`; do not install or publish it. A workflow that n
 Tauri perform ad-hoc signing before DMG construction and must mount the finished image and run the
 same strict verification against the contained `.app`.
 
-For local replacement, stop the running installed app, retain the previous
-`/Applications/Asterlyn.app` at a recoverable backup location, copy the verified bundle into
-`/Applications`, then repeat `codesign --verify --deep --strict`. Compare the installed executable
-byte-for-byte with the accepted bundle, launch it, and verify the running process plus the installed
+For local replacement, stop the running installed app and copy the previous
+`/Applications/Asterlyn.app` to a recoverable backup location outside `/Applications`. Never move
+or rename the live bundle into a backup path: macOS file bookmarks can follow that bundle identity
+and later open the backup directory instead of the new installation. After the backup copy succeeds,
+remove the old bundle, copy the verified bundle into `/Applications`, and repeat
+`codesign --verify --deep --strict`. Compare the installed executable byte-for-byte with the
+accepted bundle, launch it, and verify the running process plus the installed
 `CFBundleShortVersionString`. Any copy, signature, identity, version, or byte comparison failure must
 restore the previous app and stop; never repair the installed copy in place or fall back to an older
 build silently.

@@ -23,7 +23,9 @@ use asterlyn_workspace::{
 use asterlyn_workspace::{SearchCancellationToken, SearchMode};
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
-use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{
+    Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
 
 mod adapters;
 mod application;
@@ -74,6 +76,8 @@ const PROJECT_WINDOW_WIDTH: f64 = 1320.0;
 const PROJECT_WINDOW_HEIGHT: f64 = 820.0;
 const PROJECT_WINDOW_MIN_WIDTH: f64 = 920.0;
 const PROJECT_WINDOW_MIN_HEIGHT: f64 = 600.0;
+const MIN_VISIBLE_WINDOW_WIDTH: i64 = 96;
+const MIN_VISIBLE_WINDOW_HEIGHT: i64 = 48;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -159,6 +163,66 @@ fn window_chrome_mode_for(is_macos: bool) -> &'static str {
     }
 }
 
+fn window_has_usable_monitor_intersection(
+    window_position: PhysicalPosition<i32>,
+    window_size: PhysicalSize<u32>,
+    monitor_position: PhysicalPosition<i32>,
+    monitor_size: PhysicalSize<u32>,
+) -> bool {
+    let window_left = i64::from(window_position.x);
+    let window_top = i64::from(window_position.y);
+    let window_right = window_left + i64::from(window_size.width);
+    let window_bottom = window_top + i64::from(window_size.height);
+    let monitor_left = i64::from(monitor_position.x);
+    let monitor_top = i64::from(monitor_position.y);
+    let monitor_right = monitor_left + i64::from(monitor_size.width);
+    let monitor_bottom = monitor_top + i64::from(monitor_size.height);
+    let visible_width = window_right.min(monitor_right) - window_left.max(monitor_left);
+    let visible_height = window_bottom.min(monitor_bottom) - window_top.max(monitor_top);
+    let required_width = MIN_VISIBLE_WINDOW_WIDTH.min(i64::from(window_size.width));
+    let required_height = MIN_VISIBLE_WINDOW_HEIGHT.min(i64::from(window_size.height));
+    visible_width >= required_width && visible_height >= required_height
+}
+
+fn centered_window_position(
+    window_size: PhysicalSize<u32>,
+    monitor_position: PhysicalPosition<i32>,
+    monitor_size: PhysicalSize<u32>,
+) -> PhysicalPosition<i32> {
+    let offset_x = monitor_size.width.saturating_sub(window_size.width) / 2;
+    let offset_y = monitor_size.height.saturating_sub(window_size.height) / 2;
+    PhysicalPosition::new(
+        monitor_position
+            .x
+            .saturating_add(i32::try_from(offset_x).unwrap_or(i32::MAX)),
+        monitor_position
+            .y
+            .saturating_add(i32::try_from(offset_y).unwrap_or(i32::MAX)),
+    )
+}
+
+fn ensure_window_is_visible(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let position = window.outer_position()?;
+    let size = window.outer_size()?;
+    let monitors = window.available_monitors()?;
+    if monitors.iter().any(|monitor| {
+        window_has_usable_monitor_intersection(position, size, *monitor.position(), *monitor.size())
+    }) {
+        return Ok(());
+    }
+    if let Some(monitor) = window
+        .primary_monitor()?
+        .or_else(|| monitors.into_iter().next())
+    {
+        window.set_position(centered_window_position(
+            size,
+            *monitor.position(),
+            *monitor.size(),
+        ))?;
+    }
+    Ok(())
+}
+
 fn build_project_window(
     app: &tauri::AppHandle,
     label: impl Into<String>,
@@ -181,6 +245,7 @@ fn build_project_window(
 
     let window = builder.visible(true).focused(true).build()?;
     window.show()?;
+    ensure_window_is_visible(&window)?;
     window.set_focus()?;
     Ok(window)
 }
@@ -1220,6 +1285,53 @@ mod tests {
     fn window_chrome_mode_matches_native_control_ownership() {
         assert_eq!(window_chrome_mode_for(true), "macos-native");
         assert_eq!(window_chrome_mode_for(false), "custom-right");
+    }
+
+    #[test]
+    fn stale_disconnected_monitor_position_is_not_considered_visible() {
+        let window_size = PhysicalSize::new(1_320, 820);
+        let monitor_position = PhysicalPosition::new(0, 0);
+        let monitor_size = PhysicalSize::new(1_512, 982);
+        assert!(!window_has_usable_monitor_intersection(
+            PhysicalPosition::new(-36, -973),
+            window_size,
+            monitor_position,
+            monitor_size,
+        ));
+        assert!(window_has_usable_monitor_intersection(
+            PhysicalPosition::new(96, 62),
+            window_size,
+            monitor_position,
+            monitor_size,
+        ));
+    }
+
+    #[test]
+    fn a_tiny_edge_sliver_does_not_leave_the_window_stranded() {
+        assert!(!window_has_usable_monitor_intersection(
+            PhysicalPosition::new(1_900, 100),
+            PhysicalSize::new(1_320, 820),
+            PhysicalPosition::new(0, 0),
+            PhysicalSize::new(1_920, 1_080),
+        ));
+        assert!(window_has_usable_monitor_intersection(
+            PhysicalPosition::new(1_800, 100),
+            PhysicalSize::new(1_320, 820),
+            PhysicalPosition::new(0, 0),
+            PhysicalSize::new(1_920, 1_080),
+        ));
+    }
+
+    #[test]
+    fn offscreen_windows_are_centered_on_the_selected_monitor() {
+        assert_eq!(
+            centered_window_position(
+                PhysicalSize::new(1_320, 820),
+                PhysicalPosition::new(-1_920, 0),
+                PhysicalSize::new(1_920, 1_080),
+            ),
+            PhysicalPosition::new(-1_620, 130),
+        );
     }
 
     #[test]

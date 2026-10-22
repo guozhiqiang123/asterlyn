@@ -486,7 +486,8 @@ SCRIPT_PATH="$0"
 MOUNT_DIR="$(mktemp -d "${{TMPDIR:-/tmp/}}asterlyn-update.XXXXXX")"
 APP_PARENT="$(dirname "$APP_PATH")"
 STAGED_APP="$APP_PARENT/.Asterlyn.update.app"
-BACKUP_APP="$APP_PARENT/.Asterlyn.previous.app"
+BACKUP_ROOT="$(mktemp -d "${{TMPDIR:-/tmp/}}asterlyn-update-backup.XXXXXX")"
+BACKUP_APP="$BACKUP_ROOT/Asterlyn.backup"
 cleanup() {{
   hdiutil detach "$MOUNT_DIR" -quiet >/dev/null 2>&1 || true
   rmdir "$MOUNT_DIR" >/dev/null 2>&1 || true
@@ -496,11 +497,14 @@ hdiutil attach -nobrowse -quiet -readonly -mountpoint "$MOUNT_DIR" "$DMG_PATH"
 SOURCE_APP="$MOUNT_DIR/Asterlyn.app"
 [ -d "$SOURCE_APP" ]
 codesign --verify --deep --strict "$SOURCE_APP"
-rm -rf "$STAGED_APP" "$BACKUP_APP"
+rm -rf "$STAGED_APP"
 ditto "$SOURCE_APP" "$STAGED_APP"
 codesign --verify --deep --strict "$STAGED_APP"
 while pgrep -x asterlyn >/dev/null 2>&1; do sleep 0.3; done
-if [ -d "$APP_PATH" ]; then mv "$APP_PATH" "$BACKUP_APP"; fi
+if [ -d "$APP_PATH" ]; then
+  ditto "$APP_PATH" "$BACKUP_APP"
+  rm -rf "$APP_PATH"
+fi
 if ! mv "$STAGED_APP" "$APP_PATH"; then
   if [ -d "$BACKUP_APP" ]; then mv "$BACKUP_APP" "$APP_PATH"; fi
   exit 1
@@ -510,7 +514,7 @@ if ! codesign --verify --deep --strict "$APP_PATH"; then
   if [ -d "$BACKUP_APP" ]; then mv "$BACKUP_APP" "$APP_PATH"; fi
   exit 1
 fi
-rm -rf "$BACKUP_APP"
+rm -rf "$BACKUP_ROOT"
 open "$APP_PATH" >/dev/null 2>&1 || true
 rm -f "$DMG_PATH" "$SCRIPT_PATH" >/dev/null 2>&1 || true
 "#,
@@ -874,7 +878,10 @@ mod tests {
         );
         assert!(mac.contains("hdiutil attach -nobrowse"));
         assert!(mac.contains("codesign --verify --deep --strict"));
-        assert!(mac.contains(".Asterlyn.previous.app"));
+        assert!(mac.contains("Asterlyn.backup"));
+        assert!(mac.contains("ditto \"$APP_PATH\" \"$BACKUP_APP\""));
+        assert!(mac.contains("rm -rf \"$APP_PATH\""));
+        assert!(!mac.contains("mv \"$APP_PATH\" \"$BACKUP_APP\""));
         assert!(mac.contains("open \"$APP_PATH\""));
         let windows = windows_install_script(
             Path::new(r"C:\Temp\Asterlyn_setup.exe"),
