@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import { CommandRegistry } from "../src/application/commands/command-service.ts";
 import { GIT_OPERATION_COMMANDS } from "../src/application/commands/git-operation-command-ids.ts";
@@ -35,4 +36,13 @@ test("Git operation commands reuse guarded launcher and recovery routes", async 
 
   release();
   assert.deepEqual(registry.list(), []);
+});
+
+test("generic Git operations stay command-owned instead of adding a hidden panel action", async () => {
+  const [shellView, shellEvents, bottomTool] = await Promise.all([
+    readFile(new URL("../src/shell/shell-view.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shell/shell-event-binding.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/shell/bottom-tool-runtime.ts", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(`${shellView}\n${shellEvents}\n${bottomTool}`, /git-operation-open/u);
 });

@@ -67,7 +67,6 @@ export interface ShellEventActions {
   readonly applyLayout: () => void;
   readonly closePushDiff: () => void;
   readonly closePushModeMenu: () => void;
-  readonly openGitOperation: () => void;
   readonly openGitRecoveries: () => void;
   readonly closeGitOperation: () => void;
   readonly closeRepositoryMenu: (restoreFocus: boolean) => void;
@@ -178,7 +177,6 @@ export class ShellEventBinding {
       this.actions.toggleEditorTabMenu();
     });
     listen(this.query("#hide-bottom-tool"), "click", () => this.actions.hideBottomTool());
-    listen(this.query("#git-operation-open"), "click", () => this.actions.openGitOperation());
     listen(this.query("#hide-left-tool"), "click", () => this.actions.hideLeftTool());
 
     this.resizeObserver = new ResizeObserver(() => this.actions.applyLayout());

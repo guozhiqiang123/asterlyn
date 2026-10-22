@@ -1604,7 +1604,6 @@ export class AsterlynApp {
       applyLayout: () => this.applyWorkbenchLayout(false),
       closePushDiff: () => this.closePushDiff(),
       closePushModeMenu: () => this.remoteRuntime.push.closePushModeMenu(),
-      openGitOperation: () => this.openGitOperation(),
       openGitRecoveries: () => void this.openGitRecoveries(),
       closeGitOperation: () => void this.gitOperationRuntime.close(),
       closeRepositoryMenu: (restoreFocus) => {

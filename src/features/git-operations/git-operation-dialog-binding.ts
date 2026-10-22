@@ -170,7 +170,7 @@ export class GitOperationDialogBinding {
     if (!target) return;
     queueMicrotask(() => {
       if (target.isConnected) target.focus();
-      else this.root.querySelector<HTMLButtonElement>("#git-operation-open")?.focus();
+      else this.root.querySelector<HTMLButtonElement>("#command-center-button")?.focus();
     });
   }
 

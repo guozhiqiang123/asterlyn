@@ -47,7 +47,6 @@ export class BottomToolRuntime {
     title.textContent = presentation.showTasks ? (this.options.tasksTitle?.() ?? presentation.title) : presentation.title;
     hide.setAttribute("aria-label", presentation.hideLabel);
     hide.title = presentation.hideLabel;
-    this.query("#git-operation-open").classList.toggle("hidden", !presentation.showGit);
     const tasksRefresh = this.query<HTMLButtonElement>("#tasks-header-refresh");
     tasksRefresh.classList.toggle("hidden", !presentation.showTasks);
     tasksRefresh.setAttribute("aria-label", this.options.tasksCopy().refresh);

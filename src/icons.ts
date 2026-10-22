@@ -1,4 +1,4 @@
-const paths: Record<string, string> = {
+const paths = {
   branch:
     '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M8 15c6 0 8-2 8-5"/>',
   changes:
@@ -61,8 +61,12 @@ const paths: Record<string, string> = {
   "chevron-down": '<path d="m7 9 5 5 5-5"/>',
   sort: '<path d="M8 5v14m0 0-3-3m3 3 3-3M16 19V5m0 0-3 3m3-3 3 3"/>',
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>',
-};
+  warning: '<path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v4M12 17h.01"/>',
+} as const satisfies Record<string, string>;
 
-export function icon(name: keyof typeof paths, size = 18): string {
+export type IconName = keyof typeof paths;
+export const ICON_NAMES = Object.freeze(Object.keys(paths) as IconName[]);
+
+export function icon(name: IconName, size = 18): string {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
 }

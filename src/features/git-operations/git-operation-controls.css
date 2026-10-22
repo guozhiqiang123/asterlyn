@@ -42,11 +42,6 @@
   font-size: 11px;
 }
 
-.git-operation-open {
-  margin-left: auto;
-}
-
-
 .git-detail-operation-actions {
   display: flex;
   flex-wrap: wrap;

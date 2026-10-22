@@ -1,5 +1,5 @@
 import { BRAND } from "../brand.ts";
-import { icon } from "../icons.ts";
+import { icon, type IconName } from "../icons.ts";
 import { renderSelectControl } from "../shared/select-control.ts";
 import type { ActivityTool } from "./activity-order.ts";
 import { activityToolAvailability } from "./activity-availability.ts";
@@ -67,7 +67,7 @@ export function renderShellView(model: ShellViewModel): string {
         </div>
         <div class="workbench-splitter horizontal" id="bottom-splitter" aria-label="${escapeHtml(copy.resizeGit)}" ${model.workspaceOpen ? "" : "hidden"}></div>
         <section class="bottom-tool tool-window" id="bottom-tool" aria-label="${escapeHtml(copy.branchesAndLog)}" ${model.workspaceOpen ? "" : "hidden"}>
-          <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><div class="bottom-tool-header-actions"><div class="terminal-header-actions hidden" id="terminal-header-actions"></div><button class="compact-icon-button git-operation-open" id="git-operation-open" type="button" aria-label="${escapeHtml(copy.prepareGitOperation)}" title="${escapeHtml(copy.gitOperations)}">${icon("more", 15)}</button><button class="compact-icon-button tasks-header-refresh hidden" id="tasks-header-refresh" type="button" aria-label="${escapeHtml(tasksCopy.refresh)}" title="${escapeHtml(tasksCopy.refresh)}">${icon("refresh", 15)}</button><button class="compact-icon-button plugin-settings-open hidden" id="plugin-settings-open" type="button" aria-label="${escapeHtml(copy.pluginSettings)}" title="${escapeHtml(copy.pluginSettings)}">${icon("settings", 15)}</button><button class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div></div>
+          <div class="bottom-tool-header"><strong id="bottom-tool-title">Git</strong><div class="bottom-tool-header-actions"><div class="terminal-header-actions hidden" id="terminal-header-actions"></div><button class="compact-icon-button tasks-header-refresh hidden" id="tasks-header-refresh" type="button" aria-label="${escapeHtml(tasksCopy.refresh)}" title="${escapeHtml(tasksCopy.refresh)}">${icon("refresh", 15)}</button><button class="compact-icon-button plugin-settings-open hidden" id="plugin-settings-open" type="button" aria-label="${escapeHtml(copy.pluginSettings)}" title="${escapeHtml(copy.pluginSettings)}">${icon("settings", 15)}</button><button class="compact-icon-button bottom-tool-hide" id="hide-bottom-tool" type="button" aria-label="${escapeHtml(copy.hideGit)}" title="${escapeHtml(copy.hideGit)}">${icon("close", 14)}</button></div></div>
           <div class="git-tool-grid" id="git-tool-grid">
             <section class="git-tool-pane branch-tree-pane" aria-label="${escapeHtml(copy.branches)}"><div class="git-pane-body" id="branch-navigation-body" tabindex="-1"></div></section>
             <div class="workbench-splitter vertical" id="branch-tree-splitter" aria-label="${escapeHtml(copy.resizeBranchTree)}"></div>
@@ -146,7 +146,7 @@ function repositoryTargetDialog(copy: ShellCopy, common: LocaleCatalog["common"]
   return `<div class="dialog-backdrop hidden" id="repository-target-dialog" role="presentation"><section class="dialog repository-target-dialog" role="dialog" aria-modal="true" aria-labelledby="repository-target-title"><div class="dialog-heading"><h2 id="repository-target-title">${escapeHtml(copy.whereOpenProject)}</h2><button class="icon-button" id="repository-target-close" type="button" aria-label="${escapeHtml(copy.cancelOpeningProject)}">${icon("close", 18)}</button></div><p>${escapeHtml(copy.targetWindowDetail)}</p><code class="repository-target-path" id="repository-target-path"></code><div class="dialog-actions"><button class="secondary-button" id="repository-target-cancel" type="button">${escapeHtml(common.cancel)}</button><button class="secondary-button" id="repository-target-current" type="button">${escapeHtml(copy.currentWindow)}</button><button class="primary-button" id="repository-target-new" type="button">${escapeHtml(copy.newWindow)}</button></div></section></div>`;
 }
 
-function emptyState(title: string, detail: string, iconName: string): string {
+function emptyState(title: string, detail: string, iconName: IconName): string {
   return `<div class="empty-state"><span class="empty-icon">${icon(iconName, 28)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div>`;
 }
 
