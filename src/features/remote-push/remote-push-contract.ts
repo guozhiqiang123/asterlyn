@@ -25,6 +25,7 @@ export type RemotePushChangeReason =
   | "preview-error"
   | "preview-page-start"
   | "preview-page-complete"
+  | "preview-page-error"
   | "commit-selection"
   | "commit-details-start"
   | "commit-details-complete"

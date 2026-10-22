@@ -87,6 +87,7 @@ import type { RemoteRuntime } from "./features/remote-push/remote-runtime.ts";
 import { createRemoteRuntime } from "./features/remote-push/create-remote-runtime.ts";
 import { remoteOperationCompletionFeedback } from "./features/remote-push/remote-operation-feedback";
 import { bindPushPreviewSplitter } from "./features/remote-push/push-preview-splitter.ts";
+import { bindPushPreviewPagingSurface } from "./features/remote-push/push-preview-paging.ts";
 import { repositoryBranch, repositoryRemotes } from "./features/remote-push/git-root-scope.ts";
 import { ApplicationDialogRuntime } from "./shared/application-dialog-runtime.ts";
 import { closeLastProjectWindowConfirmation, discardConflictConfirmation, saveFileBeforeCloseConfirmation, saveFilesBeforeActionConfirmation, switchConflictBlockedNotice, undoWorktreeConfirmation } from "./shared/application-confirmations.ts";
@@ -3509,10 +3510,7 @@ export class AsterlynApp {
         }
       });
     });
-    this.root.querySelector<HTMLButtonElement>("#push-load-more")?.addEventListener(
-      "click",
-      () => void this.remoteRuntime.push.loadMorePushPreview(),
-    );
+    bindPushPreviewPagingSurface(this.root, this.remoteState, () => void this.remoteRuntime.push.loadMorePushPreview(), this.localization.catalog.remote.loading);
     this.root.querySelector<HTMLButtonElement>("#push-diff-close")?.addEventListener("click", () => this.closePushDiff());
     this.root.querySelector<HTMLElement>("#push-diff-backdrop")?.addEventListener("click", (event) => {
       if (event.target === event.currentTarget) this.closePushDiff();

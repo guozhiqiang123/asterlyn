@@ -528,6 +528,66 @@ test("tag collisions identify the failed tag and can exclude tags without retryi
   controller.dispose();
 });
 
+test("Push scroll paging appends once, blocks duplicates, and exposes an inline retry", async () => {
+  const failure = deferred();
+  const calls = [];
+  const first = {
+    ...preview("origin", "paging-token"),
+    totalCommits: 4,
+    hasMore: true,
+  };
+  const finalPage = {
+    ...preview("origin", "paging-token"),
+    commits: [commit("three"), commit("four")],
+    offset: 2,
+    totalCommits: 4,
+    hasMore: false,
+  };
+  const responses = [Promise.resolve(first), failure.promise, Promise.resolve(finalPage)];
+  const controller = new RemotePushController(createGateway({
+    readPushPreview(...args) {
+      calls.push({ offset: args[4], pageSize: args[5] });
+      const response = responses.shift();
+      if (!response) throw new Error("unexpected preview read");
+      return response;
+    },
+  }));
+  const changes = [];
+  controller.subscribe((change) => changes.push(change));
+  const repository = snapshot();
+  controller.installSnapshot(repository);
+  controller.openDialog("push");
+  await settle();
+
+  const failedPage = controller.loadMorePushPreview();
+  assert.equal(controller.state.pushPreviewLoadingMore, true);
+  assert.deepEqual(changes.at(-1), { reason: "preview-page-start" });
+  void controller.loadMorePushPreview();
+  assert.equal(calls.length, 2);
+
+  failure.reject(new Error("page failed"));
+  await failedPage;
+  assert.equal(controller.state.pushPreviewLoadingMore, false);
+  assert.equal(controller.state.pushPreviewPagingError?.detail, "page failed");
+  assert.equal(changes.at(-1)?.reason, "preview-page-error");
+
+  const { renderRemoteDialogContent } = await import("../src/features/remote-push/remote-push-view.ts");
+  const failedHtml = renderRemoteDialogContent({ snapshot: repository, state: controller.state });
+  assert.doesNotMatch(failedHtml, /id="push-load-more"/u);
+  assert.match(failedHtml, /id="push-commit-page-retry"/u);
+
+  await controller.loadMorePushPreview();
+  assert.deepEqual(calls.map((call) => call.offset), [0, 2, 2]);
+  assert.deepEqual(
+    controller.state.pushPreview?.commits.map((entry) => entry.oid),
+    ["one", "two", "three", "four"],
+  );
+  assert.equal(controller.state.pushPreview?.hasMore, false);
+  assert.equal(controller.state.pushPreviewPagingError, null);
+  assert.equal(changes.at(-1)?.reason, "preview-page-complete");
+  controller.dispose();
+});
+
 function createGateway(overrides = {}) {
   const previewResponses = overrides.previewResponses ?? [];
   let previewIndex = 0;
@@ -861,6 +921,8 @@ test("push dialog consumes backend-filtered remote branches and includes __new__
   // New destinations keep the standalone badge without duplicating "New" in the option label.
   assert.match(branchOptionsHtml, /<option value="main" selected>main<\/option>/);
   assert.doesNotMatch(branchOptionsHtml, /main \(New\)/);
+  assert.match(html, /class="push-branch-control" data-selected-value="main"/);
+  assert.match(html, /id="push-branch-select"[^>]*title="main"/);
   assert.match(html, /class="push-branch-badge new">New<\/span>/);
   controller.dispose();
 });

@@ -591,9 +591,6 @@
 .push-route-destination { display: flex; min-width: 0; align-items: center; gap: 4px; }
 .push-route-destination svg { flex-shrink: 0; }
 .push-remote-target .select-control {
-  flex: 1 1 auto;
-  min-width: 60px;
-  max-width: 140px;
   height: 22px;
   border-radius: 4px;
   background: var(--bg-elevated);
@@ -794,5 +791,4 @@
 .push-mode-menu button:disabled { opacity: 0.45; }
 .push-mode-menu button span { display: grid; gap: 2px; }
 .push-mode-menu small { color: var(--text-faint); font-size: 9px; }
-.push-load-more { margin: 4px 8px 8px; }
 .push-preview-limit { margin: 7px 9px; }

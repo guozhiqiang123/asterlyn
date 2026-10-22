@@ -37,6 +37,70 @@
   border-right: none;
 }
 
+.push-route-destination > .select-control {
+  flex: 0 1 auto;
+  min-width: 60px;
+  max-width: 140px;
+}
+
+.push-branch-control {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 60px;
+  max-width: 100%;
+  height: 22px;
+}
+
+.push-branch-control::after {
+  content: attr(data-selected-value);
+  visibility: hidden;
+  box-sizing: border-box;
+  padding: 0 30px 0 8px;
+  white-space: pre;
+}
+
+.push-branch-control > .select-control {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+#push-branch-select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.push-commit-page-status {
+  display: flex;
+  min-height: 29px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 5px 8px;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.push-commit-page-status.error { color: var(--danger-text); }
+
+.push-commit-page-status button {
+  min-height: 23px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.push-commit-page-status button:hover { border-color: var(--accent); color: var(--text); }
+
 .push-dialog .push-preview-splitter {
   height: 100%;
 }

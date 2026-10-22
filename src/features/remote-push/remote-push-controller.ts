@@ -378,7 +378,8 @@ export class RemotePushController {
     const sequence = this.dialogSequence;
     const generation = this.repositoryGeneration;
     this.state.pushPreviewLoadingMore = true;
-    this.emit({ reason: "preview-page-start", dialogChanged: true });
+    this.state.pushPreviewPagingError = null;
+    this.emit({ reason: "preview-page-start" });
     try {
       const page = await this.gateway.readPushPreview(
         snapshot.root,
@@ -401,15 +402,16 @@ export class RemotePushController {
         commits: [...preview.commits, ...page.commits.map((commit) => ({ ...commit, repositoryId: this.state.pushRepositoryId }))],
       };
       this.state.pushPreviewLoadingMore = false;
+      this.state.pushPreviewPagingError = null;
       this.emit({ reason: "preview-page-complete", dialogChanged: true });
     } catch (error) {
       if (!this.dialogRequestMatches(sequence, generation, snapshot.root)) return;
       this.state.pushPreviewLoadingMore = false;
-      this.state.dialogError = this.dialogError(error);
+      this.state.pushPreviewPagingError = this.dialogError(error);
       this.emit({
-        reason: "preview-error",
+        reason: "preview-page-error",
         dialogChanged: true,
-        error: this.dialogErrorAnnouncement(this.state.dialogError),
+        error: this.dialogErrorAnnouncement(this.state.pushPreviewPagingError),
       });
     }
   }
@@ -631,6 +633,7 @@ export class RemotePushController {
     }
     this.state.pushPreviewRefreshing = preserveContent;
     this.state.dialogError = null;
+    this.state.pushPreviewPagingError = null;
     this.state.pushModeMenuOpen = false;
     this.emit({
       reason: "preview-refresh-start",

@@ -101,6 +101,7 @@ export interface RemotePushState {
   pushPreviewLoading: boolean;
   pushPreviewRefreshing: boolean;
   pushPreviewLoadingMore: boolean;
+  pushPreviewPagingError: OperationErrorPresentation | null;
   pushSelectedCommit: string | null;
   pushCommitDetails: CommitDetails | null;
   pushCommitDetailsLoading: boolean;
@@ -133,6 +134,7 @@ export function createRemotePushState(): RemotePushState {
     pushPreviewLoading: false,
     pushPreviewRefreshing: false,
     pushPreviewLoadingMore: false,
+    pushPreviewPagingError: null,
     pushSelectedCommit: null,
     pushCommitDetails: null,
     pushCommitDetailsLoading: false,

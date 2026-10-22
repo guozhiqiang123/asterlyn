@@ -348,7 +348,7 @@ function renderPushRoute(model: RemotePushDialogViewModel, preview: PushPreview 
       return `<option value="${escapeAttribute(candidate)}" ${candidate === destinationBranch ? "selected" : ""}>${escapeHtml(candidate)}</option>`;
     }),
   ].join("");
-  const branchControl = renderSelectControl(`<select id="push-branch-select" aria-label="${escapeAttribute(copy.remoteBranch)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${branchOptions}</select>`);
+  const branchControl = `<span class="push-branch-control" data-selected-value="${escapeAttribute(destinationBranch)}">${renderSelectControl(`<select id="push-branch-select" aria-label="${escapeAttribute(copy.remoteBranch)}" title="${escapeAttribute(destinationBranch)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${branchOptions}</select>`)}</span>`;
 
   return `<div class="push-route-row" aria-label="${escapeAttribute(copy.pushRouteAria(branch, `${selectedRemote}/${destinationBranch}`))}"><button class="push-route-endpoint push-route-scope ${state.pushSelectedCommit ? "" : "selected"}" id="push-all-commits" type="button" aria-pressed="${state.pushSelectedCommit === null}" title="${escapeAttribute(copy.showAllOutgoingFiles)}"><span class="push-route-kind">${escapeHtml(copy.localBranch)}</span><span class="push-route-name">${icon("branch", 14)}<strong>${escapeHtml(branch)}</strong></span><small>${escapeHtml(copy.outgoingCommitCount(outgoingCount))} · ${escapeHtml(copy.showAllFiles)}</small></button><span class="push-route-arrow" aria-hidden="true"><small>${escapeHtml(copy.push)}</small><strong>→</strong></span><div class="push-route-endpoint push-remote-target"><span class="push-route-kind">${escapeHtml(copy.remoteBranch)}</span><span class="push-route-name push-route-destination">${icon("upload", 14)}${renderSelectControl(`<select id="push-remote-select" aria-label="${escapeAttribute(copy.pushRemote)}" ${state.pushPreviewRefreshing || state.operation ? "disabled" : ""}>${options}</select>`)}<span class="push-route-separator">/</span>${branchControl}${showNewBadge ? `<span class="push-branch-badge new">${escapeHtml(copy.newBadge)}</span>` : ""}</span><small>${escapeHtml(copy.selectedDestination)}</small></div></div>`;
 }
@@ -375,7 +375,28 @@ function renderPushPreviewBody(model: RemotePushDialogViewModel, preview: PushPr
   const reviewFiles = pushReviewFiles(preview, state);
   const files = renderPushFiles(model, preview, reviewFiles);
   const fileScope = state.pushSelectedCommit ? copy.filesInSelectedCommit : copy.filesInAllCommits;
-  return `<div class="push-preview-grid"><section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">${escapeHtml(copy.outgoingCommits)}</h3><span>${localization.number.format(preview.commits.length)}/${localization.number.format(preview.totalCommits)}</span></div><div class="push-commit-list" role="listbox" aria-label="${escapeAttribute(copy.outgoingListAria)}">${commits}</div>${preview.hasMore ? `<button class="secondary-button push-load-more" id="push-load-more" type="button" ${state.pushPreviewLoadingMore ? "disabled" : ""}>${escapeHtml(state.pushPreviewLoadingMore ? copy.loading : copy.showMore)}</button>` : preview.truncated ? `<p class="push-preview-limit">${escapeHtml(copy.truncatedCommits(localization.number.format(preview.totalCommits)))}</p>` : ""}</section><div class="workbench-splitter vertical push-preview-splitter" id="push-preview-splitter" aria-label="${escapeAttribute(copy.resizePushPreview)}"></div><section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${escapeHtml(fileScope)}</h3><span>${localization.number.format(reviewFiles.length)}${preview.filesTruncated && !state.pushSelectedCommit ? "+" : ""}</span>${pushFileToolbar(model, Boolean(state.pushSelectedFile))}</div><div class="push-file-list compact-file-tree" role="tree">${files}</div></section></div>`;
+  const paging = renderPushCommitPaging(model, preview);
+  return `<div class="push-preview-grid"><section class="push-preview-commits" aria-labelledby="push-commits-title"><div class="push-preview-pane-heading"><h3 id="push-commits-title">${escapeHtml(copy.outgoingCommits)}</h3><span>${localization.number.format(preview.commits.length)}/${localization.number.format(preview.totalCommits)}</span></div><div class="push-commit-list" role="listbox" aria-label="${escapeAttribute(copy.outgoingListAria)}">${commits}${paging}</div>${!preview.hasMore && preview.truncated ? `<p class="push-preview-limit">${escapeHtml(copy.truncatedCommits(localization.number.format(preview.totalCommits)))}</p>` : ""}</section><div class="workbench-splitter vertical push-preview-splitter" id="push-preview-splitter" aria-label="${escapeAttribute(copy.resizePushPreview)}"></div><section class="push-preview-files" aria-labelledby="push-files-title"><div class="push-preview-pane-heading push-files-heading"><h3 id="push-files-title">${escapeHtml(fileScope)}</h3><span>${localization.number.format(reviewFiles.length)}${preview.filesTruncated && !state.pushSelectedCommit ? "+" : ""}</span>${pushFileToolbar(model, Boolean(state.pushSelectedFile))}</div><div class="push-file-list compact-file-tree" role="tree">${files}</div></section></div>`;
+}
+
+function renderPushCommitPaging(
+  model: RemotePushDialogViewModel,
+  preview: PushPreview,
+): string {
+  const { state } = model;
+  if (!preview.hasMore && !state.pushPreviewLoadingMore && !state.pushPreviewPagingError) {
+    return "";
+  }
+  const localization = model.localization ?? DEFAULT_LOCALIZATION;
+  const copy = localization.catalog.remote;
+  if (state.pushPreviewLoadingMore) {
+    return `<div class="push-commit-page-status loading" id="push-commit-page-status" role="status"><span class="spinner" aria-hidden="true"></span><span>${escapeHtml(copy.loading)}</span></div>`;
+  }
+  if (state.pushPreviewPagingError) {
+    const message = state.pushPreviewPagingError.detail ?? state.pushPreviewPagingError.summary;
+    return `<div class="push-commit-page-status error" id="push-commit-page-status" role="status"><span>${escapeHtml(message)}</span><button type="button" id="push-commit-page-retry">${escapeHtml(localization.catalog.common.retry)}</button></div>`;
+  }
+  return `<div class="push-commit-page-status idle" id="push-commit-page-status" aria-hidden="true"></div>`;
 }
 
 function renderPushFiles(model: RemotePushDialogViewModel, preview: PushPreview, reviewFiles: CommitFileChange[]): string {

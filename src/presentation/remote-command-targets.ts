@@ -33,7 +33,7 @@ export const REMOTE_COMMAND_DEFINITIONS: readonly RemoteCommandDefinition[] = [
   remote(REMOTE_COMMANDS.toggleFileView, "toggle-file-view", REVIEW_SCOPES, (catalog) => catalog.remote.showPushedFilesAs(`${catalog.remote.flatList} / ${catalog.remote.folderTree}`), "push review files tree flat view", '.push-file-toolbar [data-collection-command="view"]'),
   remote(REMOTE_COMMANDS.expandFolders, "expand-folders", REVIEW_SCOPES, (catalog) => catalog.remote.expandPushedFolders, "push review expand all file folders", '.push-file-toolbar [data-collection-command="expand"]'),
   remote(REMOTE_COMMANDS.collapseFolders, "collapse-folders", REVIEW_SCOPES, (catalog) => catalog.remote.collapsePushedFolders, "push review collapse all file folders", '.push-file-toolbar [data-collection-command="collapse"]'),
-  remote(REMOTE_COMMANDS.loadMore, "load-more", REVIEW_SCOPES, (catalog) => catalog.remote.showMore, "push review load more outgoing commits", "#push-load-more"),
+  remote(REMOTE_COMMANDS.loadMore, "load-more", REVIEW_SCOPES, (catalog) => catalog.remote.showMore, "push review load more outgoing commits"),
 ];
 
 export const REMOTE_SHORTCUT_TARGETS: readonly DomCommandDefinition[] =

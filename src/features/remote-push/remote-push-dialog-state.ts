@@ -48,6 +48,7 @@ export function resetRemotePushDialogState(
   state.pushPreviewLoading = false;
   state.pushPreviewRefreshing = false;
   state.pushPreviewLoadingMore = false;
+  state.pushPreviewPagingError = null;
   clearRemotePushSelectionState(state);
   state.pushTagsEnabled = readPushTagsEnabled(storage) ?? state.pushTagsEnabled;
   state.pushTagMode = readPushTagMode(storage) ?? state.pushTagMode;
