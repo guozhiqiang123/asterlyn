@@ -8,12 +8,25 @@ import {
   parseWorkspaceTrust,
 } from "../src/protocol/task-execution.ts";
 import { TaskExecutionController } from "../src/application/tasks/task-execution-controller.ts";
-import { TaskExecutionRuntime } from "../src/features/tasks/task-execution-runtime.ts";
+import { coalesceTaskExecutionOutputs, TaskExecutionRuntime } from "../src/features/tasks/task-execution-runtime.ts";
 import { renderTaskExecutionReview } from "../src/features/tasks/task-execution-view.ts";
 import { EN_US_TASK_EXECUTION_COPY } from "../src/localization/task-execution-copy.ts";
 
 const identity = { root: "/repo", generation: 3 };
 const review = { protocolVersion: 1, reviewId: "review-1", workspaceRoot: "/repo", pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", canonicalExecutablePath: "/repo/gradlew", args: ["assembleDebug"], cwd: "/repo", trust: "trusted" };
+
+test("completed task output coalesces adjacent transport frames without reordering streams", () => {
+  const result = coalesceTaskExecutionOutputs([
+    { stream: "stdout", dataBase64: Buffer.from("hello ").toString("base64") },
+    { stream: "stdout", dataBase64: Buffer.from("world").toString("base64") },
+    { stream: "stderr", dataBase64: Buffer.from("warning").toString("base64") },
+    { stream: "stdout", dataBase64: Buffer.from("done").toString("base64") },
+  ]);
+  assert.deepEqual(result.map(({ stream, dataBase64 }) => [stream, Buffer.from(dataBase64, "base64").toString()]), [
+    ["stdout", "hello world"], ["stderr", "warning"], ["stdout", "done"],
+  ]);
+  assert.equal(Object.isFrozen(result), true);
+});
 
 test("task wire parsers require protocol version and bounded event fields", () => {
   assert.deepEqual(

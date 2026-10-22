@@ -44,13 +44,13 @@ use adapters::system_file_clipboard::{
 };
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
-    ActiveWorkspaces, CommitFileRestoreRegistry, GitOperationCoordinator, HistoryPageCacheRegistry,
-    PendingRepositoryWindowReservation, PendingRepositoryWindows, PluginMarketplaceCoordinator,
-    PluginProcessQueryManager, ScanRegistry, TaskManager, WorkspaceEntryInspection,
-    WorkspaceMutationCoordinator, WorkspaceMutationPreview, WorkspaceReplacementDiff,
-    WorkspaceReplacementPreview, WorkspaceReplacementRegistry, WorkspaceSearchIndexRegistry,
-    WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
-    WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    ActiveWorkspaces, CommitFileRestoreRegistry, DiagnosticsLog, GitOperationCoordinator,
+    HistoryPageCacheRegistry, PendingRepositoryWindowReservation, PendingRepositoryWindows,
+    PluginMarketplaceCoordinator, PluginProcessQueryManager, ScanRegistry, TaskManager,
+    WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
+    WorkspaceReplacementDiff, WorkspaceReplacementPreview, WorkspaceReplacementRegistry,
+    WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
+    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
     apply_authorized_replacement, build_plugin_host_supervisor, exact_git_repository,
     execute_workspace_mutation_plan, finalize_replacement, finalize_workspace_mutation_recovery,
@@ -300,6 +300,23 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .setup(|app| {
+            let diagnostics = DiagnosticsLog::open(
+                app.path()
+                    .app_log_dir()
+                    .map_err(std::io::Error::other)?
+                    .join("diagnostics"),
+            )?;
+            diagnostics.install_panic_hook();
+            diagnostics.info(
+                "host",
+                "application.starting",
+                None,
+                serde_json::json!({
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "processId": std::process::id(),
+                }),
+            );
+            app.manage(diagnostics);
             ensure_bundled_plugins(app.handle()).map_err(std::io::Error::other)?;
             recover_interrupted_plugin_activations(app.handle()).map_err(std::io::Error::other)?;
             let plugin_hosts = build_plugin_host_supervisor(app.handle().clone())
@@ -494,12 +511,20 @@ pub fn run() {
             cleanup_plugin_task_cache,
             execute_plugin_process_query,
             execute_plugin_tool_operation,
-            cancel_plugin_tool_operation
+            cancel_plugin_tool_operation,
+            write_frontend_diagnostic,
+            diagnostic_log_directory
         ])
         .build(tauri::generate_context!())
         .expect("Asterlyn desktop runtime failed");
     app.run(|app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            app.state::<DiagnosticsLog>().info(
+                "host",
+                "application.exiting",
+                None,
+                serde_json::json!({}),
+            );
             app.state::<TaskManager>().cancel_all();
             app.state::<PluginProcessQueryManager>().cancel_all();
             let _ = abandon_plugin_activations(app);

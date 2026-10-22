@@ -17,6 +17,11 @@ Status: experimental public policy rooted at Asterlyn `0.1.19`; current Plugin S
 Marketplace and Installed diagnostics are host-owned plain text. A plugin cannot hide, restyle, or
 rewrite admission, permission, runtime, quarantine, rollback, or uninstall results.
 
+The host also persists bounded structured lifecycle evidence according to
+[`ADR-0033`](../architecture/decisions/0033-structured-local-diagnostics.md). Plugins do not receive
+filesystem logging authority and cannot inject top-level fields; callback and capability metadata is
+wrapped by the host, redacted, and correlated without persisting request bodies or process output.
+
 ## Collect a support packet
 
 Record only bounded non-secret evidence:

@@ -43,6 +43,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0030-plugin-run-targets-and-android-workbench.md`](architecture/decisions/0030-plugin-run-targets-and-android-workbench.md) — generic plugin run/target/session contracts, bounded external-tool queries, and the host-rendered Android workbench.
 - [`architecture/decisions/0031-supervised-staged-plugin-run-sessions.md`](architecture/decisions/0031-supervised-staged-plugin-run-sessions.md) — staged plugin Run sessions, authoritative final-artifact identity, and typed declared tool operations.
 - [`architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md`](architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md) — direct GitHub Release plugin sources, static admission, immutable installation, isolated activation, restart recovery, and rollback.
+- [`architecture/decisions/0033-structured-local-diagnostics.md`](architecture/decisions/0033-structured-local-diagnostics.md) — one bounded local JSONL timeline across the webview, native host, capabilities, and isolated plugin lifecycle.
 
 ## Plugin development
 
@@ -90,6 +91,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/git-worktree-actions-plan.md`](engineering/git-worktree-actions-plan.md) — primary/linked/available branch checkout identity, reviewed removal, Android Studio-style creation, primary-window Open/Reveal actions, and acceptance gates.
 - [`engineering/keyboard-shortcut-management-plan.md`](engineering/keyboard-shortcut-management-plan.md) — unified command registry, customizable keybindings, conflict handling, Settings management, and editor/terminal integration plan.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
+- [`engineering/structured-diagnostics.md`](engineering/structured-diagnostics.md) — log location, event contract, privacy rules, plugin-task diagnosis, and validation gates.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds, zero-cost Release publication, and artifact trust boundary.
 - [`engineering/in-app-update-plan.md`](engineering/in-app-update-plan.md) — startup/manual update discovery, verified native package installation, restart behavior, and updater trust boundaries.
 - [`engineering/plugin-system-plan.md`](engineering/plugin-system-plan.md) — phased bundled-plugin kernel, Tasks tool, supervised execution, Android/Gradle workflow, and external-host gate.

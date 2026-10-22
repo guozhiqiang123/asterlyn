@@ -1,4 +1,5 @@
 mod commit_file_restore;
+pub(crate) mod diagnostics;
 mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod history_page_cache;
@@ -26,6 +27,7 @@ pub(crate) use commit_file_restore::{
     finalize_commit_file_restore, list_commit_file_restore_recoveries,
     prepare_commit_file_restore_plan, rollback_commit_file_restore,
 };
+pub(crate) use diagnostics::DiagnosticsLog;
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use history_page_cache::HistoryPageCacheRegistry;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};

@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use asterlyn_plugin_runtime::{
     CapabilityContext, CapabilityHandler, PluginHostSupervisor, PluginRuntimeError,
@@ -12,7 +13,10 @@ use tauri::{Emitter, Manager};
 use super::plugin_process_query::{PluginProcessQueryResult, PluginProcessQueryStatus};
 use super::plugin_task_cache::{self, CacheMutationStatus, CacheReadStatus};
 use super::plugin_workspace_state;
-use super::{ActiveWorkspaces, PluginMarketplaceCoordinator, PluginProcessQueryManager, trust};
+use super::{
+    ActiveWorkspaces, DiagnosticsLog, PluginMarketplaceCoordinator, PluginProcessQueryManager,
+    diagnostics::current_trace_id, trust,
+};
 use crate::commands::installation_store;
 
 pub(crate) const PLUGIN_NOTIFICATION_EVENT: &str = "asterlyn://plugin-notification";
@@ -66,6 +70,23 @@ pub(crate) fn supervise_plugin_host_terminations(
         .name("plugin-termination-observer".to_owned())
         .spawn(move || {
             while let Ok(termination) = terminations.recv() {
+                let diagnostics = app.state::<DiagnosticsLog>();
+                diagnostics.error(
+                    "plugin.runtime",
+                    "session.terminated",
+                    None,
+                    json!({
+                        "pluginId": &termination.plugin_id,
+                        "pluginVersion": &termination.plugin_version,
+                        "sessionId": &termination.session_id,
+                        "owner": &termination.owner,
+                        "reason": &termination.reason,
+                        "detail": diagnostics.safe_message(&termination.detail),
+                        "stderrBytes": termination.diagnostics.stderr.len(),
+                        "stderrTruncated": termination.diagnostics.stderr_truncated,
+                        "protocolDiagnosticCount": termination.diagnostics.protocol_diagnostics.len(),
+                    }),
+                );
                 app.state::<PluginProcessQueryManager>()
                     .cancel_session(&termination.owner, &termination.plugin_id);
                 let quarantined = app.state::<PluginMarketplaceCoordinator>().run(|| {
@@ -117,186 +138,264 @@ impl CapabilityHandler for NativePluginCapabilityHandler {
         context: &CapabilityContext<'_>,
         request: &CapabilityRequest,
     ) -> Result<JsonValue, RemoteFailure> {
-        let permission = required_permission(&request.capability, &request.operation)?;
-        if !context.admitted_permissions.contains(permission) {
-            return Err(failure(
-                "capability.permission-denied",
-                format!("capability permission is not admitted: {permission}"),
-            ));
-        }
-        let root = self
-            .app
-            .state::<ActiveWorkspaces>()
-            .resolve(context.owner, context.workspace_root)
-            .map_err(|error| failure("capability.workspace-stale", error.to_string()))?;
-        let arguments = capability_arguments(&request.payload)?;
-        match (request.capability.as_str(), request.operation.as_str()) {
-            ("taskCache", "computeFingerprint") => {
-                expect_count(arguments, 1)?;
-                let paths = string_array(&arguments[0], "fingerprint paths")?;
-                serialize(plugin_task_cache::compute_fingerprint(&root, &paths))
+        let diagnostics = self.app.state::<DiagnosticsLog>().inner().clone();
+        let trace_id = current_trace_id();
+        let started = Instant::now();
+        diagnostics.info(
+            "plugin.capability",
+            "request.started",
+            trace_id.as_deref(),
+            json!({
+                "pluginId": context.plugin_id,
+                "pluginVersion": context.plugin_version,
+                "capability": request.capability,
+                "operation": request.operation,
+                "workspaceHash": diagnostics.hash_identifier(context.workspace_root),
+                "payloadBytes": serde_json::to_vec(&request.payload).map_or(0, |value| value.len()),
+            }),
+        );
+        let result = (|| {
+            let permission = required_permission(&request.capability, &request.operation)?;
+            if !context.admitted_permissions.contains(permission) {
+                return Err(failure(
+                    "capability.permission-denied",
+                    format!("capability permission is not admitted: {permission}"),
+                ));
             }
-            ("taskCache", "read") => {
-                expect_count(arguments, 1)?;
-                let provider_id = string_argument(&arguments[0], "provider ID")?;
-                let cache_root = self.plugin_task_cache_root()?;
-                let value = plugin_task_cache::read_cache(
-                    &cache_root,
-                    &root,
-                    context.plugin_id,
-                    provider_id,
-                );
-                Ok(json!({
-                    "protocolVersion": 1,
-                    "status": cache_read_status(value.status),
-                    "pluginId": value.plugin_id,
-                    "providerId": value.provider_id,
-                    "fingerprint": value.fingerprint,
-                    "payloadBase64": value.payload_base64,
-                    "updatedAtEpochMs": value.updated_at_epoch_ms,
-                    "lastAccessEpochMs": value.last_access_epoch_ms,
-                    "staleReason": value.stale_reason,
-                    "dirtyReason": value.dirty_reason,
-                }))
-            }
-            ("taskCache", "write") => {
-                expect_count(arguments, 3)?;
-                let provider_id = string_argument(&arguments[0], "provider ID")?;
-                let fingerprint =
-                    serde_json::from_value(arguments[1].clone()).map_err(|error| {
-                        failure(
-                            "capability.invalid-arguments",
-                            format!("fingerprint is invalid: {error}"),
-                        )
-                    })?;
-                let payload = string_argument(&arguments[2], "cache payload")?;
-                let value = plugin_task_cache::write_cache(
-                    &self.plugin_task_cache_root()?,
-                    &root,
-                    context.plugin_id,
-                    provider_id,
-                    fingerprint,
-                    payload,
-                );
-                Ok(cache_mutation_value(value))
-            }
-            ("taskCache", "markDirty") => {
-                expect_count(arguments, 2)?;
-                let provider_id = string_argument(&arguments[0], "provider ID")?;
-                let reason = string_argument(&arguments[1], "dirty reason")?;
-                let value = plugin_task_cache::mark_dirty(
-                    &self.plugin_task_cache_root()?,
-                    &root,
-                    context.plugin_id,
-                    provider_id,
-                    reason,
-                );
-                Ok(cache_mutation_value(value))
-            }
-            ("processQueries", "execute") => {
-                expect_count(arguments, 1)?;
-                let query_id = string_argument(&arguments[0], "query ID")?;
-                let trust_store = trust::app_store_path(&self.app)
-                    .map_err(|error| failure("capability.trust-unavailable", error))?;
-                let result = self.app.state::<PluginProcessQueryManager>().execute_exact(
-                    super::ExactPluginProcessQuery {
-                        owner: context.owner,
-                        root: &root,
-                        trust_store: &trust_store,
-                        plugin_id: context.plugin_id,
-                        plugin_version: context.plugin_version,
-                        package_digest: context.package_digest,
-                        query_id,
-                    },
-                );
-                Ok(process_query_value(result))
-            }
-            ("workspaceState", "read") => {
-                expect_count(arguments, 1)?;
-                let key = string_argument(&arguments[0], "workspace-state key")?;
-                let value = plugin_workspace_state::read(
-                    &self.plugin_workspace_state_root()?,
-                    &root,
-                    context.plugin_id,
-                    key,
-                )
-                .map_err(|error| failure("capability.workspace-state", error))?;
-                Ok(value.map(JsonValue::String).unwrap_or(JsonValue::Null))
-            }
-            ("workspaceState", "write") => {
-                expect_count(arguments, 2)?;
-                let key = string_argument(&arguments[0], "workspace-state key")?;
-                let value = string_argument(&arguments[1], "workspace-state value")?;
-                plugin_workspace_state::write(
-                    &self.plugin_workspace_state_root()?,
-                    &root,
-                    context.plugin_id,
-                    key,
-                    value,
-                )
-                .map_err(|error| failure("capability.workspace-state", error))?;
-                Ok(JsonValue::Null)
-            }
-            ("notifications", "publish") => {
-                expect_count(arguments, 1)?;
-                let request = arguments[0].as_object().ok_or_else(|| {
-                    failure(
-                        "capability.invalid-arguments",
-                        "notification request must be an object",
-                    )
-                })?;
-                if request.len() != 2 {
-                    return Err(failure(
-                        "capability.invalid-arguments",
-                        "notification request has an invalid shape",
-                    ));
+            let root = self
+                .app
+                .state::<ActiveWorkspaces>()
+                .resolve(context.owner, context.workspace_root)
+                .map_err(|error| failure("capability.workspace-stale", error.to_string()))?;
+            let arguments = capability_arguments(&request.payload)?;
+            match (request.capability.as_str(), request.operation.as_str()) {
+                ("taskCache", "computeFingerprint") => {
+                    expect_count(arguments, 1)?;
+                    let paths = string_array(&arguments[0], "fingerprint paths")?;
+                    serialize(plugin_task_cache::compute_fingerprint(&root, &paths))
                 }
-                let kind = request
-                    .get("kind")
-                    .and_then(JsonValue::as_str)
-                    .filter(|kind| matches!(*kind, "info" | "success" | "warning" | "error"))
-                    .ok_or_else(|| {
-                        failure(
-                            "capability.invalid-arguments",
-                            "notification kind is invalid",
-                        )
-                    })?;
-                let message_key = request
-                    .get("messageKey")
-                    .and_then(JsonValue::as_str)
-                    .filter(|key| valid_message_key(key))
-                    .ok_or_else(|| {
-                        failure(
-                            "capability.invalid-arguments",
-                            "notification message key is invalid",
-                        )
-                    })?;
-                self.app
-                    .emit_to(
-                        context.owner,
-                        PLUGIN_NOTIFICATION_EVENT,
-                        PluginNotificationEvent {
+                ("taskCache", "read") => {
+                    expect_count(arguments, 1)?;
+                    let provider_id = string_argument(&arguments[0], "provider ID")?;
+                    let cache_root = self.plugin_task_cache_root()?;
+                    let value = plugin_task_cache::read_cache(
+                        &cache_root,
+                        &root,
+                        context.plugin_id,
+                        provider_id,
+                    );
+                    Ok(json!({
+                        "protocolVersion": 1,
+                        "status": cache_read_status(value.status),
+                        "pluginId": value.plugin_id,
+                        "providerId": value.provider_id,
+                        "fingerprint": value.fingerprint,
+                        "payloadBase64": value.payload_base64,
+                        "updatedAtEpochMs": value.updated_at_epoch_ms,
+                        "lastAccessEpochMs": value.last_access_epoch_ms,
+                        "staleReason": value.stale_reason,
+                        "dirtyReason": value.dirty_reason,
+                    }))
+                }
+                ("taskCache", "write") => {
+                    expect_count(arguments, 3)?;
+                    let provider_id = string_argument(&arguments[0], "provider ID")?;
+                    let fingerprint =
+                        serde_json::from_value(arguments[1].clone()).map_err(|error| {
+                            failure(
+                                "capability.invalid-arguments",
+                                format!("fingerprint is invalid: {error}"),
+                            )
+                        })?;
+                    let payload = string_argument(&arguments[2], "cache payload")?;
+                    let value = plugin_task_cache::write_cache(
+                        &self.plugin_task_cache_root()?,
+                        &root,
+                        context.plugin_id,
+                        provider_id,
+                        fingerprint,
+                        payload,
+                    );
+                    Ok(cache_mutation_value(value))
+                }
+                ("taskCache", "markDirty") => {
+                    expect_count(arguments, 2)?;
+                    let provider_id = string_argument(&arguments[0], "provider ID")?;
+                    let reason = string_argument(&arguments[1], "dirty reason")?;
+                    let value = plugin_task_cache::mark_dirty(
+                        &self.plugin_task_cache_root()?,
+                        &root,
+                        context.plugin_id,
+                        provider_id,
+                        reason,
+                    );
+                    Ok(cache_mutation_value(value))
+                }
+                ("processQueries", "execute") => {
+                    expect_count(arguments, 1)?;
+                    let query_id = string_argument(&arguments[0], "query ID")?;
+                    let trust_store = trust::app_store_path(&self.app)
+                        .map_err(|error| failure("capability.trust-unavailable", error))?;
+                    let result = self.app.state::<PluginProcessQueryManager>().execute_exact(
+                        super::ExactPluginProcessQuery {
+                            owner: context.owner,
+                            root: &root,
+                            trust_store: &trust_store,
                             plugin_id: context.plugin_id,
-                            kind,
-                            message_key,
+                            plugin_version: context.plugin_version,
+                            package_digest: context.package_digest,
+                            query_id,
                         },
+                    );
+                    Ok(process_query_value(result))
+                }
+                ("workspaceState", "read") => {
+                    expect_count(arguments, 1)?;
+                    let key = string_argument(&arguments[0], "workspace-state key")?;
+                    let value = plugin_workspace_state::read(
+                        &self.plugin_workspace_state_root()?,
+                        &root,
+                        context.plugin_id,
+                        key,
                     )
-                    .map_err(|error| {
+                    .map_err(|error| failure("capability.workspace-state", error))?;
+                    Ok(value.map(JsonValue::String).unwrap_or(JsonValue::Null))
+                }
+                ("workspaceState", "write") => {
+                    expect_count(arguments, 2)?;
+                    let key = string_argument(&arguments[0], "workspace-state key")?;
+                    let value = string_argument(&arguments[1], "workspace-state value")?;
+                    plugin_workspace_state::write(
+                        &self.plugin_workspace_state_root()?,
+                        &root,
+                        context.plugin_id,
+                        key,
+                        value,
+                    )
+                    .map_err(|error| failure("capability.workspace-state", error))?;
+                    Ok(JsonValue::Null)
+                }
+                ("notifications", "publish") => {
+                    expect_count(arguments, 1)?;
+                    let request = arguments[0].as_object().ok_or_else(|| {
                         failure(
-                            "capability.notification-unavailable",
-                            format!("publish plugin notification: {error}"),
+                            "capability.invalid-arguments",
+                            "notification request must be an object",
                         )
                     })?;
-                Ok(JsonValue::Null)
+                    if request.len() != 2 {
+                        return Err(failure(
+                            "capability.invalid-arguments",
+                            "notification request has an invalid shape",
+                        ));
+                    }
+                    let kind = request
+                        .get("kind")
+                        .and_then(JsonValue::as_str)
+                        .filter(|kind| matches!(*kind, "info" | "success" | "warning" | "error"))
+                        .ok_or_else(|| {
+                            failure(
+                                "capability.invalid-arguments",
+                                "notification kind is invalid",
+                            )
+                        })?;
+                    let message_key = request
+                        .get("messageKey")
+                        .and_then(JsonValue::as_str)
+                        .filter(|key| valid_message_key(key))
+                        .ok_or_else(|| {
+                            failure(
+                                "capability.invalid-arguments",
+                                "notification message key is invalid",
+                            )
+                        })?;
+                    self.app
+                        .emit_to(
+                            context.owner,
+                            PLUGIN_NOTIFICATION_EVENT,
+                            PluginNotificationEvent {
+                                plugin_id: context.plugin_id,
+                                kind,
+                                message_key,
+                            },
+                        )
+                        .map_err(|error| {
+                            failure(
+                                "capability.notification-unavailable",
+                                format!("publish plugin notification: {error}"),
+                            )
+                        })?;
+                    Ok(JsonValue::Null)
+                }
+                _ => Err(failure(
+                    "capability.unsupported-operation",
+                    format!(
+                        "unsupported capability operation: {} / {}",
+                        request.capability, request.operation
+                    ),
+                )),
             }
-            _ => Err(failure(
-                "capability.unsupported-operation",
-                format!(
-                    "unsupported capability operation: {} / {}",
-                    request.capability, request.operation
-                ),
-            )),
+        })();
+        match &result {
+            Ok(value) => diagnostics.info(
+                "plugin.capability",
+                "request.completed",
+                trace_id.as_deref(),
+                json!({
+                    "pluginId": context.plugin_id,
+                    "capability": request.capability,
+                    "operation": request.operation,
+                    "durationMs": started.elapsed().as_millis(),
+                    "resultBytes": serde_json::to_vec(value).map_or(0, |encoded| encoded.len()),
+                    "result": capability_result_summary(&request.capability, &request.operation, value),
+                }),
+            ),
+            Err(error) => diagnostics.error(
+                "plugin.capability",
+                "request.failed",
+                trace_id.as_deref(),
+                json!({
+                    "pluginId": context.plugin_id,
+                    "capability": request.capability,
+                    "operation": request.operation,
+                    "durationMs": started.elapsed().as_millis(),
+                    "errorCode": error.code,
+                    "retryable": error.retryable,
+                    "message": diagnostics.safe_message(&error.message),
+                }),
+            ),
         }
+        result
+    }
+}
+
+fn capability_result_summary(capability: &str, operation: &str, value: &JsonValue) -> JsonValue {
+    let Some(object) = value.as_object() else {
+        return json!({ "kind": "non-object" });
+    };
+    match (capability, operation) {
+        ("processQueries", "execute") => json!({
+            "status": object.get("status").and_then(JsonValue::as_str),
+            "queryId": object.get("queryId").and_then(JsonValue::as_str),
+            "stdoutBase64Bytes": object.get("stdoutBase64").and_then(JsonValue::as_str).map(str::len),
+            "stderrBase64Bytes": object.get("stderrBase64").and_then(JsonValue::as_str).map(str::len),
+            "truncated": object.get("truncated").and_then(JsonValue::as_bool),
+            "exitCode": object.get("exitCode").and_then(JsonValue::as_i64),
+        }),
+        ("taskCache", "computeFingerprint") => json!({
+            "status": object.get("status").and_then(JsonValue::as_str),
+            "fileCount": object.get("files").and_then(JsonValue::as_array).map(Vec::len),
+            "truncated": object.get("truncated").and_then(JsonValue::as_bool),
+            "reason": object.get("reason").and_then(JsonValue::as_str),
+        }),
+        ("taskCache", "read" | "write" | "markDirty") => json!({
+            "status": object.get("status").and_then(JsonValue::as_str),
+            "providerId": object.get("providerId").and_then(JsonValue::as_str),
+            "payloadBase64Bytes": object.get("payloadBase64").and_then(JsonValue::as_str).map(str::len),
+            "staleReason": object.get("staleReason").and_then(JsonValue::as_str),
+            "dirtyReason": object.get("dirtyReason").and_then(JsonValue::as_str),
+        }),
+        _ => json!({ "kind": "object" }),
     }
 }
 

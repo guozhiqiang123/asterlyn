@@ -5,6 +5,7 @@
   "windows": ["*"],
   "permissions": [
     "core:default",
+    "core:app:allow-set-app-theme",
     "core:window:allow-close",
     "core:window:allow-destroy",
     "core:window:allow-minimize",

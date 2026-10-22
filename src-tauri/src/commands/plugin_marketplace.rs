@@ -24,11 +24,11 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_RELEASE_METADATA_BYTES: u64 = 1024 * 1024;
 const BUNDLED_ANDROID_PLUGIN_ID: &str = "dev.asterlyn.android-gradle";
-const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.5.8";
+const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.5.10";
 const BUNDLED_ANDROID_PACKAGE_DIGEST: &str =
-    "sha256:dfc945c1fe70ab633eeefb68a391513499991382e355b1efc7df0c6209bb4394";
+    "sha256:36f4839f49e8723c455561d12bad5972c225c35a043e8527f0cff43a2b3c83af";
 const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
-    "../../resources/plugins/asterlyn-plugin-android-gradle-0.5.8.asterlyn-plugin.tgz"
+    "../../resources/plugins/asterlyn-plugin-android-gradle-0.5.10.asterlyn-plugin.tgz"
 );
 
 use crate::application::{

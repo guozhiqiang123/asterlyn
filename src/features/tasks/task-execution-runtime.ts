@@ -1,5 +1,6 @@
 import type {
   TaskExecutionController,
+  TaskExecutionOutput,
   TaskExecutionState,
   TaskWorkspaceIdentity,
 } from "../../application/tasks/task-execution-controller.ts";
@@ -375,7 +376,7 @@ export class TaskExecutionRuntime {
     this.projectedProgress = null;
     finished({
       status: state.status,
-      outputs: state.outputs,
+      outputs: coalesceTaskExecutionOutputs(state.outputs),
       truncated: state.outputTruncated,
       error: state.error,
     });
@@ -482,6 +483,29 @@ export class TaskExecutionRuntime {
       ? this.root
       : this.root.querySelector<HTMLElement>("#task-execution-host");
   }
+}
+
+/**
+ * Task sessions use small transport frames. Plugins consume only the completed result, so adjacent
+ * frames from the same stream can cross the runtime boundary as one value without losing ordering.
+ */
+export function coalesceTaskExecutionOutputs(
+  outputs: readonly TaskExecutionOutput[],
+): readonly TaskExecutionOutput[] {
+  if (outputs.length < 2) return outputs;
+  const result: TaskExecutionOutput[] = [];
+  for (let index = 0; index < outputs.length;) {
+    const stream = outputs[index]!.stream;
+    let end = index + 1;
+    while (end < outputs.length && outputs[end]!.stream === stream) end += 1;
+    if (end === index + 1) result.push(outputs[index]!);
+    else {
+      const binary = outputs.slice(index, end).map((output) => globalThis.atob(output.dataBase64)).join("");
+      result.push({ stream, dataBase64: globalThis.btoa(binary) });
+    }
+    index = end;
+  }
+  return Object.freeze(result);
 }
 
 function isTerminal(state: TaskExecutionState | null): state is TaskExecutionState & { readonly status: PluginTaskExecutionResult["status"] } {

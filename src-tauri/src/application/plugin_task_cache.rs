@@ -1,4 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -25,6 +26,7 @@ pub(crate) struct FingerprintFile {
     pub(crate) status: String,
     pub(crate) byte_length: u64,
     pub(crate) digest: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_js_safe_u64")]
     pub(crate) modified_at_epoch_ms: Option<u64>,
 }
 
@@ -45,6 +47,35 @@ pub(crate) struct FingerprintResult {
 }
 
 pub(crate) type FingerprintMetadata = FingerprintResult;
+
+fn deserialize_optional_js_safe_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    const MAX_JS_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let serde_json::Value::Number(number) = value else {
+        return Err(D::Error::custom(
+            "expected a non-negative safe integer or null",
+        ));
+    };
+    if let Some(value) = number.as_u64() {
+        return Ok(Some(value));
+    }
+    let value = number
+        .as_f64()
+        .filter(|value| {
+            value.is_finite()
+                && *value >= 0.0
+                && *value <= MAX_JS_SAFE_INTEGER
+                && value.fract() == 0.0
+        })
+        .ok_or_else(|| D::Error::custom("expected a non-negative JavaScript safe integer"))?;
+    Ok(Some(value as u64))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CacheReadStatus {
@@ -894,6 +925,98 @@ mod tests {
 
     fn ready_fingerprint(root: &Path) -> FingerprintMetadata {
         compute_fingerprint(root, &["build.gradle".into()])
+    }
+
+    fn fingerprint_with_timestamp(timestamp: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "protocolVersion": 1,
+            "status": "ready",
+            "workspaceRoot": "/workspace",
+            "algorithm": "sha256",
+            "digest": "a".repeat(64),
+            "files": [{
+                "path": "build.gradle",
+                "status": "present",
+                "byteLength": 12,
+                "digest": "b".repeat(64),
+                "modifiedAtEpochMs": timestamp,
+            }],
+            "truncated": false,
+            "reason": null,
+            "os": "macos",
+            "arch": "aarch64",
+            "javaHomeDigest": null,
+        })
+    }
+
+    #[test]
+    fn fingerprint_accepts_integral_javascript_timestamp_and_rejects_unsafe_numbers() {
+        let decoded: FingerprintMetadata = serde_json::from_value(fingerprint_with_timestamp(
+            serde_json::json!(1_792_659_761_583.0),
+        ))
+        .unwrap();
+        assert_eq!(
+            decoded.files[0].modified_at_epoch_ms,
+            Some(1_792_659_761_583)
+        );
+        assert!(
+            serde_json::from_value::<FingerprintMetadata>(fingerprint_with_timestamp(
+                serde_json::json!(1_792_659_761_583.5)
+            ))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<FingerprintMetadata>(fingerprint_with_timestamp(
+                serde_json::json!(9_007_199_254_740_992.0)
+            ))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<FingerprintMetadata>(fingerprint_with_timestamp(
+                serde_json::json!(-1.0)
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn javascript_round_tripped_fingerprint_writes_and_reads_fresh_cache() {
+        let directory = tempfile::tempdir().unwrap();
+        let workspace = directory.path().join("workspace");
+        let cache = directory.path().join("cache");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("build.gradle"), b"plugins {}").unwrap();
+        let fingerprint = compute_fingerprint(&workspace, &["build.gradle".into()]);
+        let mut transported = serde_json::to_value(&fingerprint).unwrap();
+        for file in transported["files"].as_array_mut().unwrap() {
+            if let Some(timestamp) = file["modifiedAtEpochMs"].as_u64() {
+                file["modifiedAtEpochMs"] = serde_json::json!(timestamp as f64);
+            }
+        }
+        let transported: FingerprintMetadata = serde_json::from_value(transported).unwrap();
+        let payload = BASE64.encode(b"task-cache");
+        assert_eq!(
+            write_cache(
+                &cache,
+                &workspace,
+                "dev.asterlyn.android-gradle",
+                "gradle-tasks",
+                transported,
+                &payload,
+            )
+            .status,
+            CacheMutationStatus::Stored
+        );
+        assert_eq!(
+            read_cache(
+                &cache,
+                &workspace,
+                "dev.asterlyn.android-gradle",
+                "gradle-tasks",
+            )
+            .status,
+            CacheReadStatus::Fresh
+        );
     }
 
     #[test]

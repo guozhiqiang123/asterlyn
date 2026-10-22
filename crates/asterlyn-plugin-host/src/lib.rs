@@ -264,6 +264,7 @@ impl PluginEngine {
             .call(&receiver.clone().into(), &args, &mut self.context)
             .map_err(|error| js_error("invoke callback", error, &mut self.context))?;
         let value = settle_value(value, &self.capability_queue, exchange, &mut self.context)?;
+        drain_capabilities(&self.capability_queue, exchange, &mut self.context)?;
         let mut projected_callbacks = BTreeMap::new();
         let mut seen = Vec::new();
         let mut projected_callback_count = 0;
@@ -883,7 +884,7 @@ fn drain_capabilities(
         }
     }
     Err(PluginEngineError::Capability(
-        "plugin capability request limit exceeded during activation".to_owned(),
+        "plugin capability request limit exceeded while draining pending jobs".to_owned(),
     ))
 }
 
@@ -1017,7 +1018,11 @@ mod tests {
               version: "1.0.0",
               activate(context) {
                 if (typeof globalThis.__asterlynUtf8Encode !== "undefined" ||
-                    typeof globalThis.__asterlynUtf8Decode !== "undefined") {
+                    typeof globalThis.__asterlynUtf8Decode !== "undefined" ||
+                    typeof globalThis.__asterlynUtf8DecodeLines !== "undefined" ||
+                    typeof globalThis.__asterlynDecodeGradleTasks !== "undefined" ||
+                    typeof globalThis.__asterlynBase64DecodeBytes !== "undefined" ||
+                    typeof globalThis.__asterlynBase64EncodeBytes !== "undefined") {
                   throw new Error("native codec handle escaped");
                 }
                 context.contribute({
@@ -1026,6 +1031,10 @@ mod tests {
                   execute() {
                     const encoded = new TextEncoder().encode("A🙂");
                     const decoded = new TextDecoder("utf-8").decode(encoded);
+                    const lines = new TextDecoder("utf-8").decodeLines(new TextEncoder().encode("one\r\ntwo\n"));
+                    const gradle = new TextDecoder("utf-8").decodeGradleTasks(new TextEncoder().encode(
+                      "Tasks runnable from root project 'fixture'\nBuild tasks\n-----------\nassemble - Assemble fixture\n"
+                    ));
                     const replacement = new TextDecoder().decode(new Uint8Array([0xff]));
                     let fatal = false;
                     try { new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array([0xff])); }
@@ -1033,12 +1042,14 @@ mod tests {
                     const bom = new TextDecoder().decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41]));
                     const base64 = btoa(String.fromCharCode(0, 65, 255));
                     const binary = Array.from(atob(base64), (value) => value.charCodeAt(0));
+                    const nativeBytes = Array.from(Uint8Array.fromBase64(base64));
+                    const nativeBase64 = new Uint8Array([0, 65, 255]).toBase64();
                     let invalidBase64 = false;
                     let invalidBinary = false;
                     try { atob("not base64!"); } catch { invalidBase64 = true; }
                     try { btoa("🙂"); } catch { invalidBinary = true; }
-                    return { bytes: Array.from(encoded), decoded, replacement, fatal, bom,
-                      base64, binary, invalidBase64, invalidBinary };
+                    return { bytes: Array.from(encoded), decoded, lines, gradle, replacement, fatal, bom,
+                      base64, binary, nativeBytes, nativeBase64, invalidBase64, invalidBinary };
                   },
                 });
               },
@@ -1064,11 +1075,15 @@ mod tests {
             .expect("invoke codec fixture");
         assert_eq!(result["bytes"], json!([65, 240, 159, 153, 130]));
         assert_eq!(result["decoded"], "A🙂");
+        assert_eq!(result["lines"], json!(["one", "two", ""]));
+        assert_eq!(result["gradle"]["tasks"][0]["id"], ":assemble");
         assert_eq!(result["replacement"], "�");
         assert_eq!(result["fatal"], true);
         assert_eq!(result["bom"], "A");
         assert_eq!(result["base64"], "AEH/");
         assert_eq!(result["binary"], json!([0, 65, 255]));
+        assert_eq!(result["nativeBytes"], json!([0, 65, 255]));
+        assert_eq!(result["nativeBase64"], "AEH/");
         assert_eq!(result["invalidBase64"], true);
         assert_eq!(result["invalidBinary"], true);
     }

@@ -212,6 +212,12 @@ path, command, version, or digest. The detailed trust and rollback boundary is r
 
 ## Failure policy
 
+Operational failures use the host-owned structured local diagnostic stream defined by
+[`ADR-0033`](decisions/0033-structured-local-diagnostics.md). The application boundary owns file
+retention and redaction; product/domain crates do not depend on the writer. Plugin activation and
+callback correlation IDs flow through native capability execution so process, parsing, cache, and
+runtime-containment phases can be diagnosed without UI automation or access to callback bodies.
+
 - A failed Git command returns its operation, exit status, and sanitized stderr.
 - A failed remote command returns only a typed authentication, network, rejection, or unknown category; bounded child output is discarded and remote URLs never enter application state.
 - Remote credentials remain inside an explicitly selected installed platform credential manager or the SSH agent. Asterlyn resets inherited Git credential helpers, disables terminal/askpass interaction and inherited Git tracing for these commands, and never stores a username, password, token, or authorization header in repository configuration or application state.

@@ -6,6 +6,7 @@ import {
   resolvePresentationSnapshot,
 } from "./presentation/presentation-environment.ts";
 import { loadAppPreferences } from "./preferences.ts";
+import { reportFrontendDiagnostic } from "./adapters/tauri/frontend-diagnostics.ts";
 
 export async function startDesktopApplication(): Promise<void> {
   const preferences = loadAppPreferences(window.localStorage);
@@ -13,6 +14,7 @@ export async function startDesktopApplication(): Promise<void> {
   const presentation = resolvePresentationSnapshot(preferences, system);
   applyPresentationToDocument(document, presentation);
   void nativeAppearance.setTheme(preferences.theme).catch((error: unknown) => {
+    reportFrontendDiagnostic("warning", "appearance.sync_failed", error);
     console.error("Unable to synchronize the native appearance.", error);
   });
 
