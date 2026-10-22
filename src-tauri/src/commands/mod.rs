@@ -5,6 +5,7 @@ mod git_recovery;
 mod plugin_cache;
 mod plugin_marketplace;
 mod plugin_marketplace_cleanup;
+mod plugin_marketplace_verification;
 mod plugin_process_query;
 mod plugin_runtime;
 pub(crate) use git_recovery::{
@@ -19,8 +20,9 @@ pub(crate) use plugin_marketplace::{
     ensure_bundled_plugins, installation_store, list_installed_plugin_manifests,
     list_plugin_installations, list_plugin_sources, prepare_plugin_install,
     recover_interrupted_plugin_activations, refresh_plugin_source, remove_plugin_source,
-    restart_for_plugin_changes, select_installed_plugin_rollback, set_installed_plugin_enabled,
-    set_plugin_source_enabled, uninstall_installed_plugin, upsert_plugin_source,
+    repair_installed_plugin_version, restart_for_plugin_changes, select_installed_plugin_rollback,
+    set_installed_plugin_enabled, set_plugin_source_enabled, uninstall_installed_plugin,
+    upsert_plugin_source,
 };
 pub(crate) use plugin_process_query::{
     cancel_plugin_tool_operation, execute_plugin_process_query, execute_plugin_tool_operation,

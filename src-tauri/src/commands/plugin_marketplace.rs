@@ -4,8 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use asterlyn_plugin_marketplace::{
     AdmittedPluginIdentity, BUILT_IN_ANDROID_REPOSITORY, PluginInstallationSnapshot,
-    PluginInstallationStore, PluginSource, PluginSourceCatalog, PluginSourceCatalogStatus,
-    PluginSourceSnapshot, PluginSourceStore, compare_release_versions, parse_github_release,
+    PluginInstallationStore, PluginRuntimeStatus, PluginSource, PluginSourceCatalog,
+    PluginSourceCatalogStatus, PluginSourceSnapshot, PluginSourceStore, compare_release_versions,
+    parse_github_release,
 };
 use asterlyn_plugin_package::{
     AdmissionContext, AdmittedPluginManifest, SUPPORTED_CAPABILITIES, SUPPORTED_PERMISSIONS,
@@ -36,6 +37,9 @@ use crate::application::{
 };
 
 use super::plugin_marketplace_cleanup::{cleanup_marketplace_storage, remove_marketplace_entry};
+use super::plugin_marketplace_verification::{
+    inspect_verified_installed_package, verify_installed_package_archive_path,
+};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -186,32 +190,14 @@ pub(crate) fn list_installed_plugin_manifests(
                     .versions
                     .iter()
                     .find(|candidate| candidate.version == selected)?;
-                let inspected = installed_package_root(
+                let inspected = inspect_verified_installed_package(
                     &app,
                     &plugin.plugin_id,
+                    &plugin.repository,
                     &version.version,
                     &version.package_digest,
-                )
-                .and_then(|root| {
-                    verify_installed_package_archive(
-                        &app,
-                        &plugin.plugin_id,
-                        &version.version,
-                        &version.package_digest,
-                    )?;
-                    let report = inspect_extracted_package(
-                        &root,
-                        &admission_context(&plugin.repository, &version.version),
-                    )
-                    .map_err(|error| error.to_string())?;
-                    if version.content_digest.as_deref() != Some(report.content_digest.as_str()) {
-                        return Err(
-                            "installed plugin content is not bound to its admitted package; reinstall it"
-                                .to_owned(),
-                        );
-                    }
-                    Ok(report)
-                });
+                    version.content_digest.as_deref(),
+                );
                 let (manifest, error) = match inspected {
                     Ok(report) => (Some(report.management_manifest), None),
                     Err(error) => (None, Some(bounded_manifest_error(error))),
@@ -351,6 +337,47 @@ pub(crate) fn select_installed_plugin_rollback(
     marketplace.run(|| {
         installation_store(&app)?
             .select_rollback(&plugin_id, &version, &package_digest)
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[tauri::command]
+pub(crate) fn repair_installed_plugin_version(
+    plugin_id: String,
+    version: String,
+    package_digest: String,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+) -> Result<PluginInstallationSnapshot, String> {
+    marketplace.run(|| {
+        let installation = installation_store(&app)?;
+        let snapshot = installation.snapshot().map_err(|error| error.to_string())?;
+        let plugin = snapshot
+            .plugins
+            .iter()
+            .find(|candidate| candidate.plugin_id == plugin_id)
+            .ok_or_else(|| "installed plugin was not found".to_owned())?;
+        let candidate = plugin
+            .versions
+            .iter()
+            .find(|candidate| candidate.version == version)
+            .ok_or_else(|| "installed plugin version was not found".to_owned())?;
+        if candidate.package_digest != package_digest {
+            return Err("plugin package digest does not match the installed version".to_owned());
+        }
+        if candidate.runtime_status != PluginRuntimeStatus::Quarantined {
+            return Err("only a quarantined plugin version can be repaired".to_owned());
+        }
+        inspect_verified_installed_package(
+            &app,
+            &plugin_id,
+            &plugin.repository,
+            &version,
+            &package_digest,
+            candidate.content_digest.as_deref(),
+        )?;
+        installation
+            .repair_quarantined_version(&plugin_id, &version, &package_digest)
             .map_err(|error| error.to_string())
     })
 }
@@ -789,13 +816,7 @@ pub(crate) fn verify_installed_package_archive(
     package_digest: &str,
 ) -> Result<(), String> {
     let archive = installed_package_archive(app, plugin_id, version, package_digest)?;
-    let bytes =
-        fs::read(&archive).map_err(|error| format!("read retained plugin archive: {error}"))?;
-    if format!("sha256:{:x}", Sha256::digest(&bytes)) == package_digest {
-        Ok(())
-    } else {
-        Err("retained plugin archive does not match its admitted digest".into())
-    }
+    verify_installed_package_archive_path(&archive, package_digest)
 }
 
 fn retain_package_archive(
@@ -1157,9 +1178,12 @@ fn hidden_command(program: &str) -> Command {
 }
 
 #[cfg(test)]
+#[path = "plugin_marketplace_repair_tests.rs"]
+mod repair_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use asterlyn_plugin_marketplace::PluginRuntimeStatus;
 
     #[test]
     fn bundled_android_package_is_admitted_enabled_and_content_bound_offline() {

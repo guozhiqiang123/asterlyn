@@ -74,6 +74,17 @@ export const demoPluginMarketplaceBridge: PluginMarketplaceBridge = {
     installationGeneration += 1;
     return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: structuredClone(installedPlugins) };
   },
+  async repairInstalledPluginVersion(pluginId, version) {
+    installedPlugins = installedPlugins.map((plugin) => plugin.pluginId === pluginId ? {
+      ...plugin,
+      pendingVersion: version,
+      versions: plugin.versions.map((candidate) => candidate.version === version
+        ? { ...candidate, runtimeStatus: "pendingRestart" }
+        : candidate),
+    } : plugin);
+    installationGeneration += 1;
+    return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: structuredClone(installedPlugins) };
+  },
   async uninstallInstalledPlugin(pluginId) {
     installedPlugins = installedPlugins.filter((plugin) => plugin.pluginId !== pluginId);
     installationGeneration += 1;

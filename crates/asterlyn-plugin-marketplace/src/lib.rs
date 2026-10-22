@@ -532,6 +532,33 @@ impl PluginInstallationStore {
         })
     }
 
+    pub fn repair_quarantined_version(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
+            if admitted.runtime_status != PluginRuntimeStatus::Quarantined {
+                return Err(MarketplaceError::Conflict(
+                    "repair requires a quarantined plugin version".into(),
+                ));
+            }
+            if admitted.content_digest.is_none() {
+                return Err(MarketplaceError::Conflict(
+                    "plugin version predates immutable content binding; reinstall it".into(),
+                ));
+            }
+            admitted.runtime_status = if plugin.enabled {
+                PluginRuntimeStatus::PendingRestart
+            } else {
+                PluginRuntimeStatus::PendingRuntime
+            };
+            plugin.pending_version = Some(version.into());
+            Ok(true)
+        })
+    }
+
     pub fn remove_plugin(
         &self,
         plugin_id: &str,

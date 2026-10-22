@@ -76,6 +76,8 @@ export interface PluginManagementCopy {
   readonly knownGood: string;
   readonly quarantined: string;
   readonly rollback: string;
+  readonly repairPlugin: string;
+  readonly repairPluginTitle: string;
   readonly uninstallPlugin: string;
   readonly confirmUninstallPlugin: string;
   readonly uninstallKeepsData: string;
@@ -172,7 +174,10 @@ function renderAdmittedPackages(
       const rollback = candidate.runtimeStatus === "knownGood" && candidate.version !== plugin.activeVersion
         ? `<button class="secondary-button" type="button" data-installed-plugin-rollback="${escapeAttribute(plugin.pluginId)}" data-plugin-version="${escapeAttribute(candidate.version)}" data-package-digest="${escapeAttribute(candidate.packageDigest)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.rollback)}</button>`
         : "";
-      return `<li><span><code>${escapeHtml(candidate.version)}</code><small>${escapeHtml(versionStatus(candidate.runtimeStatus, copy))}</small></span>${rollback}</li>`;
+      const repair = candidate.runtimeStatus === "quarantined"
+        ? `<button class="secondary-button" type="button" data-installed-plugin-repair="${escapeAttribute(plugin.pluginId)}" data-plugin-version="${escapeAttribute(candidate.version)}" data-package-digest="${escapeAttribute(candidate.packageDigest)}" title="${escapeAttribute(copy.repairPluginTitle)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.repairPlugin)}</button>`
+        : "";
+      return `<li><span><code>${escapeHtml(candidate.version)}</code><small>${escapeHtml(versionStatus(candidate.runtimeStatus, copy))}</small></span>${rollback}${repair}</li>`;
     }).join("");
     const uninstallReview = !plugin.bundledFallback && state.confirmUninstallPlugin === plugin.pluginId
       ? `<div class="plugin-installed-uninstall-review" role="alert"><div><strong>${escapeHtml(copy.confirmUninstallPlugin)}</strong><span>${escapeHtml(copy.uninstallKeepsData)}</span></div><button class="secondary-button" type="button" data-installed-plugin-uninstall-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-installed-plugin-uninstall-confirm="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`

@@ -16,7 +16,7 @@ const copy = {
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading sources…", noSources: "No sources.", notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ", marketplaceSecurityNote: "Packages are verified before installation.",
   inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", hostOperations: "Host operations", hostOperationSummary: (id) => `${id} · reviewed query or mutation · trusted workspace required`, license: "License", pendingRuntimeNote: "Pending isolated runtime.",
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
-  enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin data is retained.",
+  enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", repairPlugin: "Repair", repairPluginTitle: "Reverify this package and prepare another isolated activation attempt", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin data is retained.",
 };
 
 const entry = {
@@ -239,4 +239,26 @@ test("installed plugin history exposes exact rollback and explicit retained-data
   assert.match(html, /data-package-digest="sha256:a{64}"/u);
   assert.match(html, /data-installed-plugin-uninstall-confirm/u);
   assert.match(html, /Plugin data is retained/u);
+});
+
+test("quarantined plugin versions expose an exact package repair action", () => {
+  const digest = `sha256:${"c".repeat(64)}`;
+  const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy, false, {
+    tab: "installed", loading: false, error: null, busyRepository: null, form: null,
+    confirmDeleteRepository: null, admissionReview: null, snapshot: null, restarting: false,
+    restartRequired: false, busyPlugin: null, confirmUninstallPlugin: null,
+    installations: { schemaVersion: 2, generation: 5, recovered: false, plugins: [{
+      pluginId: "dev.asterlyn.example", repository: "asterlyn/example", enabled: true,
+      bundledFallback: false, activeVersion: null, knownGoodVersion: null, pendingVersion: null,
+      versions: [{
+        version: "2.0.0", packageDigest: digest, contentDigest: `sha256:${"d".repeat(64)}`,
+        admittedAtEpochMs: 2, runtimeStatus: "quarantined",
+      }],
+    }] },
+  });
+  assert.match(html, /data-installed-plugin-repair="dev\.asterlyn\.example"/u);
+  assert.match(html, /data-plugin-version="2\.0\.0"/u);
+  assert.match(html, /data-package-digest="sha256:c{64}"/u);
+  assert.match(html, />Repair<\/button>/u);
+  assert.doesNotMatch(html, /data-installed-plugin-rollback/u);
 });

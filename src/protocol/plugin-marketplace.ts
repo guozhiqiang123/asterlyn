@@ -50,6 +50,7 @@ export interface PluginMarketplaceBridge {
   restartForPluginChanges(): Promise<void>;
   setInstalledPluginEnabled(pluginId: string, enabled: boolean): Promise<PluginInstallationSnapshot>;
   selectInstalledPluginRollback(pluginId: string, version: string, packageDigest: string): Promise<PluginInstallationSnapshot>;
+  repairInstalledPluginVersion(pluginId: string, version: string, packageDigest: string): Promise<PluginInstallationSnapshot>;
   uninstallInstalledPlugin(pluginId: string): Promise<PluginInstallationSnapshot>;
 }
 

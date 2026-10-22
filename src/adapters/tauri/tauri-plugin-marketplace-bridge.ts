@@ -19,5 +19,6 @@ export const tauriPluginMarketplaceBridge: PluginMarketplaceBridge = {
   restartForPluginChanges: () => invoke<void>("restart_for_plugin_changes"),
   setInstalledPluginEnabled: (pluginId, enabled) => invoke<PluginInstallationSnapshot>("set_installed_plugin_enabled", { pluginId, enabled }),
   selectInstalledPluginRollback: (pluginId, version, packageDigest) => invoke<PluginInstallationSnapshot>("select_installed_plugin_rollback", { pluginId, version, packageDigest }),
+  repairInstalledPluginVersion: (pluginId, version, packageDigest) => invoke<PluginInstallationSnapshot>("repair_installed_plugin_version", { pluginId, version, packageDigest }),
   uninstallInstalledPlugin: (pluginId) => invoke<PluginInstallationSnapshot>("uninstall_installed_plugin", { pluginId }),
 };

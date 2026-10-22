@@ -44,6 +44,75 @@ fn installation_index_recovers_missing_and_corrupt_current_generations() {
 }
 
 #[test]
+fn explicit_repair_rearms_an_exact_quarantined_version_at_the_restart_boundary() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = PluginInstallationStore::open(directory.path()).unwrap();
+    let package_digest = digest(17);
+    admit_and_quarantine(&store, "3.0.0", &package_digest, 17);
+
+    let quarantined = store.snapshot().unwrap();
+    assert_eq!(
+        quarantined.plugins[0].versions[0].runtime_status,
+        PluginRuntimeStatus::Quarantined
+    );
+    assert_eq!(quarantined.plugins[0].pending_version, None);
+
+    let repaired = store
+        .repair_quarantined_version(PLUGIN_ID, "3.0.0", &package_digest)
+        .unwrap();
+    assert_eq!(
+        repaired.plugins[0].versions[0].runtime_status,
+        PluginRuntimeStatus::PendingRestart
+    );
+    assert_eq!(
+        repaired.plugins[0].pending_version.as_deref(),
+        Some("3.0.0")
+    );
+    assert!(
+        store
+            .begin_activation(PLUGIN_ID, "3.0.0", &package_digest)
+            .unwrap_err()
+            .to_string()
+            .contains("requires restart")
+    );
+
+    let restarted = store.recover_interrupted_activations().unwrap();
+    assert_eq!(
+        restarted.plugins[0].versions[0].runtime_status,
+        PluginRuntimeStatus::PendingRuntime
+    );
+    let active = store
+        .begin_activation(PLUGIN_ID, "3.0.0", &package_digest)
+        .unwrap();
+    assert_eq!(
+        active.plugins[0].versions[0].runtime_status,
+        PluginRuntimeStatus::Active
+    );
+}
+
+#[test]
+fn repairing_a_disabled_plugin_preserves_its_choice_without_requiring_a_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = PluginInstallationStore::open(directory.path()).unwrap();
+    let package_digest = digest(18);
+    admit_and_quarantine(&store, "3.0.1", &package_digest, 18);
+    store.set_plugin_enabled(PLUGIN_ID, false).unwrap();
+
+    let repaired = store
+        .repair_quarantined_version(PLUGIN_ID, "3.0.1", &package_digest)
+        .unwrap();
+    assert!(!repaired.plugins[0].enabled);
+    assert_eq!(
+        repaired.plugins[0].versions[0].runtime_status,
+        PluginRuntimeStatus::PendingRuntime
+    );
+    assert_eq!(
+        repaired.plugins[0].pending_version.as_deref(),
+        Some("3.0.1")
+    );
+}
+
+#[test]
 fn retention_keeps_pointers_recent_quarantine_and_bounded_known_good_history() {
     let directory = tempfile::tempdir().unwrap();
     let store = PluginInstallationStore::open(directory.path()).unwrap();
@@ -144,6 +213,7 @@ fn admit_and_quarantine(
             false,
         )
         .unwrap();
+    store.set_plugin_enabled(PLUGIN_ID, true).unwrap();
     store.recover_interrupted_activations().unwrap();
     store
         .begin_activation(PLUGIN_ID, version, package_digest)

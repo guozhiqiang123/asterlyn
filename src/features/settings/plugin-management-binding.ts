@@ -226,6 +226,23 @@ export class PluginManagementBinding {
         );
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-repair]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const pluginId = button.dataset.installedPluginRepair;
+        const version = button.dataset.pluginVersion;
+        const digest = button.dataset.packageDigest;
+        if (!pluginId || !version || !digest) return;
+        const requiresRestart = this.installations?.plugins.find(
+          (candidate) => candidate.pluginId === pluginId,
+        )?.enabled ?? true;
+        void this.mutateInstallation(
+          pluginId,
+          () => this.marketplace.repairInstalledPluginVersion(pluginId, version, digest),
+          () => undefined,
+          requiresRestart,
+        );
+      });
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-uninstall]").forEach((button) => {
       button.addEventListener("click", () => {
         this.confirmUninstallPlugin = button.dataset.installedPluginUninstall ?? null;
@@ -387,6 +404,7 @@ export class PluginManagementBinding {
     pluginId: string,
     operation: () => Promise<PluginInstallationSnapshot>,
     completed: () => void = () => undefined,
+    requiresRestart = true,
   ): Promise<void> {
     if (this.busyPlugin !== null) return;
     this.busyPlugin = pluginId;
@@ -395,7 +413,7 @@ export class PluginManagementBinding {
     try {
       this.installations = await operation();
       await this.host.loadPluginManagement();
-      this.restartRequired = true;
+      this.restartRequired ||= requiresRestart;
       completed();
     } catch (error) {
       this.marketplaceError = errorMessage(error);
