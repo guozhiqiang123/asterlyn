@@ -7,6 +7,7 @@ import {
   type ContextMenuSession,
   type ContextMenuSubmenuItem,
 } from "./context-menu-model.ts";
+import { diagnostics } from "../diagnostics.ts";
 import {
   contextMenuEdgeIndex,
   contextMenuTypeaheadIndex,
@@ -111,12 +112,14 @@ export class ContextMenuHost implements ContextMenuPort {
     try {
       active.session.dismissed?.();
     } catch (error) {
+      diagnostics.report("error", "context_menu.dismiss_failed", error);
       console.error(error);
     }
     if (!restoreFocus) return;
     try {
       active.session.restoreFocus();
     } catch (error) {
+      diagnostics.report("error", "context_menu.restore_focus_failed", error);
       console.error(error);
     }
   }
@@ -256,7 +259,12 @@ export class ContextMenuHost implements ContextMenuPort {
       return;
     }
     this.closeActive(active.session.ownerId, true);
-    void Promise.resolve(active.session.invoke(item.actionId)).catch(console.error);
+    const reportFailure = (error: unknown): void => {
+      diagnostics.report("error", "context_menu.action_failed", error);
+      console.error(error);
+    };
+    try { void Promise.resolve(active.session.invoke(item.actionId)).catch(reportFailure); }
+    catch (error) { reportFailure(error); }
   }
 
   private openSubmenu(

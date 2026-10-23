@@ -48,7 +48,9 @@ pub(crate) use commit_file_restore::{
     execute_commit_file_restore, finalize_commit_file_restore, list_commit_file_restore_recoveries,
     prepare_commit_file_restore, rollback_commit_file_restore,
 };
-pub(crate) use diagnostics::{diagnostic_log_directory, write_frontend_diagnostic};
+pub(crate) use diagnostics::{
+    diagnostic_log_directory, diagnostic_log_health, write_frontend_diagnostic,
+};
 pub(crate) use git_operations::{
     cancel_remote_operation, commit_changes, configure_remote_ssh, create_branch,
     execute_branch_mutation, execute_git_operation, execute_git_reset,

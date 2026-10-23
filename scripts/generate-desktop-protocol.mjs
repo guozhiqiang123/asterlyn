@@ -36,14 +36,16 @@ export async function generateDesktopProtocol() {
     ...importLines,
     "",
     `export const DESKTOP_PROTOCOL_VERSION = ${schema.version} as const;`,
+    `export const DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS = ${JSON.stringify(schema.diagnosticContextCommands ?? [])} as const;`,
     "",
     "export interface DesktopCommandMap {",
   ];
   for (const command of schema.commands) {
     const entries = Object.entries(command.args);
-    const args = entries.length === 0
+    let args = entries.length === 0
       ? "Record<string, never>"
       : `{ ${entries.map(([name, type]) => `${name}: ${typescriptType(type)};`).join(" ")} }`;
+    if (schema.diagnosticContextCommands?.includes(command.name)) args += " & { diagnosticTraceId?: string }";
     lines.push(`  ${command.name}: { args: ${args}; result: ${typescriptType(command.result)} };`);
   }
   lines.push(

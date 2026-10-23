@@ -18,6 +18,7 @@
     "PluginRuntimeTheme": "./plugin-runtime",
     "PluginRuntimeValue": "./plugin-runtime"
   },
+  "diagnosticContextCommands": ["activate_installed_plugin_runtime", "invoke_installed_plugin_callback", "prepare_task_execution", "start_task_execution"],
   "commands": [
     { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
     { "name": "install_app_update", "args": {}, "result": "AppUpdateInstallResult", "validator": "appUpdateInstallResult" },

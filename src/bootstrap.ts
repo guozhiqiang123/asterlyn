@@ -11,6 +11,7 @@ installFrontendDiagnostics();
 async function bootstrap(): Promise<void> {
   const { startDesktopApplication } = await import("./startup-runtime.ts");
   await startDesktopApplication();
+  reportFrontendDiagnostic("info", "application.frontend_ready", "");
 }
 
 void bootstrap().catch((error: unknown) => {

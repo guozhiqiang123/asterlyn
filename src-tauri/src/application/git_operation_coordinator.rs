@@ -3,6 +3,7 @@ use serde_json::json;
 use std::sync::OnceLock;
 use std::time::Instant;
 
+use super::diagnostics::with_trace;
 use super::{DiagnosticsLog, GitMutationRegistry, RemoteOperationRegistry, WorkspaceWriteRegistry};
 
 pub(crate) struct GitOperationCoordinator {
@@ -108,14 +109,23 @@ impl GitOperationCoordinator {
                 .register(&resolved_root, &operation_id, operation)?;
 
             let task_cancellation = cancellation.clone();
+            let worker_trace = diagnostic_context
+                .as_ref()
+                .map(|(_, trace, _, _)| trace.clone());
             let result = run_blocking(operation, move || {
-                let _write = write_lock.lock().map_err(|_| poisoned_workspace_lock())?;
-                let _guard = mutation_lock.lock().map_err(|_| GitError::Io {
-                    operation: "serialize Git mutations".to_string(),
-                    message: "Git-mutation lock was poisoned".to_string(),
-                })?;
-                action(&repository, &task_cancellation)?;
-                repository.tracked_snapshot(snapshot_limit)
+                let work = || {
+                    let _write = write_lock.lock().map_err(|_| poisoned_workspace_lock())?;
+                    let _guard = mutation_lock.lock().map_err(|_| GitError::Io {
+                        operation: "serialize Git mutations".to_string(),
+                        message: "Git-mutation lock was poisoned".to_string(),
+                    })?;
+                    action(&repository, &task_cancellation)?;
+                    repository.tracked_snapshot(snapshot_limit)
+                };
+                match worker_trace {
+                    Some(trace) => with_trace(&trace, work),
+                    None => work(),
+                }
             })
             .await;
 
@@ -295,9 +305,11 @@ mod tests {
         git(&["commit", "-m", "Initial"]);
 
         let diagnostics_directory = directory.path().join("diagnostics");
-        let diagnostics = DiagnosticsLog::open(diagnostics_directory.clone()).unwrap();
+        let diagnostics = DiagnosticsLog::open(diagnostics_directory.clone());
         let coordinator = GitOperationCoordinator::new(WorkspaceWriteRegistry::default());
-        coordinator.install_diagnostics(diagnostics).unwrap();
+        coordinator
+            .install_diagnostics(diagnostics.clone())
+            .unwrap();
         let repository_root = repository.to_string_lossy().into_owned();
         tauri::async_runtime::block_on(coordinator.run_remote(
             repository_root.clone(),
@@ -308,11 +320,16 @@ mod tests {
         ))
         .unwrap();
 
-        let events = std::fs::read_to_string(diagnostics_directory.join("asterlyn.jsonl"))
-            .unwrap()
-            .lines()
-            .map(|line| serde_json::from_str::<JsonValue>(line).unwrap())
-            .collect::<Vec<_>>();
+        assert!(diagnostics.flush(Duration::from_secs(2)));
+        let events = std::fs::read_to_string(
+            diagnostics_directory
+                .join(diagnostics.session_id())
+                .join("asterlyn.jsonl"),
+        )
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<JsonValue>(line).unwrap())
+        .collect::<Vec<_>>();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0]["target"], "git.remote");
         assert_eq!(events[0]["event"], "operation.started");

@@ -1,4 +1,5 @@
 import { bridge } from "./bridge";
+import { diagnostics } from "./application/diagnostics.ts";
 import { changeWorkspacePath, fileChangeKey, findFileChange } from "./change-identity.ts";
 import { LazyContextMenuHost } from "./shared/context-menu/lazy-context-menu-host.ts";
 import { WorkspaceTrashRuntime } from "./features/workspace-trash/workspace-trash-runtime.ts";
@@ -8576,6 +8577,7 @@ export class AsterlynApp {
   }
 
   private showError(error: unknown): void {
+    diagnostics.report("error", "operation.handled_error", error);
     const message = localizedOperationError(error, this.localization.catalog.errors);
     this.state.error = message;
     this.notificationCenter.publish({ kind: "error", message, source: "host" });

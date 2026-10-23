@@ -300,12 +300,11 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .setup(|app| {
-            let diagnostics = DiagnosticsLog::open(
-                app.path()
-                    .app_log_dir()
-                    .map_err(std::io::Error::other)?
-                    .join("diagnostics"),
-            )?;
+            let diagnostics = app
+                .path()
+                .app_log_dir()
+                .map(|directory| DiagnosticsLog::open(directory.join("diagnostics")))
+                .unwrap_or_else(|_| DiagnosticsLog::memory_only());
             diagnostics.install_panic_hook();
             app.state::<GitOperationCoordinator>()
                 .install_diagnostics(diagnostics.clone())
@@ -316,6 +315,9 @@ pub fn run() {
                 None,
                 serde_json::json!({
                     "version": env!("CARGO_PKG_VERSION"),
+                    "buildId": env!("ASTERLYN_BUILD_ID"),
+                    "os": std::env::consts::OS,
+                    "architecture": std::env::consts::ARCH,
                     "processId": std::process::id(),
                 }),
             );
@@ -328,6 +330,12 @@ pub fn run() {
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
             app.manage(plugin_hosts);
             build_project_window(app.handle(), "main", "Asterlyn")?;
+            app.state::<DiagnosticsLog>().info(
+                "host",
+                "application.native_ready",
+                None,
+                serde_json::json!({"buildId": env!("ASTERLYN_BUILD_ID")}),
+            );
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -516,6 +524,7 @@ pub fn run() {
             execute_plugin_tool_operation,
             cancel_plugin_tool_operation,
             write_frontend_diagnostic,
+            diagnostic_log_health,
             diagnostic_log_directory
         ])
         .build(tauri::generate_context!())
@@ -533,6 +542,14 @@ pub fn run() {
             let _ = abandon_plugin_activations(app);
             app.state::<PluginHostSupervisor>()
                 .cancel_all(ShutdownReason::ApplicationExit);
+            let diagnostics = app.state::<DiagnosticsLog>();
+            diagnostics.info(
+                "host",
+                "application.shutdown_dispatched",
+                None,
+                serde_json::json!({"meaning": "cleanup and cancellation requests dispatched"}),
+            );
+            diagnostics.shutdown(std::time::Duration::from_millis(500));
         }
     });
 }

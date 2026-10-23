@@ -92,6 +92,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/keyboard-shortcut-management-plan.md`](engineering/keyboard-shortcut-management-plan.md) — unified command registry, customizable keybindings, conflict handling, Settings management, and editor/terminal integration plan.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
 - [`engineering/structured-diagnostics.md`](engineering/structured-diagnostics.md) — log location, event contract, privacy rules, plugin-task diagnosis, and validation gates.
+- [`engineering/2026-10-23-diagnostics-hardening-plan.md`](engineering/2026-10-23-diagnostics-hardening-plan.md) — ordered privacy, recoverable asynchronous persistence, lifecycle integrity, frontend coverage, and native acceptance hardening.
+- [`benchmarks/2026-10-23-diagnostics-hardening.md`](benchmarks/2026-10-23-diagnostics-hardening.md) — fault/concurrency tests, bounded burst evidence, signed package hashes and installed-log acceptance.
 - [`engineering/ci.md`](engineering/ci.md) — least-privilege cross-platform preview builds, zero-cost Release publication, and artifact trust boundary.
 - [`engineering/in-app-update-plan.md`](engineering/in-app-update-plan.md) — startup/manual update discovery, verified native package installation, restart behavior, and updater trust boundaries.
 - [`engineering/plugin-system-plan.md`](engineering/plugin-system-plan.md) — phased bundled-plugin kernel, Tasks tool, supervised execution, Android/Gradle workflow, and external-host gate.

@@ -45,13 +45,14 @@ pub(crate) fn discover_task_artifacts(
 pub(crate) fn prepare_task_execution(
     workspace_root: String,
     request: TaskRequest,
+    diagnostic_trace_id: Option<String>,
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
     tasks: State<'_, TaskManager>,
     diagnostics: State<'_, DiagnosticsLog>,
 ) -> Result<PreparedTask, String> {
-    let trace_id = diagnostics.next_trace_id("task-prepare");
+    let trace_id = diagnostics.command_trace(diagnostic_trace_id.as_deref(), "task-prepare");
     let started = Instant::now();
     diagnostics.info(
         "task.execution",
@@ -129,13 +130,14 @@ pub(crate) fn start_task_execution(
     workspace_root: String,
     review_id: String,
     remember_confirmation: bool,
+    diagnostic_trace_id: Option<String>,
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
     tasks: State<'_, TaskManager>,
     diagnostics: State<'_, DiagnosticsLog>,
 ) -> Result<TaskStarted, String> {
-    let trace_id = diagnostics.next_trace_id("task-run");
+    let trace_id = diagnostics.command_trace(diagnostic_trace_id.as_deref(), "task-run");
     let started = Instant::now();
     diagnostics.info(
         "task.execution",
@@ -397,7 +399,7 @@ mod tests {
     #[test]
     fn task_events_log_aggregates_without_output_contents() {
         let directory = tempfile::tempdir().unwrap();
-        let diagnostics = DiagnosticsLog::open(directory.path().to_path_buf()).unwrap();
+        let diagnostics = DiagnosticsLog::open(directory.path().to_path_buf());
         let state = Arc::new(Mutex::new(TaskRunDiagnosticState::new()));
         record_task_event(
             &diagnostics,
@@ -426,7 +428,14 @@ mod tests {
                 exit_code: Some(0),
             },
         );
-        let log = std::fs::read_to_string(directory.path().join("asterlyn.jsonl")).unwrap();
+        assert!(diagnostics.flush(std::time::Duration::from_secs(2)));
+        let log = std::fs::read_to_string(
+            directory
+                .path()
+                .join(diagnostics.session_id())
+                .join("asterlyn.jsonl"),
+        )
+        .unwrap();
         assert!(log.contains("\"event\":\"run.completed\""));
         assert!(log.contains("\"stdoutBytes\":13"));
         assert!(!log.contains("c2VjcmV0LW91dHB1dA=="));

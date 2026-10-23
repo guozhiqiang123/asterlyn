@@ -5,6 +5,10 @@ import type {
   DesktopCommandName,
 } from "../../protocol/generated-desktop-protocol";
 import { validateDesktopResult } from "../../protocol/validate-desktop-result";
+import { DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS } from "../../protocol/generated-desktop-protocol";
+import { observeDesktopCommand } from "../../application/diagnostics.ts";
+
+const contextCommands: ReadonlySet<string> = new Set(DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS);
 
 export const isTauriRuntime = "__TAURI_INTERNALS__" in window;
 
@@ -17,8 +21,10 @@ export async function invokeDesktopCommand<
   command: Command,
   args?: DesktopCommandMap[Command]["args"],
 ): Promise<Result> {
-  const value = await invokeTauri<unknown>(command, args);
-  return validateDesktopResult(command, value) as Result;
+  return observeDesktopCommand(command, async (traceId) => {
+    const value = await invokeTauri<unknown>(command, contextCommands.has(command) ? { ...args, diagnosticTraceId: traceId } : args);
+    return validateDesktopResult(command, value) as Result;
+  }, contextCommands.has(command));
 }
 
 /** Reserved for feature-scoped validators that are intentionally loaded with their feature chunk. */
@@ -26,5 +32,6 @@ export function invokeDesktopCommandUnvalidated<Command extends DesktopCommandNa
   command: Command,
   args?: DesktopCommandMap[Command]["args"],
 ): Promise<unknown> {
-  return invokeTauri<unknown>(command, args);
+  return observeDesktopCommand(command, (traceId) => invokeTauri<unknown>(command,
+    contextCommands.has(command) ? { ...args, diagnosticTraceId: traceId } : args), contextCommands.has(command));
 }

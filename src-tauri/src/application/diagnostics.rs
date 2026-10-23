@@ -1,20 +1,18 @@
-use std::cell::RefCell;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use serde_json::{Value as JsonValue, json};
 use sha2::{Digest, Sha256};
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const ACTIVE_LOG_NAME: &str = "asterlyn.jsonl";
-const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
-const RETAINED_LOGS: usize = 5;
+mod privacy;
+mod writer;
+use privacy::{bounded_text, sanitize_fields, sanitize_text};
+pub(crate) use writer::DiagnosticHealth;
+
 const MAX_EVENT_BYTES: usize = 32 * 1024;
-const MAX_STRING_BYTES: usize = 16 * 1024;
-
+static SESSION_NONCE: AtomicU64 = AtomicU64::new(0);
 thread_local! {
     static CURRENT_TRACE_ID: RefCell<Option<String>> = const { RefCell::new(None) };
 }
@@ -23,65 +21,117 @@ thread_local! {
 pub(crate) struct DiagnosticsLog {
     inner: Arc<DiagnosticsLogInner>,
 }
-
 struct DiagnosticsLogInner {
-    directory: PathBuf,
-    active_path: PathBuf,
-    writer: Mutex<WriterState>,
-    sequence: AtomicU64,
+    directory: Option<PathBuf>,
     session_id: String,
-    process_id: u32,
+    trace_sequence: AtomicU64,
     home: Option<String>,
+    shared: Arc<writer::Shared>,
 }
-
-struct WriterState {
-    file: Option<File>,
-    bytes: u64,
+impl Drop for DiagnosticsLogInner {
+    fn drop(&mut self) {
+        self.shared.close();
+    }
 }
 
 impl DiagnosticsLog {
-    pub(crate) fn open(directory: PathBuf) -> io::Result<Self> {
-        fs::create_dir_all(&directory)?;
-        let active_path = directory.join(ACTIVE_LOG_NAME);
-        if active_path
-            .metadata()
-            .is_ok_and(|metadata| metadata.len() >= MAX_LOG_BYTES)
-        {
-            rotate_files(&directory, &active_path)?;
-        }
-        let file = open_log_file(&active_path)?;
-        let bytes = file.metadata()?.len();
-        let process_id = std::process::id();
-        Ok(Self {
+    /// Creation never makes product startup depend on a writable log directory.
+    pub(crate) fn open(directory: PathBuf) -> Self {
+        Self::start(Some(directory))
+    }
+    pub(crate) fn memory_only() -> Self {
+        Self::start(None)
+    }
+    fn start(directory: Option<PathBuf>) -> Self {
+        let session_id = format!(
+            "session-{}-{}-{}",
+            epoch_millis(),
+            std::process::id(),
+            SESSION_NONCE.fetch_add(1, Ordering::Relaxed)
+        );
+        let shared = Arc::new(writer::Shared::default());
+        writer::start(shared.clone(), directory.clone(), session_id.clone());
+        Self {
             inner: Arc::new(DiagnosticsLogInner {
                 directory,
-                active_path,
-                writer: Mutex::new(WriterState {
-                    file: Some(file),
-                    bytes,
-                }),
-                sequence: AtomicU64::new(0),
-                session_id: format!("session-{}-{process_id}", epoch_millis()),
-                process_id,
+                session_id,
+                trace_sequence: AtomicU64::new(0),
                 home: std::env::var("HOME").ok().filter(|value| !value.is_empty()),
+                shared,
             }),
-        })
+        }
     }
-
-    pub(crate) fn directory(&self) -> &Path {
-        &self.inner.directory
+    pub(crate) fn directory(&self) -> Option<&Path> {
+        self.inner.directory.as_deref()
     }
-
+    #[cfg(test)]
+    pub(crate) fn session_id(&self) -> &str {
+        &self.inner.session_id
+    }
+    pub(crate) fn health(&self) -> DiagnosticHealth {
+        self.inner.shared.health()
+    }
+    pub(crate) fn flush(&self, timeout: Duration) -> bool {
+        self.inner.shared.flush(timeout)
+    }
+    pub(crate) fn shutdown(&self, timeout: Duration) -> bool {
+        self.record(
+            "info",
+            "diagnostics",
+            "health.snapshot",
+            None,
+            json!(self.health()),
+        );
+        let drained = self.flush(timeout);
+        self.inner.shared.close();
+        drained
+    }
     pub(crate) fn next_trace_id(&self, prefix: &str) -> String {
-        let sequence = self.inner.sequence.fetch_add(1, Ordering::Relaxed) + 1;
-        format!("{prefix}-{}-{sequence}", epoch_millis())
+        format!(
+            "{}-{}-{}",
+            bounded_text(prefix, 64),
+            self.inner.session_id,
+            self.inner.trace_sequence.fetch_add(1, Ordering::Relaxed) + 1
+        )
     }
-
+    pub(crate) fn command_trace(&self, supplied: Option<&str>, prefix: &str) -> String {
+        supplied
+            .filter(|value| {
+                value.starts_with("ui-")
+                    && value.len() <= 128
+                    && value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            })
+            .map(str::to_owned)
+            .unwrap_or_else(|| self.next_trace_id(prefix))
+    }
+    pub(crate) fn operation(
+        &self,
+        target: &'static str,
+        name: &'static str,
+        trace_id: String,
+        fields: JsonValue,
+    ) -> DiagnosticOperation {
+        self.info(
+            target,
+            &format!("{name}.started"),
+            Some(&trace_id),
+            fields.clone(),
+        );
+        DiagnosticOperation {
+            log: self.clone(),
+            target,
+            name,
+            trace_id,
+            fields,
+            started: Instant::now(),
+            finished: false,
+        }
+    }
     pub(crate) fn hash_identifier(&self, value: impl AsRef<[u8]>) -> String {
-        let digest = format!("{:x}", Sha256::digest(value.as_ref()));
-        digest[..16].to_owned()
+        format!("{:x}", Sha256::digest(value.as_ref()))[..16].to_owned()
     }
-
     pub(crate) fn info(
         &self,
         target: &str,
@@ -91,7 +141,6 @@ impl DiagnosticsLog {
     ) {
         self.record("info", target, event, trace_id, fields);
     }
-
     pub(crate) fn error(
         &self,
         target: &str,
@@ -101,7 +150,6 @@ impl DiagnosticsLog {
     ) {
         self.record("error", target, event, trace_id, fields);
     }
-
     pub(crate) fn record(
         &self,
         level: &str,
@@ -110,103 +158,109 @@ impl DiagnosticsLog {
         trace_id: Option<&str>,
         fields: JsonValue,
     ) {
-        let sequence = self.inner.sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        let (fields, truncated) = sanitize_fields(&fields, self.inner.home.as_deref());
         let mut value = json!({
-            "schemaVersion": 1,
-            "timestampEpochMs": epoch_millis(),
-            "sequence": sequence,
-            "sessionId": self.inner.session_id,
-            "processId": self.inner.process_id,
-            "level": bounded_text(level, 16),
-            "target": bounded_text(target, 128),
-            "event": bounded_text(event, 128),
-            "thread": std::thread::current().name().unwrap_or("unnamed"),
-            "fields": fields,
+            "schemaVersion": 1, "timestampEpochMs": epoch_millis(), "sessionId": self.inner.session_id,
+            "processId": std::process::id(), "buildId": option_env!("ASTERLYN_BUILD_ID").unwrap_or("unknown"), "level": bounded_text(level, 16),
+            "target": bounded_text(target, 128), "event": bounded_text(event, 128),
+            "thread": bounded_text(std::thread::current().name().unwrap_or("unnamed"), 128),
+            "fields": fields, "fieldsTruncated": truncated,
         });
-        if let Some(trace_id) = trace_id {
-            value
-                .as_object_mut()
-                .expect("diagnostic event is an object")
-                .insert(
-                    "traceId".to_owned(),
-                    JsonValue::String(bounded_text(trace_id, 160)),
-                );
+        if let Some(trace) = trace_id {
+            value["traceId"] = json!(bounded_text(trace, 160));
         }
-        sanitize_value(&mut value, self.inner.home.as_deref());
-        let mut encoded = serde_json::to_vec(&value).unwrap_or_else(|_| {
-            br#"{"schemaVersion":1,"level":"error","target":"diagnostics","event":"serialization_failed","fields":{}}"#.to_vec()
-        });
-        if encoded.len() > MAX_EVENT_BYTES {
-            encoded = serde_json::to_vec(&json!({
-                "schemaVersion": 1,
-                "timestampEpochMs": epoch_millis(),
-                "sequence": sequence,
-                "sessionId": self.inner.session_id,
-                "processId": self.inner.process_id,
-                "level": "warning",
-                "target": "diagnostics",
-                "event": "event_truncated",
-                "fields": {
-                    "originalTarget": bounded_text(target, 128),
-                    "originalEvent": bounded_text(event, 128),
-                    "originalBytes": encoded.len(),
-                }
-            }))
-            .expect("bounded diagnostic fallback serializes");
+        if truncated {
+            self.inner.shared.truncated.fetch_add(1, Ordering::Relaxed);
         }
-        encoded.push(b'\n');
-        let _ = self.write_line(&encoded);
+        // Preparation is already bounded; this final cap also covers JSON escape expansion.
+        if serde_json::to_vec(&value)
+            .expect("JSON value serializes")
+            .len()
+            > MAX_EVENT_BYTES - 128
+        {
+            value["target"] = json!("diagnostics");
+            value["event"] = json!("event_truncated");
+            value["fields"] = json!({"originalTarget": bounded_text(target, 128), "originalEvent": bounded_text(event, 128)});
+            value["fieldsTruncated"] = json!(true);
+            self.inner.shared.truncated.fetch_add(1, Ordering::Relaxed);
+        }
+        self.inner.shared.enqueue(value, level == "error");
     }
-
     pub(crate) fn safe_message(&self, value: impl AsRef<str>) -> String {
         sanitize_text(value.as_ref(), self.inner.home.as_deref())
     }
-
     pub(crate) fn install_panic_hook(&self) {
         let previous = std::panic::take_hook();
         let diagnostics = self.clone();
         std::panic::set_hook(Box::new(move |info| {
+            if std::thread::current().name() == Some("diagnostics-writer") {
+                eprintln!("diagnostics: writer panicked; persistence unavailable");
+                previous(info);
+                return;
+            }
             let message = info
                 .payload()
                 .downcast_ref::<&str>()
                 .copied()
                 .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
                 .unwrap_or("non-string panic payload");
-            diagnostics.error(
-                "host",
-                "panic",
-                current_trace_id().as_deref(),
-                json!({
-                    "message": diagnostics.safe_message(message),
-                    "file": info.location().map(|location| diagnostics.safe_message(location.file())),
-                    "line": info.location().map(|location| location.line()),
-                    "column": info.location().map(|location| location.column()),
-                }),
-            );
+            diagnostics.error("host", "panic", current_trace_id().as_deref(), json!({
+                "message": diagnostics.safe_message(message),
+                "file": info.location().map(|location| diagnostics.safe_message(location.file())),
+                "line": info.location().map(|location| location.line()),
+                "column": info.location().map(|location| location.column()),
+            }));
+            diagnostics.flush(Duration::from_millis(200));
             previous(info);
         }));
     }
+}
 
-    fn write_line(&self, line: &[u8]) -> io::Result<()> {
-        let mut writer = self
-            .inner
-            .writer
-            .lock()
-            .map_err(|_| io::Error::other("diagnostics writer lock was poisoned"))?;
-        if writer.bytes.saturating_add(line.len() as u64) > MAX_LOG_BYTES {
-            writer.file.take();
-            rotate_files(&self.inner.directory, &self.inner.active_path)?;
-            writer.file = Some(open_log_file(&self.inner.active_path)?);
-            writer.bytes = 0;
+/// Owns a terminal event even when a future is cancelled or a validation branch returns early.
+pub(crate) struct DiagnosticOperation {
+    log: DiagnosticsLog,
+    target: &'static str,
+    name: &'static str,
+    trace_id: String,
+    fields: JsonValue,
+    started: Instant,
+    finished: bool,
+}
+impl DiagnosticOperation {
+    pub(crate) fn finish(&mut self, result: Result<(), &str>, extra: JsonValue) {
+        if self.finished {
+            return;
         }
-        let file = writer
-            .file
-            .as_mut()
-            .ok_or_else(|| io::Error::other("diagnostics log is unavailable"))?;
-        file.write_all(line)?;
-        file.flush()?;
-        writer.bytes = writer.bytes.saturating_add(line.len() as u64);
-        Ok(())
+        self.finished = true;
+        let mut fields = self.fields.clone();
+        if let (Some(fields), Some(extra)) = (fields.as_object_mut(), extra.as_object()) {
+            fields.extend(extra.clone());
+        }
+        fields["durationMs"] = json!(self.started.elapsed().as_millis());
+        let (level, outcome) = match result {
+            Ok(()) => ("info", "completed"),
+            Err(error) => {
+                fields["error"] = json!(self.log.safe_message(error));
+                ("error", "failed")
+            }
+        };
+        self.log.record(
+            level,
+            self.target,
+            &format!("{}.{outcome}", self.name),
+            Some(&self.trace_id),
+            fields,
+        );
+    }
+}
+impl Drop for DiagnosticOperation {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.finish(
+                Err("operation scope ended before completion"),
+                json!({"outcome": "abandoned"}),
+            );
+        }
     }
 }
 
@@ -226,96 +280,6 @@ pub(crate) fn current_trace_id() -> Option<String> {
     CURRENT_TRACE_ID.with(|current| current.borrow().clone())
 }
 
-fn open_log_file(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let file = options.open(path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-    }
-    Ok(file)
-}
-
-fn rotate_files(directory: &Path, active_path: &Path) -> io::Result<()> {
-    let oldest = directory.join(format!("asterlyn.{RETAINED_LOGS}.jsonl"));
-    if oldest.exists() {
-        fs::remove_file(oldest)?;
-    }
-    for index in (1..RETAINED_LOGS).rev() {
-        let source = directory.join(format!("asterlyn.{index}.jsonl"));
-        if source.exists() {
-            fs::rename(
-                source,
-                directory.join(format!("asterlyn.{}.jsonl", index + 1)),
-            )?;
-        }
-    }
-    if active_path.exists() {
-        fs::rename(active_path, directory.join("asterlyn.1.jsonl"))?;
-    }
-    Ok(())
-}
-
-fn sanitize_value(value: &mut JsonValue, home: Option<&str>) {
-    match value {
-        JsonValue::String(text) => *text = sanitize_text(text, home),
-        JsonValue::Array(values) => {
-            for value in values {
-                sanitize_value(value, home);
-            }
-        }
-        JsonValue::Object(values) => {
-            for value in values.values_mut() {
-                sanitize_value(value, home);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn sanitize_text(value: &str, home: Option<&str>) -> String {
-    let mut text = bounded_text(value, MAX_STRING_BYTES);
-    if let Some(home) = home {
-        text = text.replace(home, "~");
-    }
-    for marker in ["Bearer ", "Authorization: ", "access_token=", "token="] {
-        redact_after_marker(&mut text, marker);
-    }
-    text
-}
-
-fn redact_after_marker(text: &mut String, marker: &str) {
-    let mut search_from = 0;
-    while let Some(relative) = text[search_from..].find(marker) {
-        let start = search_from + relative + marker.len();
-        let end = text[start..]
-            .find(|character: char| {
-                character.is_whitespace() || matches!(character, '&' | ',' | ';')
-            })
-            .map_or(text.len(), |relative| start + relative);
-        text.replace_range(start..end, "[REDACTED]");
-        search_from = start + "[REDACTED]".len();
-    }
-}
-
-fn bounded_text(value: &str, maximum_bytes: usize) -> String {
-    if value.len() <= maximum_bytes {
-        return value.to_owned();
-    }
-    let mut end = maximum_bytes;
-    while !value.is_char_boundary(end) {
-        end -= 1;
-    }
-    format!("{}…", &value[..end])
-}
-
 fn epoch_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -328,63 +292,173 @@ fn epoch_millis() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn writes_bounded_redacted_json_lines() {
-        let directory = tempfile::tempdir().unwrap();
-        let diagnostics = DiagnosticsLog::open(directory.path().to_path_buf()).unwrap();
-        diagnostics.info(
-            "plugin.runtime",
-            "callback.completed",
-            Some("trace-1"),
-            json!({"message": "Authorization: secret-value token=another-value"}),
-        );
-        let line = fs::read_to_string(directory.path().join(ACTIVE_LOG_NAME)).unwrap();
-        let value: JsonValue = serde_json::from_str(line.trim()).unwrap();
-        assert_eq!(value["event"], "callback.completed");
-        assert_eq!(value["traceId"], "trace-1");
-        assert!(value["sessionId"].as_str().unwrap().starts_with("session-"));
-        assert_eq!(value["processId"], std::process::id());
-        assert_eq!(
-            value["fields"]["message"],
-            "Authorization: [REDACTED] token=[REDACTED]"
-        );
+    use std::fs;
+    fn events(log: &DiagnosticsLog) -> Vec<JsonValue> {
+        assert!(log.flush(Duration::from_secs(2)));
+        let path = log
+            .directory()
+            .unwrap()
+            .join(log.session_id())
+            .join("asterlyn.jsonl");
+        fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
     }
-
     #[test]
-    fn trace_scope_restores_the_previous_trace() {
+    fn concurrent_events_are_valid_redacted_bounded_and_output_ordered() {
+        let root = tempfile::tempdir().unwrap();
+        let log = DiagnosticsLog::open(root.path().into());
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let log = &log;
+                scope.spawn(move || { for _ in 0..30 {
+                    log.info("test", "record", Some("trace-1"), json!({"message": "Authorization: Basic credential", "password": "hidden"}));
+                }});
+            }
+        });
+        let values = events(&log);
+        assert_eq!(values.len(), 120);
+        let encoded = serde_json::to_string(&values).unwrap();
+        assert!(!encoded.contains("credential"));
+        assert!(!encoded.contains("hidden"));
+        for (index, value) in values.iter().enumerate() {
+            assert_eq!(value["sequence"], index as u64 + 1);
+            assert_eq!(value["traceId"], "trace-1");
+            assert!(value.to_string().len() <= MAX_EVENT_BYTES);
+        }
+    }
+    #[test]
+    fn failed_directory_does_not_block_creation_and_recovers_buffered_events() {
+        let root = tempfile::tempdir().unwrap();
+        let location = root.path().join("blocked");
+        fs::write(&location, "obstruction").unwrap();
+        let log = DiagnosticsLog::open(location.clone());
+        log.error("test", "before_recovery", None, json!({}));
+        assert!(!log.flush(Duration::from_secs(1)));
+        assert!(log.health().write_failures > 0);
+        fs::remove_file(&location).unwrap();
+        fs::create_dir(&location).unwrap();
+        // A barrier forces a retry, without waiting for a UI action or restart.
+        let _ = log.flush(Duration::from_secs(1));
+        let values = events(&log);
+        assert!(
+            values
+                .iter()
+                .any(|value| value["event"] == "before_recovery")
+        );
+        assert!(log.health().persistence_available);
+        assert!(log.health().recoveries > 0);
+    }
+    #[test]
+    fn trace_scope_restores_after_return_and_panic() {
         assert_eq!(current_trace_id(), None);
         with_trace("outer", || {
-            assert_eq!(current_trace_id().as_deref(), Some("outer"));
-            with_trace("inner", || {
-                assert_eq!(current_trace_id().as_deref(), Some("inner"))
-            });
+            let _ = std::panic::catch_unwind(|| with_trace("inner", || panic!("fixture")));
             assert_eq!(current_trace_id().as_deref(), Some("outer"));
         });
         assert_eq!(current_trace_id(), None);
     }
 
     #[test]
-    fn rotation_retains_the_five_newest_generations() {
-        let directory = tempfile::tempdir().unwrap();
-        let active = directory.path().join(ACTIVE_LOG_NAME);
-        fs::write(&active, "active").unwrap();
-        for index in 1..=RETAINED_LOGS {
-            fs::write(
-                directory.path().join(format!("asterlyn.{index}.jsonl")),
-                format!("generation-{index}"),
-            )
-            .unwrap();
-        }
-        rotate_files(directory.path(), &active).unwrap();
-        assert!(!active.exists());
-        assert_eq!(
-            fs::read_to_string(directory.path().join("asterlyn.1.jsonl")).unwrap(),
-            "active"
+    fn operation_lifecycle_covers_validation_delivery_errors_and_abandoned_scopes() {
+        let root = tempfile::tempdir().unwrap();
+        let log = DiagnosticsLog::open(root.path().into());
+        let mut validation = log.operation(
+            "plugin.runtime",
+            "activation",
+            "ui-validation".into(),
+            json!({"pluginId": "fixture"}),
         );
+        validation.finish(
+            Err("workspace generation must be greater than zero"),
+            json!({}),
+        );
+        validation.finish(Ok(()), json!({})); // A second finish must not turn failure into success.
+        let mut callback = log.operation(
+            "plugin.runtime",
+            "callback",
+            "ui-delivery".into(),
+            json!({}),
+        );
+        callback.finish(
+            Err("publish plugin runtime event failed"),
+            json!({"phase": "delivery"}),
+        );
+        drop(log.operation(
+            "plugin.runtime",
+            "activation",
+            "ui-abandoned".into(),
+            json!({}),
+        ));
+        let values = events(&log);
+        assert_eq!(values.len(), 6);
+        assert!(
+            values
+                .iter()
+                .all(|value| value["event"] != "callback.completed")
+        );
+        assert_eq!(values[1]["event"], "activation.failed");
+        assert_eq!(values[3]["event"], "callback.failed");
+        assert_eq!(values[5]["fields"]["outcome"], "abandoned");
+    }
+
+    #[test]
+    fn bounded_shutdown_drains_and_rejects_late_records() {
+        let root = tempfile::tempdir().unwrap();
+        let log = DiagnosticsLog::open(root.path().into());
+        log.info("test", "before_exit", None, json!({}));
+        assert!(log.shutdown(Duration::from_secs(2)));
+        let before = log.health().dropped;
+        log.info("test", "too_late", None, json!({}));
+        assert_eq!(log.health().dropped, before + 1);
         assert_eq!(
-            fs::read_to_string(directory.path().join("asterlyn.5.jsonl")).unwrap(),
-            "generation-4"
+            log.command_trace(Some("ui-valid-123"), "test"),
+            "ui-valid-123"
+        );
+        assert_ne!(
+            log.command_trace(Some("Bearer secret"), "test"),
+            "Bearer secret"
+        );
+    }
+
+    #[test]
+    fn failure_burst_is_bounded_and_recovers_without_restart() {
+        let root = tempfile::tempdir().unwrap();
+        let location = root.path().join("unavailable");
+        fs::write(&location, "obstruction").unwrap();
+        let log = DiagnosticsLog::open(location.clone());
+        let started = Instant::now();
+        for index in 0..2_000 {
+            log.info(
+                "probe",
+                "burst",
+                None,
+                json!({"index": index, "status": "queued"}),
+            );
+        }
+        let elapsed = started.elapsed();
+        assert!(!log.flush(Duration::from_secs(1)));
+        let health = log.health();
+        assert!(health.queued <= 320);
+        assert!(health.retry_buffered <= 64);
+        assert!(health.dropped > 0);
+        fs::remove_file(&location).unwrap();
+        log.error("probe", "recovery_sentinel", None, json!({}));
+        assert!(log.flush(Duration::from_secs(2)));
+        let values = events(&log);
+        assert!(
+            values
+                .iter()
+                .any(|value| value["event"] == "recovery_sentinel")
+        );
+        assert!(log.health().recoveries > 0);
+        eprintln!(
+            "diagnostics burst: 2000 events enqueued in {:.2} ms; dropped={}, retry_buffered={}",
+            elapsed.as_secs_f64() * 1000.0,
+            health.dropped,
+            health.retry_buffered
         );
     }
 }

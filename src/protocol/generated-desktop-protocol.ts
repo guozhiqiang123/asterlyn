@@ -8,6 +8,7 @@ import type { PluginSourceSnapshot, PluginInstallationSnapshot, InstalledPluginM
 import type { InstalledPluginActivation, InstalledPluginRuntimeDiagnostics, PluginRuntimeTheme, PluginRuntimeValue } from "./plugin-runtime";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
+export const DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS = ["activate_installed_plugin_runtime","invoke_installed_plugin_callback","prepare_task_execution","start_task_execution"] as const;
 
 export interface DesktopCommandMap {
   check_for_app_updates: { args: Record<string, never>; result: Model.AppUpdateCheckResult };
@@ -28,11 +29,11 @@ export interface DesktopCommandMap {
   select_installed_plugin_rollback: { args: { pluginId: string; version: string; packageDigest: string; }; result: PluginInstallationSnapshot };
   repair_installed_plugin_version: { args: { pluginId: string; version: string; packageDigest: string; }; result: PluginInstallationSnapshot };
   uninstall_installed_plugin: { args: { pluginId: string; }; result: PluginInstallationSnapshot };
-  activate_installed_plugin_runtime: { args: { pluginId: string; workspaceRoot: string; workspaceGeneration: number; evidence: PluginRuntimeValue; locale: string; theme: PluginRuntimeTheme; }; result: InstalledPluginActivation };
+  activate_installed_plugin_runtime: { args: { pluginId: string; workspaceRoot: string; workspaceGeneration: number; evidence: PluginRuntimeValue; locale: string; theme: PluginRuntimeTheme; } & { diagnosticTraceId?: string }; result: InstalledPluginActivation };
   confirm_installed_plugin_runtime_healthy: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
   fail_installed_plugin_runtime_activation: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
   abandon_installed_plugin_runtime_activation: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
-  invoke_installed_plugin_callback: { args: { pluginId: string; callbackHandle: string; operation: string; payload: PluginRuntimeValue; }; result: PluginRuntimeValue };
+  invoke_installed_plugin_callback: { args: { pluginId: string; callbackHandle: string; operation: string; payload: PluginRuntimeValue; } & { diagnosticTraceId?: string }; result: PluginRuntimeValue };
   deactivate_installed_plugin_runtime: { args: { pluginId: string; }; result: void };
   read_installed_plugin_runtime_diagnostics: { args: { pluginId: string; }; result: InstalledPluginRuntimeDiagnostics };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
@@ -51,9 +52,9 @@ export interface DesktopCommandMap {
   close_terminal: { args: { sessionId: string; }; result: boolean };
   read_workspace_trust: { args: { workspaceRoot: string; pluginId: string; }; result: Model.WorkspaceTrustResult };
   set_workspace_trust: { args: { workspaceRoot: string; pluginId: string; state: Model.WorkspaceTrustState; }; result: Model.WorkspaceTrustResult };
-  prepare_task_execution: { args: { workspaceRoot: string; request: Model.TaskExecutionRequest; }; result: Model.TaskExecutionReview };
+  prepare_task_execution: { args: { workspaceRoot: string; request: Model.TaskExecutionRequest; } & { diagnosticTraceId?: string }; result: Model.TaskExecutionReview };
   read_task_confirmation: { args: { workspaceRoot: string; reviewId: string; }; result: Model.TaskConfirmationResult };
-  start_task_execution: { args: { workspaceRoot: string; reviewId: string; rememberConfirmation: boolean; }; result: Model.TaskExecutionStarted };
+  start_task_execution: { args: { workspaceRoot: string; reviewId: string; rememberConfirmation: boolean; } & { diagnosticTraceId?: string }; result: Model.TaskExecutionStarted };
   cancel_task_execution: { args: { runId: string; }; result: void };
   discover_task_artifacts: { args: { repositoryRoot: string; hints: Array<string>; sidecarNames: Array<string>; }; result: Model.TaskArtifactDiscovery };
   compute_workspace_fingerprint: { args: { workspaceRoot: string; paths: Array<string>; }; result: WorkspaceFingerprint };

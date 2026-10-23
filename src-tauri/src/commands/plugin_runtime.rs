@@ -7,7 +7,6 @@ use asterlyn_plugin_runtime::{
 use asterlyn_plugin_runtime_protocol::{HostTheme, ShutdownReason};
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
-use std::time::Instant;
 use tauri::{Emitter, State, WebviewWindow};
 
 use crate::application::{
@@ -47,6 +46,7 @@ pub(crate) async fn activate_installed_plugin_runtime(
     evidence: JsonValue,
     locale: String,
     theme: String,
+    diagnostic_trace_id: Option<String>,
     window: WebviewWindow,
     app: tauri::AppHandle,
     active: State<'_, ActiveWorkspaces>,
@@ -55,12 +55,11 @@ pub(crate) async fn activate_installed_plugin_runtime(
     supervisor: State<'_, PluginHostSupervisor>,
     diagnostics: State<'_, DiagnosticsLog>,
 ) -> Result<InstalledPluginActivation, String> {
-    let trace_id = diagnostics.next_trace_id("plugin-activation");
-    let started = Instant::now();
-    diagnostics.info(
+    let trace_id = diagnostics.command_trace(diagnostic_trace_id.as_deref(), "plugin-activation");
+    let mut operation_log = diagnostics.operation(
         "plugin.runtime",
-        "activation.started",
-        Some(&trace_id),
+        "activation",
+        trace_id.clone(),
         serde_json::json!({
             "pluginId": &plugin_id,
             "window": window.label(),
@@ -69,152 +68,143 @@ pub(crate) async fn activate_installed_plugin_runtime(
             "evidenceBytes": json_bytes(&evidence),
         }),
     );
-    if workspace_generation == 0 {
-        return Err("workspace generation must be greater than zero".to_owned());
-    }
-    let root = active
-        .resolve(window.label(), &workspace_root)
-        .map_err(|error| error.to_string())?;
-    let (selection, plugin_root) = marketplace.run(|| {
-        let store = installation_store(&app)?;
-        let snapshot = store.snapshot().map_err(|error| error.to_string())?;
-        let selection = select_installed_plugin(&snapshot, &plugin_id)?;
-        let plugin_root = installed_package_root(
-            &app,
-            &plugin_id,
-            &selection.version,
-            &selection.package_digest,
-        )?;
-        verify_installed_package_archive(
-            &app,
-            &plugin_id,
-            &selection.version,
-            &selection.package_digest,
-        )?;
-        store
-            .begin_activation(&plugin_id, &selection.version, &selection.package_digest)
+    let result = async {
+        if workspace_generation == 0 {
+            return Err("workspace generation must be greater than zero".to_owned());
+        }
+        let root = active
+            .resolve(window.label(), &workspace_root)
             .map_err(|error| error.to_string())?;
-        Ok((selection, plugin_root))
-    })?;
-    let workspace_id = format!(
-        "workspace-{:x}",
-        Sha256::digest(format!("{}\0{}", root.display(), workspace_generation).as_bytes())
-    );
-    let owner = window.label().to_owned();
-    let supervisor = supervisor.inner().clone();
-    let process_queries = process_queries.inner().clone();
-    let selected_plugin_id = plugin_id.clone();
-    let selected_version = selection.version.clone();
-    let selected_digest = selection.package_digest.clone();
-    let selected_content_digest = selection.content_digest.clone();
-    let selected_repository = selection.repository.clone();
-    let activation_trace = trace_id.clone();
-    let activation_result =
-        tauri::async_runtime::spawn_blocking(move || -> Result<ActivatedPlugin, String> {
-            with_trace(&activation_trace, || {
-                let context = admission_context(&selected_repository, &selected_version);
-                let report =
-                    inspect_extracted_package(&plugin_root, &context).map_err(|error| {
-                        format!("installed plugin failed activation verification: {error}")
-                    })?;
-                if report.plugin_id != selected_plugin_id
-                    || report.plugin_version != selected_version
-                {
-                    return Err("installed plugin identity changed after admission".to_owned());
-                }
-                if report.content_digest != selected_content_digest {
-                    return Err(
+        let (selection, plugin_root) = marketplace.run(|| {
+            let store = installation_store(&app)?;
+            let snapshot = store.snapshot().map_err(|error| error.to_string())?;
+            let selection = select_installed_plugin(&snapshot, &plugin_id)?;
+            let plugin_root = installed_package_root(
+                &app,
+                &plugin_id,
+                &selection.version,
+                &selection.package_digest,
+            )?;
+            verify_installed_package_archive(
+                &app,
+                &plugin_id,
+                &selection.version,
+                &selection.package_digest,
+            )?;
+            store
+                .begin_activation(&plugin_id, &selection.version, &selection.package_digest)
+                .map_err(|error| error.to_string())?;
+            Ok((selection, plugin_root))
+        })?;
+        let workspace_id = format!(
+            "workspace-{:x}",
+            Sha256::digest(format!("{}\0{}", root.display(), workspace_generation).as_bytes())
+        );
+        let owner = window.label().to_owned();
+        let supervisor = supervisor.inner().clone();
+        let process_queries = process_queries.inner().clone();
+        let selected_plugin_id = plugin_id.clone();
+        let selected_version = selection.version.clone();
+        let selected_digest = selection.package_digest.clone();
+        let selected_content_digest = selection.content_digest.clone();
+        let selected_repository = selection.repository.clone();
+        let activation_trace = trace_id.clone();
+        let activation_result =
+            tauri::async_runtime::spawn_blocking(move || -> Result<ActivatedPlugin, String> {
+                with_trace(&activation_trace, || {
+                    let context = admission_context(&selected_repository, &selected_version);
+                    let report =
+                        inspect_extracted_package(&plugin_root, &context).map_err(|error| {
+                            format!("installed plugin failed activation verification: {error}")
+                        })?;
+                    if report.plugin_id != selected_plugin_id
+                        || report.plugin_version != selected_version
+                    {
+                        return Err("installed plugin identity changed after admission".to_owned());
+                    }
+                    if report.content_digest != selected_content_digest {
+                        return Err(
                         "installed plugin content changed after admission; reinstall the plugin"
                             .to_owned(),
                     );
-                }
-                process_queries.admit_authority(
-                    &owner,
-                    PluginToolAuthorityIdentity {
-                        repository: &selected_repository,
-                        plugin_id: &selected_plugin_id,
-                        plugin_version: &selected_version,
-                        package_digest: &selected_digest,
-                    },
-                    report.management_manifest.schema_version,
-                    &report.management_manifest.host_operations,
-                    &report.management_manifest.process_queries,
-                    &report.management_manifest.tool_operations,
-                )?;
-                let activation = supervisor
-                    .activate(PluginActivation {
-                        owner: owner.clone(),
-                        plugin_root,
-                        identity: PluginRuntimeIdentity {
-                            plugin_id: selected_plugin_id.clone(),
-                            plugin_version: selected_version.clone(),
-                            package_digest: selected_digest.clone(),
-                            runtime_entry: report.runtime_entry,
+                    }
+                    process_queries.admit_authority(
+                        &owner,
+                        PluginToolAuthorityIdentity {
+                            repository: &selected_repository,
+                            plugin_id: &selected_plugin_id,
+                            plugin_version: &selected_version,
+                            package_digest: &selected_digest,
                         },
-                        capabilities: report.capabilities,
-                        permissions: report.permissions,
-                        workspace_id,
-                        workspace_generation,
-                        workspace_root: root.to_string_lossy().into_owned(),
-                        evidence,
-                        locale,
-                        theme: parse_theme(&theme).map_err(|error| error.to_string())?,
-                    })
-                    .map_err(|error| error.to_string());
-                if activation.is_err() {
-                    process_queries.revoke_authority(&owner, &selected_plugin_id);
-                }
-                activation
+                        report.management_manifest.schema_version,
+                        &report.management_manifest.host_operations,
+                        &report.management_manifest.process_queries,
+                        &report.management_manifest.tool_operations,
+                    )?;
+                    let activation = supervisor
+                        .activate(PluginActivation {
+                            owner: owner.clone(),
+                            plugin_root,
+                            identity: PluginRuntimeIdentity {
+                                plugin_id: selected_plugin_id.clone(),
+                                plugin_version: selected_version.clone(),
+                                package_digest: selected_digest.clone(),
+                                runtime_entry: report.runtime_entry,
+                            },
+                            capabilities: report.capabilities,
+                            permissions: report.permissions,
+                            workspace_id,
+                            workspace_generation,
+                            workspace_root: root.to_string_lossy().into_owned(),
+                            evidence,
+                            locale,
+                            theme: parse_theme(&theme).map_err(|error| error.to_string())?,
+                        })
+                        .map_err(|error| error.to_string());
+                    if activation.is_err() {
+                        process_queries.revoke_authority(&owner, &selected_plugin_id);
+                    }
+                    activation
+                })
+            })
+            .await
+            .map_err(|error| format!("plugin activation worker could not complete: {error}"))
+            .and_then(|result| result);
+        let activated = match activation_result {
+            Ok(activated) => activated,
+            Err(error) => {
+                let _ = marketplace.run(|| {
+                    installation_store(&app)?
+                        .mark_activation_failed(
+                            &plugin_id,
+                            &selection.version,
+                            &selection.package_digest,
+                        )
+                        .map(|_| ())
+                        .map_err(|failure| failure.to_string())
+                });
+                return Err(error);
+            }
+        };
+        Ok(project_activation(
+            plugin_id,
+            selection.version,
+            selection.package_digest,
+            activated,
+        ))
+    }
+    .await;
+    let summary = result
+        .as_ref()
+        .map(|activated| {
+            serde_json::json!({
+                "pluginVersion": activated.plugin_version, "sessionId": activated.session_id,
+                "contributionCount": activated.contributions.len(),
             })
         })
-        .await
-        .map_err(|error| format!("plugin activation worker could not complete: {error}"))
-        .and_then(|result| result);
-    let activated = match activation_result {
-        Ok(activated) => activated,
-        Err(error) => {
-            diagnostics.error(
-                "plugin.runtime",
-                "activation.failed",
-                Some(&trace_id),
-                serde_json::json!({
-                    "pluginId": &plugin_id,
-                    "pluginVersion": &selection.version,
-                    "durationMs": started.elapsed().as_millis(),
-                    "error": diagnostics.safe_message(&error),
-                }),
-            );
-            let _ = marketplace.run(|| {
-                installation_store(&app)?
-                    .mark_activation_failed(
-                        &plugin_id,
-                        &selection.version,
-                        &selection.package_digest,
-                    )
-                    .map(|_| ())
-                    .map_err(|failure| failure.to_string())
-            });
-            return Err(error);
-        }
-    };
-    diagnostics.info(
-        "plugin.runtime",
-        "activation.completed",
-        Some(&trace_id),
-        serde_json::json!({
-            "pluginId": &plugin_id,
-            "pluginVersion": &selection.version,
-            "sessionId": &activated.session_id,
-            "contributionCount": activated.contributions.len(),
-            "durationMs": started.elapsed().as_millis(),
-        }),
-    );
-    Ok(project_activation(
-        plugin_id,
-        selection.version,
-        selection.package_digest,
-        activated,
-    ))
+        .unwrap_or_else(|_| serde_json::json!({}));
+    operation_log.finish(result.as_ref().map(|_| ()).map_err(String::as_str), summary);
+    result
 }
 
 #[tauri::command]
@@ -328,16 +318,16 @@ pub(crate) async fn invoke_installed_plugin_callback(
     callback_handle: String,
     operation: String,
     payload: JsonValue,
+    diagnostic_trace_id: Option<String>,
     window: WebviewWindow,
     supervisor: State<'_, PluginHostSupervisor>,
     diagnostics: State<'_, DiagnosticsLog>,
 ) -> Result<JsonValue, String> {
-    let trace_id = diagnostics.next_trace_id("plugin-callback");
-    let started = Instant::now();
-    diagnostics.info(
+    let trace_id = diagnostics.command_trace(diagnostic_trace_id.as_deref(), "plugin-callback");
+    let mut operation_log = diagnostics.operation(
         "plugin.runtime",
-        "callback.started",
-        Some(&trace_id),
+        "callback",
+        trace_id.clone(),
         serde_json::json!({
             "pluginId": &plugin_id,
             "callbackHandle": &callback_handle,
@@ -346,65 +336,51 @@ pub(crate) async fn invoke_installed_plugin_callback(
             "payloadBytes": json_bytes(&payload),
         }),
     );
-    let owner = window.label().to_owned();
-    let supervisor = supervisor.inner().clone();
-    let runtime_plugin_id = plugin_id.clone();
-    let callback_trace = trace_id.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        with_trace(&callback_trace, || {
-            supervisor.invoke_with_events(
-                &owner,
-                &runtime_plugin_id,
-                &callback_handle,
-                &operation,
-                payload,
-            )
+    let result = async {
+        let owner = window.label().to_owned();
+        let supervisor = supervisor.inner().clone();
+        let runtime_plugin_id = plugin_id.clone();
+        let callback_trace = trace_id.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            with_trace(&callback_trace, || {
+                supervisor.invoke_with_events(
+                    &owner,
+                    &runtime_plugin_id,
+                    &callback_handle,
+                    &operation,
+                    payload,
+                )
+            })
         })
-    })
-    .await
-    .map_err(|error| format!("plugin callback worker could not complete: {error}"))
-    .and_then(|result| result.map_err(|error| error.to_string()));
-    let invocation = match result {
-        Ok(invocation) => invocation,
-        Err(error) => {
-            diagnostics.error(
-                "plugin.runtime",
-                "callback.failed",
-                Some(&trace_id),
-                serde_json::json!({
-                    "pluginId": &plugin_id,
-                    "durationMs": started.elapsed().as_millis(),
-                    "error": diagnostics.safe_message(&error),
-                }),
-            );
-            return Err(error);
-        }
-    };
-    diagnostics.info(
-        "plugin.runtime",
-        "callback.completed",
-        Some(&trace_id),
-        serde_json::json!({
-            "pluginId": &plugin_id,
-            "durationMs": started.elapsed().as_millis(),
-            "resultBytes": json_bytes(&invocation.payload),
-            "eventCount": invocation.events.len(),
+        .await
+        .map_err(|error| format!("plugin callback worker could not complete: {error}"))
+        .and_then(|result| result.map_err(|error| error.to_string()));
+        let invocation = result?;
+        let summary = serde_json::json!({
+            "resultBytes": json_bytes(&invocation.payload), "eventCount": invocation.events.len(),
             "result": plugin_callback_summary(&invocation.payload),
-        }),
-    );
-    for event in invocation.events {
-        window
-            .emit(
-                PLUGIN_RUNTIME_EVENT,
-                InstalledPluginRuntimeEvent {
-                    plugin_id: plugin_id.clone(),
-                    subscription_handle: event.subscription_handle,
-                    payload: event.payload,
-                },
-            )
-            .map_err(|error| format!("publish plugin runtime event: {error}"))?;
+        });
+        for event in invocation.events {
+            window
+                .emit(
+                    PLUGIN_RUNTIME_EVENT,
+                    InstalledPluginRuntimeEvent {
+                        plugin_id: plugin_id.clone(),
+                        subscription_handle: event.subscription_handle,
+                        payload: event.payload,
+                    },
+                )
+                .map_err(|error| format!("publish plugin runtime event: {error}"))?;
+        }
+        Ok::<_, String>((invocation.payload, summary))
     }
-    Ok(invocation.payload)
+    .await;
+    let summary = result
+        .as_ref()
+        .map(|(_, summary)| summary.clone())
+        .unwrap_or_else(|_| serde_json::json!({}));
+    operation_log.finish(result.as_ref().map(|_| ()).map_err(String::as_str), summary);
+    result.map(|(payload, _)| payload)
 }
 
 fn json_bytes(value: &JsonValue) -> usize {
