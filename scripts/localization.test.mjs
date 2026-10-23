@@ -18,7 +18,7 @@ import { EN_US } from "../src/localization/en-US.ts";
 import { loadLocale } from "../src/localization/locale-loader.ts";
 import { ZH_CN } from "../src/localization/zh-CN.ts";
 import { createLocalization } from "../src/localization/localization.ts";
-import { localizedRemoteOperationError } from "../src/localization/error-message.ts";
+import { localizedOperationError, localizedRemoteOperationError } from "../src/localization/error-message.ts";
 import { renderShellView } from "../src/shell/shell-view.ts";
 import { ShellController } from "../src/shell/shell-controller.ts";
 import { DEFAULT_APP_PREFERENCES } from "../src/preferences.ts";
@@ -51,6 +51,18 @@ test("structured branch rejection guidance is localized without raw Git output",
   assert.match(english.detail ?? "", /origin\/main/);
   assert.match(chinese.guidance ?? "", /合并或变基/);
   assert.doesNotMatch(JSON.stringify([english, chinese]), /secret server output/);
+});
+
+test("remote tag collisions are reported as preserved local tags", () => {
+  const error = {
+    kind: "remoteFailed",
+    operation: "fetch",
+    remote: "origin",
+    reason: "tagConflict",
+  };
+
+  assert.match(localizedOperationError(error, EN_US.errors), /preserved the local tags/);
+  assert.match(localizedOperationError(error, ZH_CN.errors), /保留本地标签/);
 });
 
 test("Simplified Chinese catalog is lazy-loadable and renders shell and settings", async () => {

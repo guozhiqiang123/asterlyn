@@ -13,7 +13,7 @@ use crate::credential::{
     CredentialService, discover_platform_credential_helper, parse_remote_endpoint,
     ssh_identity_configured, validate_credential_field,
 };
-use crate::error::{GitError, RemoteFailureKind};
+use crate::error::GitError;
 #[cfg(test)]
 use crate::model::HistoryPath;
 use crate::model::{
@@ -34,7 +34,7 @@ use crate::parser::{parse_blame_incremental, parse_branches, parse_commits, pars
 use crate::process::{
     CancellableOutput, CancellationToken, GitRunner, GitStdin, join_stream, read_stream_bounded,
 };
-use crate::remote_failure::parse_remote_ref_failures;
+use crate::remote_failure::{classify_remote_failure, parse_remote_ref_failures};
 
 mod commit_details;
 mod head_commit_mutation;
@@ -4041,9 +4041,27 @@ impl GitRepository {
         remote: &str,
         cancellation: &CancellationToken,
     ) -> Result<(), GitError> {
+        self.fetch_remote_with_tags(remote, true, cancellation)
+    }
+
+    pub fn fetch_remote_branches(
+        &self,
+        remote: &str,
+        cancellation: &CancellationToken,
+    ) -> Result<(), GitError> {
+        self.fetch_remote_with_tags(remote, false, cancellation)
+    }
+
+    fn fetch_remote_with_tags(
+        &self,
+        remote: &str,
+        include_tags: bool,
+        cancellation: &CancellationToken,
+    ) -> Result<(), GitError> {
         self.ensure_no_repository_operation("fetch")?;
         let remote = self.validated_remote(remote, false)?;
         let refspec = canonical_fetch_refspec(&remote.name);
+        let tag_mode = if include_tags { "--tags" } else { "--no-tags" };
         self.run_remote_operation(
             "fetch",
             &remote.name,
@@ -4052,7 +4070,7 @@ impl GitRepository {
                 OsString::from("--atomic"),
                 OsString::from("--no-prune"),
                 OsString::from("--no-prune-tags"),
-                OsString::from("--tags"),
+                OsString::from(tag_mode),
                 OsString::from("--no-recurse-submodules"),
                 OsString::from("--"),
                 OsString::from(&remote.name),
@@ -4177,7 +4195,7 @@ impl GitRepository {
                 OsString::from("--atomic"),
                 OsString::from("--no-prune"),
                 OsString::from("--no-prune-tags"),
-                OsString::from("--tags"),
+                OsString::from("--no-tags"),
                 OsString::from("--no-recurse-submodules"),
                 OsString::from("--"),
                 OsString::from(&upstream.remote),
@@ -6356,44 +6374,6 @@ fn remote_cancelled(
         operation: operation.to_string(),
         repository_state_may_have_changed,
         remote_state_may_have_changed,
-    }
-}
-
-fn classify_remote_failure(stdout: &[u8], stderr: &[u8]) -> RemoteFailureKind {
-    let mut output = Vec::with_capacity(stdout.len() + stderr.len());
-    output.extend_from_slice(stdout);
-    output.extend_from_slice(stderr);
-    let message = String::from_utf8_lossy(&output).to_ascii_lowercase();
-    if [
-        "authentication failed",
-        "could not read username",
-        "permission denied",
-        "publickey",
-        "access denied",
-    ]
-    .iter()
-    .any(|needle| message.contains(needle))
-    {
-        RemoteFailureKind::Authentication
-    } else if [
-        "could not resolve host",
-        "couldn't connect",
-        "connection refused",
-        "connection timed out",
-        "network is unreachable",
-        "unable to access",
-    ]
-    .iter()
-    .any(|needle| message.contains(needle))
-    {
-        RemoteFailureKind::Network
-    } else if ["non-fast-forward", "rejected", "failed to push some refs"]
-        .iter()
-        .any(|needle| message.contains(needle))
-    {
-        RemoteFailureKind::Rejected
-    } else {
-        RemoteFailureKind::Unknown
     }
 }
 
@@ -10289,19 +10269,6 @@ mod tests {
                 ..
             }
         ));
-
-        assert_eq!(
-            classify_remote_failure(&[], b"fatal: Authentication failed for secret"),
-            RemoteFailureKind::Authentication
-        );
-        assert_eq!(
-            classify_remote_failure(&[], b"fatal: unable to access token: connection refused"),
-            RemoteFailureKind::Network
-        );
-        assert_eq!(
-            classify_remote_failure(b"! refs/heads/main [rejected]", b""),
-            RemoteFailureKind::Rejected
-        );
 
         git(&fixture.local, &["checkout", "--detach"]);
         let detached = repository

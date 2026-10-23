@@ -660,6 +660,7 @@ export const ZH_CN = {
     remoteFailedFallback: "远程操作失败，且没有子进程输出。请检查 Git 配置后重试。",
     authenticationFailed: "身份验证不可用。请配置非交互式 Git 凭据助手或 SSH 代理后重试。",
     networkFailed: "无法连接远程仓库。请检查网络和远程仓库配置。",
+    tagConflict: "一个或多个本地标签与远端同名标签指向不同提交。Asterlyn 已保留本地标签；再次获取标签前请先检查这些标签。",
     remoteRejected: "远程仓库拒绝更新一个或多个引用。重试前请检查目标引用和远端策略。",
     remotePush: ZH_CN_REMOTE_PUSH_ERRORS,
     fileConflictPreserved: "此文件在 Asterlyn 外部发生变化。本地缓冲区仍保持打开，且未被覆盖。",

@@ -30,6 +30,7 @@ export function localizedOperationError(error: unknown, copy: ErrorCopy): string
       const messages: Record<string, string> = {
         authentication: copy.authenticationFailed,
         network: copy.networkFailed,
+        tagConflict: copy.tagConflict,
         rejected: copy.remoteRejected,
         unknown: copy.remoteFailedFallback,
       };

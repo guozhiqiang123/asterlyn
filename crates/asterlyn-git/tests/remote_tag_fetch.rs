@@ -12,7 +12,7 @@ struct RemoteFixture {
 }
 
 #[test]
-fn fetch_and_update_import_remote_tags_without_touching_uncommitted_content() {
+fn explicit_fetch_imports_remote_tags_without_touching_uncommitted_content() {
     let fixture = remote_fixture();
     let fetch_oid = commit_file(&fixture.peer, "fetch.txt", "fetch\n", "Fetch tag");
     publish(&fixture.peer, "fetch-release");
@@ -29,21 +29,6 @@ fn fetch_and_update_import_remote_tags_without_touching_uncommitted_content() {
     assert_eq!(
         fs::read_to_string(fixture.local.join("base.txt")).expect("dirty file remains"),
         "dirty\n"
-    );
-
-    git(&fixture.local, &["restore", "base.txt"]);
-    let update_oid = commit_file(&fixture.peer, "update.txt", "update\n", "Update tag");
-    publish(&fixture.peer, "update-release");
-    repository
-        .pull_ff_only(&CancellationToken::new())
-        .expect("update imports remote tags while fast-forwarding");
-    assert_eq!(
-        git_stdout(&fixture.local, &["rev-parse", "HEAD"]),
-        update_oid
-    );
-    assert_eq!(
-        git_stdout(&fixture.local, &["rev-parse", "refs/tags/update-release"]),
-        update_oid
     );
 }
 
@@ -68,6 +53,30 @@ fn conflicting_remote_tag_fails_without_partially_updating_refs() {
     assert_eq!(
         git_stdout(&fixture.local, &["rev-parse", "refs/remotes/origin/main"]),
         original_tracking
+    );
+    assert_eq!(
+        git_stdout(&fixture.remote, &["rev-parse", "refs/tags/collision"]),
+        peer_oid
+    );
+}
+
+#[test]
+fn update_ignores_unrelated_tag_conflicts_and_fast_forwards_the_branch() {
+    let fixture = remote_fixture();
+    let original_oid = git_stdout(&fixture.local, &["rev-parse", "HEAD"]);
+    git(&fixture.local, &["tag", "collision"]);
+
+    let peer_oid = commit_file(&fixture.peer, "peer.txt", "peer\n", "Peer change");
+    publish(&fixture.peer, "collision");
+    let repository = GitRepository::open(&fixture.local).expect("repository opens");
+    repository
+        .pull_ff_only(&CancellationToken::new())
+        .expect("update ignores unrelated remote tag conflicts");
+
+    assert_eq!(git_stdout(&fixture.local, &["rev-parse", "HEAD"]), peer_oid);
+    assert_eq!(
+        git_stdout(&fixture.local, &["rev-parse", "refs/tags/collision"]),
+        original_oid
     );
     assert_eq!(
         git_stdout(&fixture.remote, &["rev-parse", "refs/tags/collision"]),

@@ -5,6 +5,7 @@ export interface ErrorCopy {
   remoteFailedFallback: string;
   authenticationFailed: string;
   networkFailed: string;
+  tagConflict: string;
   remoteRejected: string;
   remotePush: {
     tagAlreadyExistsTitle: string;

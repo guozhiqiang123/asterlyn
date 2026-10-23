@@ -1489,7 +1489,7 @@ const demoBridge: DesktopBridge = {
 
   async fetchRemote(
     repositoryRoot: string,
-    remote: string,
+    remote: string, _includeTags: boolean,
     operationId: string,
   ): Promise<RepositoryMutationOutcome> {
     if (!isTauri) {
@@ -1506,6 +1506,7 @@ const demoBridge: DesktopBridge = {
     return invoke<RepositoryMutationOutcome>("fetch_remote", {
       repositoryRoot,
       remote,
+      includeTags: _includeTags,
       operationId,
     });
   },

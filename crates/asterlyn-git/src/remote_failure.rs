@@ -1,7 +1,47 @@
-use crate::error::{RemoteRefFailure, RemoteRefFailureReason, RemoteRefKind};
+use crate::error::{RemoteFailureKind, RemoteRefFailure, RemoteRefFailureReason, RemoteRefKind};
 
 const MAX_REMOTE_REF_FAILURES: usize = 8;
 const MAX_REMOTE_REF_NAME_CHARS: usize = 256;
+
+pub(crate) fn classify_remote_failure(stdout: &[u8], stderr: &[u8]) -> RemoteFailureKind {
+    let mut output = Vec::with_capacity(stdout.len() + stderr.len());
+    output.extend_from_slice(stdout);
+    output.extend_from_slice(stderr);
+    let message = String::from_utf8_lossy(&output).to_ascii_lowercase();
+    if [
+        "authentication failed",
+        "could not read username",
+        "permission denied",
+        "publickey",
+        "access denied",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+    {
+        RemoteFailureKind::Authentication
+    } else if [
+        "could not resolve host",
+        "couldn't connect",
+        "connection refused",
+        "connection timed out",
+        "network is unreachable",
+        "unable to access",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+    {
+        RemoteFailureKind::Network
+    } else if message.contains("would clobber existing tag") {
+        RemoteFailureKind::TagConflict
+    } else if ["non-fast-forward", "rejected", "failed to push some refs"]
+        .iter()
+        .any(|needle| message.contains(needle))
+    {
+        RemoteFailureKind::Rejected
+    } else {
+        RemoteFailureKind::Unknown
+    }
+}
 
 pub(crate) fn parse_remote_ref_failures(stdout: &[u8], stderr: &[u8]) -> Vec<RemoteRefFailure> {
     let mut output = Vec::with_capacity(stdout.len() + stderr.len() + 1);
@@ -85,6 +125,29 @@ fn remote_ref_identity(reference: &str) -> (RemoteRefKind, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classifies_remote_failures_without_exposing_child_output() {
+        assert_eq!(
+            classify_remote_failure(&[], b"fatal: Authentication failed for secret"),
+            RemoteFailureKind::Authentication
+        );
+        assert_eq!(
+            classify_remote_failure(&[], b"fatal: unable to access token: connection refused"),
+            RemoteFailureKind::Network
+        );
+        assert_eq!(
+            classify_remote_failure(b"! refs/heads/main [rejected]", b""),
+            RemoteFailureKind::Rejected
+        );
+        assert_eq!(
+            classify_remote_failure(
+                b"! [rejected] release -> release (would clobber existing tag)",
+                b""
+            ),
+            RemoteFailureKind::TagConflict
+        );
+    }
 
     #[test]
     fn parses_bounded_push_failures_and_prioritizes_the_concrete_cause() {

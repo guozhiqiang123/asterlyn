@@ -144,7 +144,7 @@ export interface DesktopCommandMap {
   read_remote_authentication: { args: { repositoryRoot: string; repositoryId: string; remote: string; }; result: Model.RemoteAuthenticationStatus };
   store_remote_https_credential: { args: { repositoryRoot: string; repositoryId: string; remote: string; username: string; token: string; }; result: Model.RemoteAuthenticationStatus };
   configure_remote_ssh: { args: { repositoryRoot: string; repositoryId: string; remote: string; sshUrl: string; }; result: Model.RemoteAuthenticationStatus };
-  fetch_remote: { args: { repositoryRoot: string; remote: string; operationId: string; }; result: Model.RepositoryMutationOutcome };
+  fetch_remote: { args: { repositoryRoot: string; remote: string; includeTags: boolean; operationId: string; }; result: Model.RepositoryMutationOutcome };
   read_push_preview: { args: { repositoryRoot: string; repositoryId: string; remote: string; tagMode: Model.PushTagMode; offset: number; pageSize: number; destinationBranch: string | null; sourceBranch: string | null; }; result: Model.PushPreview };
   read_push_file_commit: { args: { repositoryRoot: string; repositoryId: string; remote: string; tagMode: Model.PushTagMode; previewToken: string; path: string; destinationBranch: string | null; sourceBranch: string | null; }; result: Model.CommitDetails | null };
   pull_current: { args: { repositoryRoot: string; operationId: string; }; result: Model.RepositoryMutationOutcome };

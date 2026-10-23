@@ -787,7 +787,7 @@ export const EN_US: LocaleCatalog = {
     remoteFailedFallback: "The remote operation failed without exposing child-process output. Check Git configuration and retry.",
     authenticationFailed: "Authentication was unavailable. Configure a non-interactive Git credential helper or SSH agent, then retry.",
     networkFailed: "The remote could not be reached. Check the network and remote configuration.",
-    remoteRejected: "The remote rejected one or more refs. Review the destination policy before retrying.",
+    tagConflict: "One or more local tags point to different commits than the remote tags. Asterlyn preserved the local tags; review them before fetching tags again.", remoteRejected: "The remote rejected one or more refs. Review the destination policy before retrying.",
     remotePush: EN_US_REMOTE_PUSH_ERRORS,
     fileConflictPreserved: "This file changed outside Asterlyn. Your local buffer is still open and was not overwritten.",
     unexpectedOperation: "An unexpected operation error occurred.",

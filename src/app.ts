@@ -3686,7 +3686,7 @@ export class AsterlynApp {
     }
     if (!(await this.saveDirtyTabsBefore(this.localization.catalog.common.prepareStrategy(this.localization.catalog.remote.strategies[strategy])))) return;
     if (this.remoteState.dialog === "update") this.closeRemoteDialog(false);
-    if (!(await this.runRemoteOperation("fetch"))) return;
+    if (!(await this.runRemoteOperation("fetch", "interactive", false))) return;
 
     const snapshot = this.windowSession.repository.state.snapshot;
     const remote = this.remoteState.selectedRemote;
@@ -3741,7 +3741,7 @@ export class AsterlynApp {
     const policy = remotePolicy(snapshot, this.remoteState.selectedRemote, this.localization);
     if (!policy.fetch.enabled || !policy.selectedRemote) return false;
     const revision = this.windowSession.repository.state.revision;
-    await this.runRemoteOperation("fetch", "background");
+    await this.runRemoteOperation("fetch", "background", false);
     return this.windowSession.repository.state.snapshot?.root === snapshot.root &&
       this.windowSession.repository.state.revision > revision;
   }
@@ -3749,6 +3749,7 @@ export class AsterlynApp {
   private async runRemoteOperation(
     kind: "fetch" | "pull" | "push",
     presentation: "interactive" | "background" = "interactive",
+    includeFetchTags = true,
   ): Promise<boolean> {
     const snapshot = this.windowSession.repository.state.snapshot;
     if (!snapshot || this.state.loading || this.remoteState.operation) return false;
@@ -3778,7 +3779,7 @@ export class AsterlynApp {
     let failureMessage: string | null = null;
 
     try {
-      const result = await this.remoteRuntime.push.runOperation(kind, background);
+      const result = await this.remoteRuntime.push.runOperation(kind, background, includeFetchTags);
       if (generation !== this.windowSession.generation || result.status === "stale") return false;
       if (result.status === "success") {
         const feedback = remoteOperationCompletionFeedback(
@@ -8445,7 +8446,7 @@ export class AsterlynApp {
 
   private async fetchConfiguredRemote(root: string, remote: string): Promise<boolean> {
     const copy = this.localization.catalog.remote;
-    return this.runBranchMutation(copy.operationInProgress(copy.actionNames.fetch), copy.operationCompleted(copy.actionNames.fetch), () => bridge.fetchRemote(root, remote, `remote-management-${++this.branchMutationSequence}`));
+    return this.runBranchMutation(copy.operationInProgress(copy.actionNames.fetch), copy.operationCompleted(copy.actionNames.fetch), () => bridge.fetchRemote(root, remote, true, `remote-management-${++this.branchMutationSequence}`));
   }
 
   private async runBranchMutation(

@@ -602,6 +602,7 @@ pub(crate) async fn execute_head_commit_mutation(
 pub(crate) async fn fetch_remote(
     repository_root: String,
     remote: String,
+    include_tags: bool,
     operation_id: String,
     git_operations: State<'_, GitOperationCoordinator>,
     window: tauri::WebviewWindow,
@@ -611,13 +612,24 @@ pub(crate) async fn fetch_remote(
         .require_git(window.label(), &repository_root)?
         .to_string_lossy()
         .into_owned();
+    let operation = if include_tags {
+        "fetch with tags"
+    } else {
+        "fetch branches"
+    };
     git_operations
         .run_remote(
             repository_root,
             operation_id,
-            "fetch",
+            operation,
             COMMIT_LIMIT,
-            move |repository, cancellation| repository.fetch_remote(&remote, cancellation),
+            move |repository, cancellation| {
+                if include_tags {
+                    repository.fetch_remote(&remote, cancellation)
+                } else {
+                    repository.fetch_remote_branches(&remote, cancellation)
+                }
+            },
         )
         .await
         .map(|snapshot| {

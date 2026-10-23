@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 pub enum RemoteFailureKind {
     Authentication,
     Network,
+    TagConflict,
     Rejected,
     Unknown,
 }

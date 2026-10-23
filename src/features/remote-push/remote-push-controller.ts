@@ -525,7 +525,11 @@ export class RemotePushController {
     return path;
   }
 
-  async runOperation(kind: "fetch" | "pull" | "push", background = false): Promise<RemoteOperationResult> {
+  async runOperation(
+    kind: "fetch" | "pull" | "push",
+    background = false,
+    includeFetchTags = true,
+  ): Promise<RemoteOperationResult> {
     const snapshot = this.snapshot;
     if (!snapshot || this.state.operation) return { status: "unavailable" };
     const repositoryId = kind === "push" ? this.state.pushRepositoryId : ".";
@@ -557,7 +561,7 @@ export class RemotePushController {
     this.emit({ reason: "operation-start", toolbarChanged: true, dialogChanged: true });
     try {
       const outcome = kind === "fetch"
-        ? await this.gateway.fetchRemote(snapshot.root, remote!.name, operationId)
+        ? await this.gateway.fetchRemote(snapshot.root, remote!.name, includeFetchTags, operationId)
         : kind === "pull"
           ? await this.gateway.pullCurrent(snapshot.root, operationId)
           : await this.gateway.pushCurrent(

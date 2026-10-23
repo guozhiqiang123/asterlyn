@@ -140,10 +140,11 @@ export const tauriGitOperationBridge: GitOperationBridge = {
       remote,
       sshUrl,
     }),
-  fetchRemote: (repositoryRoot, remote, operationId) =>
+  fetchRemote: (repositoryRoot, remote, includeTags, operationId) =>
     invokeDesktopCommand<RepositoryMutationOutcome>("fetch_remote", {
       repositoryRoot,
       remote,
+      includeTags,
       operationId,
     }),
   pullCurrent: (repositoryRoot, operationId) =>

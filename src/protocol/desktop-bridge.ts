@@ -462,6 +462,7 @@ export interface GitOperationBridge {
   fetchRemote(
     repositoryRoot: string,
     remote: string,
+    includeTags: boolean,
     operationId: string,
   ): Promise<RepositoryMutationOutcome>;
   pullCurrent(repositoryRoot: string, operationId: string): Promise<RepositoryMutationOutcome>;

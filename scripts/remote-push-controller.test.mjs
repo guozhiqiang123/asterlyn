@@ -424,16 +424,20 @@ test("operation ownership rejects completions after repository replacement", asy
   assert.equal(controller.state.operation, null);
 });
 
-test("automatic Fetch is identified as background work while manual Fetch remains interactive", async () => {
+test("background branch refresh excludes tags while manual Fetch includes them", async () => {
   const firstFetch = deferred();
   const secondFetch = deferred();
   let calls = 0;
+  const tagModes = [];
   const controller = new RemotePushController(createGateway({
-    fetchRemote() { return ++calls === 1 ? firstFetch.promise : secondFetch.promise; },
+    fetchRemote(_root, _remote, includeTags) {
+      tagModes.push(includeTags);
+      return ++calls === 1 ? firstFetch.promise : secondFetch.promise;
+    },
   }));
   controller.installSnapshot(snapshot());
 
-  const automatic = controller.runOperation("fetch", true);
+  const automatic = controller.runOperation("fetch", true, false);
   assert.equal(controller.state.operation?.background, true);
   firstFetch.resolve(snapshot());
   assert.equal((await automatic).status, "success");
@@ -443,6 +447,7 @@ test("automatic Fetch is identified as background work while manual Fetch remain
   assert.equal(controller.state.operation?.background, false);
   secondFetch.resolve(snapshot());
   assert.equal((await manual).status, "success");
+  assert.deepEqual(tagModes, [false, true]);
   controller.dispose();
 });
 
