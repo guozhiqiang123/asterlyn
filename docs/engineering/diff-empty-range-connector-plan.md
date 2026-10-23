@@ -3,6 +3,12 @@
 - **Status:** Implemented
 - **Date:** 2026-10-09
 
+> **Behavior revised 2026-10-23:** the zero-height cusp described below is retained only when
+> no alignment slot exists. A real MergeView alignment slot must fill its full measured height
+> at the gutter edge. See the follow-up in
+> [`diff-action-controls-visual-polish-plan.md`](diff-action-controls-visual-polish-plan.md#empty-side-fill-root-cause--2026-10-23).
+> The original acceptance covered compact path bounds but missed the visible fill beside actions.
+
 ## Problem
 
 Pure additions and deletions contain a zero-length range on the empty side of the Diff. The current

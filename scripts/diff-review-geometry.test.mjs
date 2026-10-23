@@ -107,7 +107,7 @@ test("empty Diff ranges use compact document-edge anchors", () => {
   assert.equal(measureDiffReviewRange(view, { from: 20, to: 20 }, { left: 0, top: 100 }).top, 100);
 });
 
-test("empty-side connectors taper to a compact cusp", () => {
+test("empty-side connectors without an alignment slot retain a compact cusp", () => {
   const path = buildDiffReviewConnectorPath(
     { left: 0, right: 100, top: 40, bottom: 40 },
     { left: 160, right: 260, top: 20, bottom: 80 },
@@ -125,6 +125,65 @@ test("empty-side connectors taper to a compact cusp", () => {
   assert.match(deletion, /^M 100\.00 20\.00 C 130\.00 20\.00 130\.00 40\.00 160\.00 40\.00/u);
   assert.match(deletion, /L 160\.00 40\.00/u);
   assert.match(deletion, /100\.00 80\.00 Z$/u);
+});
+
+function alignmentView(position, widgetType, viewport = { left: 10, right: 210, top: 90, bottom: 250 }) {
+  const widget = { from: position, to: position, top: 20, bottom: 80, height: 60, type: widgetType };
+  const text = { from: 10, to: 20, top: 80, bottom: 100, height: 20, type: 0 };
+  return {
+    state: { doc: { length: 20, lineAt() { return { from: 10, to: 20 }; } } },
+    documentTop: 100,
+    lineBlockAt(offset) {
+      return offset < 10 ? { top: 0, bottom: 20, type: 0 }
+        : { top: 20, bottom: 100, type: [widget, text] };
+    },
+    coordsAtPos() { throw new Error("alignment slots must remain measurable offscreen"); },
+    scrollDOM: { getBoundingClientRect() { return viewport; } },
+  };
+}
+
+test("empty Diff ranges fill the real alignment slot at a line boundary", () => {
+  assert.deepEqual(measureDiffReviewRange(alignmentView(10, 1), { from: 10, to: 10 }, { left: 0, top: 100 }), {
+    left: 10, right: 210, top: 20, bottom: 80,
+  });
+  // A folded replacement is not an empty alignment slot and must not add a false band.
+  assert.deepEqual(measureDiffReviewRange(alignmentView(10, 3), { from: 10, to: 10 }, { left: 0, top: 100 }), {
+    left: 10, right: 210, top: 20, bottom: 20,
+  });
+});
+
+test("alignment connectors remain visible when their anchor scrolls above the viewport", () => {
+  const view = alignmentView(10, 1, { left: 10, right: 210, top: 155, bottom: 175 });
+  assert.deepEqual(measureDiffReviewRange(view, { from: 10, to: 10 }, { left: 0, top: 100 }), {
+    left: 10, right: 210, top: 55, bottom: 75,
+  });
+});
+
+test("end-of-document alignment starts before the trailing spacer", () => {
+  const view = alignmentView(20, 2);
+  view.lineBlockAt = () => ({ top: 0, bottom: 80, type: [
+    { from: 10, to: 20, top: 0, bottom: 20, height: 20, type: 0 },
+    { from: 20, to: 20, top: 20, bottom: 80, height: 60, type: 2 },
+  ] });
+  assert.deepEqual(measureDiffReviewRange(view, { from: 20, to: 20 }, { left: 0, top: 100 }), {
+    left: 10, right: 210, top: 20, bottom: 80,
+  });
+});
+
+test("large changed ranges keep their visible middle when endpoint DOM is virtualized", () => {
+  const view = {
+    state: { doc: { length: 100 } },
+    documentTop: 20,
+    coordsAtPos() { return null; },
+    lineBlockAt(position) {
+      return position < 50 ? { from: 0, to: 49, top: 0, bottom: 20, type: 0 }
+        : { from: 50, to: 100, top: 500, bottom: 520, type: 0 };
+    },
+    scrollDOM: { getBoundingClientRect() { return { left: 10, right: 210, top: 100, bottom: 300 }; } },
+  };
+  assert.deepEqual(measureDiffReviewRange(view, { from: 0, to: 100 }, { left: 0, top: 100 }), {
+    left: 10, right: 210, top: 0, bottom: 200,
+  });
 });
 
 test("connector overlay is clipped to the visible code viewport", () => {

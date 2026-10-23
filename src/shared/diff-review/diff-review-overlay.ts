@@ -62,7 +62,12 @@ export class DiffReviewOverlay {
     const snapshot = this.snapshot;
     if (!snapshot || !this.root.isConnected) return;
     const root = this.root.getBoundingClientRect();
-    const frame = diffReviewOverlayFrame(root, this.viewport.getBoundingClientRect());
+    // DOM rectangles start at the border box; absolute children start at the padding box
+    // and move with the containing block's scroll offset. Keep clipping in page coordinates.
+    const frame = diffReviewOverlayFrame(root, this.viewport.getBoundingClientRect(), {
+      left: root.left + this.root.clientLeft - this.root.scrollLeft,
+      top: root.top + this.root.clientTop - this.root.scrollTop,
+    });
     if (frame.width <= 0 || frame.height <= 0) {
       this.svg.replaceChildren();
       this.svg.style.display = "none";

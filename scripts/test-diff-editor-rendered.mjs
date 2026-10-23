@@ -314,6 +314,93 @@ try {
       assert.equal(editable.borderTop, "1px");
       assert.deepEqual(editable.spacerBorders, ["1px", "1px"]);
 
+      // The connector's SVG is positioned inside the host's padding box. A bordered host must
+      // not shift it away from the action gutter, even though DOM rectangles include borders.
+      for (const theme of ["light", "dark"]) {
+        for (const border of [0, 1, 2]) {
+          await page.evaluate(({ theme, border }) => {
+            document.documentElement.dataset.theme = theme;
+            document.querySelector("#editor").style.border = `${border}px solid transparent`;
+          }, { theme, border });
+          await settle();
+          const connector = await page.evaluate(() => {
+            const svg = document.querySelector(".diff-review-overlay");
+            const frame = svg.getBoundingClientRect();
+            const path = svg.querySelector("path").getBBox();
+            const lane = document.querySelector(".cm-merge-revert").getBoundingClientRect();
+            const viewport = document.querySelector(".cm-mergeView").getBoundingClientRect();
+            return {
+              leftGap: frame.left + path.x - lane.left,
+              rightGap: frame.left + path.x + path.width - lane.right,
+              frameLeftGap: frame.left - viewport.left,
+              frameTopGap: frame.top - viewport.top,
+            };
+          });
+          for (const [edge, gap] of Object.entries(connector)) {
+            assert.ok(Math.abs(gap) <= 0.05,
+              `${name}: ${theme} ${border}px border: connector ${edge} is displaced by ${gap}px`);
+          }
+        }
+      }
+      await page.evaluate(() => {
+        document.querySelector("#editor").style.removeProperty("border");
+        document.documentElement.dataset.theme = "dark";
+      });
+      await settle();
+
+      // Bounding boxes alone miss a zero-height cusp: it reaches both horizontal endpoints
+      // while leaving the empty side of an addition/deletion visibly unfilled beside the button.
+      const additions = [
+        ["middle", "head\ntail\n", "head\nadded one\nadded two\nadded three\ntail\n"],
+        ["start", "tail\n", "added one\nadded two\ntail\n"],
+        ["end", "head\n", "head\nadded one\nadded two\n"],
+        ["empty-file", "", "added one\nadded two\n"],
+      ];
+      for (const theme of ["light", "dark"]) {
+        for (const [location, before, after] of additions) {
+          for (const direction of ["addition", "deletion"]) {
+            await page.evaluate(({ theme, before, after, direction }) => {
+              document.documentElement.dataset.theme = theme;
+              window.diffLayoutFixture.mountEditable(
+                direction === "addition" ? before : after,
+                direction === "addition" ? after : before,
+              );
+            }, { theme, before, after, direction });
+            await settle();
+            const fill = await page.evaluate((direction) => {
+              const svg = document.querySelector(".diff-review-overlay");
+              const path = svg.querySelector("path");
+              const lane = document.querySelector(".cm-merge-revert").getBoundingClientRect();
+              const panes = document.querySelectorAll(".cm-mergeViewEditor");
+              const changedPane = panes[direction === "addition" ? 1 : 0];
+              const changedLines = [...changedPane.querySelectorAll(".cm-changedLine")];
+              const inverse = path.getScreenCTM().inverse();
+              const points = changedLines.flatMap((line) => {
+                const rect = line.getBoundingClientRect();
+                return [lane.left + 1.1, lane.right - 1.1].map((x) => ({
+                  x, y: (rect.top + rect.bottom) / 2,
+                }));
+              });
+              return {
+                samples: points.map(({ x, y }) => path.isPointInFill(new DOMPoint(x, y).matrixTransform(inverse))),
+                unchangedTops: [...document.querySelectorAll(".cm-line")]
+                  .filter((line) => line.textContent === "tail")
+                  .map((line) => line.getBoundingClientRect().top),
+              };
+            }, direction);
+            assert.ok(fill.samples.length >= 2, `${name}: ${location} ${direction}: missing changed lines`);
+            assert.ok(fill.samples.every(Boolean),
+              `${name}: ${theme} ${location} ${direction}: connector leaves an unfilled gutter edge ${JSON.stringify(fill.samples)}`);
+            if (fill.unchangedTops.length === 2) close(...fill.unchangedTops, `${location} ${direction}: unchanged line alignment`);
+          }
+        }
+      }
+      await page.evaluate(() => {
+        document.documentElement.dataset.theme = "dark";
+        window.diffLayoutFixture.mountEditable();
+      });
+      await settle();
+
       await page.hover(".editable-diff-splitter");
       await page.waitForTimeout(150);
       assert.equal(await page.$eval(
@@ -365,6 +452,17 @@ try {
           `${name}: ${label}: splitter ends at ${geometry.splitterBottom}, before viewport bottom ${geometry.viewportBottom}`);
         assert.match(geometry.topHit, /editable-diff-splitter/, `${name}: ${label}: upper drag target`);
         assert.match(geometry.bottomHit, /editable-diff-splitter/, `${name}: ${label}: lower drag target`);
+        const filled = await page.evaluate(() => {
+          const path = document.querySelector(".diff-review-overlay path");
+          if (!path) return false;
+          const lane = document.querySelector(".cm-merge-revert").getBoundingClientRect();
+          const viewport = document.querySelector(".cm-mergeView").getBoundingClientRect();
+          const inverse = path.getScreenCTM().inverse();
+          return [lane.left + 1.1, lane.right - 1.1].every((x) => path.isPointInFill(
+            new DOMPoint(x, (viewport.top + viewport.bottom) / 2).matrixTransform(inverse),
+          ));
+        });
+        assert.ok(filled, `${name}: ${label}: long addition must keep both visible connector edges filled`);
         return geometry;
       };
       for (const location of ["300px", "middle", "end"]) {
@@ -397,7 +495,7 @@ try {
       )) > 42, `${name}: drag after scrolling must resize the panes`);
       assert.deepEqual(errors, [], `${name}: no browser runtime errors`);
       await page.evaluate(() => window.diffLayoutFixture.destroy());
-      console.log(`PASS ${name}: Diff footer alignment, splitters, revert, and full-height dragging after long-file scroll/resize`);
+      console.log(`PASS ${name}: Diff footer alignment, 16 themed addition/deletion fill cases, splitters, revert, and long-file connector/dragging after scroll/resize`);
     } finally {
       await browser.close();
     }

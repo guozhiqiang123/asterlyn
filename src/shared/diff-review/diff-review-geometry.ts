@@ -1,4 +1,4 @@
-import type { EditorView } from "@codemirror/view";
+import { BlockType, type EditorView } from "@codemirror/view";
 import type { DiffReviewRange } from "./diff-review-model.ts";
 
 export interface DiffReviewMeasuredRect {
@@ -27,14 +27,15 @@ interface RectBounds {
 export function diffReviewOverlayFrame(
   root: RectBounds,
   viewport: RectBounds,
+  positioningOrigin: Pick<RectBounds, "left" | "top"> = root,
 ): DiffReviewOverlayFrame {
   const pageLeft = Math.max(root.left, viewport.left);
   const pageTop = Math.max(root.top, viewport.top);
   const pageRight = Math.min(root.right, viewport.right);
   const pageBottom = Math.min(root.bottom, viewport.bottom);
   return {
-    left: pageLeft - root.left,
-    top: pageTop - root.top,
+    left: pageLeft - positioningOrigin.left,
+    top: pageTop - positioningOrigin.top,
     width: Math.max(0, pageRight - pageLeft),
     height: Math.max(0, pageBottom - pageTop),
     pageLeft,
@@ -51,18 +52,19 @@ export function measureDiffReviewRange(
   const to = Math.min(view.state.doc.length, Math.max(from, range.to));
   const viewport = view.scrollDOM.getBoundingClientRect();
   if (from === to) {
-    const anchor = measureEmptyRangeAnchor(view, from);
-    if (anchor === null || anchor < viewport.top || anchor > viewport.bottom) return null;
+    const bounds = measureEmptyRangeBounds(view, from);
+    if (!bounds || bounds.bottom < viewport.top || bounds.top > viewport.bottom) return null;
     return {
       left: viewport.left - root.left,
       right: viewport.right - root.left,
-      top: anchor - root.top,
-      bottom: anchor - root.top,
+      top: Math.max(bounds.top, viewport.top) - root.top,
+      bottom: Math.min(bounds.bottom, viewport.bottom) - root.top,
     };
   }
-  const start = view.coordsAtPos(from, 1);
-  const end = view.coordsAtPos(to - 1, -1);
-  if (!start || !end) return null;
+  // A large changed block may start/end outside CodeMirror's mounted viewport. Its line
+  // blocks still have document geometry, so the visible middle of its connector must remain.
+  const start = view.coordsAtPos(from, 1) ?? measureLineBlockBounds(view, from);
+  const end = view.coordsAtPos(to - 1, -1) ?? measureLineBlockBounds(view, to - 1);
   const top = Math.max(start.top, viewport.top);
   const bottom = Math.min(Math.max(end.bottom, start.bottom), viewport.bottom);
   if (bottom < viewport.top || top > viewport.bottom || bottom <= top) return null;
@@ -94,17 +96,40 @@ export function buildDiffReviewConnectorPath(
   ].join(" ");
 }
 
-function measureEmptyRangeAnchor(view: EditorView, position: number): number | null {
+function measureEmptyRangeBounds(view: EditorView, position: number): { top: number; bottom: number } | null {
   const line = view.state.doc.lineAt(position);
+  const block = view.lineBlockAt(position);
+  const parts = Array.isArray(block.type) ? block.type : [block];
+  // MergeView already reserves the counterpart's height at an empty range. Paint that
+  // alignment slot in the gutter instead of collapsing its edge to a zero-height cusp.
+  // Use public block geometry so folding and offscreen spacers do not depend on DOM classes.
+  const alignmentHeight = parts.reduce((height, part) => height + (
+    part.from === position && part.to === position &&
+    (part.type === BlockType.WidgetBefore || part.type === BlockType.WidgetAfter)
+      ? part.height : 0
+  ), 0);
+  let top: number;
   if (position === line.from) {
-    const block = view.lineBlockAt(position > 0 ? position - 1 : position);
-    return view.documentTop + (position > 0 ? block.bottom : block.top);
+    top = view.documentTop + (position > 0 ? view.lineBlockAt(position - 1).bottom : block.top);
+  } else if (position === line.to) {
+    const textBottom = parts.reduce((bottom, part) => part.type === BlockType.Text ? part.bottom : bottom, block.bottom);
+    top = view.documentTop + textBottom;
+  } else {
+    const caret = view.coordsAtPos(position, 1) ?? view.coordsAtPos(position, -1);
+    if (!caret) return null;
+    top = (caret.top + caret.bottom) / 2;
   }
-  if (position === line.to) {
-    return view.documentTop + view.lineBlockAt(position).bottom;
-  }
-  const caret = view.coordsAtPos(position, 1) ?? view.coordsAtPos(position, -1);
-  return caret ? (caret.top + caret.bottom) / 2 : null;
+  return { top, bottom: top + alignmentHeight };
+}
+
+function measureLineBlockBounds(view: EditorView, position: number): { top: number; bottom: number } {
+  const block = view.lineBlockAt(position);
+  const parts = Array.isArray(block.type) ? block.type : [block];
+  const text = parts.find((part) => part.type === BlockType.Text && part.from <= position && part.to >= position);
+  return {
+    top: view.documentTop + (text?.top ?? block.top),
+    bottom: view.documentTop + (text?.bottom ?? block.bottom),
+  };
 }
 
 function number(value: number): string {
