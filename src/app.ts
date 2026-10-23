@@ -19,7 +19,7 @@ import {
   type HistoryListPresentation,
 } from "./features/git-history/history-list-view";
 import {
-  historyCountPresentation, historyScope,
+  historyCountPresentation, historyScope, syncHistoryClearAllButton,
   renderHistoryNavigation as renderHistoryNavigationView,
   type HistoryFilterMenu,
   type HistoryNavigationViewModel,
@@ -5071,7 +5071,7 @@ export class AsterlynApp {
     const input = this.root.querySelector<HTMLInputElement>("#history-filter");
     input?.addEventListener("input", () => {
       this.gitHistoryPresentationRuntime.filters.setTextQuery(input.value);
-      this.renderHistoryResults();
+      this.renderHistoryResults(); syncHistoryClearAllButton(this.root, input.value);
     });
     input?.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && input.value) {
@@ -5079,7 +5079,7 @@ export class AsterlynApp {
         event.stopPropagation();
         input.value = "";
         this.gitHistoryPresentationRuntime.filters.clearTextQuery();
-        this.renderHistoryResults();
+        this.renderHistoryResults(); syncHistoryClearAllButton(this.root, input.value);
         return;
       }
       if (event.key === "Enter" || event.key === "ArrowDown") {

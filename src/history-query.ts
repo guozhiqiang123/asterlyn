@@ -169,10 +169,11 @@ export function filterHistoryText(
     };
   }
 
-  if (/^[0-9a-f]{40}$/iu.test(needle)) {
+  if (/^[0-9a-f]+$/iu.test(needle)) {
     const normalizedOid = needle.toLowerCase();
-    const startingIndex = commits.findIndex(
-      (commit) => commit.oid.toLowerCase() === normalizedOid,
+    const startingIndex = commits.findIndex((commit) =>
+      commit.oid.toLowerCase() === normalizedOid ||
+      commit.shortOid.toLowerCase() === normalizedOid,
     );
     if (startingIndex >= 0) {
       return { commits: commits.slice(startingIndex), error: null };

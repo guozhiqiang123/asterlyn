@@ -11,7 +11,7 @@ import {
   renderCommitFolderDetail,
 } from "../src/features/git-history/git-detail-view.ts";
 import { renderHistoryDialogView } from "../src/features/git-history/history-dialog-view.ts";
-import { historyCountPresentation, renderHistoryNavigation } from "../src/features/git-history/history-navigation-view.ts";
+import { historyClearAllHidden, historyCountPresentation, renderHistoryNavigation, syncHistoryClearAllButton } from "../src/features/git-history/history-navigation-view.ts";
 import {
   actionableEmptyState,
   contentHeading,
@@ -682,7 +682,7 @@ test("history navigation owns filter menus and list host presentation", () => {
 
 test("history text search alone exposes the clear-all icon", () => {
   const snapshot = repositorySnapshot();
-  const html = renderHistoryNavigation({
+  const model = {
     snapshot,
     files: [], filesLoading: false, filesError: null, filesTruncated: false,
     presentation: {
@@ -696,8 +696,25 @@ test("history text search alone exposes the clear-all icon", () => {
     datePreset: "all", paths: new Map(), repositoryIds: new Set(), recentPaths: [],
     order: "topological", firstParent: false, excludeMerges: false, collapseLinear: false,
     filterMenu: null, branchSubmenu: null, favoriteRefs: new Map(), recentRefs: [],
-  });
+  };
+  const html = renderHistoryNavigation(model);
   assert.match(html, /data-history-clear-all/u);
+  const clearAll = html.match(/<button[^>]*data-history-clear-all[^>]*>/u)?.[0] ?? "";
+  assert.doesNotMatch(clearAll, /\bhidden\b/u);
+  assert.match(clearAll, /data-history-structured-filters="false"/u);
+
+  const inactive = renderHistoryNavigation({ ...model, query: "" });
+  const inactiveClearAll = inactive.match(/<button[^>]*data-history-clear-all[^>]*>/u)?.[0] ?? "";
+  assert.match(inactiveClearAll, /\bhidden\b/u);
+  assert.equal(historyClearAllHidden("a".repeat(40), false), false);
+  assert.equal(historyClearAllHidden("", false), true);
+  assert.equal(historyClearAllHidden("", true), false);
+
+  const button = { hidden: true, dataset: { historyStructuredFilters: "false" } };
+  syncHistoryClearAllButton({ querySelector: () => button }, "a".repeat(40));
+  assert.equal(button.hidden, false);
+  syncHistoryClearAllButton({ querySelector: () => button }, "");
+  assert.equal(button.hidden, true);
 });
 
 test("history count uses the full structural total and keeps text matching local", () => {
