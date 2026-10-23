@@ -1,6 +1,6 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog rooted at Asterlyn `0.1.19`; current SDK `1.10.0`, package schema `3`, and
+Status: experimental public catalog rooted at Asterlyn `0.1.20`; current SDK `1.10.0`, package schema `3`, and
 plugin-host protocol `1`.
 
 Security containment in `0.1.19`: installable packages cannot receive authority from legacy raw
