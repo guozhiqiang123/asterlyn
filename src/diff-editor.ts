@@ -48,10 +48,7 @@ import {
 } from "./editor-theme";
 import type { EffectiveTheme } from "./presentation/presentation-environment";
 import { EditorLanguageLoader } from "./editor-language";
-import type { GitBlameResult } from "./models.ts";
 import {
-  editorGutterContextMenu,
-  gitBlamePresentation,
   lineNumberGutter,
   type DiffGitBlameSources,
   type GitBlameCopy,
@@ -60,7 +57,6 @@ import {
 import {
   applyEditorPreferences,
   codeMirrorFocusOwnership,
-  sameBlameSource,
 } from "./features/files-editor/editor-runtime-shared.ts";
 import {
   DEFAULT_APP_PREFERENCES,
@@ -80,7 +76,7 @@ import {
   NOOP_CONTEXT_MENU_PORT,
   type ContextMenuPort,
 } from "./shared/context-menu/context-menu-model.ts";
-import { gitBlameContextSession } from "./features/files-editor/editor-gutter-context-actions.ts";
+import { GitBlamePaneController, sourceBlameTarget } from "./features/files-editor/git-blame-pane-controller.ts";
 import {
   captureDiffExpansionAnchor,
   restoreDiffExpansionAnchor,
@@ -148,23 +144,19 @@ export class DiffEditor {
   private changeBlocks: DiffChangeBlock[] = [];
   private activeChangeStart: number | null = null;
   private blameSources: DiffGitBlameSources;
-  private readonly blameState: Record<"old" | "new", {
-    result: GitBlameResult | null;
-    loading: boolean;
-    generation: number;
-  }> = {
-    old: { result: null, loading: false, generation: 0 },
-    new: { result: null, loading: false, generation: 0 },
-  };
+  private readonly blameController: GitBlamePaneController;
   private ruler: HTMLDivElement | null = null;
   private onExpandUnchanged: ((section: string, anchor: DiffExpansionAnchor) => void) | null = null;
 
   constructor(
-    private readonly blameRuntime: GitBlameRuntime,
+    blameRuntime: GitBlameRuntime,
     private blameCopy: GitBlameCopy,
     private readonly contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
   ) {
     this.blameSources = unavailableDiffBlameSources(blameCopy.gitBlameRequiresSplit);
+    this.blameController = new GitBlamePaneController(
+      blameRuntime, blameCopy, contextMenu, "editor.diff.git-blame",
+    );
   }
 
   mount(
@@ -278,16 +270,19 @@ export class DiffEditor {
   setBlameCopy(copy: GitBlameCopy): void {
     if (this.blameCopy === copy) return;
     this.blameCopy = copy;
-    for (const side of ["old", "new"] as const) {
-      const result = this.blameState[side].result;
-      if (result) this.installBlame(side, result);
-    }
+    this.blameController.setCopy(copy);
   }
 
   private render(): void {
     const parent = this.parent;
     if (!parent) return;
     this.destroyViews();
+    for (const side of ["old", "new"] as const) {
+      this.blameController.setTarget(side, sourceBlameTarget(this.blameSources[side]));
+    }
+    this.blameController.setTarget("unified", sourceBlameTarget({
+      source: null, unavailableReason: this.blameSources.unifiedReason,
+    }));
     this.activeChangeStart = null;
     parent.replaceChildren();
     parent.classList.toggle("split-diff", this.presentation.layout === "split");
@@ -400,7 +395,7 @@ export class DiffEditor {
     const theme = new Compartment();
     const phrases = new Compartment();
     const blame = new Compartment();
-    const activeBlame = side ? this.blameState[side].result : null;
+    const blamePane = side ?? "unified";
     const sourceLine = rows && side
       ? (documentLine: number) => rows[documentLine - 1]?.[side].lineNumber ?? null
       : unifiedRows
@@ -418,21 +413,7 @@ export class DiffEditor {
       highlightSelectionMatches(),
       theme.of(asterlynEditorTheme(this.themeValue)),
       phrases.of(EditorState.phrases.of(this.phrasesValue)),
-      editorGutterContextMenu(
-        (event, view) => this.openBlameMenu(side ?? null, event, view),
-      ),
-      blame.of(activeBlame
-        ? gitBlamePresentation(
-            activeBlame,
-            this.blameCopy,
-            (event, view) => this.openBlameMenu(side ?? null, event, view),
-            (hunk) => {
-              const source = side ? this.blameSources[side].source : null;
-              if (source && !hunk.uncommitted) this.blameRuntime.openCommit(source, hunk);
-            },
-            sourceLine,
-          )
-        : []),
+      ...this.blameController.extensions(blamePane, blame, sourceLine),
       asterlynSyntaxHighlighting,
       language.of(this.languageSupport ?? []),
       activeDiffBlockDecoration,
@@ -454,7 +435,7 @@ export class DiffEditor {
         lineNumberGutter(
           (lineNumber) => rows[lineNumber - 1]?.[side].lineNumber?.toString() ?? "",
           side === "old" ? "after" : "before",
-          (event, view) => this.openBlameMenu(side, event, view),
+          this.blameController.menu(blamePane),
         ),
         sourceChangeGutter(rows, side),
         sourceLineDecorations(rows, side),
@@ -468,7 +449,7 @@ export class DiffEditor {
             return (r.newLineNumber ?? r.oldLineNumber)?.toString() ?? "";
           },
           "before",
-          (event, editorView) => this.openBlameMenu(null, event, editorView),
+          this.blameController.menu(blamePane),
         ),
         unifiedChangeGutter(unifiedRows),
         unifiedLineDecorations(unifiedRows),
@@ -498,6 +479,7 @@ export class DiffEditor {
       side: side ?? null,
       sourceLine,
     });
+    this.blameController.register(blamePane, view, blame, sourceLine);
     applyEditorPreferences(view, this.editorPreferences);
     this.describeLanguage(view);
     return view;
@@ -524,116 +506,6 @@ export class DiffEditor {
     view.dom.dataset.languageStatus = this.languageStatus;
   }
 
-  private openBlameMenu(
-    side: "old" | "new" | null,
-    event: MouseEvent,
-    view: EditorView,
-  ): void {
-    const state = side ? this.blameState[side] : null;
-    const generation = state?.generation ?? 0;
-    const active = state?.result !== null && state !== null;
-    const loading = state?.loading ?? false;
-    const availability = side ? this.blameSources[side] : null;
-    this.contextMenu.open(
-      { x: event.clientX, y: event.clientY },
-      gitBlameContextSession("editor.diff.git-blame", {
-        active,
-        loading,
-        enabled: availability?.source !== null && availability !== null,
-        unavailableReason: availability?.unavailableReason ?? this.blameSources.unifiedReason,
-        copy: this.blameCopy,
-        isCurrent: () => {
-          const current = side ? this.blameState[side] : null;
-          return this.views.includes(view) &&
-            (current?.generation ?? 0) === generation &&
-            (current?.result !== null && current !== null) === active &&
-            (current?.loading ?? false) === loading;
-        },
-        toggle: () => side ? this.toggleBlame(side) : undefined,
-        blocked: (reason) => this.blameRuntime.status(reason, "warning"),
-        restoreFocus: () => {
-          if (this.views.includes(view)) view.focus();
-        },
-      }),
-    );
-  }
-
-  private async toggleBlame(side: "old" | "new"): Promise<void> {
-    const state = this.blameState[side];
-    if (state.result || state.loading) {
-      this.clearBlame(side, true);
-      return;
-    }
-    const source = this.blameSources[side].source;
-    if (!source) return;
-    const generation = ++state.generation;
-    state.loading = true;
-    this.blameRuntime.status(this.blameCopy.loadingGitBlame, "information");
-    try {
-      const result = await this.blameRuntime.load(source);
-      if (
-        generation !== state.generation ||
-        !sameBlameSource(this.blameSources[side].source, source)
-      ) return;
-      state.loading = false;
-      state.result = result;
-      this.installBlame(side, result);
-      const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
-      this.blameRuntime.status(
-        result.truncated ? this.blameCopy.gitBlameLimited(lines) : this.blameCopy.gitBlameLoaded(lines),
-        result.truncated ? "warning" : "information",
-      );
-    } catch (error) {
-      if (generation !== state.generation) return;
-      state.loading = false;
-      this.blameRuntime.error(error);
-    }
-  }
-
-  private clearBlame(side: "old" | "new", report: boolean): void {
-    this.contextMenu.close("editor.diff.git-blame");
-    const state = this.blameState[side];
-    state.generation += 1;
-    state.loading = false;
-    state.result = null;
-    for (const binding of this.languageBindings) {
-      if (binding.side === side) {
-        binding.view.dispatch({ effects: binding.blame.reconfigure([]) });
-      }
-    }
-    if (report) this.blameRuntime.status(this.blameCopy.gitBlameHidden, "information");
-  }
-
-  private installBlame(side: "old" | "new", result: GitBlameResult): void {
-    for (const binding of this.languageBindings) {
-      if (binding.side !== side) continue;
-      binding.view.dispatch({
-        effects: binding.blame.reconfigure(
-          gitBlamePresentation(
-            result,
-            this.blameCopy,
-            (event, view) => this.openBlameMenu(side, event, view),
-            (hunk) => {
-              const source = this.blameSources[side].source;
-              if (source && !hunk.uncommitted) this.blameRuntime.openCommit(source, hunk);
-            },
-            binding.sourceLine,
-          ),
-        ),
-      });
-    }
-  }
-
-  private resetBlame(): void {
-    this.contextMenu.close("editor.diff.git-blame");
-    for (const side of ["old", "new"] as const) {
-      const state = this.blameState[side];
-      state.generation += 1;
-      state.loading = false;
-      state.result = null;
-    }
-  }
-
   currentPath(): string {
     return this.sourcePath;
   }
@@ -657,7 +529,10 @@ export class DiffEditor {
     this.splitDispose = null;
     removeOverviewRuler(this.ruler);
     this.ruler = null;
-    for (const view of this.views) view.destroy();
+    for (const view of this.views) {
+      this.blameController.unregister(view);
+      view.destroy();
+    }
     this.views.length = 0;
     this.languageBindings.length = 0;
   }
@@ -676,7 +551,7 @@ export class DiffEditor {
     this.changeBlocks = [];
     this.activeChangeStart = null;
     this.onExpandUnchanged = null;
-    this.resetBlame();
+    this.blameController.destroy();
     this.blameSources = unavailableDiffBlameSources(this.blameCopy.gitBlameRequiresSplit);
   }
 }

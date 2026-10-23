@@ -1,15 +1,18 @@
 # Compact Git Blame presentation plan
 
-> Status: superseded on 2026-10-20. The persistent display preference and line-number-hover mode
-> described below were removed after usage feedback. Git Blame is on-demand again.
+> Status: revised on 2026-10-23. The dedicated gutter remains on-demand; selected-line authorship
+> loads independently on focus. The retired persistent display preference and line-number-hover
+> design below remain historical context.
 
 ## Current behavior
 
 - Right-clicking anywhere in the CodeMirror gutter band exposes one checked Git Blame action. This
   includes line numbers, fold and change-indicator lanes, and empty gutter space below short files.
-  Enabling it performs the exact-source request and renders a dedicated author/date gutter;
-  disabling it removes the result without changing source content.
-- The selected-line annotation remains at the line end while Blame is enabled, including when focus
+  Enabling it reuses cached exact-source data, or loads it if needed, and renders a dedicated
+  author/date gutter. Disabling it hides that column while retaining the selected-line annotation
+  and its cached result without changing source content.
+- Focusing a code line automatically loads its exact-source authorship without enabling the gutter.
+  The selected-line annotation follows the main cursor line and remains visible when focus
   temporarily moves to a context menu or another application surface. The dedicated gutter keeps
   the compact `YYYY-MM-DD` date, while the line-end annotation shows the author and exact local
   authored time as `YYYY-MM-DD HH:mm`.
@@ -24,6 +27,38 @@
   because macOS WebView can suppress the visible focused row's commit subject and metadata.
 - The Editor settings no longer persist or expose a Git Blame display mode. Dirty, untracked,
   ambiguous unified-Diff, and stale-source safeguards remain unchanged.
+- Ordinary text, read-only Diff, editable Diff, and conflict panes share one request and presentation
+  controller. It separates gutter visibility from result availability, loads only focused eligible
+  panes, and reuses each source result across cursor movement and gutter toggles. Cached text tabs
+  retain their own results, while a saved-file load epoch invalidates old source data.
+- Editing, source replacement, pane destruction, and tab closure invalidate pending results.
+  Automatic lookup failures are attempted once per source rather than retried on every cursor
+  movement. Dirty conflict Result projections require an explicit gutter request and do not issue
+  automatic Git queries per keystroke.
+
+## Independent line-end authorship correction (2026-10-23)
+
+- The previous gutter toggle owned both result loading and the two presentations, which made
+  selected-line authorship disappear unless the dedicated gutter was enabled. Gutter visibility
+  now has its own state and never clears a valid inline result.
+- Chromium/WebKit rendered regression covers automatic focused-line loading with a hidden gutter,
+  independent gutter toggles, exact commit navigation, cached tab switching, edit invalidation,
+  saved-source reload, delayed responses, failure deduplication, and unavailable sources. Read-only
+  Diff, editable Diff, and conflict panes use the same behavior and retain unified-source limits.
+- Validation passed: 1,277 frontend script tests, 156 Git core tests, TypeScript checking, production
+  build, and Chromium/WebKit rendered Git Blame, Diff, and conflict-editor suites. The production
+  startup chunk remains 480.57 kB; cursor movement and gutter toggles reuse the loaded source result.
+- Native smoke passed within 6,000 ms after macOS was unlocked. The final version `0.1.19` bundle
+  was ad-hoc signed, strictly verified with sealed resources, installed at `/Applications/Asterlyn.app`,
+  and relaunched. The installed shell independently reported `READY`; its startup diagnostics had no
+  warning or error events. The installed executable matches the accepted bundle with SHA-256
+  `6aa809931e6615005bc478a908b6a1cd4f09ebfcd4752687892f27f3f3978311`.
+- Acceptance archive:
+  `target/release/bundle/macos/Asterlyn-0.1.19-local-2026-10-23-independent-inline-blame.app.zip`,
+  SHA-256 `c34a61287d58dc10f29a0a8f04c5751cb86c0b76a6213f69411f1768c9e2fff9`.
+  The previous installation remains recoverable at
+  `/Users/gzq/Library/Application Support/Asterlyn Install Backups/20261023-121218-independent-inline-blame/Asterlyn.app`.
+- Manual acceptance passed on 2026-10-23; the user approved committing the correction.
 
 The remainder of this document records the now-retired automatic compact-mode design.
 

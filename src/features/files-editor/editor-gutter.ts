@@ -147,19 +147,20 @@ export function diffLineNumberGutter(
   });
 }
 
-/** Shows the restored blame gutter and keeps the compact active-line annotation. */
+/** The gutter is optional; the active-line annotation uses the same cached result. */
 export function gitBlamePresentation(
   result: GitBlameResult,
   copy: GitBlameCopy,
   openMenu: OpenEditorContextMenu,
   openCommit: OpenGitBlameCommit,
   sourceLine: SourceLineMapper = (line) => line,
+  showGutter = true,
 ): Extension {
   const hunks = [...result.hunks].sort(
     (left, right) => left.finalStartLine - right.finalStartLine,
   );
   return [
-    blameGutter(hunks, copy, openMenu, openCommit, sourceLine),
+    ...(showGutter ? [blameGutter(hunks, copy, openMenu, openCommit, sourceLine)] : []),
     blameLineEndPresentation(hunks, copy, openCommit, sourceLine),
   ];
 }

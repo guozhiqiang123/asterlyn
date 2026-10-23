@@ -22,6 +22,7 @@ export interface GitBlamePaneTarget {
   readonly navigationSource?: GitBlameSource | null;
   readonly unavailableReason: string | null;
   readonly load?: () => Promise<GitBlameResult>;
+  readonly autoLoad?: boolean;
 }
 
 interface PaneState {
@@ -29,6 +30,8 @@ interface PaneState {
   result: GitBlameResult | null;
   loading: boolean;
   generation: number;
+  gutterVisible: boolean;
+  requested: boolean;
 }
 
 interface PaneBinding {
@@ -59,7 +62,7 @@ export function sourceBlameTarget(
   };
 }
 
-/** Owns the on-demand Git Blame menu and request lifecycle for any number of panes. */
+/** Shares source results between automatic line-end metadata and optional gutters. */
 export class GitBlamePaneController {
   private readonly states = new Map<string, PaneState>();
   private readonly bindings: PaneBinding[] = [];
@@ -85,8 +88,13 @@ export class GitBlamePaneController {
       current.target = target;
       return;
     }
-    if (current) this.clear(pane, false);
-    this.states.set(pane, { target, result: null, loading: false, generation: 0 });
+    if (current) this.clear(pane);
+    this.states.set(pane, {
+      target, result: null, loading: false, generation: 0, gutterVisible: false, requested: false,
+    });
+    for (const binding of this.bindings) {
+      if (binding.pane === pane) this.requestInline(pane, binding.view);
+    }
   }
 
   extensions(
@@ -98,6 +106,9 @@ export class GitBlamePaneController {
     const result = state?.result ?? null;
     return [
       editorGutterContextMenu(this.menu(pane)),
+      EditorView.updateListener.of((update) => {
+        if (update.focusChanged || update.selectionSet) this.requestInline(pane, update.view);
+      }),
       compartment.of(result
         ? this.presentation(pane, result, sourceLine)
         : []),
@@ -111,6 +122,15 @@ export class GitBlamePaneController {
     sourceLine: (documentLine: number) => number | null = (line) => line,
   ): void {
     this.bindings.push({ pane, view, compartment, sourceLine });
+    this.install(pane, this.states.get(pane)?.result ?? null);
+    this.requestInline(pane, view);
+  }
+
+  unregister(view: EditorView): void {
+    for (let index = this.bindings.length - 1; index >= 0; index -= 1) {
+      if (this.bindings[index]!.view === view) this.bindings.splice(index, 1);
+    }
+    this.contextMenu.close(this.ownerId);
   }
 
   menu(pane: string): OpenEditorContextMenu {
@@ -118,7 +138,7 @@ export class GitBlamePaneController {
   }
 
   invalidate(pane: string): void {
-    if (this.states.has(pane)) this.clear(pane, false);
+    if (this.states.has(pane)) this.clear(pane);
   }
 
   destroy(): void {
@@ -137,7 +157,7 @@ export class GitBlamePaneController {
     if (!state) return;
     const identity = state.target.identity;
     const generation = state.generation;
-    const active = state.result !== null;
+    const active = state.gutterVisible;
     const loading = state.loading;
     this.contextMenu.open(
       { x: event.clientX, y: event.clientY },
@@ -153,7 +173,7 @@ export class GitBlamePaneController {
             current &&
             current.target.identity === identity &&
             current.generation === generation &&
-            (current.result !== null) === active &&
+            current.gutterVisible === active &&
             current.loading === loading &&
             this.bindings.some((binding) => binding.pane === pane && binding.view === view),
           );
@@ -172,58 +192,86 @@ export class GitBlamePaneController {
   private async toggle(pane: string): Promise<void> {
     const state = this.states.get(pane);
     if (!state) return;
-    if (state.result || state.loading) {
-      this.clear(pane, true);
+    if (state.gutterVisible) {
+      state.gutterVisible = false;
+      this.install(pane, state.result);
+      this.runtime.status(this.copy.gitBlameHidden, "information");
       return;
     }
+    if (!state.target.source && !state.target.load) return;
+    state.gutterVisible = true;
+    if (state.result) {
+      this.install(pane, state.result);
+      return;
+    }
+    await this.load(pane, true);
+  }
+
+  private requestInline(pane: string, view: EditorView): void {
+    if (!view.hasFocus) return;
+    const state = this.states.get(pane);
+    if (!state || state.target.autoLoad === false || state.requested || state.result || state.loading) return;
+    queueMicrotask(() => {
+      if (this.states.get(pane) === state && this.bindings.some((binding) =>
+        binding.pane === pane && binding.view === view && view.hasFocus
+      )) void this.load(pane, false);
+    });
+  }
+
+  private async load(pane: string, report: boolean): Promise<void> {
+    const state = this.states.get(pane);
+    if (!state || state.loading || state.result || (!report && state.requested)) return;
     if (!state.target.source && !state.target.load) return;
     const identity = state.target.identity;
     const generation = ++state.generation;
     state.loading = true;
-    this.runtime.status(this.copy.loadingGitBlame, "information");
+    state.requested = true;
+    if (report) this.runtime.status(this.copy.loadingGitBlame, "information");
     try {
       const result = state.target.load
         ? await state.target.load()
         : await this.runtime.load(state.target.source!);
       const current = this.states.get(pane);
-      if (!current || current.generation !== generation || current.target.identity !== identity) return;
+      if (current !== state || current.generation !== generation || current.target.identity !== identity) return;
       current.loading = false;
       current.result = result;
       this.install(pane, result);
       const lines = result.hunks.reduce((total, hunk) => total + hunk.lineCount, 0);
-      this.runtime.status(
+      if (report) this.runtime.status(
         result.truncated ? this.copy.gitBlameLimited(lines) : this.copy.gitBlameLoaded(lines),
         result.truncated ? "warning" : "information",
       );
     } catch (error) {
       const current = this.states.get(pane);
-      if (!current || current.generation !== generation) return;
+      if (current !== state || current.generation !== generation) return;
       current.loading = false;
-      this.runtime.error(error);
+      current.gutterVisible = false;
+      if (report) this.runtime.error(error);
     }
   }
 
-  private clear(pane: string, report: boolean): void {
+  private clear(pane: string): void {
     this.contextMenu.close(this.ownerId);
     const state = this.states.get(pane);
     if (!state) return;
     state.generation += 1;
     state.loading = false;
     state.result = null;
+    state.gutterVisible = false;
+    state.requested = true;
     for (const binding of this.bindings) {
       if (binding.pane === pane) {
         binding.view.dispatch({ effects: binding.compartment.reconfigure([]) });
       }
     }
-    if (report) this.runtime.status(this.copy.gitBlameHidden, "information");
   }
 
-  private install(pane: string, result: GitBlameResult): void {
+  private install(pane: string, result: GitBlameResult | null): void {
     for (const binding of this.bindings) {
       if (binding.pane !== pane) continue;
       binding.view.dispatch({
         effects: binding.compartment.reconfigure(
-          this.presentation(pane, result, binding.sourceLine),
+          result ? this.presentation(pane, result, binding.sourceLine) : [],
         ),
       });
     }
@@ -244,6 +292,7 @@ export class GitBlamePaneController {
         if (source && !hunk.uncommitted) this.runtime.openCommit(source, hunk);
       },
       sourceLine,
+      this.states.get(pane)?.gutterVisible ?? false,
     );
   }
 }

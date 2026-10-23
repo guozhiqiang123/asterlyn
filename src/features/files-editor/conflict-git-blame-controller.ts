@@ -115,6 +115,7 @@ export class ConflictGitBlameController {
       ].join("\0"),
       source: null,
       navigationSource: available[0]?.availability.source ?? null,
+      autoLoad: this.version === 0,
       unavailableReason: available.length > 0
         ? null
         : sources.ours.unavailableReason ?? sources.theirs.unavailableReason,

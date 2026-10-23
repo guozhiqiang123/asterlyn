@@ -31,8 +31,11 @@ test("every CodeMirror surface installs the shared focus-ownership contract", as
 });
 
 test("read-only Diff restores focus after its Git Blame context-menu cycle", async () => {
-  const source = await readFile(new URL("src/diff-editor.ts", root), "utf8");
-  assert.match(source, /gitBlameContextSession|openBlameMenu|toggleBlame/u);
-  assert.match(source, /restoreFocus/u);
+  const [source, controller] = await Promise.all([
+    readFile(new URL("src/diff-editor.ts", root), "utf8"),
+    readFile(new URL("src/features/files-editor/git-blame-pane-controller.ts", root), "utf8"),
+  ]);
+  assert.match(source, /GitBlamePaneController/u);
+  assert.match(controller, /restoreFocus/u);
   assert.match(source, /codeMirrorFocusOwnership/u);
 });

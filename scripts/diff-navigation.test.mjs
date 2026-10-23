@@ -379,7 +379,7 @@ test("Diff position navigation outlines the complete current change block", asyn
   assert.match(theme, /\.cm-diff-current-change-end/);
 });
 
-test("ordinary and Diff editors load Git Blame only from the gutter action", async () => {
+test("ordinary and Diff editors share Git Blame presentation and context actions", async () => {
   const [gutterSource, textEditorSource, diffEditorSource, paneControllerSource] = await Promise.all([
     readFile(new URL("../src/features/files-editor/editor-gutter.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/text-editor.ts", import.meta.url), "utf8"),
@@ -394,12 +394,9 @@ test("ordinary and Diff editors load Git Blame only from the gutter action", asy
   assert.match(gutterSource, /update\.selectionSet/u);
   assert.match(gutterSource, /update\.focusChanged/u);
   assert.doesNotMatch(gutterSource, /for \(const visible of view\.visibleRanges\)/u);
-  assert.doesNotMatch(textEditorSource, /void this\.ensureBlame/u);
-  assert.doesNotMatch(diffEditorSource, /void this\.ensureBlame/u);
-  assert.doesNotMatch(paneControllerSource, /void this\.ensure/u);
-  assert.match(textEditorSource, /gitBlameContextSession|toggleBlame/u);
-  assert.match(diffEditorSource, /gitBlameContextSession|toggleBlame/u);
-  assert.match(paneControllerSource, /gitBlameContextSession|toggle/u);
+  assert.match(textEditorSource, /GitBlamePaneController/u);
+  assert.match(diffEditorSource, /GitBlamePaneController/u);
+  assert.match(paneControllerSource, /gitBlameContextSession/u);
 });
 
 test("split Diff centers line numbers and uses one stable change gutter per side", async () => {
