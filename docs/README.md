@@ -91,6 +91,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/git-worktree-actions-plan.md`](engineering/git-worktree-actions-plan.md) — primary/linked/available branch checkout identity, reviewed removal, Android Studio-style creation, primary-window Open/Reveal actions, and acceptance gates.
 - [`engineering/keyboard-shortcut-management-plan.md`](engineering/keyboard-shortcut-management-plan.md) — unified command registry, customizable keybindings, conflict handling, Settings management, and editor/terminal integration plan.
 - [`engineering/local-build.md`](engineering/local-build.md) — reproducible frontend, Rust, native Linux, and packaging setup.
+- [`benchmarks/2026-10-23-macos-icon-launch-recovery.md`](benchmarks/2026-10-23-macos-icon-launch-recovery.md) — saved-icon bookmark diagnosis, archive-only backup migration, atomic Contents replacement and quit/reopen acceptance.
 - [`engineering/structured-diagnostics.md`](engineering/structured-diagnostics.md) — log location, event contract, privacy rules, plugin-task diagnosis, and validation gates.
 - [`engineering/2026-10-23-diagnostics-hardening-plan.md`](engineering/2026-10-23-diagnostics-hardening-plan.md) — ordered privacy, recoverable asynchronous persistence, lifecycle integrity, frontend coverage, and native acceptance hardening.
 - [`benchmarks/2026-10-23-diagnostics-hardening.md`](benchmarks/2026-10-23-diagnostics-hardening.md) — fault/concurrency tests, bounded burst evidence, signed package hashes and installed-log acceptance.

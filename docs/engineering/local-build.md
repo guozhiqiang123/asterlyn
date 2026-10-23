@@ -176,16 +176,44 @@ contains the pre-signing `.app`; do not install or publish it. A workflow that n
 Tauri perform ad-hoc signing before DMG construction and must mount the finished image and run the
 same strict verification against the contained `.app`.
 
-For local replacement, stop the running installed app and copy the previous
-`/Applications/Asterlyn.app` to a recoverable backup location outside `/Applications`. Never move
-or rename the live bundle into a backup path: macOS file bookmarks can follow that bundle identity
-and later open the backup directory instead of the new installation. After the backup copy succeeds,
-remove the old bundle, copy the verified bundle into `/Applications`, and repeat
-`codesign --verify --deep --strict`. Compare the installed executable byte-for-byte with the
-accepted bundle, launch it, and verify the running process plus the installed
-`CFBundleShortVersionString`. Any copy, signature, identity, version, or byte comparison failure must
-restore the previous app and stop; never repair the installed copy in place or fall back to an older
-build silently.
+For local replacement, use the repository-owned installer after signing and smoke acceptance:
+
+```bash
+node scripts/install-macos-app.mjs \
+  --source target/release/bundle/macos/Asterlyn.app \
+  --evidence /tmp/asterlyn-local-install-evidence.json
+```
+
+The installer gracefully stops the installed app and archives it under
+`~/Library/Application Support/Asterlyn/archived-install-backups/`. Backups are ZIP files only,
+verified by complete archive CRC and executable digest before replacement. Never retain expanded
+`.app` or `.app.backup-*` backup folders: macOS can retain icon bookmarks to those folders even
+when LaunchServices correctly resolves the bundle ID to `/Applications/Asterlyn.app`.
+
+Do not move, rename, delete/recreate, or replace the installed `.app` root. The installer stages
+`Contents` outside the bundle, checks the full copy's files/modes/symlinks, and atomically exchanges
+`Contents` using Darwin `RENAME_SWAP`. This preserves the `.app` root inode and its icon identity.
+Strict installed signature and executable digest checks follow; verification failure exchanges the
+old contents back. If rollback also fails, the previous contents remain in a named recovery stage.
+Do not bypass these checks by copying directly into the live bundle.
+
+Only Asterlyn Launchpad entries are reconciled. The oldest icon's item/parent/order are retained,
+its bookmark targets the canonical installed application, and duplicate Asterlyn entries are removed
+in one SQLite transaction with schema-drift guards. The database is backed up first; unrelated app
+entries are checked unchanged. Dock is briefly reloaded to discard cached icon bookmarks. This is
+not a global LaunchServices reset, preference deletion, or Launchpad layout reset. If the database
+is unavailable, evidence explicitly records that icon-entry validation was unavailable.
+
+Acceptance must launch via the saved icon bookmark, confirm the installed process and persisted
+`application.frontend_ready`, quit, then reopen through that bookmark and repeat the checks.
+Direct executable or explicit-path launch alone cannot prove a saved icon works. The helper also
+unregisters the build copy and force-registers the installed bundle. Its evidence records version,
+hashes, ZIP backup, preserved inode, targeted icon repair, and both startup sessions. The local build
+requires the macOS developer tools (Swift), system SQLite, `ditto`, and `unzip` in addition to Tauri.
+
+Historical expanded backup locations mentioned by earlier acceptance documents were migrated into
+verified archives on 2026-10-23; see
+[`../benchmarks/2026-10-23-macos-icon-launch-recovery.md`](../benchmarks/2026-10-23-macos-icon-launch-recovery.md).
 
 - Every completed local project task ends with a fresh native acceptance package for its build host after its required checks pass. On Linux, build Debian:
 
