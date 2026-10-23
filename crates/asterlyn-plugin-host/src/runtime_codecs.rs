@@ -296,56 +296,52 @@ fn parse_gradle_tasks(bytes: &[u8]) -> JsonValue {
         if line.is_empty() || is_gradle_divider(line) {
             continue;
         }
-        if in_task_group {
-            if let Some((task_name, description)) = parse_gradle_task_line(line) {
-                let id = if task_name.starts_with(':') {
-                    task_name.to_owned()
-                } else if task_name.contains(':') {
-                    format!(":{task_name}")
-                } else if project_path == ":" {
-                    format!(":{task_name}")
-                } else {
-                    format!("{project_path}:{task_name}")
-                };
-                recognized += 1;
-                if recognized > MAX_GRADLE_TASKS * 4 {
+        if in_task_group && let Some((task_name, description)) = parse_gradle_task_line(line) {
+            let id = if task_name.starts_with(':') {
+                task_name.to_owned()
+            } else if task_name.contains(':') || project_path == ":" {
+                format!(":{task_name}")
+            } else {
+                format!("{project_path}:{task_name}")
+            };
+            recognized += 1;
+            if recognized > MAX_GRADLE_TASKS * 4 {
+                return gradle_error("Gradle task list exceeded the discovery limit.");
+            }
+            if let Some(existing) = records.get_mut(&id) {
+                if existing.get("description").is_none()
+                    && let Some(description) = description
+                {
+                    existing["description"] = JsonValue::String(description.to_owned());
+                }
+            } else {
+                if records.len() >= MAX_GRADLE_TASKS {
                     return gradle_error("Gradle task list exceeded the discovery limit.");
                 }
-                if let Some(existing) = records.get_mut(&id) {
-                    if existing.get("description").is_none() {
-                        if let Some(description) = description {
-                            existing["description"] = JsonValue::String(description.to_owned());
-                        }
-                    }
-                } else {
-                    if records.len() >= MAX_GRADLE_TASKS {
-                        return gradle_error("Gradle task list exceeded the discovery limit.");
-                    }
-                    let separator = id.rfind(':').unwrap_or(0);
-                    let task_project_path = if separator > 0 { &id[..separator] } else { ":" };
-                    let mut task = JsonMap::new();
-                    task.insert("id".to_owned(), JsonValue::String(id.clone()));
-                    task.insert("label".to_owned(), JsonValue::String(id.clone()));
-                    task.insert("group".to_owned(), JsonValue::String(group.clone()));
-                    if let Some(description) = description {
-                        task.insert(
-                            "description".to_owned(),
-                            JsonValue::String(description.to_owned()),
-                        );
-                    }
+                let separator = id.rfind(':').unwrap_or(0);
+                let task_project_path = if separator > 0 { &id[..separator] } else { ":" };
+                let mut task = JsonMap::new();
+                task.insert("id".to_owned(), JsonValue::String(id.clone()));
+                task.insert("label".to_owned(), JsonValue::String(id.clone()));
+                task.insert("group".to_owned(), JsonValue::String(group.clone()));
+                if let Some(description) = description {
                     task.insert(
-                        "projectPath".to_owned(),
-                        JsonValue::String(task_project_path.to_owned()),
+                        "description".to_owned(),
+                        JsonValue::String(description.to_owned()),
                     );
-                    task.insert("runnable".to_owned(), JsonValue::Bool(false));
-                    task.insert(
-                        "disabledReason".to_owned(),
-                        JsonValue::String("Task execution is not enabled yet.".to_owned()),
-                    );
-                    records.insert(id, JsonValue::Object(task));
                 }
-                continue;
+                task.insert(
+                    "projectPath".to_owned(),
+                    JsonValue::String(task_project_path.to_owned()),
+                );
+                task.insert("runnable".to_owned(), JsonValue::Bool(false));
+                task.insert(
+                    "disabledReason".to_owned(),
+                    JsonValue::String("Task execution is not enabled yet.".to_owned()),
+                );
+                records.insert(id, JsonValue::Object(task));
             }
+            continue;
         }
         if is_gradle_failure(line) {
             return gradle_error("Gradle task discovery failed.");

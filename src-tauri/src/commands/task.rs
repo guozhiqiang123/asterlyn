@@ -42,6 +42,8 @@ pub(crate) fn discover_task_artifacts(
     scan_task_artifacts(&root, &hints, &sidecar_names)
 }
 #[tauri::command]
+// Tauri injects window/application state alongside the stable command arguments.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn prepare_task_execution(
     workspace_root: String,
     request: TaskRequest,
@@ -126,6 +128,8 @@ pub(crate) fn read_task_confirmation(
 }
 
 #[tauri::command]
+// Tauri injects window/application state alongside the stable command arguments.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn start_task_execution(
     workspace_root: String,
     review_id: String,

@@ -26,6 +26,24 @@ build or test suite is not a substitute for this gate. If a published tag fails 
 creation, retain that tag as failed release evidence, land the correction on `main`, and publish a new
 patch version rather than moving the existing tag.
 
+Use the workflow's pinned toolchain explicitly for local preflight, rather than assuming the
+default Rust installation matches CI. The current gate is
+`cargo +1.98.1 clippy --workspace --locked --all-targets -- -D warnings`; run formatting with the
+same toolchain. This includes standalone plugin-host targets, not only the desktop application.
+
+The [2026-10-23 preview run](https://github.com/guozhiqiang123/asterlyn/actions/runs/39921378520)
+passed tests but failed this lint gate after diagnostic trace arguments were added to three Tauri
+commands. The `0.1.20` preflight adds scoped argument-count exceptions at those command boundaries,
+where Tauri injects runtime/window state; the command payload and behavior stay unchanged.
+It also simplifies equivalent/nested branches in the standalone Gradle task decoder so every
+workspace target passes the pinned lint policy. No workspace-wide lint exception is introduced.
+
+Local macOS preflight for `0.1.20` passed with Rust `1.98.1`: locked all-target Clippy, formatting,
+477 workspace tests (six existing environment/live-release tests ignored), version/tag consistency,
+frontend check/build, all 1,292 script tests, and standalone plugin-template verification. The hosted
+workflow still owns native Linux watcher execution and the four-target packaging/publication gate;
+local macOS results do not substitute for those jobs.
+
 Release SBOM validation derives its expected Rust manifest count from Cargo workspace metadata and
 adds the frontend manifest. Adding or removing a workspace crate must not require a second
 hard-coded package count in the workflow.

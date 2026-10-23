@@ -313,6 +313,8 @@ pub(crate) fn abandon_installed_plugin_runtime_activation(
 }
 
 #[tauri::command]
+// Tauri injects window/runtime state alongside the stable callback arguments.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn invoke_installed_plugin_callback(
     plugin_id: String,
     callback_handle: String,
