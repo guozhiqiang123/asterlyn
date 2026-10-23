@@ -45,6 +45,8 @@ path currently invokes it.
    presentation.
 6. The frontend does not invent remote Tag state. Git updates local refs first, and the existing
    authoritative repository snapshot remains the only presentation source.
+7. Remote operation lifecycle records use hashed workspace and operation identities. Failures record
+   the structured error kind and reason without storing remote URLs, credentials, or raw child output.
 
 ## Implementation plan
 
@@ -117,6 +119,8 @@ manual acceptance.
   chosen strategy, and leaves the local Tag unchanged.
 - Tag collisions have their own localized failure reason instead of being presented as a remote
   destination-policy rejection.
+- Native remote operations emit bounded `git.remote` started/completed/failed diagnostics with
+  hashed workspace and operation identities, duration, and structured failure classification.
 - Reviewed commit Push and exact single-Tag Push now use the existing four-second informational
   toast as well as the bottom status bar. Background Fetch remains silent.
 - Validation passed: 967 frontend script tests, TypeScript production build, 139 Rust unit tests,
@@ -127,6 +131,8 @@ manual acceptance.
   ignored. Its new integration case proves Update fast-forwards through an unrelated Tag collision;
   a dry run against the reported repository also succeeded for branch-only fetching while the old
   Tag-synchronizing path reproduced all three collisions.
+- Remote lifecycle diagnostics passed a native unit test that verifies started/completed events and
+  confirms the raw workspace path and operation identifier are absent from the JSONL record.
 - The verified macOS application bundle was installed to `/Applications/Asterlyn.app` and launched.
   The retained local archive is
   `target/release/bundle/macos/Asterlyn-0.1.5-local-2026-10-13-remote-tag-feedback.app.zip`
@@ -136,3 +142,5 @@ manual acceptance.
   archive is `target/release/bundle/macos/Asterlyn-0.1.19-local-2026-10-23-update-tag-conflict.app.zip`
   with SHA-256 `e7ffd239e65488bbe4fe79c795fddd6e69752ee25b4c103c55b0a4d9a1b7044c`.
 - Manual acceptance passed on 2026-10-23 for Update Current Project in `dbloodSugar_vestbag`.
+- Installed diagnostics recorded five successful branch fetches for the reported workspace in
+  509–792 ms, with no failed remote operations for that workspace.

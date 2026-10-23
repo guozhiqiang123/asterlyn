@@ -307,6 +307,9 @@ pub fn run() {
                     .join("diagnostics"),
             )?;
             diagnostics.install_panic_hook();
+            app.state::<GitOperationCoordinator>()
+                .install_diagnostics(diagnostics.clone())
+                .map_err(std::io::Error::other)?;
             diagnostics.info(
                 "host",
                 "application.starting",
