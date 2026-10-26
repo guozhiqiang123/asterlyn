@@ -45,12 +45,12 @@ use adapters::system_file_clipboard::{
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, DiagnosticsLog, GitOperationCoordinator,
-    HistoryPageCacheRegistry, PendingRepositoryWindowReservation, PendingRepositoryWindows,
-    PluginMarketplaceCoordinator, PluginProcessQueryManager, ScanRegistry, TaskManager,
-    WorkspaceEntryInspection, WorkspaceMutationCoordinator, WorkspaceMutationPreview,
-    WorkspaceReplacementDiff, WorkspaceReplacementPreview, WorkspaceReplacementRegistry,
-    WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry, WorkspaceTextSearchReport,
-    WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    HistoryPageCacheRegistry, LanguageServiceManager, PendingRepositoryWindowReservation,
+    PendingRepositoryWindows, PluginMarketplaceCoordinator, PluginProcessQueryManager,
+    ScanRegistry, TaskManager, WorkspaceEntryInspection, WorkspaceMutationCoordinator,
+    WorkspaceMutationPreview, WorkspaceReplacementDiff, WorkspaceReplacementPreview,
+    WorkspaceReplacementRegistry, WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry,
+    WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
     apply_authorized_replacement, build_plugin_host_supervisor, exact_git_repository,
     execute_workspace_mutation_plan, finalize_replacement, finalize_workspace_mutation_recovery,

@@ -1,10 +1,5 @@
 use crate::application::{ActiveWorkspaces, LanguageServiceManager};
-use asterlyn_language_service::{
-    DocumentIdentity, DocumentState, TextChange, TextPosition, TextRange,
-};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State, Window};
 
 #[derive(Debug, Serialize)]
