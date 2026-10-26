@@ -27,6 +27,7 @@ import {
   validateInstalledPluginRuntimeDiagnostics,
   validatePluginRuntimeValue,
 } from "./plugin-runtime.ts";
+import { assertLanguageServiceResultEnvelope, assertLanguageServiceReview } from "./validate-language-service.ts";
 
 export function validateDesktopResult<Command extends DesktopCommandName>(
   command: Command,
@@ -47,6 +48,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
       throw new Error(`${command}: process query results require the feature-scoped validator.`);
     case "pluginToolOperationResult":
       throw new Error(`${command}: plugin tool-operation results require the feature-scoped validator.`);
+    case "languageServiceReview":
+      assertLanguageServiceReview(value, command);
+      break;
+    case "languageServiceResultEnvelope":
+      assertLanguageServiceResultEnvelope(value, command);
+      break;
     case "void":
       assert(value === null || value === undefined, command, "expected no response body");
       break;
