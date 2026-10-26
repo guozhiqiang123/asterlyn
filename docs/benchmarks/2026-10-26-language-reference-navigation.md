@@ -48,15 +48,29 @@ overlays, references paging beyond the bound and location history remain outside
 
 ## Resource evidence
 
-One final local run took 4.95 seconds in Chromium and 8.01 seconds in WebKit for the full interaction
+One final local run took 4.47 seconds in Chromium and 4.70 seconds in WebKit for the full interaction
 suite, including twenty additional navigation/picker cycles per engine. Chromium retained JS heap
-increased 228,392 bytes after GC over those cycles. Other runs under compilation load were slower;
+increased 220,188 bytes after GC over those cycles. Other runs under compilation load were slower;
 these fixture samples do not establish a per-click production latency or aggregate memory ceiling.
 Each popup is bounded, issues no requests while filtering and releases external listeners/DOM on
 close. Request logs carry kind/outcome/count only; paths, symbols and source content are excluded.
 
 ## Native delivery
 
-Fresh native signed package, actual-project probe, canonical installation and saved-icon quit/reopen
-are pending. Exact identities and remaining startup-data issues will be recorded after delivery.
-The user's manual acceptance and Windows/Linux desktop interaction acceptance are not claimed.
+Clean source `5775daf360e60ca3a0451d067e8b2d1791d69b8a` was freshly built and whole-bundle ad-hoc
+signed. Strict verification confirms `dev.asterlyn.desktop`, sealed resources version 2 and app
+version 0.1.20. Actual-project native startup and installed logs confirm one healthy LSP contribution
+and one language provider. Canonical replacement preserves the application root, retains the old
+installation as a verified ZIP and verifies the installed executable against the accepted source.
+Initial saved-icon launch and quit/reopen both record frontend readiness with the same build.
+[Machine-readable evidence](2026-10-26-language-reference-install.json).
+
+Build ID: `5775daf360e60ca3a0451d067e8b2d1791d69b8a-clean-1792997473967`.
+Archive: [`Asterlyn-0.1.20-references-20261026-macos.app.zip`](../../target/release/bundle/macos/Asterlyn-0.1.20-references-20261026-macos.app.zip),
+19,989,142 bytes, SHA-256 `3250e6f11f9d85c3b6708e466dbc7fd9eaaa4d982f2d21ea4f5f89f3d2554ff7`.
+Installed executable SHA-256: `3439956a4f5a63f233b78f0bbd7048cb26b120e80bb8e23ceb5f1f1970525ee4`.
+
+The final installed session retains two pre-existing `existing_project_directories` invalidPath
+startup-data errors; neither frontend readiness nor provider activation failed. This iteration does
+not claim to fix the separate recent-project bound issue. The user's manual acceptance and
+Windows/Linux desktop interaction acceptance are not claimed.

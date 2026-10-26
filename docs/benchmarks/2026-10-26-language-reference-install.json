@@ -1,0 +1,65 @@
+{
+  "version": "0.1.20",
+  "sourceCodeRevision": "5775daf360e60ca3a0451d067e8b2d1791d69b8a",
+  "buildId": "5775daf360e60ca3a0451d067e8b2d1791d69b8a-clean-1792997473967",
+  "archive": "target/release/bundle/macos/Asterlyn-0.1.20-references-20261026-macos.app.zip",
+  "archiveBytes": 19989142,
+  "archiveSha256": "3250e6f11f9d85c3b6708e466dbc7fd9eaaa4d982f2d21ea4f5f89f3d2554ff7",
+  "executableSha256": "3439956a4f5a63f233b78f0bbd7048cb26b120e80bb8e23ceb5f1f1970525ee4",
+  "installedExecutableSha256": "3439956a4f5a63f233b78f0bbd7048cb26b120e80bb8e23ceb5f1f1970525ee4",
+  "strictSignatureVerification": true,
+  "bundleIdentifier": "dev.asterlyn.desktop",
+  "sealedResourcesVersion": 2,
+  "installedRootIdentityPreserved": true,
+  "backupFormat": "verified ZIP",
+  "backupSha256": "953ecbf69677e9e3f3be206d9a540329fa0724d0c3370797b0d5af909eda75c0",
+  "launchVia": "icon-bookmark",
+  "firstLaunch": {
+    "pid": 46348,
+    "session": "session-1792997625616-46348-0",
+    "buildId": "5775daf360e60ca3a0451d067e8b2d1791d69b8a-clean-1792997473967",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "reopen": {
+    "pid": 46447,
+    "session": "session-1792997627427-46447-0",
+    "buildId": "5775daf360e60ca3a0451d067e8b2d1791d69b8a-clean-1792997473967",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "nativeProbe": {
+    "nativePid": 46045,
+    "session": "session-1792997590215-46045-0",
+    "buildId": "5775daf360e60ca3a0451d067e8b2d1791d69b8a-clean-1792997473967",
+    "frontendReady": true,
+    "pluginId": "dev.asterlyn.lsp",
+    "pluginVersion": "0.1.0",
+    "nativeContributionCount": 1,
+    "registeredLanguageProviders": 1,
+    "runtimeStatus": "knownGood",
+    "lspErrors": 0,
+    "sourceFilesModified": false
+  },
+  "installedLspActivation": true,
+  "installedLanguageProviders": 1,
+  "installedStartupErrors": [
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    },
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    }
+  ],
+  "scriptTestsPassed": 1320,
+  "nativeLanguageTestsPassed": 4,
+  "transportTestsPassed": 10,
+  "renderedEngines": [
+    "Chromium",
+    "WebKit"
+  ],
+  "retainedChromiumHeapDeltaOver20Cycles": 220188,
+  "manualUiAcceptance": false
+}

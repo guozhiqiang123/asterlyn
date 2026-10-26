@@ -1,6 +1,7 @@
 # Declaration and reference selection — 2026-10-26
 
-Status: implemented; automated gates pass, native delivery pending. Baseline: `7a71d92`.
+Status: implemented; automated and native local delivery gates pass. User manual acceptance and
+Windows/Linux desktop interaction acceptance remain open. Baseline: `7a71d92`.
 Initial plan commit: `1f4d58a`, before implementation.
 
 The user asks to choose among multiple references and align navigation with Android Studio and
@@ -62,4 +63,10 @@ Peek, Android Studio's full Find Usages tool window, or its complete keymap.
   references/Find Usages, filtering without new requests, mouse/keyboard selection, viewport bounds,
   512-result clipping feedback, stale intermediate responses and all prior definition checks.
 - Actual native actor proves declarations are excluded from references; real Asterlyn `app.ts`
-  call → declaration → references loop passes without saving source. Native delivery follows.
+  call → declaration → references loop passes without saving source. Four host language tests and
+  ten transport/actual-server tests pass with the actual server environment explicitly enabled.
+- Source implementation `33afe95` and rendered/real-project acceptance `5775daf` are separately
+  committed. Clean `5775daf` was freshly packaged and strictly signed/verified. The actual-project
+  native probe and canonical installation confirm provider registration, unchanged app root,
+  executable digest equality and both saved-icon launches. Backups are verified ZIPs only.
+  [Exact acceptance and package evidence](../benchmarks/2026-10-26-language-reference-navigation.md).
