@@ -660,6 +660,7 @@ export class AsterlynApp {
     const languageWorkspace = () => this.windowSession.workspace.state.root ? { root: this.windowSession.workspace.state.root, generation: this.windowSession.generation } : null;
     this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({
       registry: this.pluginTasksRuntime.contributionRegistry,
+      diagnostic: (fields) => diagnostics.report("info", "language.provider.changed", `providers=${fields.providerCount};generation=${fields.workspaceGeneration ?? "none"}`),
       native: createTauriLanguageServiceBridge((review) => this.dialogRuntime.confirm(languageExecutionConfirmation(review, this.localization.catalog.locale === "zh-CN"))),
       workspace: languageWorkspace,
       document: (handle) => { const tab = textTab(this.editorState.session, handle.tabId); return tab?.status === "ready" && tab.document.repositoryRoot === this.windowSession.workspace.state.root ? { workspacePath: tab.document.workspacePath, readOnly: tab.document.readOnly === true || this.state.loading, loadEpoch: tab.loadEpoch } : null; },

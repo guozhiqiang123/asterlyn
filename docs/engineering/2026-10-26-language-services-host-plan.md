@@ -101,3 +101,11 @@ evidence. Remote hosting and arbitrary executable/configuration providers requir
 - Resource measurements and limitations are recorded in the sibling plugin's
   `docs/acceptance-2026-10-26.md`; host acceptance is recorded in
   [the host evidence](../benchmarks/2026-10-26-language-services.md).
+
+## Installed-app activation regression
+
+The first installed-project test exposed a missing `languageService` branch in desktop result
+validation, despite the declared type and projector supporting it. The exact regression and
+correction are recorded in [the activation fix evidence](../benchmarks/2026-10-26-language-services-activation-fix.md).
+The native-helper acceptance now traverses the production frontend validator and runs in both CI
+quality workflows. Actual Asterlyn workspace features are tested without saving the overlay.

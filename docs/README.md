@@ -221,3 +221,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md`](benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md) — independent Hello and Android GitHub Releases, production discovery/download/admission, pinned inspector/runtime parity, and remaining installed-app MKT8D gates.
 
 - [`benchmarks/2026-10-26-language-services.md`](benchmarks/2026-10-26-language-services.md) — TS/JS host/plugin automated, resource and native-install acceptance evidence.
+
+- [`benchmarks/2026-10-26-language-services-activation-fix.md`](benchmarks/2026-10-26-language-services-activation-fix.md) — desktop validation regression, immutable quarantine repair and actual-project LSP acceptance.

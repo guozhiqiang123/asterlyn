@@ -11,6 +11,7 @@ export interface LanguageServicesRuntimeOptions {
   readonly bind: (factory: EditorLanguageServicePortFactory | null) => void;
   readonly reportError: (error: unknown) => void;
   readonly navigate: (location: EditorLanguageServiceLocation) => void;
+  readonly diagnostic?: (fields: { providerCount: number; workspaceGeneration: number | null }) => void;
 }
 const LANGUAGES: Readonly<Record<string, string>> = { ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
 export function workspaceFileUri(root: string, path: string): string | null {
@@ -37,6 +38,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     const next = JSON.stringify([workspace, options.registry.list().filter((item) => item.kind === "language-service").map((item) => [item.qualifiedId, item.pluginVersion])]);
     if (key === next) return;
     key = next; factory.reconcile();
+    options.diagnostic?.({ providerCount: options.registry.list().filter((item) => item.kind === "language-service").length, workspaceGeneration: workspace?.generation ?? null });
     // A new binding identity refreshes existing cached editors once when admission/activation changes.
     options.bind((handle) => factory(handle));
   };

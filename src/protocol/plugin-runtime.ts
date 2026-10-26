@@ -22,12 +22,10 @@ const MAX_RUNTIME_VALUE_DEPTH = 32;
 const MAX_CALLBACKS_PER_RESULT = 64;
 
 export type PluginRuntimeTheme = "light" | "dark" | "highContrast";
-export type ExternalPluginContributionKind =
-  | "command"
-  | "taskProvider"
-  | "executionTargetProvider"
-  | "runConfigurationProvider"
-  | "languageService";
+export const EXTERNAL_PLUGIN_CONTRIBUTION_KINDS = [
+  "command", "taskProvider", "executionTargetProvider", "runConfigurationProvider", "languageService",
+] as const;
+export type ExternalPluginContributionKind = typeof EXTERNAL_PLUGIN_CONTRIBUTION_KINDS[number];
 
 export interface ExternalPluginContribution {
   readonly kind: ExternalPluginContributionKind;
@@ -130,10 +128,7 @@ export function validateInstalledPluginActivation(
   for (const raw of activation.contributions) {
     const contribution = record(raw, command);
     assert(
-      contribution.kind === "command" ||
-      contribution.kind === "taskProvider" ||
-      contribution.kind === "executionTargetProvider" ||
-      contribution.kind === "runConfigurationProvider",
+      EXTERNAL_PLUGIN_CONTRIBUTION_KINDS.some((kind) => kind === contribution.kind),
       command,
       "invalid runtime contribution kind",
     );

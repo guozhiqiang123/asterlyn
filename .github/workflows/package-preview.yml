@@ -70,6 +70,9 @@ jobs:
           TAURI_ENV_DEBUG: "true"
         run: node scripts/prepare-plugin-host-sidecar.mjs
 
+      - name: Verify LSP package desktop activation
+        run: npm run test:lsp:activation
+
       - name: Test Rust workspace
         run: cargo test --workspace --locked
 

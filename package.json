@@ -20,7 +20,8 @@
     "test:push-route:rendered": "node scripts/test-push-route-rendered.mjs",
     "test:native:rendered": "node scripts/smoke-native-app.mjs --require-rendered target/release/asterlyn",
     "test:native:rendered:build": "tauri build --no-bundle && npm run test:native:rendered",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:lsp:activation": "node scripts/test-lsp-package-activation.mjs"
   },
   "dependencies": {
     "@asterlyn/plugin-sdk": "file:packages/plugin-sdk",

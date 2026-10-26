@@ -106,6 +106,24 @@ test("external plugin runtime results validate transactional contributions", () 
   );
 });
 
+test("desktop activation accepts every supported contribution including the native LSP tag", () => {
+  const activation = {
+    pluginId: "dev.asterlyn.lsp", pluginVersion: "0.1.0",
+    packageDigest: `sha256:${"a".repeat(64)}`, sessionId: "lsp-session",
+    contributions: [{ kind: "languageService", id: "typescript-javascript", callbacks: {}, payload: {
+      kind: "language-service", id: "typescript-javascript", label: "TypeScript / JavaScript",
+      serverId: "typescript", languageIds: ["typescript", "javascript"], extensions: [".ts", ".js"], rootMarkers: ["package.json"],
+    } }],
+  };
+  assert.equal(validateDesktopResult("activate_installed_plugin_runtime", activation), activation);
+  for (const kind of ["command", "taskProvider", "executionTargetProvider", "runConfigurationProvider", "languageService"]) {
+    assert.equal(validateDesktopResult("activate_installed_plugin_runtime", { ...activation, contributions: [{ ...activation.contributions[0], kind }] }).contributions[0].kind, kind);
+  }
+  for (const kind of ["language-service", "arbitraryServer", "", null]) {
+    assert.throws(() => validateDesktopResult("activate_installed_plugin_runtime", { ...activation, contributions: [{ ...activation.contributions[0], kind }] }), /invalid runtime contribution kind/u);
+  }
+});
+
 test("plugin installation schema 2 validates admission content binding", () => {
   const snapshot = {
     schemaVersion: 2,
