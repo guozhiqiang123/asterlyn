@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.11.0" as const;
+export const PLUGIN_SDK_VERSION = "1.12.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -560,7 +560,7 @@ export interface SdkLanguageServiceContribution {
   readonly kind: "language-service";
   readonly id: string;
   readonly label: string;
-  readonly serverId: "typescript";
+  readonly serverId: "typescript" | "rust-analyzer";
   readonly languageIds: readonly string[];
   readonly extensions: readonly string[];
   readonly rootMarkers: readonly string[];
