@@ -97,6 +97,10 @@ export function createEditorLanguageServicePort(
 }
 
 class Session {
+  private readonly info: Identity;
+  private readonly native: Native;
+  private readonly reportError: (error: unknown) => void;
+  private readonly removed: () => void;
   private sessionId: string | null = null;
   private review: unknown = null;
   private approved = false;
@@ -115,12 +119,7 @@ class Session {
       readonly diagnostics: readonly EditorLanguageServiceDiagnostic[];
     }) => void
   >();
-  constructor(
-    private readonly info: Identity,
-    private readonly native: Native,
-    private readonly reportError: (error: unknown) => void,
-    private readonly removed: () => void,
-  ) {}
+  constructor(info: Identity, native: Native, reportError: (error: unknown) => void, removed: () => void) { this.info = info; this.native = native; this.reportError = reportError; this.removed = removed; }
   port(
     handle: EditorLanguageServiceHandle,
     navigate?: (location: EditorLanguageServiceLocation) => void,
