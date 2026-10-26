@@ -37,7 +37,7 @@ try {
   assert.equal(completed.result, "answer", `completion result missing: ${completed.text}`);
   const completionText = await page.evaluate(() => window.languageServiceFixture.editor.activeEntry().view.state.doc.toString());
   assert.match(completionText, /answer/, "completion text edit was applied");
-  await page.evaluate(() => window.languageServiceFixture.diagnosticsListener?.({ handle: { tabId: "tab-a", path: "/repo/main.ts", loadEpoch: 1 }, version: 2, diagnostics: [{ message: "test diagnostic", severity: 1, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } } }] }));
+  await page.evaluate(() => window.languageServiceFixture.diagnosticsListener?.({ handle: { tabId: "tab-a", path: "/repo/main.ts", loadEpoch: 1 }, version: 3, diagnostics: [{ message: "test diagnostic", severity: 1, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } } }] }));
   await page.waitForSelector(".cm-lintRange", { timeout: 10000 });
   await page.evaluate(() => window.languageServiceFixture.editor.setReadOnly(true));
   assert.equal(await page.evaluate(() => window.languageServiceFixture.events.at(-1).type), "close", "read-only transition closes the service");
