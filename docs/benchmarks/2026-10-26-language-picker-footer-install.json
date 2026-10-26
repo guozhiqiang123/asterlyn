@@ -1,0 +1,59 @@
+{
+  "version": "0.1.20",
+  "sourceCodeRevision": "7db7fbf02a0cce365e0c4e30dadde1df1edc34c9",
+  "buildId": "7db7fbf02a0cce365e0c4e30dadde1df1edc34c9-clean-1793001771959",
+  "archive": "target/release/bundle/macos/Asterlyn-0.1.20-picker-footer-20261026-macos.app.zip",
+  "archiveBytes": 19990871,
+  "archiveSha256": "1a68839e1fb260c93afa695c3eb87e923a3fe67537557e2bc053952845e795a5",
+  "executableSha256": "7b6e24f7c35b7dcddf7e94ba9066c00ff7e950254ec0b987f847dcab967d1fd4",
+  "installedExecutableSha256": "7b6e24f7c35b7dcddf7e94ba9066c00ff7e950254ec0b987f847dcab967d1fd4",
+  "strictSignatureVerification": true,
+  "bundleIdentifier": "dev.asterlyn.desktop",
+  "sealedResourcesVersion": 2,
+  "installedRootIdentityPreserved": true,
+  "backupFormat": "verified ZIP",
+  "backupSha256": "0c4a540213bd56c3929d826265f36a2015753f90f9b53f3cd179b287e3488b3b",
+  "firstLaunch": {
+    "pid": 71664,
+    "session": "session-1793001916246-71664-0",
+    "buildId": "7db7fbf02a0cce365e0c4e30dadde1df1edc34c9-clean-1793001771959",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "reopen": {
+    "pid": 71767,
+    "session": "session-1793001918000-71767-0",
+    "buildId": "7db7fbf02a0cce365e0c4e30dadde1df1edc34c9-clean-1793001771959",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "nativeProbe": {
+    "nativePid": 71514,
+    "session": "session-1793001908323-71514-0",
+    "buildId": "7db7fbf02a0cce365e0c4e30dadde1df1edc34c9-clean-1793001771959",
+    "frontendReady": true,
+    "pluginId": "dev.asterlyn.lsp",
+    "pluginVersion": "0.1.0",
+    "nativeContributionCount": 1,
+    "registeredLanguageProviders": 1,
+    "runtimeStatus": "knownGood",
+    "lspErrors": 0,
+    "sourceFilesModified": false
+  },
+  "installedStartupErrors": [
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    },
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    }
+  ],
+  "ownershipStyleTestsPassed": 34,
+  "renderedEngines": [
+    "Chromium",
+    "WebKit"
+  ],
+  "manualUiAcceptance": false
+}

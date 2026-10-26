@@ -84,5 +84,11 @@ filtering, selection, keyboard and resource bounds are unchanged.
 
 Typecheck, production build and 34 ownership/style checks pass. The existing Chromium/WebKit real
 gesture suite passes, retaining no-match/512-result warning coverage and keyboard selection.
-No new tests are added for this reversible presentation refinement. Native delivery follows the
-existing canonical signing, replacement and saved-icon restart process; exact evidence follows.
+No new tests are added for this reversible presentation refinement. Fresh clean source `7db7fbf`
+passed complete bundle signing/strict verification, actual-project probe, canonical replacement
+and both saved-icon launches. The app root is preserved and installed executable matches the
+accepted artifact; backups are verified ZIPs. Existing recent-directory startup errors remain
+outside this UI refinement. [Exact delivery evidence](2026-10-26-language-picker-footer-install.json).
+
+Archive: [`Asterlyn-0.1.20-picker-footer-20261026-macos.app.zip`](../../target/release/bundle/macos/Asterlyn-0.1.20-picker-footer-20261026-macos.app.zip),
+19,990,871 bytes, SHA-256 `1a68839e1fb260c93afa695c3eb87e923a3fe67537557e2bc053952845e795a5`.
