@@ -921,7 +921,7 @@ mod tests {
             "language/status",
             serde_json::json!({"type":"Starting"}),
         )];
-        for index in 0..600 {
+        for index in 0..500 {
             events.push(notification(
                 "language/progressReport",
                 serde_json::json!({"id":index,"workDone":index}),
@@ -957,11 +957,11 @@ mod tests {
         assert_eq!(retained.last(), Some(&events[events.len() - 2]));
         assert!(retained.contains(&notification(
             "language/progressReport",
-            serde_json::json!({"id":599,"workDone":599})
+            serde_json::json!({"id":499,"workDone":499})
         )));
         assert!(retained.contains(&notification(
             "language/status",
-            serde_json::json!({"type":"ProjectStatus","count":599})
+            serde_json::json!({"type":"ProjectStatus","count":499})
         )));
         process.stop().unwrap();
     }

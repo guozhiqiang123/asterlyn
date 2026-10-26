@@ -25,7 +25,7 @@
 ## 验证
 
 - 核心 crate 16 项单元测试通过；新增 7 项 mailbox 测试及 1 项真实管道/reader/初始化缓冲测试。
-  用 20,000 条合并候选消息验证响应、诊断和 ServiceReady 不丢失；另用 1,200 条子进程通知覆盖启动路径。
+  用 20,000 条合并候选消息验证响应、诊断和 ServiceReady 不丢失；另用 1,000 条子进程通知覆盖启动路径。
   未知状态/请求/响应的容量、8 KiB 状态上限、满队列终止、断开唤醒和 FIFO 均有回归。
 - 显式设置真实工具环境后，3 项真实 TS/Rust transport 测试通过。TS 本项目跨文件定义/引用、hover、补全和
   dirty 诊断约 1.29 秒；Rust 跨 crate、引用、补全、dirty target +1 行与版本化诊断约 13.00 秒。
@@ -37,5 +37,24 @@
 
 ## 本机交付
 
-代码阶段提交后按本地规范重新构建、完整 bundle 签名、真实本项目日志验收和规范覆盖安装；完成后的包摘要与
-图标退出重开记录另补。当前文档不把待执行的原生交付写成通过，也不把安装基础改造当 Android 功能已开放。
+运行代码提交 `771c46a` 已重新构建并完整 ad-hoc 签名，严格 bundle 验证与 ZIP CRC 通过。
+[机器可读交付证据](2026-10-26-jvm-transport-delivery.json) 记录原生日志、图标启动和资源样本。
+
+- ZIP：`target/release/bundle/macos/Asterlyn-0.1.21-macos.app.zip`，20,022,135 B。
+- ZIP SHA-256：`34eb1a7a07768639dd27b4ab1b0cc5134ed0a94fa8f1de1a9ec1dc6dfd07e64b`。
+- 安装 executable SHA-256：`c4551940f76eea3566db70215055cb179dc2593972dee6e201987f5d305d2615`，与验收包一致。
+- buildId：`771c46af06f14b9934acb8ec9b63257e0f05c819-clean-1793018912194`；版本仍为 0.1.21，未发布远端。
+- 真实 Asterlyn 项目启动日志记录 frontend-ready、2 个已有语言 provider，语言服务错误 0。
+  两条既有 `existing_project_directories` 错误仍存在，未计作语言错误，也不声称修复。
+- 规范安装器只交换 `/Applications/Asterlyn.app/Contents`；根 inode `203606126` 保持。
+  旧包保存在已验证 ZIP；无展开的 `.app.backup`。保存图标首次启动和退出重开均记录 frontend-ready。
+  首次启动达到 frontend-ready 后即退出，当时 provider 尚未完成注册；重开后日志确认 2 个已有 provider。
+  没有通过测试端口替真实应用批准执行权限。
+- 重开后根进程单次 RSS 112,816 KiB、CPU 0.1%；不含 WebKit/helper/语言进程，
+  不是整树、峰值或长期内存预算。JVM 服务尚未进入产品，本次不存在 JVM 内存达标结论。
+- 测试 worktree 已删除；本次创建的独立 Gradle daemon 已清理，未停止用户的共享 daemon。
+  清理时两个原 Android 项目 Git 状态均无变更。
+
+交付收尾仅把 `cfg(test)` 洪峰夹具从 600 轮降至 500 轮（1,000 条通知），使单个测试子进程参数低于 Linux
+128 KiB 限制；16 项单元测试再次通过。该调整和文档不改变上述已安装运行代码。Linux/Windows 原生、Android
+编辑器交互、只读 SDK/依赖来源和混合语言一致性仍未验收，安装基础改造不表示 Android 功能已开放。

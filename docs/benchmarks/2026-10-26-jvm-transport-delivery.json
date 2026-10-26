@@ -1,0 +1,80 @@
+{
+  "codeCommit": "771c46af06f14b9934acb8ec9b63257e0f05c819",
+  "version": "0.1.21",
+  "artifact": "target/release/bundle/macos/Asterlyn-0.1.21-macos.app.zip",
+  "bytes": 20022135,
+  "sha256": "34eb1a7a07768639dd27b4ab1b0cc5134ed0a94fa8f1de1a9ec1dc6dfd07e64b",
+  "executableSha256": "c4551940f76eea3566db70215055cb179dc2593972dee6e201987f5d305d2615",
+  "strictBundleVerification": true,
+  "zipCrcVerified": true,
+  "previousZipSha256": "d8fd1a9d19df881ba5c72afcc8c2bdcfbbdaba4c094d8f209cb302afca089002",
+  "applicationRoot": {
+    "rootIdentityPreserved": true,
+    "inode": "203606126",
+    "device": "16777234"
+  },
+  "nativeSmoke": {
+    "session": "session-1793019038699-75683-0",
+    "pid": 75683,
+    "buildId": "771c46af06f14b9934acb8ec9b63257e0f05c819-clean-1793018912194",
+    "frontendReady": true,
+    "registeredProviders": 2,
+    "languageErrors": [],
+    "otherErrors": [
+      {
+        "event": "command.failed",
+        "command": "existing_project_directories"
+      },
+      {
+        "event": "command.failed",
+        "command": "existing_project_directories"
+      }
+    ]
+  },
+  "installedSessions": [
+    {
+      "kind": "firstLaunch",
+      "pid": 75939,
+      "session": "session-1793019104410-75939-0",
+      "buildId": "771c46af06f14b9934acb8ec9b63257e0f05c819-clean-1793018912194",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark",
+      "registeredProviders": 0,
+      "errorEvents": [
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        },
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        }
+      ]
+    },
+    {
+      "kind": "reopen",
+      "pid": 76048,
+      "session": "session-1793019106076-76048-0",
+      "buildId": "771c46af06f14b9934acb8ec9b63257e0f05c819-clean-1793018912194",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark",
+      "registeredProviders": 2,
+      "errorEvents": [
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        },
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        }
+      ]
+    }
+  ],
+  "rootProcessSample": {
+    "rssKiB": 112816,
+    "cpuPercent": 0.1,
+    "elapsed": "06:08",
+    "scope": "single root process; one sample; excludes WebKit/plugin children and language-server peak"
+  }
+}
