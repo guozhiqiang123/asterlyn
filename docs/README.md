@@ -55,6 +55,7 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Delivery
 
+- [`engineering/2026-10-26-language-definition-navigation-plan.md`](engineering/2026-10-26-language-definition-navigation-plan.md) — Ctrl/Command-click definition navigation, target identity, feedback and real gesture acceptance.
 - [`engineering/2026-10-26-language-services-host-plan.md`](engineering/2026-10-26-language-services-host-plan.md) — parallel host/plugin implementation stages, frozen TS/JS contract and integration acceptance gates.
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
