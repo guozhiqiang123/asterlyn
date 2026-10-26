@@ -558,6 +558,7 @@ fn project_contributions(
             "provider" => ContributionKind::TaskProvider,
             "execution-target-provider" => ContributionKind::ExecutionTargetProvider,
             "run-configuration-provider" => ContributionKind::RunConfigurationProvider,
+            "language-service" => ContributionKind::LanguageService,
             _ => {
                 return Err(PluginEngineError::Contract(format!(
                     "unsupported contribution kind: {kind}"

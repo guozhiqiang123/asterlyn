@@ -34,6 +34,7 @@ contributions remain available.
 | `workspaceState` | Read/write bounded non-secret plugin state for the current workspace | `host.workspace.state` | Plugin/workspace namespace only; no repository file write |
 | `executionTargets` | Contribute transient execution targets such as attached devices | `host.execution-targets.read` | Bounded metadata; target validity is rechecked before use |
 | `runConfigurations` | Contribute configuration metadata and staged run plans | No additional metadata permission; each task/tool phase needs its own admitted permission | The host never guesses an ambiguous configuration or target |
+| `languageServices` | Contribute metadata for the host-owned TypeScript language-service profile | `host.language-services.execute` | Fixed packaged server/resources only; no arbitrary executable, argv, environment, or plugin handle |
 | `notifications` | Publish semantic info/success/warning/error by localization key | `host.notifications.publish` | Host owns resolved text, source attribution, timing, accessibility and dismissal |
 
 SDK `1.10.0` retains legacy candidate types only so migration tooling can diagnose old source. The
@@ -57,6 +58,7 @@ and raw filesystem/process/network APIs are not implicit capabilities.
 | `host.workspace.state` | Store bounded non-secret strings under plugin/workspace keys | Credentials, global state, repository files, or cross-plugin access |
 | `host.execution-targets.read` | Discover and describe bounded transient targets | Device mutation by itself; install/launch still requires admitted tool operations |
 | `host.notifications.publish` | Request one host-rendered localized notification | HTML, actions, custom duration, styling, notification history, or observation |
+| `host.language-services.execute` | Use the admitted TypeScript language-service profile for eligible TS/JS documents | Arbitrary servers, project-local TypeScript/plugins, shell access, file writes, or workspace edits |
 
 ## Runtime methods
 

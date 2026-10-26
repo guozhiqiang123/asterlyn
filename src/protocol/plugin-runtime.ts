@@ -26,7 +26,8 @@ export type ExternalPluginContributionKind =
   | "command"
   | "taskProvider"
   | "executionTargetProvider"
-  | "runConfigurationProvider";
+  | "runConfigurationProvider"
+  | "languageService";
 
 export interface ExternalPluginContribution {
   readonly kind: ExternalPluginContributionKind;

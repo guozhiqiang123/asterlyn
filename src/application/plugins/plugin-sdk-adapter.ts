@@ -174,6 +174,7 @@ export function adaptSdkContribution(contribution: SdkPluginContribution): Plugi
       snapshot: () => adaptRunConfigurationSnapshot(contribution.snapshot()),
     };
   }
+  if (contribution.kind === "language-service") return contribution;
   return {
     ...contribution,
     snapshot: contribution.snapshot,

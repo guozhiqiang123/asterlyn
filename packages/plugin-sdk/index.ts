@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.10.0" as const;
+export const PLUGIN_SDK_VERSION = "1.11.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -555,11 +555,22 @@ export interface SdkPluginProviderContribution {
   readonly invalidate?: (invalidation: SdkWorkspaceInvalidation) => void | Promise<void>;
   readonly run?: (taskId: string) => SdkTaskRunPlan | null | Promise<SdkTaskRunPlan | null>;
 }
+/** Host-owned metadata selecting a fixed, admitted language server profile. */
+export interface SdkLanguageServiceContribution {
+  readonly kind: "language-service";
+  readonly id: string;
+  readonly label: string;
+  readonly serverId: "typescript";
+  readonly languageIds: readonly string[];
+  readonly extensions: readonly string[];
+  readonly rootMarkers: readonly string[];
+}
 export type SdkPluginContribution =
   | SdkPluginCommandContribution
   | SdkPluginProviderContribution
   | SdkExecutionTargetProviderContribution
-  | SdkRunConfigurationProviderContribution;
+  | SdkRunConfigurationProviderContribution
+  | SdkLanguageServiceContribution;
 export interface SdkPluginActivationContext {
   readonly identity: SdkWorkspaceIdentity;
   readonly evidence: readonly SdkWorkspaceEvidence[];

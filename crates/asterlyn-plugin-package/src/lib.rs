@@ -34,6 +34,7 @@ pub const SUPPORTED_CAPABILITIES: &[&str] = &[
     "toolOperations",
     "workspaceCatalog",
     "workspaceState",
+    "languageServices",
 ];
 pub const SUPPORTED_PERMISSIONS: &[&str] = &[
     "host.execution-targets.read",
@@ -45,6 +46,7 @@ pub const SUPPORTED_PERMISSIONS: &[&str] = &[
     "host.tool.execute",
     "host.workspace.catalog.read",
     "host.workspace.state",
+    "host.language-services.execute",
 ];
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 const MANIFEST_PATH: &str = "manifest.json";

@@ -452,6 +452,7 @@ class RemoteContributionProjection {
       case "taskProvider": return this.projectTaskProvider(payload);
       case "executionTargetProvider": return this.projectExecutionTargetProvider(payload);
       case "runConfigurationProvider": return this.projectRunConfigurationProvider(payload);
+      case "languageService": return this.projectLanguageService(payload);
     }
   }
 
@@ -531,6 +532,21 @@ class RemoteContributionProjection {
       ...(this.has("run") ? { run: (configurationId: string, targetId?: string) => this.session.invoke(this.source, "run", [configurationId, targetId]) } : {}),
     };
     return adaptSdkContribution(contribution as unknown as SdkPluginContribution);
+  }
+
+  private async projectLanguageService(payload: RuntimeRecord): Promise<PluginContribution> {
+    const languageIds = Array.isArray(payload.languageIds) ? payload.languageIds.filter((value): value is string => typeof value === "string") : [];
+    const extensions = Array.isArray(payload.extensions) ? payload.extensions.filter((value): value is string => typeof value === "string") : [];
+    const rootMarkers = Array.isArray(payload.rootMarkers) ? payload.rootMarkers.filter((value): value is string => typeof value === "string") : [];
+    return adaptSdkContribution({
+      kind: "language-service",
+      id: this.source.id,
+      label: requiredText(payload.label, "language service label"),
+      serverId: "typescript",
+      languageIds,
+      extensions,
+      rootMarkers,
+    } as unknown as SdkPluginContribution);
   }
 
   private listen(listener: () => void): Disposable {

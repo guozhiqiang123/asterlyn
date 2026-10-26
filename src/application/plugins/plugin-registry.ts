@@ -560,6 +560,16 @@ function validateContribution(contribution: PluginContribution): void {
         (contribution.run !== undefined && typeof contribution.run !== "function"))) {
       throw new Error(`Invalid provider contribution: ${contribution.id}`);
     }
+    if (contribution.kind === "language-service" &&
+      (!contribution.label.trim() || contribution.serverId !== "typescript" ||
+        !Array.isArray(contribution.languageIds) || contribution.languageIds.length === 0 ||
+        !Array.isArray(contribution.extensions) || contribution.extensions.length === 0 ||
+        !Array.isArray(contribution.rootMarkers) || contribution.rootMarkers.length === 0 ||
+        contribution.languageIds.some((value) => typeof value !== "string" || !value.trim()) ||
+        contribution.extensions.some((value) => typeof value !== "string" || !/^\.[^\\/]+$/.test(value)) ||
+        contribution.rootMarkers.some((value) => typeof value !== "string" || !value.trim()))) {
+      throw new Error(`Invalid language service contribution: ${contribution.id}`);
+    }
     if (contribution.kind === "execution-target-provider") validateExecutionTargetProvider(contribution);
     if (contribution.kind === "run-configuration-provider") validateRunConfigurationProvider(contribution);
   } catch (error) {

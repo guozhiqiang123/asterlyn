@@ -261,6 +261,7 @@ pub enum ContributionKind {
     TaskProvider,
     ExecutionTargetProvider,
     RunConfigurationProvider,
+    LanguageService,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

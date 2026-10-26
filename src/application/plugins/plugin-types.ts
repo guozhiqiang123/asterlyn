@@ -13,6 +13,7 @@ import type {
   SdkWorkspaceStateCapability,
   SdkExecutionTargetProviderContribution,
   SdkRunConfigurationProviderContribution,
+  SdkLanguageServiceContribution,
   SdkPluginLocalization,
   SdkPluginNotificationCapability,
   SdkPluginNotificationRequest,
@@ -60,6 +61,7 @@ export type PluginProcessQueriesCapability = SdkProcessQueriesCapability;
 export type PluginWorkspaceStateCapability = SdkWorkspaceStateCapability;
 export type PluginExecutionTargetProviderContribution = SdkExecutionTargetProviderContribution;
 export type PluginRunConfigurationProviderContribution = SdkRunConfigurationProviderContribution;
+export type PluginLanguageServiceContribution = SdkLanguageServiceContribution;
 export type PluginTaskExecutionRequest = SdkTaskExecutionRequest;
 export type PluginTaskAuthorizationDescriptor = SdkTaskAuthorizationDescriptor;
 export type PluginNotificationRequest = SdkPluginNotificationRequest;
@@ -165,7 +167,8 @@ export type PluginContribution =
   | PluginCommandContribution
   | PluginProviderContribution
   | PluginExecutionTargetProviderContribution
-  | PluginRunConfigurationProviderContribution;
+  | PluginRunConfigurationProviderContribution
+  | PluginLanguageServiceContribution;
 
 export interface PluginActivationContext {
   readonly identity: PluginWorkspaceIdentity;
