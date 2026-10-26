@@ -104,6 +104,7 @@ class Session {
   private sessionId: string | null = null;
   private review: unknown = null;
   private approved = false;
+  private denied = false;
   private docs = new Map<
     string,
     { version: number; text: string; queue: Promise<void> }
@@ -179,14 +180,16 @@ class Session {
   }
   private async ensure(): Promise<string> {
     if (this.sessionId) return this.sessionId;
+    if (this.denied) throw new Error("language-service execution was denied");
     if (!this.approved) {
       this.review = await this.native.prepare(
         this.info.workspaceRoot,
         this.info.pluginId,
       );
       this.approved = await this.native.confirm(this.review);
-      if (!this.approved)
+      if (!this.approved) { this.denied = true;
         throw new Error("language-service execution was denied");
+      }
     }
     this.sessionId = await this.native.start(
       this.info.workspaceRoot,
