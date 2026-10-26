@@ -1,3 +1,4 @@
+import { LanguageServiceIndexingError } from "../../src/protocol/editor-language-service.ts";
 import "../../src/styles.css";
 import "../../src/features/files-editor/language-location-picker.css";
 import { TextEditor } from "../../src/text-editor.ts";
@@ -34,6 +35,7 @@ const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: ()
   request(_handle, method, params, version) {
     if (!["textDocument/definition", "textDocument/references"].includes(method)) return Promise.resolve(null);
     state.requests.push({ method, params, version });
+    if (state.mode === "indexing") return Promise.reject(new LanguageServiceIndexingError());
     if (method === "textDocument/references") {
       if (state.mode === "deferredReferences") return new Promise((resolve) => state.pending.push(resolve));
       if (state.mode === "noReferences") return Promise.resolve([]);

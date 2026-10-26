@@ -1,9 +1,14 @@
 //! Window/workspace-bound language actors. No manager lock is held while performing server I/O.
+#[path = "language_service_diagnostics.rs"]
+mod diagnostics;
 use asterlyn_language_service::{
     DocumentIdentity, DocumentState, JsonRpcId, JsonRpcMessage, LanguageServiceProcess,
-    ServerEvent, TextChange, TextPosition, TypeScriptServerProfile, terminate_process_tree,
-    utf16_offset,
+    RustServerProfile, ServerEvent, TextChange, TextPosition, TypeScriptServerProfile,
+    terminate_process_tree, utf16_offset,
 };
+use diagnostics::DiagnosticProfile;
+#[cfg(test)]
+use diagnostics::rust_diagnostic_item;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
@@ -36,6 +41,16 @@ pub(crate) struct LanguagePackage {
     pub root: PathBuf,
     pub node: PathBuf,
     pub node_digest: String,
+    pub rust: Option<RustServerProfile>,
+}
+impl LanguagePackage {
+    pub fn server_id(&self) -> &'static str {
+        if self.rust.is_some() {
+            "rust-analyzer"
+        } else {
+            "typescript"
+        }
+    }
 }
 struct Review {
     subject: LanguageSubject,
@@ -46,6 +61,7 @@ struct Session {
     subject: LanguageSubject,
     control: SyncSender<ActorCommand>,
     pid: u32,
+    profile: &'static str,
 }
 #[derive(Default)]
 pub(crate) struct LanguageServiceManager {
@@ -188,7 +204,25 @@ impl LanguageServiceManager {
             .starting
             .lock()
             .map_err(|_| "language startup lock unavailable")?;
-        if !starting.insert(subject.owner.clone()) {
+        let startup_key = format!(
+            "{}:{}:{}",
+            subject.owner,
+            subject.activation,
+            package.server_id()
+        );
+        let active_count = self
+            .sessions
+            .lock()
+            .map_err(|_| "language session lock unavailable")?
+            .values()
+            .filter(|session| {
+                session.subject.owner != subject.owner || session.profile != package.server_id()
+            })
+            .count();
+        if active_count + starting.len() >= 8 {
+            return Err("language service session limit reached".into());
+        }
+        if !starting.insert(startup_key.clone()) {
             return Err("language service is already starting for this window".into());
         }
         drop(starting);
@@ -205,7 +239,7 @@ impl LanguageServiceManager {
         }
         let _startup = Startup {
             owners: &self.starting,
-            owner: subject.owner.clone(),
+            owner: startup_key,
         };
         let closing = self.closing.clone();
         let allowed: Arc<dyn Fn() -> bool + Send + Sync> =
@@ -213,11 +247,28 @@ impl LanguageServiceManager {
         if !allowed() {
             return Err("language service authority was revoked".into());
         }
-        self.cancel_owner(&subject.owner);
-        let mut process = LanguageServiceProcess::start(&TypeScriptServerProfile {
-            package_root: package.root,
-            node: package.node,
-        })
+        let profile = package.server_id();
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.retain(|_, session| {
+                if session.subject.owner == subject.owner && session.profile == profile {
+                    let _ = session.control.try_send(ActorCommand::Stop);
+                    terminate_process_tree(session.pid);
+                    false
+                } else {
+                    true
+                }
+            });
+            if sessions.len() >= 8 {
+                return Err("language service session limit reached".into());
+            }
+        }
+        let mut process = match package.rust.as_ref() {
+            Some(rust) => LanguageServiceProcess::start_rust(rust),
+            None => LanguageServiceProcess::start(&TypeScriptServerProfile {
+                package_root: package.root,
+                node: package.node,
+            }),
+        }
         .map_err(safe_error)?;
         let pid = process.pid();
         let root_uri = url::Url::from_directory_path(&subject.root)
@@ -242,6 +293,7 @@ impl LanguageServiceManager {
                     subject: subject.clone(),
                     control,
                     pid,
+                    profile,
                 },
             );
         let actor_id = id.clone();
@@ -443,6 +495,7 @@ fn document_language(path: &Path) -> Option<&'static str> {
         "tsx" => Some("typescriptreact"),
         "js" | "mjs" | "cjs" => Some("javascript"),
         "jsx" => Some("javascriptreact"),
+        "rs" => Some("rust"),
         _ => None,
     }
 }
@@ -454,6 +507,15 @@ fn actor(
     allowed: Arc<dyn Fn() -> bool + Send + Sync>,
     emit: Arc<dyn Fn(LanguageServiceEvent) + Send + Sync>,
 ) {
+    let rust = process.profile_id() == "rust-analyzer";
+    let pull = rust && process.supports_diagnostic_pull();
+    let diagnostics = DiagnosticProfile::new(rust, pull);
+    let request_timeout = if rust {
+        Duration::from_secs(30)
+    } else {
+        REQUEST_TIMEOUT
+    };
+    let mut rust_ready = !rust;
     let mut documents = HashMap::<String, DocumentState>::new();
     let mut pending = BTreeMap::<u64, Pending>::new();
     let mut diagnostic_pending = HashMap::<u64, (String, i64, Instant)>::new();
@@ -481,13 +543,14 @@ fn actor(
                                 if let Some(body) = response
                                     .result
                                     .as_ref()
-                                    .and_then(|v| v.get("body"))
+                                    .and_then(|v| v.get(diagnostics.body_key()))
                                     .and_then(Value::as_array)
                                 {
                                     for diagnostic in
                                         body.iter().take(512 - job.items.len().min(512))
                                     {
-                                        if let Some(item) = diagnostic_item(&doc.text, diagnostic) {
+                                        if let Some(item) = diagnostics.item(&doc.text, diagnostic)
+                                        {
                                             job.items.push(item);
                                         }
                                     }
@@ -529,6 +592,30 @@ fn actor(
                     }
                 }
                 Ok(Some(ServerEvent::Message(JsonRpcMessage::Notification(notification)))) => {
+                    if rust
+                        && notification.method == "experimental/serverStatus"
+                        && let Some(params) = notification.params.as_ref()
+                        && let (Some(health), Some(quiescent)) = (
+                            params.get("health").and_then(Value::as_str),
+                            params.get("quiescent").and_then(Value::as_bool),
+                        )
+                        && ["ok", "warning", "error"].contains(&health)
+                    {
+                        rust_ready = quiescent && health != "error";
+                        emit(LanguageServiceEvent {
+                            session_id: id.clone(),
+                            kind: if health == "error" {
+                                "degraded"
+                            } else if rust_ready {
+                                "ready"
+                            } else {
+                                "indexing"
+                            },
+                            uri: None,
+                            version: None,
+                            diagnostics: None,
+                        });
+                    }
                     if notification.method == "textDocument/publishDiagnostics"
                         && let Some(params) = notification.params
                         && let (Some(uri), Some(version), Some(items)) = (
@@ -544,7 +631,9 @@ fn actor(
                             kind: "diagnostics",
                             uri: Some(uri.into()),
                             version: Some(version),
-                            diagnostics: Some(Value::Array(items.clone())),
+                            diagnostics: Some(Value::Array(
+                                diagnostics.push_items(&documents[uri].text, items),
+                            )),
                         });
                     }
                 }
@@ -585,6 +674,9 @@ fn actor(
             .map(|(uri, job)| (uri.clone(), job.version))
             .collect::<Vec<_>>();
         for (uri, version) in due {
+            if diagnostics.query_count() == 0 {
+                continue;
+            }
             if !documents
                 .get(&uri)
                 .is_some_and(|doc| doc.version == version)
@@ -599,18 +691,23 @@ fn actor(
             };
             if let Some(job) = diagnostic_jobs.get_mut(&uri) {
                 job.due = Instant::now() + Duration::from_secs(86400);
-                job.remaining = 2;
+                job.remaining = diagnostics.query_count();
                 job.failed = false;
                 job.items.clear();
             }
-            // Fixed read-only profile queries. No command name or argument is supplied by the plugin/renderer.
-            for command in ["semanticDiagnosticsSync", "syntacticDiagnosticsSync"] {
-                match process.request("workspace/executeCommand",Some(json!({"command":"typescript.tsserverRequest","arguments":[command,{"file":file,"includeLinePosition":true},{"isAsync":false,"expectsResult":true}]}))) {
-                    Ok(number)=>{diagnostic_pending.insert(number,(uri.clone(),version,Instant::now()+REQUEST_TIMEOUT));},
-                    Err(_)=>break 'session,
+            for (method, params) in diagnostics.requests(&uri, &file) {
+                match process.request(method, Some(params)) {
+                    Ok(number) => {
+                        diagnostic_pending.insert(
+                            number,
+                            (uri.clone(), version, Instant::now() + request_timeout),
+                        );
+                    }
+                    Err(_) => break 'session,
                 }
             }
         }
+
         let command = match receiver.recv_timeout(Duration::from_millis(10)) {
             Ok(c) => c,
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
@@ -628,6 +725,7 @@ fn actor(
                 let result = (|| {
                     let path = document_path(&subject.root, &uri)?;
                     if document_language(&path) != Some(language.as_str())
+                        || (language == "rust") != rust
                         || version != 1
                         || text.len() > MAX_DOCUMENT_BYTES
                         || documents.len() >= MAX_DOCUMENTS
@@ -763,6 +861,9 @@ fn actor(
             } => {
                 let result = (|| {
                     let doc = documents.get(&uri).ok_or("language document is not open")?;
+                    if rust && !rust_ready {
+                        return Err("Rust language services are loading this project. Try navigation again shortly.".into());
+                    }
                     if doc.version != version
                         || request_id.is_empty()
                         || request_id.len() > 128
@@ -793,7 +894,7 @@ fn actor(
                                 external: request_id,
                                 uri,
                                 version,
-                                deadline: Instant::now() + REQUEST_TIMEOUT,
+                                deadline: Instant::now() + request_timeout,
                                 reply,
                             },
                         );
@@ -831,39 +932,6 @@ fn actor(
     });
 }
 
-fn diagnostic_item(text: &str, value: &Value) -> Option<Value> {
-    let point = |value: &Value| -> Option<TextPosition> {
-        Some(TextPosition {
-            line: u32::try_from(value.get("line")?.as_u64()?.checked_sub(1)?).ok()?,
-            character: u32::try_from(value.get("offset")?.as_u64()?.checked_sub(1)?).ok()?,
-        })
-    };
-    let start = point(value.get("startLocation").or_else(|| value.get("start"))?)?;
-    let end = point(value.get("endLocation").or_else(|| value.get("end"))?)?;
-    let start_offset = utf16_offset(text, &start).ok()?;
-    let end_offset = utf16_offset(text, &end).ok()?;
-    if start_offset > end_offset {
-        return None;
-    }
-    let message = value
-        .get("text")
-        .or_else(|| value.get("message"))
-        .and_then(Value::as_str)
-        .unwrap_or("TypeScript diagnostic")
-        .chars()
-        .take(8192)
-        .collect::<String>();
-    let severity = match value.get("category").and_then(Value::as_str) {
-        Some("error") => 1,
-        Some("warning") => 2,
-        Some("suggestion") => 4,
-        _ => 3,
-    };
-    Some(
-        json!({"range":{"start":{"line":start.line,"character":start.character},"end":{"line":end.line,"character":end.character}},"message":message,"severity":severity,"source":"typescript","code":value.get("code").and_then(Value::as_i64)}),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -882,6 +950,7 @@ mod tests {
             root: "/package".into(),
             node: "/node".into(),
             node_digest: "n".into(),
+            rust: None,
         };
         let id = manager.prepare(subject.clone(), package.clone()).unwrap();
         assert!(
@@ -952,6 +1021,7 @@ mod tests {
             root: package.path().to_owned(),
             node: PathBuf::from(node),
             node_digest: "test".into(),
+            rust: None,
         };
         let id = manager
             .start(owner.clone(), identity, Arc::new(|| true), Arc::new(|_| {}))
@@ -1053,6 +1123,7 @@ mod tests {
             root: PathBuf::from(package_root),
             node: PathBuf::from(node),
             node_digest: "fixture".into(),
+            rust: None,
         };
         let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let allowed_alive = alive.clone();
@@ -1244,3 +1315,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "language_service_rust_tests.rs"]
+mod rust_tests;

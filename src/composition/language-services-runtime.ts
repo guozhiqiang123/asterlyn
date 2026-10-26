@@ -21,7 +21,7 @@ export interface LanguageServicesRuntimeOptions {
   readonly approvalDiagnostic?: (event: import("../protocol/language-service.ts").LanguageServiceApprovalEvent) => void;
   readonly diagnostic?: (fields: { providerCount: number; workspaceGeneration: number | null }) => void;
 }
-const LANGUAGES: Readonly<Record<string, string>> = { ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
+const LANGUAGES: Readonly<Record<string, string>> = { rs: "rust", ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
 export function workspaceFileUri(root: string, path: string): string | null {
   if (path.startsWith("/") || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === "..")) return null;
   const normalized = root.replace(/\\/gu, "/").replace(/\/$/u, "");
@@ -37,13 +37,13 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     const languageId = extension ? LANGUAGES[extension] : undefined;
     const providers = options.registry.list().filter((entry) => entry.kind === "language-service" && languageId && entry.languageIds.includes(languageId) && entry.extensions.includes(`.${extension}`));
     if (providers.length !== 1 || !languageId) return null;
-    const provider = providers[0]!; const uri = workspaceFileUri(workspace.root, document.workspacePath);
-    return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion } : null;
+    const provider = providers[0]!; if (provider.kind !== "language-service") return null; const uri = workspaceFileUri(workspace.root, document.workspacePath);
+    return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion, serverId: provider.serverId } : null;
   }, options.native, options.reportError, options.navigate, options.definitionDiagnostic, options.approvalDiagnostic);
   let key = "";
   const refresh = () => {
     const workspace = options.workspace();
-    const next = JSON.stringify([workspace, options.registry.list().filter((item) => item.kind === "language-service").map((item) => [item.qualifiedId, item.pluginVersion])]);
+    const next = JSON.stringify([workspace, options.registry.list().filter((item) => item.kind === "language-service").map((item) => [item.qualifiedId, item.pluginVersion, item.serverId])]);
     if (key === next) return;
     key = next; factory.reconcile((info) => workspace?.root === info.workspaceRoot && workspace.generation === info.workspaceGeneration
       && !options.registry.list().some((item) => item.kind === "language-service" && item.pluginId === info.pluginId && item.pluginVersion !== info.providerVersion));
@@ -55,6 +55,15 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   return { refresh, revoke: (pluginId: string) => { factory.revoke(pluginId); }, dispose: () => { release(); options.bind(null); factory.dispose(); } };
 }
 export function languageExecutionConfirmation(review: Parameters<NativeLanguageServiceBridge["confirm"]>[0], chinese: boolean): ApplicationConfirmationRequest {
+  if (review.serverId === "rust-analyzer") return chinese ? {
+    title: "启用 Rust 语言服务？",
+    message: `插件 ${review.pluginId} ${review.pluginVersion} 将运行本机 Rust 1.98.1 的 rust-analyzer，并通过 Cargo 读取当前项目模型。该进程具有当前用户的系统权限；项目和用户的 Cargo 配置也会影响执行。\n\n首版使用离线模式，关闭构建脚本、过程宏和保存时 Cargo check；宏生成代码的分析可能不完整。不会自动安装依赖或工具。\n\n执行程序：${review.executableIdentity}\n插件校验：${review.packageDigest}\n\n当前窗口的项目会话内单独记住 Rust 的选择。重启、切换项目或工具身份变化后重新确认。`,
+    confirmLabel: "启用 Rust 语言服务", cancelLabel: "暂不启用",
+  } : {
+    title: "Enable Rust language services?",
+    message: `Plugin ${review.pluginId} ${review.pluginVersion} will run local Rust 1.98.1 rust-analyzer and read this project's model through Cargo. It has your user account's system permissions; project and user Cargo configuration can also affect execution.\n\nThis initial profile runs offline with build scripts, procedural macros and Cargo check on save disabled. Generated code analysis may be incomplete. Tools and dependencies are never installed automatically.\n\nExecutable: ${review.executableIdentity}\nPackage: ${review.packageDigest}\n\nRemember Rust's separate choice for this project's session. Restarting, changing projects or a changed tool identity requires confirmation again.`,
+    confirmLabel: "Enable Rust language services", cancelLabel: "Not now",
+  };
   return chinese ? {
     title: "启用 TypeScript / JavaScript 语言服务？",
     message: `插件 ${review.pluginId} ${review.pluginVersion} 将通过本机 Node.js 运行随包附带的语言服务，并读取当前项目与打开的源文件。该进程具有当前用户的系统权限。\n\n执行程序：${review.executableIdentity}\n插件校验：${review.packageDigest}\n\n当前窗口的项目会话内记住此选择，刷新和切换文件不会重复询问。重启应用、切换项目或插件／Node 身份变化后需要重新确认。`,

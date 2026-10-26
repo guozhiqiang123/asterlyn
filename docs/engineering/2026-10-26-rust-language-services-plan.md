@@ -1,10 +1,11 @@
 # Rust 语言服务兼容计划
 
-- 日期：2026-10-26；状态：**仅规划，未实现**。
-- 宿主基线：`c79fa95`；当前可用插件为 `dev.asterlyn.lsp` 0.1.0、SDK 1.11.0，只提供 TS/JS。
+- 日期：2026-10-26；状态：**R0/R1 与 R2 工作区功能已实现，覆盖安装验收进行中；R3/R4/R5 待实施**。
+- 宿主基线：`c79fa95`；规划时的可用插件为 `dev.asterlyn.lsp` 0.1.0、SDK 1.11.0，仅 TS/JS；本次交付为 0.2.0 / SDK 1.12.0。
 - 目标：用 rust-analyzer 为普通 Rust 源码提供可用的定义/引用跳转、悬停、基础补全和诊断，
   与现有 TS/JS 同时工作。先在本项目真实 Cargo workspace 验收，再扩展其他 Rust 项目。
-- 本次仅修改计划文档；不安装工具、不改运行代码/SDK/插件包、不打包覆盖应用或发布远端。
+- 用户在发现 `.rs` 无法跳转后授权继续实施。当前交付目标先闭环本项目内 Rust 定义/引用导航，
+  不把 R3 外部源码或 R4 Cargo/宏增强提前标为完成。允许本机准备组件、开发和本地打包；不发布远端。
 
 ## 1. 架构选择
 
@@ -24,7 +25,7 @@ SDK 若需拓展 profile 枚举，以增量 minor 版本规划，暂拟 1.12.0�
 Rust 插件包必须提高最低宿主版本至首个通过双语言验收的版本；不得沿用当前 0.1.13 下限让旧宿主
 接收到不认识的 Rust descriptor。当前 TS/JS 0.1.0 包及其校验值保持兼容。
 
-## 2. 已核实的阻塞项
+## 2. 规划时核实的阻塞项（基线）
 
 | 位置 | 当前限制 | Rust 接入前必须完成 |
 | --- | --- | --- |
@@ -172,7 +173,16 @@ formatting、macro 虚拟文档不靠“服务已经启动”顺带开启。R4 �
 
 ## 9. 计划检查记录
 
-已审阅当前宿主/插件边界及 Rust 官方资料；只读查询了本机组件状态。文档中的后续能力均未实现，
+### 实施契约 R0
+
+采用 SDK 1.12.0、宿主 0.1.21、插件 0.2.0 作为首个双 profile 开发版本；仍不发布 Release。
+Rust profile 固定工具链 1.98.1，包内 `servers/rust-analyzer/profile.json` 仅声明固定策略
+`cargo-offline-no-build-v1`，宿主逐字段校验并核验资源摘要。Rust 初期不运行 build scripts、
+proc-macro 或保存即 check；用户须先批准包含 Cargo 模型访问/执行可能性的 Rust 会话。
+此 profile 与 TS 的进程、授权和版本时钟独立。先通过真实本项目导航，再覆盖安装供人工验收。
+
+**最初规划时的检查记录（历史，不代表实施后的状态）：**
+已审阅当时宿主/插件边界及 Rust 官方资料；只读查询了本机组件状态。当时的后续能力均未实现，
 未安装/下载工具、未执行 Cargo 分析或构建脚本、未改变当前应用。实施前 R0 要固定实际 server
 版本/摘要与协议探针证据；上游主分支文档只能说明方向，不能替代选定版本的验收。
 
@@ -182,3 +192,20 @@ formatting、macro 虚拟文档不靠“服务已经启动”顺带开启。R4 �
 [ra-capabilities]: https://rust-lang.github.io/rust-analyzer/src/rust_analyzer/lsp/capabilities.rs.html
 [rustup-env]: https://rust-lang.github.io/rustup/environment-variables.html
 [cargo-config]: https://doc.rust-lang.org/cargo/reference/config.html
+
+## 10. 本次实施结果
+
+SDK 1.12.0 的精确开发制品已提交为 `0543766`。宿主 0.1.21 / 插件 0.2.0 已打通
+Rust 固定工具链解析、独立 review/consent/session、Cargo 工作区导航、悬停、基础补全和版本化原生诊断。
+纯 TS 的 0.1.0 旧包继续被新宿主接受；0.2.0 的最低宿主为 0.1.21。
+
+实际探针还发现并修复两个不能靠 descriptor 测试发现的问题：关闭 Cargo autoreload 导致初始模型
+不可用；点击时先清下划线会移除 Rust 语法 span，再做命中检测导致手势丢失。后者现在先命中再重绘，
+并通过真实 Rust 源文件 + 真实服务器 + Chromium/WebKit Ctrl-click 验收。
+
+诊断 profile 拆入独立模块，主 actor 负责通用版本/取消/生命周期；只投影固定状态和计数。
+索引中的原生拒绝映射为专用 UI 状态，不再伪装为空定义。当前边界仍是工作区 catalog：
+标准库/依赖的只读导航 R3、构建脚本/宏策略 R4、跨平台完整验收 R5 均未完成。
+
+功能、性能/内存样本、已知限制和最终安装记录见
+[实施验收](../benchmarks/2026-10-26-rust-language-services.md)。

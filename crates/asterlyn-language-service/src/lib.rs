@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+mod rust_profile;
+pub use rust_profile::RustServerProfile;
 
 pub const MAX_HEADER_BYTES: usize = 8 * 1024;
 pub const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
@@ -259,7 +261,9 @@ pub struct LanguageServiceProcess {
     session: LanguageServiceSession<QueuedWriter>,
     events: Receiver<ServerEvent>,
     buffered: Vec<JsonRpcMessage>,
-    tsdk: PathBuf,
+    initialization_options: Value,
+    profile: &'static str,
+    capabilities: Value,
     stopped: bool,
 }
 
@@ -281,13 +285,25 @@ impl LanguageServiceProcess {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
-        let mut child = command
+        command
             .arg(profile.package_root.join(TYPESCRIPT_SERVER_ENTRY))
             .arg("--stdio")
             .current_dir(&profile.package_root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+        Self::spawn_command(
+            command,
+            "typescript",
+            serde_json::json!({"tsserver":{"path":profile.package_root.join(TYPESCRIPT_IMPL_ENTRY),"useSyntaxServer":"never"},"plugins":[],"disableAutomaticTypingAcquisition":true,"maxTsServerMemory":512}),
+        )
+    }
+    fn spawn_command(
+        mut command: Command,
+        profile: &'static str,
+        initialization_options: Value,
+    ) -> Result<Self, SessionError> {
+        let mut child = command
             .spawn()
             .map_err(|error| SessionError::Process(format!("start language server: {error}")))?;
         let stdin = child
@@ -303,33 +319,33 @@ impl LanguageServiceProcess {
         if let Some(stderr) = child.stderr.take() {
             std::thread::spawn(move || drain_stderr(stderr));
         }
-        let tsdk = profile.package_root.join(TYPESCRIPT_IMPL_ENTRY);
         Ok(Self {
             child,
             session: LanguageServiceSession::new(QueuedWriter::new(stdin)),
             events,
             buffered: Vec::new(),
-            tsdk,
+            initialization_options,
+            profile,
+            capabilities: Value::Null,
             stopped: false,
         })
     }
 
     pub fn initialize(&mut self, root_uri: &str) -> Result<(), SessionError> {
-        let tsdk = self.session_tsdk_path();
         let params = serde_json::json!({
             "processId": null, "rootUri": root_uri,
             "capabilities": {
                 "general": {"positionEncodings": ["utf-16"]},
+                "experimental": {"serverStatusNotification": self.profile == "rust-analyzer"},
                 "textDocument": {"publishDiagnostics": {"versionSupport": true},
                     "hover": {"contentFormat": ["plaintext"]},
                     "completion": {"completionItem": {"snippetSupport": false}},
+                    "diagnostic": {"dynamicRegistration":false},
                     "definition": {"linkSupport": false}},
                 "workspace": {"applyEdit": false, "configuration": false,
                     "workspaceEdit": {"documentChanges": false}}
             },
-            "initializationOptions": {"tsserver": {"path": tsdk, "useSyntaxServer": "never"},
-                "plugins": [], "disableAutomaticTypingAcquisition": true,
-                "maxTsServerMemory": 512}
+            "initializationOptions": self.initialization_options
         });
         let response = self.request_wait("initialize", Some(params), Duration::from_secs(10))?;
         if response.error.is_some()
@@ -344,11 +360,22 @@ impl LanguageServiceProcess {
                 "language server initialization failed".into(),
             ));
         }
+        self.capabilities = response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("capabilities"))
+            .cloned()
+            .unwrap_or(Value::Null);
         self.notify("initialized", Some(serde_json::json!({})))
     }
 
-    fn session_tsdk_path(&self) -> String {
-        self.tsdk.to_string_lossy().into_owned()
+    pub fn profile_id(&self) -> &'static str {
+        self.profile
+    }
+    pub fn supports_diagnostic_pull(&self) -> bool {
+        self.capabilities
+            .get("diagnosticProvider")
+            .is_some_and(|v| !v.is_null() && *v != Value::Bool(false))
     }
 
     pub fn request(&mut self, method: &str, params: Option<Value>) -> Result<u64, SessionError> {

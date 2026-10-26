@@ -3,6 +3,7 @@ mod commit_file_restore;
 mod diagnostics;
 mod git_operations;
 mod git_recovery;
+mod language_rust;
 mod language_service;
 mod plugin_cache;
 mod plugin_marketplace;

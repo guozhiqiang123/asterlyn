@@ -37,8 +37,8 @@ export interface DesktopCommandMap {
   invoke_installed_plugin_callback: { args: { pluginId: string; callbackHandle: string; operation: string; payload: PluginRuntimeValue; } & { diagnosticTraceId?: string }; result: PluginRuntimeValue };
   deactivate_installed_plugin_runtime: { args: { pluginId: string; }; result: void };
   read_installed_plugin_runtime_diagnostics: { args: { pluginId: string; }; result: InstalledPluginRuntimeDiagnostics };
-  prepare_language_service: { args: { workspaceRoot: string; pluginId: string; }; result: LanguageServiceReview };
-  start_language_service: { args: { workspaceRoot: string; reviewId: string; }; result: string };
+  prepare_language_service: { args: { workspaceRoot: string; pluginId: string; serverId?: string; }; result: LanguageServiceReview };
+  start_language_service: { args: { workspaceRoot: string; reviewId: string; serverId?: string; }; result: string };
   open_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; languageId: string; version: number; text: string; }; result: void };
   change_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; version: number; changes: Array<LanguageServiceTextChange>; }; result: void };
   close_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; }; result: void };

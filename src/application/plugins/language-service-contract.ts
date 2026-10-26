@@ -6,11 +6,12 @@ const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs"
 /** Validate the complete declaration before projection; malformed metadata is never repaired. */
 export function validateLanguageServiceContribution(value: unknown): asserts value is PluginLanguageServiceContribution {
   const item = value as Partial<PluginLanguageServiceContribution> | null;
-  if (!item || item.kind !== "language-service" || item.serverId !== "typescript" ||
+  const rust = item?.serverId === "rust-analyzer";
+  if (!item || (!rust && item.serverId !== "typescript") ||
     typeof item.label !== "string" || item.label.length > 120 || !item.label.trim() ||
     /[\u0000-\u001f\u007f]/u.test(item.label) ||
-    !validList(item.languageIds, 4, (entry) => LANGUAGE_IDS.has(entry)) ||
-    !validList(item.extensions, 8, (entry) => EXTENSIONS.has(entry)) ||
+    !validList(item.languageIds, 4, (entry) => rust ? entry === "rust" : LANGUAGE_IDS.has(entry)) ||
+    !validList(item.extensions, 8, (entry) => rust ? entry === ".rs" : EXTENSIONS.has(entry)) ||
     !validList(item.rootMarkers, 8, (entry) => /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/u.test(entry))) {
     throw new Error("Invalid language service contribution");
   }

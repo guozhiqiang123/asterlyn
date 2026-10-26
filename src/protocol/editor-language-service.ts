@@ -36,3 +36,8 @@ export interface EditorLanguageServicePort {
 }
 
 export type EditorLanguageServicePortFactory = (handle: EditorLanguageServiceHandle) => EditorLanguageServicePort | null;
+
+/** A host-owned loading state, distinct from a successful empty symbol result. */
+export class LanguageServiceIndexingError extends Error {
+  constructor() { super("Language services are indexing this project."); this.name = "LanguageServiceIndexingError"; }
+}

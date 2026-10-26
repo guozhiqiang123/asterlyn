@@ -1,6 +1,6 @@
 import type { EditorLanguageServiceDiagnostic } from "./editor-language-service.ts";
 export interface LanguageServiceReview {
-  readonly reviewId: string; readonly pluginId: string; readonly serverId: "typescript";
+  readonly reviewId: string; readonly pluginId: string; readonly serverId: "typescript" | "rust-analyzer";
   readonly pluginVersion: string; readonly packageDigest: string; readonly resourceDigest: string;
   readonly executableIdentity: string; readonly expiresAt: number;
 }
@@ -14,13 +14,13 @@ export interface LanguageServiceApprovalEvent {
 }
 
 export interface LanguageServiceEvent {
-  readonly sessionId: string; readonly kind: "diagnostics" | "terminated";
+  readonly sessionId: string; readonly kind: "diagnostics" | "terminated" | "indexing" | "ready" | "degraded";
   readonly uri?: string; readonly version?: number; readonly diagnostics?: readonly EditorLanguageServiceDiagnostic[];
 }
 export interface NativeLanguageServiceBridge {
-  prepare(root: string, pluginId: string): Promise<LanguageServiceReview>;
+  prepare(root: string, pluginId: string, serverId?: "typescript" | "rust-analyzer"): Promise<LanguageServiceReview>;
   confirm(review: LanguageServiceReview): Promise<boolean>;
-  start(root: string, reviewId: string): Promise<string>;
+  start(root: string, reviewId: string, serverId?: "typescript" | "rust-analyzer"): Promise<string>;
   open(root: string, session: string, uri: string, language: string, version: number, text: string): Promise<void>;
   change(root: string, session: string, uri: string, version: number, changes: readonly { range: null; text: string }[]): Promise<void>;
   close(root: string, session: string, uri: string): Promise<void>;

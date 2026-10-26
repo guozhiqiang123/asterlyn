@@ -363,3 +363,15 @@ function plugin(id, activate) {
     activate,
   };
 }
+
+test("Rust profile accepts only Rust languages and suffixes alongside TypeScript", () => {
+  const owner = { id: "dev.asterlyn.lsp", version: "0.2.0" };
+  const registry = new PluginContributionRegistry();
+  const rust = { kind: "language-service", id: "rust", label: "Rust", serverId: "rust-analyzer", languageIds: ["rust"], extensions: [".rs"], rootMarkers: ["Cargo.toml"] };
+  const release = registry.registerExternalBatch(owner, [languageService(), rust]);
+  assert.equal(registry.list().length, 2); release.dispose();
+  for (const patch of [{ languageIds: ["typescript"] }, { extensions: [".ts"] }, { rootMarkers: ["../Cargo.toml"] }, { serverId: "rustup" }]) {
+    assert.throws(() => registry.registerExternalBatch(owner, [languageService(), { ...rust, ...patch }]));
+    assert.equal(registry.list().length, 0);
+  }
+});

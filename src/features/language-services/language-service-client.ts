@@ -3,10 +3,11 @@ import type { EditorDefinitionEvent, EditorLanguageServiceDiagnostic, EditorLang
 export interface LanguageDocumentIdentity {
   readonly workspaceRoot: string; readonly workspaceGeneration: number; readonly uri: string;
   readonly languageId: string; readonly pluginId: string; readonly providerVersion?: string;
+  readonly serverId?: "typescript" | "rust-analyzer";
 }
 export type { NativeLanguageServiceBridge, LanguageServiceEvent } from "../../protocol/language-service.ts";
 import type { NativeLanguageServiceBridge, LanguageServiceEvent, LanguageServiceApprovalEvent } from "../../protocol/language-service.ts";
-export type LanguageConsentScope = Pick<LanguageDocumentIdentity, "workspaceRoot" | "workspaceGeneration" | "pluginId" | "providerVersion">;
+export type LanguageConsentScope = Pick<LanguageDocumentIdentity, "workspaceRoot" | "workspaceGeneration" | "pluginId" | "providerVersion" | "serverId">;
 export type LanguageServiceFactory = EditorLanguageServicePortFactory & { dispose(): void; reconcile(retainConsent?: (identity: LanguageConsentScope) => boolean): void; revoke(pluginId: string): void };
 interface Consent { readonly scope: LanguageConsentScope; approvedIdentity: string | null; denied: boolean; }
 type Listener = Parameters<EditorLanguageServicePort["subscribeDiagnostics"]>[0];
@@ -17,7 +18,7 @@ interface Document {
 }
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const handleKey = (h: EditorLanguageServiceHandle) => JSON.stringify([h.tabId, h.path, h.loadEpoch]);
-const sessionKey = (i: LanguageDocumentIdentity) => JSON.stringify([i.workspaceRoot, i.workspaceGeneration, i.pluginId, i.providerVersion]);
+const sessionKey = (i: LanguageDocumentIdentity) => JSON.stringify([i.workspaceRoot, i.workspaceGeneration, i.pluginId, i.providerVersion, i.serverId ?? "typescript"]);
 const validSnapshot = (s: EditorLanguageServiceSnapshot) => Number.isSafeInteger(s.version) && s.version > 0 && s.text.length <= MAX_TEXT_BYTES && new TextEncoder().encode(s.text).length <= MAX_TEXT_BYTES;
 
 /** Owns current overlays, ordered synchronization and result identity independently of editor UI. */
@@ -42,7 +43,7 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
       if (!consent) {
         if (consents.size >= 32) { reportError(new Error("Language consent scope limit reached")); return null; }
         consent = {
-          scope: { workspaceRoot: info.workspaceRoot, workspaceGeneration: info.workspaceGeneration, pluginId: info.pluginId, providerVersion: info.providerVersion },
+          scope: { workspaceRoot: info.workspaceRoot, workspaceGeneration: info.workspaceGeneration, pluginId: info.pluginId, providerVersion: info.providerVersion, serverId: info.serverId },
           approvedIdentity: null, denied: false,
         };
         consents.set(key, consent);
@@ -126,7 +127,8 @@ class Session {
     if (this.sessionId) return this.sessionId;
     if (this.starting) return this.starting;
     this.starting = (async () => {
-      const review = await this.native.prepare(this.info.workspaceRoot, this.info.pluginId);
+      const review = await this.native.prepare(this.info.workspaceRoot, this.info.pluginId, this.info.serverId ?? "typescript");
+      if (review.serverId !== (this.info.serverId ?? "typescript")) throw Error("Language execution profile changed");
       const identity = JSON.stringify([review.pluginId, review.serverId, review.pluginVersion, review.packageDigest, review.resourceDigest, review.executableIdentity]);
       if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
       if (this.consent.approvedIdentity !== identity) {
@@ -136,7 +138,7 @@ class Session {
         if (!approved) { this.consent.denied = true; this.approval({ outcome: "declined" }); return null; }
         this.consent.approvedIdentity = identity; this.approval({ outcome: "approved" });
       } else this.approval({ outcome: "reused" });
-      const session = await this.native.start(this.info.workspaceRoot, review.reviewId);
+      const session = await this.native.start(this.info.workspaceRoot, review.reviewId, this.info.serverId ?? "typescript");
       if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) { await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); return null; }
       this.sessionId = session; return session;
     })().finally(() => { this.starting = null; });

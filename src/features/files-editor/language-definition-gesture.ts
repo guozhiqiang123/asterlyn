@@ -1,3 +1,4 @@
+import { LanguageServiceIndexingError } from "../../protocol/editor-language-service.ts";
 import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import type { LanguageEditorContext } from "./language-service-editor.ts";
 import { isCurrentSymbolDefinition, normalizeDefinitionTargets } from "../../application/language-services/definition-targets.ts";
@@ -61,9 +62,11 @@ class DefinitionGesture {
     this.view.dispatch({});
   }
   down(event: MouseEvent): boolean {
+    // Clearing the underline can detach a highlighted token's span (the event target).
+    // Hit-test before repainting; later stages use the stored position and version.
+    const pos = event.button === 0 && definitionModifier(event, this.mac) ? this.candidate(event) : null;
     this.cancel(); this.suppressContextUntil = 0;
-    if (event.button !== 0 || !definitionModifier(event, this.mac)) return false;
-    const pos = this.candidate(event); if (pos === null) return false;
+    if (pos === null) return false;
     this.gesture = { pos, x: event.clientX, y: event.clientY, version: this.context.version(), dragged: false };
     this.suppressContextUntil = performance.now() + 750;
     this.view.focus(); event.preventDefault(); return true;
@@ -100,15 +103,21 @@ class DefinitionGesture {
     const word = this.view.state.wordAt(pos), symbol = word ? { start: { line: position.line, character: word.from - line.from }, end: { line: position.line, character: word.to - line.from } } : null;
     let kind = intent;
     const trace = (outcome: "requested" | "discarded" | "invalid" | "empty" | "selected" | "choices", targetCount = 0) => this.context.port.definitionEvent?.({ kind, outcome, targetCount });
+    let requestError: unknown = null;
+    const failed = () => {
+      if (requestError === null) return false;
+      if (this.current(token, version)) ui?.status(requestError instanceof LanguageServiceIndexingError ? ui.copy().indexing : ui.copy().requestFailed, requestError instanceof LanguageServiceIndexingError ? "information" : "warning");
+      trace("discarded"); return true;
+    };
     const request = async () => {
       trace("requested"); ui?.status(kind === "references" ? ui.copy().findingReferences : ui.copy().findingDefinition, "information");
-      return this.context.port.request(this.context.handle, `textDocument/${kind}`, { position }, version).catch(() => null);
+      return this.context.port.request(this.context.handle, `textDocument/${kind}`, { position }, version).catch((error: unknown) => { requestError = error ?? new Error("Language request failed"); return null; });
     };
-    let response = await request();
+    let response = await request(); if (failed()) return;
     if (!this.current(token, version)) { trace("discarded"); return; }
     let result = normalizeDefinitionTargets(response, kind);
     if (kind === "definition" && !result.limited && result.locations.length === 1 && isCurrentSymbolDefinition(result.locations[0]!, uri, symbol)) {
-      kind = "references"; response = await request();
+      kind = "references"; response = await request(); if (failed()) return;
       if (!this.current(token, version)) { trace("discarded"); return; }
       result = normalizeDefinitionTargets(response, kind);
     }

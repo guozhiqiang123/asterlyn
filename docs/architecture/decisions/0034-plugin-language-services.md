@@ -88,9 +88,21 @@ See [implementation plan](../../engineering/2026-10-26-language-services-host-pl
 
 Rust remains a planned follow-up, documented in the
 [Rust compatibility plan](../../engineering/2026-10-26-rust-language-services-plan.md). The accepted
-runtime/SDK still exposes only the TypeScript profile. Multi-profile identity/lifecycle, Cargo
-execution policy and authorized read-only dependency sources must pass their own gates before Rust
-is enabled; adding a language extension alone does not satisfy this ADR.
+runtime/SDK now adds the fixed `rust-analyzer` profile in SDK 1.12.0 / host 0.1.21 / plugin 0.2.0.
+It accepts only language `rust`, extension `.rs`, and sealed `servers/rust-analyzer/profile.json`:
+`{"serverId":"rust-analyzer","toolchain":"1.98.1","policy":"cargo-offline-no-build-v1"}`.
+The host resolves real Rustup component binaries outside the workspace, fingerprints rust-analyzer,
+Cargo and rustc, fixes their environment and sysroot/rust-src, and runs Cargo offline/locked.
+Project/user Cargo configuration remains part of the reviewed trust boundary. Build scripts,
+proc-macro, auto-import completion and check-on-save stay disabled. Cargo model reload stays enabled:
+disabling it prevented the initial virtual-workspace graph from becoming usable in the real probe.
+Rust has separate process/startup/review/consent keys from TypeScript. Status is projected only as
+bounded indexing/ready/degraded events, never raw server messages. Native diagnostics use negotiated
+pull capability or versioned push; pull results bind the document version at dispatch, and stale
+responses are discarded. Rust requests have a 30-second bound for cold semantic queries (TS stays at
+10 seconds); edits/navigation continue to cancel stale work. Existing 0.1.0 TS packages remain valid.
+Workspace-catalog navigation is supported first; authorized read-only dependency/standard-library
+sources remain the separate R3 gate. Adding a language extension alone does not satisfy this ADR.
 
 The [reference navigation follow-up](../../engineering/2026-10-26-language-reference-navigation-plan.md)
 adds only the read-only `textDocument/references` operation. The host constructs

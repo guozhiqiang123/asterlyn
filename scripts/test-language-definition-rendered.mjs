@@ -24,6 +24,11 @@ try {
    await click(); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "目录/target file.ts");
    let result = await snap(); assert.equal(result.selection, "target"); assert.equal(result.focused, true); assert.match(result.text, /^\/\/ unsaved 😀/u);
    assert.equal(result.requests.length, 1); assert.deepEqual(result.requests[0].params.position, { line: 2, character: 17 });
+   // Syntax-colored spans can be detached when the pointer underline is cleared on mousedown.
+   await reset(); const colored = await page.evaluate(() => window.definitionFixture.point("start"));
+   await page.mouse.move(colored.x, colored.y); await page.keyboard.down("Control"); await page.waitForSelector(".cm-definition-link");
+   await page.mouse.click(colored.x, colored.y); await page.keyboard.up("Control");
+   await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "目录/target file.ts");
    await reset(); const normal = await point(); await page.mouse.click(normal.x, normal.y); assert.equal((await snap()).requests.length, 0);
    await page.mouse.click(normal.x, normal.y, { button: "right" }); assert.equal((await snap()).requests.length, 0);
    await page.keyboard.down("Control"); await page.mouse.click(normal.x, normal.y, { button: "right" }); await page.keyboard.up("Control"); assert.equal((await snap()).requests.length, 0, `${name}: modified right button must not navigate`);
@@ -56,6 +61,10 @@ try {
     else await page.evaluate(() => window.definitionFixture.editor.detach());
     await page.evaluate(() => window.definitionFixture.resolve()); await page.waitForTimeout(40); assert.equal(await page.locator('.language-location-picker').count(), 0, `${name}: stale reference ${action} opened a picker`);
    }
+   await reset("indexing"); await click();
+   await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message.includes("indexing")));
+   assert.equal((await snap()).statuses.at(-1).kind, "information");
+   assert.equal((await snap()).outcomes.some((event) => event.outcome === "empty"), false, "indexing is not an empty definition result");
    await reset("empty"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.kind === "warning")); assert.equal((await snap()).active, "source.ts");
    await reset("outside"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message.includes("catalog"))); assert.equal((await snap()).active, "source.ts");
    for (const action of ["edit", "click", "tab", "escape", "newer"]) {

@@ -37,7 +37,7 @@ test("public guides pin independent version axes and immutable Release workflow"
       `public guide does not reference current host version ${hostVersion}`,
     );
   }
-  assert.match(developerGuide, /Plugin SDK: `1\.11\.0`/);
+  assert.match(developerGuide, /Plugin SDK: `1\.12\.0`/);
   assert.match(developerGuide, /Package schema: `3`/);
   assert.match(developerGuide, /Plugin-host protocol: `1`/);
   assert.match(developerGuide, /never .*replace Release bytes/is);

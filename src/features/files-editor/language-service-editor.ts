@@ -22,7 +22,7 @@ export function languageDiagnostic(view: EditorView, diagnostic: EditorLanguageS
 async function hover(context: LanguageEditorContext, view: EditorView, pos: number) {
   if (!context.active()) return null; context.flush(); const version = context.version();
   const line = view.state.doc.lineAt(pos);
-  const response = await context.port.request<{ contents?: unknown }>(context.handle, "textDocument/hover", { position: { line: line.number - 1, character: pos - line.from } }, version);
+  const response = await context.port.request<{ contents?: unknown }>(context.handle, "textDocument/hover", { position: { line: line.number - 1, character: pos - line.from } }, version).catch(() => null);
   if (!response || !context.active() || context.version() !== version) return null;
   const content = response.contents;
   const part = (value: unknown): string => typeof value === "string" ? value : value && typeof value === "object" && "value" in value && typeof value.value === "string" ? value.value : "";
@@ -33,7 +33,7 @@ async function hover(context: LanguageEditorContext, view: EditorView, pos: numb
 export async function completeLanguageService(context: LanguageEditorContext, completion: CompletionContext): Promise<CompletionResult | null> {
   if (!context.active()) return null; context.flush(); const version = context.version();
   const line = completion.state.doc.lineAt(completion.pos);
-  const response = await context.port.request<{ items?: readonly EditorLanguageServiceCompletionItem[] } | readonly EditorLanguageServiceCompletionItem[]>(context.handle, "textDocument/completion", { position: { line: line.number - 1, character: completion.pos - line.from } }, version);
+  const response = await context.port.request<{ items?: readonly EditorLanguageServiceCompletionItem[] } | readonly EditorLanguageServiceCompletionItem[]>(context.handle, "textDocument/completion", { position: { line: line.number - 1, character: completion.pos - line.from } }, version).catch(() => null);
   if (!response || !context.active() || context.version() !== version) return null;
   const from = completion.matchBefore(/[\w$]*/)?.from ?? completion.pos;
   const items = Array.isArray(response) ? response : "items" in response ? response.items ?? [] : [];

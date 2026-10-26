@@ -13,7 +13,7 @@ function harness(approved = true) {
   const state = { providers: [provider], calls: [], errors: [], approvals: [], subscribers: new Set(), review: { pluginVersion: "0.1.0", packageDigest: "package", resourceDigest: "resources", executableIdentity: "node-identity" } };
   let next = 0, factory; const reviews = new Set();
   const native = {
-    prepare: async (root, pluginId) => { state.calls.push(["prepare", root]); const reviewId = `review-${++next}`; reviews.add(reviewId); return { ...state.review, pluginId, serverId: "typescript", reviewId, expiresAt: Date.now() + 60000 }; },
+    prepare: async (root, pluginId, serverId = "typescript") => { state.calls.push(["prepare", root]); const reviewId = `review-${++next}`; reviews.add(reviewId); return { ...state.review, pluginId, serverId, reviewId, expiresAt: Date.now() + 60000 }; },
     confirm: async (review) => { state.calls.push(["confirm", review.reviewId]); return approved; },
     start: async (root, reviewId) => { assert.equal(reviews.delete(reviewId), true, "each process start must consume its own fresh review"); state.calls.push(["start", root]); return `session-${++next}`; },
     open: async (...args) => { state.calls.push(["open", ...args]); }, change: async () => {}, close: async () => {},
@@ -121,5 +121,22 @@ test("changing workspaces prunes old decisions below the bounded consent-cache l
   const h = harness(); try {
     for (let i = 0; i < 40; i++) { h.window.workspace.activate({ root: `/project-${i}`, repository: null }); h.runtime.refresh(); await h.open(); }
     assert.equal(h.count("confirm"), 40); assert.equal(h.state.errors.length, 0);
+  } finally { h.runtime.dispose(); }
+});
+
+test("TypeScript and Rust have separate consent, sessions and idle cleanup in one workspace", async () => {
+  const h = harness(); try {
+    h.state.providers = [{ ...provider, serverId: "typescript" }, { ...provider, serverId: "rust-analyzer", qualifiedId: "dev.asterlyn.lsp:rust", languageIds: ["rust"], extensions: [".rs"] }];
+    h.runtime.refresh();
+    const ts = await h.open();
+    const rustHandle = { ...handle, tabId: "rust", path: "src/lib.rs" };
+    const rust = await h.open(rustHandle);
+    assert.equal(h.count("confirm"), 2); assert.equal(h.count("start"), 2);
+    const opened = h.state.calls.filter((c) => c[0] === "open");
+    assert.notEqual(opened[0][2], opened[1][2]);
+    rust.close(rustHandle); await until(() => h.count("stop") === 1);
+    await ts.request(handle, "hover", { position: { line: 0, character: 0 } }, 1);
+    assert.equal(h.count("start"), 2, "stopping Rust keeps the TypeScript transport");
+    await h.open(rustHandle); assert.equal(h.count("confirm"), 2); assert.equal(h.count("start"), 3);
   } finally { h.runtime.dispose(); }
 });

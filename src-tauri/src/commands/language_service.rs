@@ -69,7 +69,11 @@ fn subject(
             .map_err(|_| "workspace activation ended")?,
     })
 }
-fn installed_package(app: &AppHandle, workspace: &Path) -> Result<LanguagePackage, String> {
+fn installed_package(
+    app: &AppHandle,
+    workspace: &Path,
+    server_id: &str,
+) -> Result<LanguagePackage, String> {
     let snapshot = installation_store(app)?
         .snapshot()
         .map_err(|_| "plugin installation state unavailable")?;
@@ -92,17 +96,31 @@ fn installed_package(app: &AppHandle, workspace: &Path) -> Result<LanguagePackag
             .permissions
             .iter()
             .any(|v| v == "host.language-services.execute")
-        || ![
-            "servers/typescript/server.mjs",
-            "servers/typescript/typescript/lib/tsserver.js",
-        ]
+        || !(if server_id == "rust-analyzer" {
+            vec!["servers/rust-analyzer/profile.json"]
+        } else {
+            vec![
+                "servers/typescript/server.mjs",
+                "servers/typescript/typescript/lib/tsserver.js",
+            ]
+        })
         .iter()
         .all(|name| report.files.iter().any(|f| f.path == *name))
     {
         return Err("installed language plugin identity, authority or resources changed".into());
     }
-    let node = trusted_node(workspace)?;
-    let node_digest = hash_file(&node)?;
+    let (node, node_digest, rust) = match server_id {
+        "typescript" => {
+            let node = trusted_node(workspace)?;
+            let digest = hash_file(&node)?;
+            (node, digest, None)
+        }
+        "rust-analyzer" => {
+            let (rust, digest) = super::language_rust::resolve_rust(&root, workspace)?;
+            (rust.analyzer.clone(), digest, Some(rust))
+        }
+        _ => return Err("unsupported language profile".into()),
+    };
     Ok(LanguagePackage {
         version: selected.version,
         digest: selected.package_digest,
@@ -110,9 +128,10 @@ fn installed_package(app: &AppHandle, workspace: &Path) -> Result<LanguagePackag
         root,
         node,
         node_digest,
+        rust,
     })
 }
-fn hash_file(path: &Path) -> Result<String, String> {
+pub(super) fn hash_file(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|_| "cannot inspect language executable")?;
     if file
         .metadata()
@@ -207,6 +226,7 @@ fn trusted_node(workspace: &Path) -> Result<PathBuf, String> {
 pub(crate) async fn prepare_language_service(
     workspace_root: String,
     plugin_id: String,
+    server_id: Option<String>,
     app: AppHandle,
     window: WebviewWindow,
     active: State<'_, ActiveWorkspaces>,
@@ -214,16 +234,20 @@ pub(crate) async fn prepare_language_service(
     if plugin_id != PLUGIN_ID {
         return Err("unsupported language provider".into());
     }
+    let server_id = server_id.unwrap_or_else(|| "typescript".into());
+    if !["typescript", "rust-analyzer"].contains(&server_id.as_str()) {
+        return Err("unsupported language profile".into());
+    }
     let owner = subject(&active, &window, &workspace_root)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let package = installed_package(&app, &owner.root)?;
+        let package = installed_package(&app, &owner.root, &server_id)?;
         let review_id = app
             .state::<LanguageServiceManager>()
             .prepare(owner, package.clone())?;
         Ok(LanguageServiceReview {
             review_id,
             plugin_id,
-            server_id: "typescript",
+            server_id: package.server_id(),
             plugin_version: package.version,
             package_digest: package.digest,
             resource_digest: package.content_digest,
@@ -242,13 +266,15 @@ pub(crate) async fn prepare_language_service(
 pub(crate) async fn start_language_service(
     workspace_root: String,
     review_id: String,
+    server_id: Option<String>,
     app: AppHandle,
     window: WebviewWindow,
     active: State<'_, ActiveWorkspaces>,
 ) -> Result<String, String> {
+    let server_id = server_id.unwrap_or_else(|| "typescript".into());
     let owner = subject(&active, &window, &workspace_root)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let package = installed_package(&app, &owner.root)?;
+        let package = installed_package(&app, &owner.root, &server_id)?;
         app.state::<LanguageServiceManager>()
             .consume(&review_id, &owner, &package)?;
         let permitted_app = app.clone();
@@ -279,7 +305,7 @@ pub(crate) async fn start_language_service(
         let emit = Arc::new(
             move |event: crate::application::language_service::LanguageServiceEvent| {
                 if event.kind == "terminated" { event_app.state::<LanguageServiceManager>().finished(&event.session_id); }
-            event_app.state::<DiagnosticsLog>().info("language.service", if event.kind == "terminated" {"session.terminated"} else {"diagnostics.completed"}, None,
+            event_app.state::<DiagnosticsLog>().info("language.service", match event.kind { "terminated"=>"session.terminated", "indexing"=>"workspace.indexing", "ready"=>"workspace.ready", "degraded"=>"workspace.degraded", _=>"diagnostics.completed" }, None,
                 serde_json::json!({"sessionId":event.session_id,"version":event.version,"diagnosticCount":event.diagnostics.as_ref().and_then(Value::as_array).map(Vec::len),"documentHash":event.uri.as_ref().map(|uri|event_app.state::<DiagnosticsLog>().hash_identifier(uri))}));
             let _ = event_app.emit_to(&label, EVENT, event);
             },
@@ -291,7 +317,7 @@ pub(crate) async fn start_language_service(
             "language.service",
             "session.started",
             None,
-            serde_json::json!({"sessionId":session,"providerId":PLUGIN_ID}),
+            serde_json::json!({"sessionId":session,"providerId":PLUGIN_ID,"serverId":server_id}),
         );
         Ok(session)
     })
@@ -300,7 +326,7 @@ pub(crate) async fn start_language_service(
 }
 async fn reply(rx: std::sync::mpsc::Receiver<Result<Value, String>>) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        rx.recv_timeout(Duration::from_secs(12))
+        rx.recv_timeout(Duration::from_secs(32))
             .map_err(|_| "language operation deadline exceeded".to_owned())?
     })
     .await

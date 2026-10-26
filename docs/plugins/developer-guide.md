@@ -1,8 +1,8 @@
 # Asterlyn plugin developer guide
 
 - Status: experimental public baseline
-- Host baseline: Asterlyn `0.1.20`
-- Plugin SDK: `1.11.0` (SDK major `1`)
+- Host baseline: Asterlyn `0.1.21`
+- Plugin SDK: `1.12.0` (SDK major `1`)
 - Package schema: `3`
 - Plugin-host protocol: `1`
 
