@@ -90,6 +90,8 @@ export class PluginTasksRuntime {
   private identity: PluginWorkspaceIdentity | null = null;
   private available = false;
 
+  get contributionRegistry() { return this.plugins.contributionRegistry; }
+
   constructor(root: HTMLElement, options: PluginTasksRuntimeOptions) {
     this.root = root;
     this.copy = options.copy;
