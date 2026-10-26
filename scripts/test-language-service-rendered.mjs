@@ -39,7 +39,7 @@ try {
   assert.equal(completed.result, "answer", `completion result missing: ${completed.text}`);
   const completionText = await page.evaluate(() => window.languageServiceFixture.editor.activeEntry().view.state.doc.toString());
   assert.match(completionText, /answer/, "completion text edit was applied");
-  const undone = await page.evaluate(() => { const view = window.languageServiceFixture.editor.activeEntry().view; view.focus(); window.languageServiceFixture.undo(view); return view.state.doc.toString(); });
+  const undone = await page.evaluate(() => { const view = window.languageServiceFixture.editor.activeEntry().view; window.languageServiceFixture.undo(view); return view.state.doc.toString(); });
   assert.doesNotMatch(undone, /answer/, "completion edit is undoable");
   await page.evaluate(() => window.languageServiceFixture.deferCompletion());
   await page.evaluate(async () => { const entry = window.languageServiceFixture.editor.activeEntry(); const view = entry.view; window.languageServiceFixture.pendingCompletion = window.languageServiceFixture.editor.complete(entry, { state: view.state, pos: view.state.selection.main.head, explicit: true, matchBefore: () => ({ from: 6, to: 11, text: "value" }) }); });
