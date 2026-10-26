@@ -1,3 +1,4 @@
+import type { LanguageServiceCopy } from "./language-service-copy.ts";
 import type { EffectiveLocale } from "../presentation/presentation-environment.ts";
 import type { TaskProviderStaleReason, TaskProviderUnavailableReason } from "../application/tasks/task-types.ts";
 import type { ChangeKind, GitOperationAction, GitOperationKind } from "../models.ts";
@@ -347,6 +348,7 @@ export interface ProjectFilesCopy {
 }
 
 export interface EditorCopy {
+  languageService: LanguageServiceCopy;
   conflict: string;
   saving: string;
   unsaved: string;

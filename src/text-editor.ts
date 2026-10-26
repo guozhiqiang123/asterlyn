@@ -403,6 +403,7 @@ export class TextEditor {
 
   detach(): void {
     this.contextMenu.close("editor.text.git-blame");
+    this.contextMenu.close("editor.text.definition");
     this.releaseActiveView(false);
   }
 
@@ -471,6 +472,7 @@ export class TextEditor {
 
   destroy(): void {
     this.contextMenu.close("editor.text.git-blame");
+    this.contextMenu.close("editor.text.definition");
     for (const tabId of [...this.entries.keys()]) this.dispose(tabId);
   }
 
@@ -652,7 +654,8 @@ export class TextEditor {
     const port = entry.languageServicePort!;
     return { port, handle: entry.languageServiceHandle, version: () => entry.languageServiceVersion,
       active: () => entry.languageServicePort === port && !this.readOnlyValue && entry.view !== null,
-      flush: () => this.flushLanguageServiceUpdate(entry) };
+      flush: () => this.flushLanguageServiceUpdate(entry),
+      definitionUi: { menu: this.contextMenu, copy: () => this.blameCopy.languageService, status: (message, kind) => this.blameRuntime.status(message, kind) } };
   }
 
   private languageServiceExtensions(entry: CachedTextEditor) {

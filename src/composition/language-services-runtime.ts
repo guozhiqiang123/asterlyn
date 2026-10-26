@@ -11,6 +11,7 @@ export interface LanguageServicesRuntimeOptions {
   readonly bind: (factory: EditorLanguageServicePortFactory | null) => void;
   readonly reportError: (error: unknown) => void;
   readonly navigate: (location: EditorLanguageServiceLocation) => void;
+  readonly definitionDiagnostic?: (event: import("../protocol/editor-language-service.ts").EditorDefinitionEvent) => void;
   readonly diagnostic?: (fields: { providerCount: number; workspaceGeneration: number | null }) => void;
 }
 const LANGUAGES: Readonly<Record<string, string>> = { ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
@@ -31,7 +32,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     if (providers.length !== 1 || !languageId) return null;
     const provider = providers[0]!; const uri = workspaceFileUri(workspace.root, document.workspacePath);
     return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion } : null;
-  }, options.native, options.reportError, options.navigate);
+  }, options.native, options.reportError, options.navigate, options.definitionDiagnostic);
   let key = "";
   const refresh = () => {
     const workspace = options.workspace();
@@ -55,26 +56,4 @@ export function languageExecutionConfirmation(review: Parameters<NativeLanguageS
     message: `Plugin ${review.pluginId} ${review.pluginVersion} will run its packaged language server with local Node.js and read this project and its open source files. The process has your user account's system permissions.\n\nExecutable: ${review.executableIdentity}\nPackage: ${review.packageDigest}\n\nRemember this choice for this project session.`,
     confirmLabel: "Enable language services", cancelLabel: "Not now",
   };
-}
-
-export async function navigateLanguageDefinition(location: EditorLanguageServiceLocation, ports: {
-  workspace(): { root: string; generation: number } | null;
-  files(): readonly import("../models.ts").ProjectFile[];
-  open(root: string, file: import("../models.ts").ProjectFile): Promise<void>;
-  content(): string | null;
-  select(from: number, to: number): void;
-}): Promise<void> {
-  const workspace = ports.workspace(); if (!workspace) return;
-  const file = ports.files().find((item) => workspaceFileUri(workspace.root, item.workspacePath) === location.uri);
-  if (!file || file.readOnly) return;
-  await ports.open(workspace.root, file);
-  const current = ports.workspace(); if (current?.root !== workspace.root || current.generation !== workspace.generation) return;
-  const content = ports.content()?.replace(/^\uFEFF/u, "").replace(/\r\n?/gu, "\n"); if (content === undefined) return;
-  const lines = content.split("\n");
-  const offset = (pos: { line: number; character: number }) => {
-    if (!Number.isSafeInteger(pos.line) || !Number.isSafeInteger(pos.character) || pos.line < 0 || pos.character < 0 || pos.line >= lines.length || pos.character > lines[pos.line]!.length) return null;
-    return lines.slice(0, pos.line).reduce((sum, text) => sum + text.length + 1, 0) + pos.character;
-  };
-  const from = offset(location.range.start), to = offset(location.range.end);
-  if (from !== null && to !== null && from <= to) ports.select(from, to);
 }

@@ -109,3 +109,11 @@ validation, despite the declared type and projector supporting it. The exact reg
 correction are recorded in [the activation fix evidence](../benchmarks/2026-10-26-language-services-activation-fix.md).
 The native-helper acceptance now traverses the production frontend validator and runs in both CI
 quality workflows. Actual Asterlyn workspace features are tested without saving the overlay.
+
+## Definition navigation iteration
+
+The follow-up [definition plan](2026-10-26-language-definition-navigation-plan.md) was recorded and
+committed before implementation. Ctrl/Command-click and F12 now share bounded target resolution,
+keyboard-operable multi-target selection, workspace/active-tab identity guards and localized
+feedback. The [acceptance record](../benchmarks/2026-10-26-language-definition-navigation.md)
+separates real browser gestures, actual cross-file server results and native delivery evidence.

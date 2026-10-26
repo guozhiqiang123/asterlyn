@@ -17,11 +17,6 @@
       "maximumLines": 1210,
       "burnDownPhase": "reviewed cohesive catalog"
     },
-    "src/localization/en-US.ts": {
-      "owner": "English localization data",
-      "maximumLines": 830,
-      "burnDownPhase": "reviewed localization data"
-    },
     "src/models.ts": {
       "owner": "versioned renderer/native wire models",
       "maximumLines": 900,

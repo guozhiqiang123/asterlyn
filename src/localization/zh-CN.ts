@@ -1,3 +1,4 @@
+import { ZH_CN_LANGUAGE_SERVICE_COPY } from "./language-service-copy.ts";
 import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_ZH_CN } from "./keybinding-zh-CN.ts";
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { ZH_CN_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
 import { ZH_GIT_RESET_COPY, ZH_REMOTE_MANAGEMENT_COPY, ZH_TOPBAR_BRANCH_COPY } from "./git-reviewed-copy.ts";
@@ -209,6 +210,7 @@ export const ZH_CN = {
     },
   },
   editor: {
+    languageService: ZH_CN_LANGUAGE_SERVICE_COPY,
     conflict: "冲突", saving: "正在保存", unsaved: "未保存", saved: "已保存", close: "关闭",
     closeFile: (name) => `关闭 ${name}`, preview: "预览", diff: "差异", imagePreview: "图像预览", diffPreview: "差异预览",
     historical: "历史版本", historicalPreview: "历史文件", historicalReadOnly: "只读历史版本",

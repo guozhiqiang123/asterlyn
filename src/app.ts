@@ -1,5 +1,6 @@
+import { createLanguageDefinitionNavigator } from "./composition/language-definition-navigation.ts";
 import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
-import { createLanguageServicesRuntime, languageExecutionConfirmation, navigateLanguageDefinition } from "./composition/language-services-runtime.ts";
+import { createLanguageServicesRuntime, languageExecutionConfirmation, workspaceFileUri } from "./composition/language-services-runtime.ts";
 import { createTauriLanguageServiceBridge } from "./adapters/tauri/tauri-language-service-bridge.ts";
 import { bridge } from "./bridge";
 import { diagnostics } from "./application/diagnostics.ts";
@@ -658,6 +659,11 @@ export class AsterlynApp {
     }, initialCatalog.locale);
     this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), confirm: (request) => this.dialogRuntime.confirm(request), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, processQueryBridge: bridge, toolOperationBridge: bridge, installedPluginRuntimeBridge: bridge, pluginMarketplaceBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), identityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
     const languageWorkspace = () => this.windowSession.workspace.state.root ? { root: this.windowSession.workspace.state.root, generation: this.windowSession.generation } : null;
+    const definitionNavigator = createLanguageDefinitionNavigator({ workspace: languageWorkspace, files: () => this.filesState.files, open: (root, file) => this.openProjectFile(root, file),
+      activeUri: () => { const active = this.activeDocument(); return active.kind === "project-file" ? workspaceFileUri(active.repositoryRoot, active.workspacePath) : null; },
+      content: () => { this.captureMountedTextEditor(); return activeTextTab(this.editorState.session)?.content ?? null; }, select: (from, to) => this.editorSurface.selectRange(from, to),
+      copy: () => this.localization.catalog.editor.languageService, status: (message, kind) => this.setStatus(message, kind === "warning" ? "warning" : "normal"),
+      diagnostic: (outcome) => diagnostics.report("info", "language.definition.navigation", `outcome=${outcome}`) });
     this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({
       registry: this.pluginTasksRuntime.contributionRegistry,
       diagnostic: (fields) => diagnostics.report("info", "language.provider.changed", `providers=${fields.providerCount};generation=${fields.workspaceGeneration ?? "none"}`),
@@ -665,7 +671,8 @@ export class AsterlynApp {
       workspace: languageWorkspace,
       document: (handle) => { const tab = textTab(this.editorState.session, handle.tabId); return tab?.status === "ready" && tab.document.repositoryRoot === this.windowSession.workspace.state.root ? { workspacePath: tab.document.workspacePath, readOnly: tab.document.readOnly === true || this.state.loading, loadEpoch: tab.loadEpoch } : null; },
       bind: (factory) => this.editorSurface.setLanguageServices(factory), reportError: (error) => this.showError(error),
-      navigate: (location) => { void navigateLanguageDefinition(location, { workspace: languageWorkspace, files: () => this.filesState.files, open: (root, file) => this.openProjectFile(root, file), content: () => { this.captureMountedTextEditor(); return activeTextTab(this.editorState.session)?.content ?? null; }, select: (from, to) => { this.editorSurface.selectRange(from, to); } }).catch((error) => this.showError(error)); },
+      navigate: (location) => { void definitionNavigator(location).catch((error) => this.showError(error)); },
+      definitionDiagnostic: (event) => diagnostics.report("info", "language.definition.lookup", `outcome=${event.outcome};targets=${event.targetCount}`),
     }) : null;
     this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, bridge, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());

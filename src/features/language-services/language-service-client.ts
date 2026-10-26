@@ -1,4 +1,4 @@
-import type { EditorLanguageServiceDiagnostic, EditorLanguageServiceHandle, EditorLanguageServiceLocation, EditorLanguageServicePort, EditorLanguageServicePortFactory, EditorLanguageServiceSnapshot } from "../../protocol/editor-language-service.ts";
+import type { EditorDefinitionEvent, EditorLanguageServiceDiagnostic, EditorLanguageServiceHandle, EditorLanguageServiceLocation, EditorLanguageServicePort, EditorLanguageServicePortFactory, EditorLanguageServiceSnapshot } from "../../protocol/editor-language-service.ts";
 
 export interface LanguageDocumentIdentity {
   readonly workspaceRoot: string; readonly workspaceGeneration: number; readonly uri: string;
@@ -19,7 +19,7 @@ const sessionKey = (i: LanguageDocumentIdentity) => JSON.stringify([i.workspaceR
 const validSnapshot = (s: EditorLanguageServiceSnapshot) => Number.isSafeInteger(s.version) && s.version > 0 && s.text.length <= MAX_TEXT_BYTES && new TextEncoder().encode(s.text).length <= MAX_TEXT_BYTES;
 
 /** Owns current overlays, ordered synchronization and result identity independently of editor UI. */
-export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void): LanguageServiceFactory {
+export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, definitionTrace?: (event: EditorDefinitionEvent) => void): LanguageServiceFactory {
   const sessions = new Map<string, Session>();
   let disposed = false;
   const unsubscribe = native.subscribe((event) => { if (!disposed) for (const session of sessions.values()) session.event(event); });
@@ -28,7 +28,7 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
     if (disposed || !info) return null;
     const key = sessionKey(info);
     let session = sessions.get(key);
-    if (!session) { session = new Session(info, native, resolve, reportError, navigate); sessions.set(key, session); }
+    if (!session) { session = new Session(info, native, resolve, reportError, navigate, definitionTrace); sessions.set(key, session); }
     return session.port(handle, info);
   }) as LanguageServiceFactory;
   factory.reconcile = () => {
@@ -54,13 +54,15 @@ class Session {
   private readonly resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null;
   private readonly reportError: (error: unknown) => void;
   private readonly navigate: ((location: EditorLanguageServiceLocation) => void) | undefined;
-  constructor(info: LanguageDocumentIdentity, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void) { this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
+  private readonly trace: ((event: EditorDefinitionEvent) => void) | undefined;
+  constructor(info: LanguageDocumentIdentity, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, trace?: (event: EditorDefinitionEvent) => void) { this.trace = trace; this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
   port(handle: EditorLanguageServiceHandle, info: LanguageDocumentIdentity): EditorLanguageServicePort | null {
     const key = handleKey(handle); const existing = this.docs.get(key);
     if (existing && !existing.closed) return existing.port;
     if (this.dead || this.docs.size >= 32) return null;
     const doc = { handle: { ...handle }, info, latest: { version: 0, text: "" }, sent: 0, opened: false, closed: false, timer: null, listeners: new Set<Listener>(), requests: new Map<string, number>() } as unknown as Document;
     doc.port = {
+      definitionEvent: (event) => { try { this.trace?.(event); } catch { /* Diagnostics cannot block navigation. */ } },
       open: (_handle, snapshot) => { this.accept(doc, snapshot); this.enqueue(() => this.flush(doc)); },
       update: (_handle, snapshot) => {
         if (!this.accept(doc, snapshot)) return;

@@ -22,7 +22,10 @@ export interface EditorLanguageServicePosition { readonly line: number; readonly
 export interface EditorLanguageServiceLocation { readonly uri: string; readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition } }
 export interface EditorLanguageServiceCompletionItem { readonly label: string; readonly detail?: string; readonly kind?: number; readonly insertText?: string; readonly textEdit?: { readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition }; readonly newText: string }; readonly insertReplaceEdit?: unknown; readonly additionalTextEdits?: readonly unknown[]; readonly command?: unknown; readonly insertTextFormat?: number; }
 
+export interface EditorDefinitionEvent { readonly outcome: "requested" | "discarded" | "invalid" | "empty" | "selected" | "choices"; readonly targetCount: number; }
+
 export interface EditorLanguageServicePort {
+  definitionEvent?(event: EditorDefinitionEvent): void;
   open(handle: EditorLanguageServiceHandle, snapshot: EditorLanguageServiceSnapshot): void;
   update(handle: EditorLanguageServiceHandle, snapshot: EditorLanguageServiceSnapshot): void;
   close(handle: EditorLanguageServiceHandle): void;

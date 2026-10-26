@@ -1,6 +1,7 @@
 # Language definition navigation plan — 2026-10-26
 
-Status: planned; this document is recorded before implementation.
+Status: D0–D2 implemented and verified; D3 automated checks pass, native delivery pending.
+The initial plan was committed as `8e2547a` before implementation.
 
 The user requests progress toward usable Ctrl + primary mouse button definition navigation, with a
 written plan before implementation. Baseline `4a24095` has an operational TS/JS provider and F12,
@@ -68,6 +69,22 @@ separate versioned-transaction gate.
 
 ## Execution record
 
-- D0: plan recorded before source changes.
-- D1–D3: pending. Native launch/profile authority and the TS/JS package remain unchanged unless
-  implementation evidence requires an explicitly documented adjustment.
+- D0: plan recorded before source changes (`8e2547a`).
+- D1–D2: bounded Location/LocationLink resolver, actual pointer hit-testing, Ctrl/Command gesture,
+  candidate mark, shared F12, keyboard chooser, localized feedback and metadata-only outcomes are
+  implemented. Target opening is restricted to the current catalog and guarded by current active
+  URI, workspace generation and navigation sequence. BOM remains one UTF-16 code unit, matching
+  the actual editor/server buffer; CRLF is normalized. The editor's WebKit Control-click selection
+  adjustment does not invalidate the held primary-button gesture. Ordinary selection changes do
+  invalidate an already pending lookup.
+- D3 automated: Chromium and WebKit real pointer tests pass, including modified right-click/gutter
+  exclusion, drag cancellation, multi-result keyboard selection/Escape, dirty target retention,
+  exact symbol selection/focus, edit/tab/new-query/Escape/disposal freshness and held-F12 suppression.
+  The real TypeScript server resolves an actual `src/app.ts` import to its declaration in
+  `text-blame-availability.ts` without writing either file. Nine focused unit tests and all 1317
+  script tests pass; typecheck, production build, existing editor rendering, actual package
+  activation, Rust formatting and focused all-target Clippy pass. Native delivery follows these
+  gates; its exact artifact and installed-log identities will be recorded separately.
+- No SDK, native execution authority, plugin version or package changes were required. The English
+  editor catalog was extracted as one coherent unit to preserve existing ownership budgets; no
+  file-size ceiling was raised.
