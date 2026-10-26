@@ -1,4 +1,5 @@
 import "../../src/styles.css";
+import "../../src/features/files-editor/language-location-picker.css";
 import { TextEditor } from "../../src/text-editor.ts";
 import { DEFAULT_APP_PREFERENCES } from "../../src/preferences.ts";
 import { EN_US } from "../../src/localization/en-US.ts";
@@ -28,15 +29,24 @@ const navigate = createLanguageDefinitionNavigator({ workspace: () => ({ root: "
   copy: () => EN_US.editor.languageService, status: (message, kind) => state.statuses.push({ message, kind }), diagnostic: (outcome) => state.outcomes.push(outcome),
 });
 const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: () => () => {},
+  get documentUri() { return workspaceFileUri("/repo", state.active.workspacePath); },
   definitionEvent(event) { state.outcomes.push(event); }, navigate: (location) => { void navigate(location); },
   request(_handle, method, params, version) {
-    if (method !== "textDocument/definition") return Promise.resolve(null);
+    if (!["textDocument/definition", "textDocument/references"].includes(method)) return Promise.resolve(null);
     state.requests.push({ method, params, version });
+    if (method === "textDocument/references") {
+      if (state.mode === "deferredReferences") return new Promise((resolve) => state.pending.push(resolve));
+      if (state.mode === "noReferences") return Promise.resolve([]);
+      if (state.mode === "oneReference") return Promise.resolve([second()]);
+      if (state.mode === "manyReferences") return Promise.resolve(Array.from({ length: 600 }, (_, line) => ({ ...second(), range: range(line, 13, 19) })));
+      return Promise.resolve([definition(), second()]);
+    }
     if (state.mode === "deferred") return new Promise((resolve) => state.pending.push(resolve));
     if (state.mode === "empty") return Promise.resolve(null);
     if (state.mode === "outside") return Promise.resolve({ uri: "file:///outside/secret.ts", range: range(0, 0, 3) });
     if (state.mode === "multiple") return Promise.resolve([definition(), second()]);
     if (state.mode === "same") return Promise.resolve({ uri: workspaceFileUri("/repo", files[0]!.workspacePath), range: range(0, 9, 15) });
+    if (["self", "deferredReferences", "oneReference", "noReferences"].includes(state.mode)) return Promise.resolve({ uri: workspaceFileUri("/repo", files[0]!.workspacePath), range: range(2, 15, 21) });
     return Promise.resolve(definition());
   },
 };

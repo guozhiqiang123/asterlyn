@@ -130,9 +130,25 @@ fn actual_workspace_unsaved_diagnostics_hover_definition_and_completion() {
         let from = selection["start"]["character"].as_u64().unwrap() as usize;
         let to = selection["end"]["character"].as_u64().unwrap() as usize;
         assert_eq!(String::from_utf16(&units[from..to]).unwrap(), symbol);
+        let references = process.request_wait("textDocument/references", Some(json!({
+            "textDocument": { "uri": uri }, "position": { "line": selection["start"]["line"], "character": from + 2 },
+            "context": { "includeDeclaration": false }
+        })), Duration::from_secs(10)).unwrap();
+        assert!(references.error.is_none());
+        assert!(
+            references
+                .result
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["uri"] == json!(app_uri)
+                    && item["range"]["start"]["line"] == json!(line)),
+            "the real declaration must find its actual app call among reference choices"
+        );
         assert_eq!(fs::read(&app_file).unwrap(), app_bytes);
         eprintln!(
-            "real src/app.ts import resolves the exact cross-file declaration range; disk unchanged"
+            "real src/app.ts call resolves its declaration and is found in its cross-file references; disk unchanged"
         );
     }
     process.stop().unwrap();

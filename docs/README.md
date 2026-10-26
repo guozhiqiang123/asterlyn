@@ -226,3 +226,4 @@ The documents in this directory are the current source of truth. A decision that
 
 - [`benchmarks/2026-10-26-language-services-activation-fix.md`](benchmarks/2026-10-26-language-services-activation-fix.md) — desktop validation regression, immutable quarantine repair and actual-project LSP acceptance.
 - [`benchmarks/2026-10-26-language-definition-navigation.md`](benchmarks/2026-10-26-language-definition-navigation.md) — real Ctrl/Command gestures, safe cross-file selection, actual workspace definitions and native delivery.
+- [`benchmarks/2026-10-26-language-reference-navigation.md`](benchmarks/2026-10-26-language-reference-navigation.md) — declaration/usages navigation, searchable choices, actual references and native delivery.

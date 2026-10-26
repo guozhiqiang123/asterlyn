@@ -1,5 +1,9 @@
 # Definition pointer navigation — 2026-10-26
 
+The chooser described below was subsequently replaced by the searchable definition/reference
+picker in [the reference follow-up](2026-10-26-language-reference-navigation.md). This record
+retains its original accepted build and measurements.
+
 The [plan](../engineering/2026-10-26-language-definition-navigation-plan.md) was committed as
 `8e2547a` before implementation. This extends the already admitted TS/JS provider's ordinary
 source editor; it does not change the immutable plugin package or native execution approval.
