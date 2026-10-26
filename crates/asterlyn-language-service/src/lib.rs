@@ -6,6 +6,8 @@
 
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
+use std::path::PathBuf;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,8 @@ use serde_json::Value;
 pub const MAX_HEADER_BYTES: usize = 8 * 1024;
 pub const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_PENDING_REQUESTS: usize = 128;
+pub const TYPESCRIPT_SERVER_ENTRY: &str = "servers/typescript/server.mjs";
+pub const TYPESCRIPT_IMPL_ENTRY: &str = "servers/typescript/typescript/lib/tsserver.js";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrameError {
@@ -100,25 +104,28 @@ pub enum JsonRpcMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
-    pub id: u64,
+    pub id: JsonRpcId,
     pub method: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
-    pub id: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: JsonRpcId,
+    #[serde(default)]
     pub result: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<JsonRpcError>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct JsonRpcNotification {
     pub jsonrpc: String,
     pub method: String,
@@ -132,6 +139,13 @@ pub struct JsonRpcError {
     pub message: String,
     #[serde(default)]
     pub data: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(untagged)]
+pub enum JsonRpcId {
+    Number(u64),
+    String(String),
 }
 
 #[derive(Debug, Default)]
@@ -155,11 +169,14 @@ impl PendingRequests {
         self.pending.insert(id, ());
         Ok(id)
     }
-    pub fn complete(&mut self, id: u64) -> bool {
-        self.pending.remove(&id).is_some()
+    pub fn complete(&mut self, id: &JsonRpcId) -> bool {
+        match id {
+            JsonRpcId::Number(value) => self.pending.remove(value).is_some(),
+            JsonRpcId::String(_) => false,
+        }
     }
     pub fn cancel(&mut self, id: u64) -> bool {
-        self.complete(id)
+        self.complete(&JsonRpcId::Number(id))
     }
     pub fn len(&self) -> usize {
         self.pending.len()
@@ -172,6 +189,138 @@ pub enum SessionError {
     InvalidMessage(String),
     Cancelled,
     Closed,
+    Process(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeScriptServerProfile {
+    pub package_root: PathBuf,
+    pub node: PathBuf,
+}
+
+impl TypeScriptServerProfile {
+    pub fn validate(&self) -> Result<(), SessionError> {
+        if !self.node.is_absolute() || !self.package_root.is_absolute() {
+            return Err(SessionError::Process(
+                "language-service paths must be absolute".into(),
+            ));
+        }
+        if !self.node.is_file() {
+            return Err(SessionError::Process(
+                "trusted Node executable is missing".into(),
+            ));
+        }
+        let server = self.package_root.join(TYPESCRIPT_SERVER_ENTRY);
+        let typescript = self.package_root.join(TYPESCRIPT_IMPL_ENTRY);
+        if !server.is_file() || !typescript.is_file() {
+            return Err(SessionError::Process(
+                "admitted TypeScript server assets are incomplete".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+pub struct LanguageServiceProcess {
+    child: Child,
+    session: LanguageServiceSession<ChildStdin>,
+    stdout: ChildStdout,
+}
+
+impl LanguageServiceProcess {
+    pub fn start(profile: &TypeScriptServerProfile) -> Result<Self, SessionError> {
+        profile.validate()?;
+        let mut child = Command::new(&profile.node)
+            .arg(profile.package_root.join(TYPESCRIPT_SERVER_ENTRY))
+            .arg("--stdio")
+            .current_dir(&profile.package_root)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| SessionError::Process(format!("start language server: {error}")))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| SessionError::Process("language server stdin unavailable".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| SessionError::Process("language server stdout unavailable".into()))?;
+        Ok(Self {
+            child,
+            session: LanguageServiceSession::new(stdin),
+            stdout,
+        })
+    }
+
+    pub fn initialize(&mut self, root_uri: &str) -> Result<u64, SessionError> {
+        let params = serde_json::json!({"processId": null, "rootUri": root_uri, "capabilities": {"textDocument": {"hover": {}, "completion": {}, "definition": {}}, "workspace": {}}, "initializationOptions": {"typescript": {"tsdk": TYPESCRIPT_IMPL_ENTRY}, "disableAutomaticTypingAcquisition": true, "disableSuggestions": false}});
+        self.session.request("initialize", Some(params))
+    }
+
+    pub fn request(&mut self, method: &str, params: Option<Value>) -> Result<u64, SessionError> {
+        self.session.request(method, params)
+    }
+    pub fn cancel(&mut self, id: u64) -> Result<bool, SessionError> {
+        self.session.cancel(id)
+    }
+    pub fn read_message(&mut self) -> Result<Option<JsonRpcMessage>, SessionError> {
+        let Some(body) = read_frame(&mut self.stdout)
+            .map_err(|error| SessionError::Process(format!("read language server: {error:?}")))?
+        else {
+            return Ok(None);
+        };
+        let message = serde_json::from_slice(&body)
+            .map_err(|error| SessionError::InvalidMessage(error.to_string()))?;
+        let protocol = match &message {
+            JsonRpcMessage::Request(value) => &value.jsonrpc,
+            JsonRpcMessage::Response(value) => &value.jsonrpc,
+            JsonRpcMessage::Notification(value) => &value.jsonrpc,
+        };
+        if protocol != "2.0" {
+            return Err(SessionError::InvalidMessage(
+                "unsupported JSON-RPC version".into(),
+            ));
+        }
+        match &message {
+            JsonRpcMessage::Response(response) => {
+                self.session.accept_response(response);
+            }
+            JsonRpcMessage::Request(request) => {
+                if request.method == "workspace/applyEdit"
+                    || request.method == "workspace/executeCommand"
+                    || request.method == "workspace/willRenameFiles"
+                {
+                    let response = JsonRpcResponse {
+                        jsonrpc: "2.0".into(),
+                        id: request.id.clone(),
+                        result: None,
+                        error: Some(JsonRpcError {
+                            code: -32601,
+                            message: "workspace mutation is disabled".into(),
+                            data: None,
+                        }),
+                    };
+                    let bytes = serde_json::to_vec(&response)
+                        .map_err(|error| SessionError::InvalidMessage(error.to_string()))?;
+                    write_frame(self.session.writer_mut(), &bytes).map_err(|error| {
+                        SessionError::Process(format!("write rejection: {error:?}"))
+                    })?;
+                }
+            }
+            JsonRpcMessage::Notification(_) => {}
+        }
+        Ok(Some(message))
+    }
+    pub fn stop(&mut self) -> Result<(), SessionError> {
+        self.session.close();
+        let _ = self.child.kill();
+        self.child
+            .wait()
+            .map_err(|error| SessionError::Process(format!("wait language server: {error}")))?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,6 +447,12 @@ pub struct LanguageServiceSession<W: Write> {
 }
 
 impl<W: Write> LanguageServiceSession<W> {
+    fn writer_mut(&mut self) -> &mut W {
+        &mut self.writer
+    }
+}
+
+impl<W: Write> LanguageServiceSession<W> {
     pub fn new(writer: W) -> Self {
         Self {
             writer,
@@ -316,7 +471,7 @@ impl<W: Write> LanguageServiceSession<W> {
         let id = self.pending.reserve()?;
         let message = serde_json::to_vec(&JsonRpcRequest {
             jsonrpc: "2.0".into(),
-            id,
+            id: JsonRpcId::Number(id),
             method: method.into(),
             params,
         })
@@ -348,7 +503,7 @@ impl<W: Write> LanguageServiceSession<W> {
         Ok(removed)
     }
     pub fn accept_response(&mut self, response: &JsonRpcResponse) -> bool {
-        self.pending.complete(response.id)
+        self.pending.complete(&response.id)
     }
     pub fn close(&mut self) {
         self.closed = true;
