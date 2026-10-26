@@ -10,7 +10,7 @@ import {
 test("bundled Android plugin artifact matches the host-pinned isolated identity", async () => {
   const artifact = await readFile(BUNDLED_ANDROID_PACKAGE_URL);
   const manifest = await readBundledAndroidManifest();
-  const hostSource = await readFile(new URL("../src-tauri/src/commands/plugin_marketplace.rs", import.meta.url), "utf8");
+  const hostSource = await readFile(new URL("../src-tauri/src/commands/plugin_marketplace/bundled.rs", import.meta.url), "utf8");
   const digest = createHash("sha256").update(artifact).digest("hex");
   assert.equal(digest, "36f4839f49e8723c455561d12bad5972c225c35a043e8527f0cff43a2b3c83af");
   assert.match(hostSource, new RegExp(`sha256:${digest}`, "u"));

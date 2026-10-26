@@ -7,7 +7,7 @@ use asterlyn_plugin_runtime::{
 use asterlyn_plugin_runtime_protocol::{HostTheme, ShutdownReason};
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
-use tauri::{Emitter, State, WebviewWindow};
+use tauri::{Emitter, Manager, State, WebviewWindow};
 
 use crate::application::{
     ActiveWorkspaces, DiagnosticsLog, PluginMarketplaceCoordinator, PluginProcessQueryManager,
@@ -427,6 +427,11 @@ pub(crate) fn deactivate_installed_plugin_runtime(
     process_queries: State<'_, PluginProcessQueryManager>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) {
+    if plugin_id == "dev.asterlyn.lsp" {
+        window
+            .state::<crate::application::LanguageServiceManager>()
+            .cancel_owner(window.label());
+    }
     process_queries.cancel_plugin(&plugin_id);
     process_queries.revoke_authority(window.label(), &plugin_id);
     supervisor.stop_plugin(

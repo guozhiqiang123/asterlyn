@@ -33,3 +33,9 @@ export function assertLanguageServiceResultEnvelope(value: unknown, command: Des
   assert(encoded.length > 0 && new TextEncoder().encode(encoded).length <= MAX_RESULT_BYTES, command, "result exceeds the size limit or is not JSON serializable");
 }
 
+
+export function validateLanguageServiceDesktopResult(validator: string, value: unknown, command: DesktopCommandName): boolean {
+  if (validator === "languageServiceReview") { assertLanguageServiceReview(value, command); return true; }
+  if (validator === "languageServiceResultEnvelope") { assertLanguageServiceResultEnvelope(value, command); return true; }
+  return false;
+}

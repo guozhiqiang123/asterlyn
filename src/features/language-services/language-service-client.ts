@@ -1,310 +1,156 @@
-import type {
-  EditorLanguageServiceDiagnostic,
-  EditorLanguageServiceHandle,
-  EditorLanguageServiceLocation,
-  EditorLanguageServicePort,
-  EditorLanguageServiceSnapshot,
-} from "../../protocol/editor-language-service.ts";
+import type { EditorLanguageServiceDiagnostic, EditorLanguageServiceHandle, EditorLanguageServiceLocation, EditorLanguageServicePort, EditorLanguageServicePortFactory, EditorLanguageServiceSnapshot } from "../../protocol/editor-language-service.ts";
 
-type Feature = "hover" | "definition" | "completion";
-type Identity = {
-  workspaceRoot: string;
-  workspaceGeneration: number;
-  uri: string;
-  languageId: string;
-  pluginId: string;
-};
-type Native = {
-  prepare(
-    root: string,
-    pluginId: string,
-  ): Promise<{ reviewId: string; pluginId: string; serverId: "typescript" }>;
-  confirm(review: unknown): Promise<boolean>;
-  start(root: string, reviewId: string): Promise<string>;
-  open(
-    root: string,
-    session: string,
-    uri: string,
-    languageId: string,
-    version: number,
-    text: string,
-  ): Promise<void>;
-  change(
-    root: string,
-    session: string,
-    uri: string,
-    version: number,
-    changes: readonly { range: unknown; text: string }[],
-  ): Promise<void>;
-  close(root: string, session: string, uri: string): Promise<void>;
-  request(
-    root: string,
-    session: string,
-    uri: string,
-    version: number,
-    requestId: string,
-    feature: Feature,
-    line: number,
-    character: number,
-  ): Promise<{
-    sessionId: string;
-    uri: string;
-    version: number;
-    result: unknown;
-  }>;
-  cancel(root: string, session: string, requestId: string): Promise<void>;
-  stop(root: string, session: string): Promise<void>;
-  subscribe(
-    listener: (event: {
-      sessionId: string;
-      uri?: string;
-      version?: number;
-      kind: "diagnostics" | "terminated";
-      diagnostics?: readonly EditorLanguageServiceDiagnostic[];
-    }) => void,
-  ): () => void;
-};
-
-const MAX_TEXT = 2 * 1024 * 1024;
-const MAX_DOCS = 32;
-const MAX_REQUESTS = 64;
-
-export function createEditorLanguageServicePort(
-  identity: (handle: EditorLanguageServiceHandle) => Identity | null,
-  native: Native,
-  reportError: (error: unknown) => void,
-  navigate?: (location: EditorLanguageServiceLocation) => void,
-): EditorLanguageServicePortFactory {
-  const sessions = new Map<string, Session>();
-  const unsubscribe = native.subscribe((event) => {
-    for (const session of sessions.values()) session.event(event);
-  });
-  return (handle) => {
-    const info = identity(handle);
-    if (!info) return null;
-    const key = `${info.workspaceRoot}\0${info.pluginId}`;
-    let session = sessions.get(key);
-    if (!session) {
-      session = new Session(info, native, reportError, () =>
-        sessions.delete(key),
-      );
-      sessions.set(key, session);
-    }
-    return session.port(handle, navigate);
-  };
-  // Factory lifetime owns the event subscription; callers may dispose by dropping the factory.
-  void unsubscribe;
+export interface LanguageDocumentIdentity {
+  readonly workspaceRoot: string; readonly workspaceGeneration: number; readonly uri: string;
+  readonly languageId: string; readonly pluginId: string; readonly providerVersion?: string;
 }
+export type { NativeLanguageServiceBridge, LanguageServiceEvent } from "../../protocol/language-service.ts";
+import type { NativeLanguageServiceBridge, LanguageServiceEvent } from "../../protocol/language-service.ts";
+export type LanguageServiceFactory = EditorLanguageServicePortFactory & { dispose(): void; reconcile(): void };
+type Listener = Parameters<EditorLanguageServicePort["subscribeDiagnostics"]>[0];
+interface Document {
+  handle: EditorLanguageServiceHandle; info: LanguageDocumentIdentity; latest: EditorLanguageServiceSnapshot;
+  sent: number; opened: boolean; closed: boolean; port: EditorLanguageServicePort; timer: ReturnType<typeof setTimeout> | null;
+  listeners: Set<Listener>; requests: Map<string, number>;
+}
+const MAX_TEXT_BYTES = 2 * 1024 * 1024;
+const handleKey = (h: EditorLanguageServiceHandle) => JSON.stringify([h.tabId, h.path, h.loadEpoch]);
+const sessionKey = (i: LanguageDocumentIdentity) => JSON.stringify([i.workspaceRoot, i.workspaceGeneration, i.pluginId, i.providerVersion]);
+const validSnapshot = (s: EditorLanguageServiceSnapshot) => Number.isSafeInteger(s.version) && s.version > 0 && s.text.length <= MAX_TEXT_BYTES && new TextEncoder().encode(s.text).length <= MAX_TEXT_BYTES;
 
+/** Owns current overlays, ordered synchronization and result identity independently of editor UI. */
+export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void): LanguageServiceFactory {
+  const sessions = new Map<string, Session>();
+  let disposed = false;
+  const unsubscribe = native.subscribe((event) => { if (!disposed) for (const session of sessions.values()) session.event(event); });
+  const factory = ((handle: EditorLanguageServiceHandle) => {
+    const info = resolve(handle);
+    if (disposed || !info) return null;
+    const key = sessionKey(info);
+    let session = sessions.get(key);
+    if (!session) { session = new Session(info, native, resolve, reportError, navigate); sessions.set(key, session); }
+    return session.port(handle, info);
+  }) as LanguageServiceFactory;
+  factory.reconcile = () => {
+    for (const [key, session] of sessions) {
+      if (!session.reconcile()) { session.dispose(); sessions.delete(key); }
+    }
+  };
+  factory.dispose = () => {
+    if (disposed) return; disposed = true; unsubscribe();
+    for (const session of sessions.values()) session.dispose(); sessions.clear(); native.dispose?.();
+  };
+  return factory;
+}
 class Session {
-  private readonly info: Identity;
-  private readonly native: Native;
-  private readonly reportError: (error: unknown) => void;
-  private readonly removed: () => void;
+  private readonly docs = new Map<string, Document>();
   private sessionId: string | null = null;
-  private review: unknown = null;
-  private approved = false;
-  private denied = false;
-  private docs = new Map<
-    string,
-    { version: number; text: string; queue: Promise<void> }
-  >();
-  private requests = new Map<
-    string,
-    { handle: EditorLanguageServiceHandle; version: number }
-  >();
-  private listeners = new Set<
-    (event: {
-      readonly handle: EditorLanguageServiceHandle;
-      readonly version: number;
-      readonly diagnostics: readonly EditorLanguageServiceDiagnostic[];
-    }) => void
-  >();
-  constructor(info: Identity, native: Native, reportError: (error: unknown) => void, removed: () => void) { this.info = info; this.native = native; this.reportError = reportError; this.removed = removed; }
-  port(
-    handle: EditorLanguageServiceHandle,
-    navigate?: (location: EditorLanguageServiceLocation) => void,
-  ): EditorLanguageServicePort {
-    return {
-      open: (_, snapshot) =>
-        void this.enqueue(handle, () => this.open(handle, snapshot)),
-      update: (_, snapshot) =>
-        void this.enqueue(handle, () => this.update(handle, snapshot)),
-      close: () => void this.enqueue(handle, () => this.close(handle)),
-      request: <T>(
-        _: unknown,
-        method: string,
-        params: unknown,
-        version: number,
-      ) =>
-        this.request(
-          handle,
-          method,
-          params,
-          version,
-          navigate,
-        ) as Promise<T | null>,
-      subscribeDiagnostics: (listener) => {
-        this.listeners.add(listener);
-        return () => this.listeners.delete(listener);
+  private starting: Promise<string | null> | null = null;
+  private serial: Promise<void> = Promise.resolve();
+  private dead = false; private denied = false; private failed = false; private sequence = 0;
+  private approvedIdentity: string | null = null;
+  private readonly info: LanguageDocumentIdentity;
+  private readonly native: NativeLanguageServiceBridge;
+  private readonly resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null;
+  private readonly reportError: (error: unknown) => void;
+  private readonly navigate: ((location: EditorLanguageServiceLocation) => void) | undefined;
+  constructor(info: LanguageDocumentIdentity, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void) { this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
+  port(handle: EditorLanguageServiceHandle, info: LanguageDocumentIdentity): EditorLanguageServicePort | null {
+    const key = handleKey(handle); const existing = this.docs.get(key);
+    if (existing && !existing.closed) return existing.port;
+    if (this.dead || this.docs.size >= 32) return null;
+    const doc = { handle: { ...handle }, info, latest: { version: 0, text: "" }, sent: 0, opened: false, closed: false, timer: null, listeners: new Set<Listener>(), requests: new Map<string, number>() } as unknown as Document;
+    doc.port = {
+      open: (_handle, snapshot) => { this.accept(doc, snapshot); this.enqueue(() => this.flush(doc)); },
+      update: (_handle, snapshot) => {
+        if (!this.accept(doc, snapshot)) return;
+        if (doc.timer) clearTimeout(doc.timer);
+        doc.timer = setTimeout(() => { doc.timer = null; this.enqueue(() => this.flush(doc)); }, 50);
       },
-      navigate,
+      close: () => this.close(doc),
+      request: <T>(_handle: EditorLanguageServiceHandle, method: string, params: unknown, version: number) => this.request(doc, method, params, version) as Promise<T | null>,
+      navigate: (location) => { if (this.current(doc)) this.navigate?.(location); },
+      subscribeDiagnostics: (listener) => { doc.listeners.add(listener); return () => doc.listeners.delete(listener); },
     };
+    this.docs.set(key, doc); return doc.port;
   }
-  event(event: {
-    sessionId: string;
-    uri?: string;
-    version?: number;
-    kind: "diagnostics" | "terminated";
-    diagnostics?: readonly EditorLanguageServiceDiagnostic[];
-  }) {
-    if (event.sessionId !== this.sessionId) return;
-    if (event.kind === "terminated") {
-      this.sessionId = null;
-      this.docs.clear();
-      return;
-    }
-    if (!event.uri || event.version === undefined || !event.diagnostics) return;
-    const doc = this.docs.get(event.uri);
-    if (!doc || doc.version !== event.version) return;
-    for (const listener of this.listeners)
-      listener({
-        handle: {
-          tabId: "",
-          path: event.uri,
-          loadEpoch: this.info.workspaceGeneration,
-        },
-        version: event.version,
-        diagnostics: event.diagnostics,
-      });
+  private current(doc: Document): boolean { const identity = this.resolve(doc.handle); return !this.dead && !doc.closed && identity !== null && sessionKey(identity) === sessionKey(doc.info) && identity.uri === doc.info.uri; }
+  private accept(doc: Document, snapshot: EditorLanguageServiceSnapshot): boolean {
+    if (!this.current(doc) || !validSnapshot(snapshot) || snapshot.version <= doc.latest.version) return false;
+    doc.latest = snapshot;
+    for (const [id] of doc.requests) { if (this.sessionId) void this.native.cancel(this.info.workspaceRoot, this.sessionId, id).catch(() => undefined); }
+    this.publish(doc, []); return true;
   }
-  private async ensure(): Promise<string> {
+  private enqueue(action: () => Promise<void>): Promise<void> {
+    this.serial = this.serial.then(action).catch((error) => { if (!this.dead && !this.denied && !this.failed) { this.failed = true; this.reportError(error); } });
+    return this.serial;
+  }
+  private async ensure(): Promise<string | null> {
+    if (this.dead || this.denied || this.failed || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
     if (this.sessionId) return this.sessionId;
-    if (this.denied) throw new Error("language-service execution was denied");
-    if (!this.approved) {
-      this.review = await this.native.prepare(
-        this.info.workspaceRoot,
-        this.info.pluginId,
-      );
-      this.approved = await this.native.confirm(this.review);
-      if (!this.approved) { this.denied = true;
-        throw new Error("language-service execution was denied");
-      }
+    if (this.starting) return this.starting;
+    this.starting = (async () => {
+      const review = await this.native.prepare(this.info.workspaceRoot, this.info.pluginId);
+      const identity = JSON.stringify([review.pluginVersion, review.packageDigest, review.resourceDigest, review.executableIdentity]);
+      if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
+      if (this.approvedIdentity !== identity && !await this.native.confirm(review)) { this.denied = true; return null; }
+      this.approvedIdentity = identity;
+      if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
+      const session = await this.native.start(this.info.workspaceRoot, review.reviewId);
+      if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) { await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); return null; }
+      this.sessionId = session; return session;
+    })().finally(() => { this.starting = null; });
+    return this.starting;
+  }
+  private async flush(doc: Document): Promise<void> {
+    if (!this.current(doc) || doc.latest.version === doc.sent || doc.latest.version === 0) return;
+    const session = await this.ensure(); if (!session || !this.current(doc)) return;
+    const snapshot = doc.latest;
+    if (!doc.opened) {
+      // Server versions begin at one for each freshly opened URI, then follow the editor clock.
+      await this.native.open(this.info.workspaceRoot, session, doc.info.uri, doc.info.languageId, 1, snapshot.text);
+      doc.opened = true; doc.sent = 1;
+      if (!this.current(doc)) return;
     }
-    this.sessionId = await this.native.start(
-      this.info.workspaceRoot,
-      (this.review as { reviewId: string }).reviewId,
-    );
-    return this.sessionId;
+    if (snapshot.version > doc.sent) await this.native.change(this.info.workspaceRoot, session, doc.info.uri, snapshot.version, [{ range: null, text: snapshot.text }]);
+    doc.sent = snapshot.version;
   }
-  private enqueue(
-    handle: EditorLanguageServiceHandle,
-    operation: () => Promise<void>,
-  ) {
-    const info = identitySafe(handle, this.info);
-    if (!info) return;
-    const doc = this.docs.get(info.uri) ?? {
-      version: 0,
-      text: "",
-      queue: Promise.resolve(),
-    };
-    doc.queue = doc.queue.then(operation).catch(this.reportError);
-    this.docs.set(info.uri, doc);
-  }
-  private async open(
-    _handle: EditorLanguageServiceHandle,
-    snapshot: EditorLanguageServiceSnapshot,
-  ) {
-    if (snapshot.text.length > MAX_TEXT || this.docs.size > MAX_DOCS)
-      throw new Error("language-service document limit exceeded");
-    const session = await this.ensure();
-    await this.native.open(
-      this.info.workspaceRoot,
-      session,
-      this.info.uri,
-      this.info.languageId,
-      snapshot.version,
-      snapshot.text,
-    );
-    this.docs.set(this.info.uri, {
-      version: snapshot.version,
-      text: snapshot.text,
-      queue: Promise.resolve(),
+  private close(doc: Document): void {
+    if (doc.closed) return; doc.closed = true;
+    if (doc.timer) clearTimeout(doc.timer); doc.timer = null;
+    for (const [id] of doc.requests) if (this.sessionId) void this.native.cancel(this.info.workspaceRoot, this.sessionId, id).catch(() => undefined);
+    doc.listeners.clear(); this.docs.delete(handleKey(doc.handle));
+    this.enqueue(async () => {
+      const session = this.sessionId;
+      if (session && doc.opened) await this.native.close(this.info.workspaceRoot, session, doc.info.uri).catch(() => undefined);
+      if (!this.docs.size && session) { this.sessionId = null; await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); }
     });
   }
-  private async update(
-    _handle: EditorLanguageServiceHandle,
-    snapshot: EditorLanguageServiceSnapshot,
-  ) {
-    const doc = this.docs.get(this.info.uri);
-    if (!doc || snapshot.version <= doc.version) return;
-    const session = await this.ensure();
-    await this.native.change(
-      this.info.workspaceRoot,
-      session,
-      this.info.uri,
-      snapshot.version,
-      [{ range: null, text: snapshot.text }],
-    );
-    doc.version = snapshot.version;
-    doc.text = snapshot.text;
-  }
-  private async close(_handle: EditorLanguageServiceHandle) {
+  private async request(doc: Document, method: string, params: unknown, version: number): Promise<unknown | null> {
+    const feature = ({ "textDocument/hover": "hover", "textDocument/definition": "definition", "textDocument/completion": "completion", hover: "hover", definition: "definition", completion: "completion" } as const)[method as "hover"];
+    const pos = (params as { position?: { line?: unknown; character?: unknown } } | null)?.position;
+    if (!feature || !pos || !Number.isSafeInteger(pos.line) || !Number.isSafeInteger(pos.character) || Number(pos.line) < 0 || Number(pos.character) < 0 || !this.current(doc) || doc.latest.version !== version || doc.requests.size >= 16 || [...this.docs.values()].reduce((count, item) => count + item.requests.size, 0) >= 64) return null;
+    if (doc.timer) { clearTimeout(doc.timer); doc.timer = null; }
+    await this.enqueue(() => this.flush(doc));
     const session = this.sessionId;
-    if (session)
-      await this.native.close(this.info.workspaceRoot, session, this.info.uri);
-    this.docs.delete(this.info.uri);
-    if (!this.docs.size && session) {
-      await this.native.stop(this.info.workspaceRoot, session);
-      this.sessionId = null;
-      this.removed();
-    }
-  }
-  private async request(
-    handle: EditorLanguageServiceHandle,
-    method: string,
-    params: unknown,
-    version: number,
-    navigate?: (location: EditorLanguageServiceLocation) => void,
-  ) {
-    void navigate;
-    const feature =
-      method === "hover"
-        ? "hover"
-        : method === "definition"
-          ? "definition"
-          : method === "completion"
-            ? "completion"
-            : null;
-    if (!feature || this.requests.size >= MAX_REQUESTS) return null;
-    const doc = this.docs.get(this.info.uri);
-    if (!doc || doc.version !== version) return null;
-    const session = await this.ensure();
-    const requestId = `${Date.now()}-${this.requests.size}`;
-    this.requests.set(requestId, { handle, version });
+    if (!session || !doc.opened || !this.current(doc) || doc.latest.version !== version || doc.sent !== version) return null;
+    const id = `${++this.sequence}`; doc.requests.set(id, version);
     try {
-      const result = await this.native.request(
-        this.info.workspaceRoot,
-        session,
-        this.info.uri,
-        version,
-        requestId,
-        feature,
-        Number((params as any)?.position?.line ?? 0),
-        Number((params as any)?.position?.character ?? 0),
-      );
-      return result.version === doc.version ? result.result : null;
-    } finally {
-      this.requests.delete(requestId);
-    }
+      const envelope = await this.native.request(this.info.workspaceRoot, session, doc.info.uri, version, id, feature, Number(pos.line), Number(pos.character));
+      return this.current(doc) && this.sessionId === session && doc.latest.version === version && envelope.sessionId === session && envelope.uri === doc.info.uri && envelope.version === version ? envelope.result : null;
+    } catch { return null; } finally { doc.requests.delete(id); }
+  }
+  event(event: LanguageServiceEvent): void {
+    if (event.sessionId !== this.sessionId) return;
+    if (event.kind === "terminated") { this.sessionId = null; this.failed = true; for (const doc of this.docs.values()) this.publish(doc, []); return; }
+    for (const doc of this.docs.values()) if (this.current(doc) && event.uri === doc.info.uri && event.version === doc.latest.version && event.diagnostics) this.publish(doc, event.diagnostics);
+  }
+  private publish(doc: Document, diagnostics: readonly EditorLanguageServiceDiagnostic[]): void { for (const listener of doc.listeners) listener({ handle: doc.handle, version: doc.latest.version, diagnostics }); }
+  reconcile(): boolean { for (const doc of [...this.docs.values()]) if (!this.current(doc)) this.close(doc); return this.docs.size > 0; }
+  dispose(): void {
+    if (this.dead) return;
+    for (const doc of [...this.docs.values()]) this.close(doc); this.dead = true;
+    const session = this.sessionId; this.sessionId = null;
+    if (session) void this.native.stop(this.info.workspaceRoot, session).catch(() => undefined);
   }
 }
-function identitySafe(handle: EditorLanguageServiceHandle, info: Identity) {
-  return handle.path === info.uri ||
-    handle.path === info.uri.replace(/^file:\/\//, "")
-    ? info
-    : null;
-}
-export type EditorLanguageServicePortFactory = (
-  handle: EditorLanguageServiceHandle,
-) => EditorLanguageServicePort | null;

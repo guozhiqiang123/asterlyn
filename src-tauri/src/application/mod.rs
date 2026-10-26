@@ -3,13 +3,13 @@ pub(crate) mod diagnostics;
 mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod history_page_cache;
+pub(crate) mod language_service;
 mod operation_supervisor;
 mod plugin_marketplace;
 mod plugin_process_query;
 mod plugin_runtime;
 pub(crate) mod plugin_task_cache;
 mod plugin_workspace_state;
-pub(crate) mod language_service;
 mod search_session;
 mod task;
 mod task_artifacts;
@@ -31,6 +31,7 @@ pub(crate) use commit_file_restore::{
 pub(crate) use diagnostics::DiagnosticsLog;
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use history_page_cache::HistoryPageCacheRegistry;
+pub(crate) use language_service::LanguageServiceManager;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use plugin_marketplace::{PendingPluginAdmission, PluginMarketplaceCoordinator};
 pub(crate) use plugin_process_query::{
@@ -77,4 +78,3 @@ pub(crate) use workspace_session::{
     PendingRepositoryWindows, WorkspaceWatchRoots, WorkspaceWriteRegistry,
 };
 pub(crate) use workspace_watch::{WorkspaceWatchService, WorkspaceWatchStatus};
-pub(crate) use language_service::LanguageServiceManager;

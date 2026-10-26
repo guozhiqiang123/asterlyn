@@ -42,9 +42,9 @@ export interface DesktopCommandMap {
   open_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; languageId: string; version: number; text: string; }; result: void };
   change_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; version: number; changes: Array<LanguageServiceTextChange>; }; result: void };
   close_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; }; result: void };
-  request_language_service: { args: { workspaceRoot: string; sessionId: string; uri: string; feature: string; version: number; line: number; character: number; }; result: LanguageServiceResultEnvelope };
-  cancel_language_request: { args: { sessionId: string; requestId: number; }; result: boolean };
-  stop_language_service: { args: { sessionId: string; }; result: boolean };
+  request_language_service: { args: { workspaceRoot: string; sessionId: string; uri: string; feature: string; version: number; requestId: string; line: number; character: number; }; result: LanguageServiceResultEnvelope };
+  cancel_language_request: { args: { workspaceRoot: string; sessionId: string; requestId: string; }; result: boolean };
+  stop_language_service: { args: { workspaceRoot: string; sessionId: string; }; result: boolean };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   is_last_project_window: { args: Record<string, never>; result: boolean };
   initial_repository: { args: Record<string, never>; result: string | null };

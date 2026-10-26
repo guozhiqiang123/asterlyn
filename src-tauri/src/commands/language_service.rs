@@ -1,228 +1,436 @@
-use crate::application::{ActiveWorkspaces, LanguageServiceManager};
+use crate::application::language_service::{
+    LanguagePackage, LanguageServiceResult, LanguageSubject,
+};
+use crate::application::{ActiveWorkspaces, DiagnosticsLog, LanguageServiceManager};
 use crate::commands::{
     admission_context, installation_store, installed_package_root, select_installed_plugin,
     verify_installed_package_archive,
 };
+use asterlyn_language_service::{TextChange, TextPosition, TextRange};
 use asterlyn_plugin_package::inspect_extracted_package;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State, Window};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
+const PLUGIN_ID: &str = "dev.asterlyn.lsp";
+const EVENT: &str = "asterlyn://language-service-event";
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LanguageServiceReview {
     pub review_id: String,
     pub plugin_id: String,
     pub server_id: &'static str,
+    pub plugin_version: String,
+    pub package_digest: String,
+    pub resource_digest: String,
+    pub executable_identity: String,
+    pub expires_at: u64,
 }
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LanguageServiceResultEnvelope {
-    pub session_id: String,
-    pub uri: String,
-    pub version: i64,
-    pub result: serde_json::Value,
-}
-
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct LanguageServiceChange {
     pub range: Option<TextRangeWire>,
     pub text: String,
 }
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct TextRangeWire {
     pub start: TextPositionWire,
     pub end: TextPositionWire,
 }
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct TextPositionWire {
     pub line: u32,
     pub character: u32,
 }
 
-#[tauri::command]
-pub(crate) fn prepare_language_service(
-    workspace_root: String,
-    plugin_id: String,
-    app: AppHandle,
-    window: Window,
-    active: State<'_, ActiveWorkspaces>,
-    manager: State<'_, LanguageServiceManager>,
-) -> Result<LanguageServiceReview, String> {
-    if plugin_id != "dev.asterlyn.lsp" || workspace_root.trim().is_empty() {
-        return Err("language-service provider is not admitted".into());
-    }
-    let canonical = active
-        .resolve(window.label(), &workspace_root)
-        .map_err(|error| format!("workspace is not active: {error}"))?;
-    let _ = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let review_id = manager.next_id("ls-review", window.label());
-    manager.review(review_id.clone(), canonical.to_string_lossy().into_owned())?;
-    Ok(LanguageServiceReview {
-        review_id,
-        plugin_id,
-        server_id: "typescript",
+fn subject(
+    active: &ActiveWorkspaces,
+    window: &WebviewWindow,
+    root: &str,
+) -> Result<LanguageSubject, String> {
+    Ok(LanguageSubject {
+        owner: window.label().into(),
+        root: active
+            .resolve(window.label(), root)
+            .map_err(|_| "workspace is no longer active")?,
+        activation: active
+            .activation_token(window.label())
+            .map_err(|_| "workspace activation ended")?,
     })
 }
-
-#[tauri::command]
-pub(crate) fn start_language_service(
-    workspace_root: String,
-    review_id: String,
-    app: AppHandle,
-    window: Window,
-    active: State<'_, ActiveWorkspaces>,
-    manager: State<'_, LanguageServiceManager>,
-) -> Result<String, String> {
-    let canonical = active
-        .resolve(window.label(), &workspace_root)
-        .map_err(|error| format!("workspace is not active: {error}"))?;
-    manager.consume_review(&review_id, canonical.to_string_lossy().as_ref())?;
-    let snapshot = installation_store(&app)?
+fn installed_package(app: &AppHandle, workspace: &Path) -> Result<LanguagePackage, String> {
+    let snapshot = installation_store(app)?
         .snapshot()
-        .map_err(|error| error.to_string())?;
-    let selection = select_installed_plugin(&snapshot, "dev.asterlyn.lsp")?;
-    verify_installed_package_archive(
-        &app,
-        "dev.asterlyn.lsp",
-        &selection.version,
-        &selection.package_digest,
-    )?;
-    let package_root = installed_package_root(
-        &app,
-        "dev.asterlyn.lsp",
-        &selection.version,
-        &selection.package_digest,
-    )?;
+        .map_err(|_| "plugin installation state unavailable")?;
+    let selected = select_installed_plugin(&snapshot, PLUGIN_ID)?;
+    if selected.repository != "guozhiqiang123/asterlyn-plugin-lsp" {
+        return Err("language plugin repository is not approved for this profile".into());
+    }
+    verify_installed_package_archive(app, PLUGIN_ID, &selected.version, &selected.package_digest)?;
+    let root = installed_package_root(app, PLUGIN_ID, &selected.version, &selected.package_digest)?;
     let report = inspect_extracted_package(
-        &package_root,
-        &admission_context(&selection.repository, &selection.version),
+        &root,
+        &admission_context(&selected.repository, &selected.version),
     )
-    .map_err(|error| format!("installed language-service package failed revalidation: {error}"))?;
-    if report.content_digest != selection.content_digest
-        || report.plugin_id != "dev.asterlyn.lsp"
-        || !report
-            .capabilities
-            .iter()
-            .any(|value| value == "languageServices")
+    .map_err(|_| "installed language plugin failed integrity verification")?;
+    if report.plugin_id != PLUGIN_ID
+        || report.plugin_version != selected.version
+        || report.content_digest != selected.content_digest
+        || !report.capabilities.iter().any(|v| v == "languageServices")
         || !report
             .permissions
             .iter()
-            .any(|value| value == "host.language-services.execute")
-        || !report
-            .files
-            .iter()
-            .any(|file| file.path == "servers/typescript/server.mjs")
-        || !report
-            .files
-            .iter()
-            .any(|file| file.path == "servers/typescript/typescript/lib/tsserver.js")
+            .any(|v| v == "host.language-services.execute")
+        || ![
+            "servers/typescript/server.mjs",
+            "servers/typescript/typescript/lib/tsserver.js",
+        ]
+        .iter()
+        .all(|name| report.files.iter().any(|f| f.path == *name))
     {
-        return Err(
-            "installed language-service package identity, authority, or resources changed".into(),
-        );
+        return Err("installed language plugin identity, authority or resources changed".into());
     }
-    let root = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let session_id = manager.next_id("ls-session", window.label());
-    let mut profile = crate::application::language_service::package_profile(root);
-    profile.package_root = package_root;
-    manager.start(session_id.clone(), profile)?;
-    Ok(session_id)
+    let node = trusted_node(workspace)?;
+    let node_digest = hash_file(&node)?;
+    Ok(LanguagePackage {
+        version: selected.version,
+        digest: selected.package_digest,
+        content_digest: selected.content_digest,
+        root,
+        node,
+        node_digest,
+    })
+}
+fn hash_file(path: &Path) -> Result<String, String> {
+    let mut file = File::open(path).map_err(|_| "cannot inspect language executable")?;
+    if file
+        .metadata()
+        .map_err(|_| "cannot inspect language executable")?
+        .len()
+        > 256 * 1024 * 1024
+    {
+        return Err("language executable exceeds inspection bound".into());
+    }
+    let mut hash = Sha256::new();
+    let mut buf = [0u8; 65536];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|_| "cannot read language executable")?;
+        if n == 0 {
+            break;
+        }
+        hash.update(&buf[..n]);
+    }
+    Ok(format!("sha256:{:x}", hash.finalize()))
+}
+fn trusted_node(workspace: &Path) -> Result<PathBuf, String> {
+    #[cfg(unix)]
+    let candidates = [
+        "/opt/homebrew/bin/node",
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+    ]
+    .iter()
+    .map(PathBuf::from)
+    .collect::<Vec<_>>();
+    #[cfg(windows)]
+    let candidates = std::env::var_os("ProgramFiles")
+        .map(|root| vec![PathBuf::from(root).join("nodejs/node.exe")])
+        .unwrap_or_default();
+    for candidate in candidates {
+        let Ok(node) = candidate.canonicalize() else {
+            continue;
+        };
+        if node.starts_with(workspace) || !node.is_file() {
+            continue;
+        }
+        let Ok(mut child) = Command::new(&node)
+            .arg("--version")
+            .env_clear()
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            continue;
+        };
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut success = false;
+        while Instant::now() < deadline {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    success = status.success();
+                    break;
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+                Err(_) => break,
+            }
+        }
+        if !success {
+            let _ = child.kill();
+            let _ = child.wait();
+            continue;
+        }
+        let mut version = String::new();
+        if let Some(out) = child.stdout.take() {
+            let _ = out.take(128).read_to_string(&mut version);
+        }
+        let parts = version
+            .trim()
+            .trim_start_matches('v')
+            .split('.')
+            .map(str::parse::<u32>)
+            .collect::<Result<Vec<_>, _>>();
+        if let Ok(parts) = parts
+            && parts.len() == 3
+            && (parts[0], parts[1], parts[2]) >= (22, 22, 2)
+        {
+            return Ok(node);
+        }
+    }
+    Err("TypeScript language services require Node.js 22.22.2 or newer installed in a standard system location".into())
 }
 
 #[tauri::command]
-pub(crate) fn open_language_document(
-    _workspace_root: String,
+pub(crate) async fn prepare_language_service(
+    workspace_root: String,
+    plugin_id: String,
+    app: AppHandle,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
+) -> Result<LanguageServiceReview, String> {
+    if plugin_id != PLUGIN_ID {
+        return Err("unsupported language provider".into());
+    }
+    let owner = subject(&active, &window, &workspace_root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let package = installed_package(&app, &owner.root)?;
+        let review_id = app
+            .state::<LanguageServiceManager>()
+            .prepare(owner, package.clone())?;
+        Ok(LanguageServiceReview {
+            review_id,
+            plugin_id,
+            server_id: "typescript",
+            plugin_version: package.version,
+            package_digest: package.digest,
+            resource_digest: package.content_digest,
+            executable_identity: format!("{} ({})", package.node.display(), package.node_digest),
+            expires_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64
+                + 60000,
+        })
+    })
+    .await
+    .map_err(|_| "language review task failed")?
+}
+#[tauri::command]
+pub(crate) async fn start_language_service(
+    workspace_root: String,
+    review_id: String,
+    app: AppHandle,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
+) -> Result<String, String> {
+    let owner = subject(&active, &window, &workspace_root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let package = installed_package(&app, &owner.root)?;
+        app.state::<LanguageServiceManager>()
+            .consume(&review_id, &owner, &package)?;
+        let permitted_app = app.clone();
+        let permitted_owner = owner.clone();
+        let digest = package.digest.clone();
+        let version = package.version.clone();
+        let allowed = Arc::new(move || {
+            let active = permitted_app.state::<ActiveWorkspaces>();
+            active.activation_token(&permitted_owner.owner).ok() == Some(permitted_owner.activation)
+                && active
+                    .resolve(
+                        &permitted_owner.owner,
+                        permitted_owner.root.to_string_lossy().as_ref(),
+                    )
+                    .ok()
+                    .as_ref()
+                    == Some(&permitted_owner.root)
+                && installation_store(&permitted_app)
+                    .ok()
+                    .and_then(|store| store.snapshot().ok())
+                    .and_then(|snap| select_installed_plugin(&snap, PLUGIN_ID).ok())
+                    .is_some_and(|selected| {
+                        selected.version == version && selected.package_digest == digest
+                    })
+        });
+        let event_app = app.clone();
+        let label = owner.owner.clone();
+        let emit = Arc::new(
+            move |event: crate::application::language_service::LanguageServiceEvent| {
+                if event.kind == "terminated" { event_app.state::<LanguageServiceManager>().finished(&event.session_id); }
+            event_app.state::<DiagnosticsLog>().info("language.service", if event.kind == "terminated" {"session.terminated"} else {"diagnostics.completed"}, None,
+                serde_json::json!({"sessionId":event.session_id,"version":event.version,"diagnosticCount":event.diagnostics.as_ref().and_then(Value::as_array).map(Vec::len),"documentHash":event.uri.as_ref().map(|uri|event_app.state::<DiagnosticsLog>().hash_identifier(uri))}));
+            let _ = event_app.emit_to(&label, EVENT, event);
+            },
+        );
+        let session = app
+            .state::<LanguageServiceManager>()
+            .start(owner, package, allowed, emit)?;
+        app.state::<DiagnosticsLog>().info(
+            "language.service",
+            "session.started",
+            None,
+            serde_json::json!({"sessionId":session,"providerId":PLUGIN_ID}),
+        );
+        Ok(session)
+    })
+    .await
+    .map_err(|_| "language startup task failed")?
+}
+async fn reply(rx: std::sync::mpsc::Receiver<Result<Value, String>>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        rx.recv_timeout(Duration::from_secs(12))
+            .map_err(|_| "language operation deadline exceeded".to_owned())?
+    })
+    .await
+    .map_err(|_| "language operation task failed")?
+}
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn open_language_document(
+    workspace_root: String,
     session_id: String,
     uri: String,
     language_id: String,
     version: i64,
     text: String,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
     manager: State<'_, LanguageServiceManager>,
 ) -> Result<(), String> {
-    if !uri.starts_with("file://") || version < 1 || language_id.is_empty() {
-        return Err("invalid language document".into());
+    if text.len() > 2 * 1024 * 1024 || uri.len() > 16384 {
+        return Err("language document exceeds input limits".into());
     }
-    manager.with(&session_id, |process| { process.notify("textDocument/didOpen", Some(serde_json::json!({"textDocument":{"uri":uri,"languageId":language_id,"version":version,"text":text}}))).map_err(|e| format!("{e:?}")) })
+    let owner = subject(&active, &window, &workspace_root)?;
+    let rx = manager.open(&session_id, &owner, uri, language_id, version, text)?;
+    reply(rx).await.map(|_| ())
 }
-
 #[tauri::command]
-pub(crate) fn change_language_document(
-    _workspace_root: String,
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn change_language_document(
+    workspace_root: String,
     session_id: String,
     uri: String,
     version: i64,
     changes: Vec<LanguageServiceChange>,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
     manager: State<'_, LanguageServiceManager>,
 ) -> Result<(), String> {
-    if !uri.starts_with("file://") || version < 1 {
-        return Err("invalid language document".into());
+    if changes.len() > 128 {
+        return Err("too many document changes".into());
     }
-    let edits = changes.into_iter().map(|change| serde_json::json!({"range":change.range.map(|range| serde_json::json!({"start": {"line":range.start.line,"character":range.start.character}, "end": {"line":range.end.line,"character":range.end.character}})), "text":change.text})).collect::<Vec<_>>();
-    manager.with(&session_id, |process| process.notify("textDocument/didChange", Some(serde_json::json!({"textDocument":{"uri":uri,"version":version},"contentChanges":edits}))).map_err(|e| format!("{e:?}")))
+    let owner = subject(&active, &window, &workspace_root)?;
+    let changes = changes
+        .into_iter()
+        .map(|c| TextChange {
+            text: c.text,
+            range: c.range.map(|r| TextRange {
+                start: TextPosition {
+                    line: r.start.line,
+                    character: r.start.character,
+                },
+                end: TextPosition {
+                    line: r.end.line,
+                    character: r.end.character,
+                },
+            }),
+        })
+        .collect();
+    let rx = manager.change(&session_id, &owner, uri, version, changes)?;
+    reply(rx).await.map(|_| ())
 }
-
 #[tauri::command]
-pub(crate) fn close_language_document(
-    _workspace_root: String,
+pub(crate) async fn close_language_document(
+    workspace_root: String,
     session_id: String,
     uri: String,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
     manager: State<'_, LanguageServiceManager>,
 ) -> Result<(), String> {
-    manager.with(&session_id, |process| {
-        process
-            .notify(
-                "textDocument/didClose",
-                Some(serde_json::json!({"textDocument":{"uri":uri}})),
-            )
-            .map_err(|e| format!("{e:?}"))
-    })
+    let owner = subject(&active, &window, &workspace_root)?;
+    let rx = manager.close(&session_id, &owner, uri)?;
+    reply(rx).await.map(|_| ())
 }
-
 #[tauri::command]
-pub(crate) fn request_language_service(
-    _workspace_root: String,
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn request_language_service(
+    workspace_root: String,
     session_id: String,
     uri: String,
-    feature: String,
     version: i64,
+    request_id: String,
+    feature: String,
     line: u32,
     character: u32,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
     manager: State<'_, LanguageServiceManager>,
-) -> Result<LanguageServiceResultEnvelope, String> {
-    if version < 1 || !uri.starts_with("file://") {
-        return Err("invalid language document identity".into());
+) -> Result<LanguageServiceResult, String> {
+    let owner = subject(&active, &window, &workspace_root)?;
+    let rx = manager.request(
+        &session_id,
+        &owner,
+        uri.clone(),
+        version,
+        request_id,
+        feature,
+        TextPosition { line, character },
+    )?;
+    let result = reply(rx).await?;
+    if subject(&active, &window, &workspace_root)? != owner {
+        return Err("language result belongs to an obsolete workspace activation".into());
     }
-    let method = match feature.as_str() {
-        "hover" => "textDocument/hover",
-        "definition" => "textDocument/definition",
-        "completion" => "textDocument/completion",
-        _ => return Err("unsupported language-service feature".into()),
-    };
-    let response_session_id = session_id.clone();
-    manager.with(&session_id, |process| {
-        let response = process.request_wait(method, Some(serde_json::json!({"textDocument":{"uri":uri},"position":{"line":line,"character":character}})), std::time::Duration::from_secs(10)).map_err(|e| format!("{e:?}"))?;
-        Ok(LanguageServiceResultEnvelope { session_id: response_session_id, uri, version, result: response.result.or_else(|| response.error.map(|error| serde_json::json!({"error": error.message}))).unwrap_or(serde_json::Value::Null) })
+    Ok(LanguageServiceResult {
+        session_id,
+        uri,
+        version,
+        result,
     })
 }
-
 #[tauri::command]
-pub(crate) fn cancel_language_request(
+pub(crate) async fn cancel_language_request(
+    workspace_root: String,
     session_id: String,
-    request_id: u64,
+    request_id: String,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
     manager: State<'_, LanguageServiceManager>,
 ) -> Result<bool, String> {
-    manager.with(&session_id, |process| {
-        process.cancel(request_id).map_err(|e| format!("{e:?}"))
-    })
+    let owner = subject(&active, &window, &workspace_root)?;
+    let rx = manager.cancel(&session_id, &owner, request_id)?;
+    Ok(reply(rx).await?.as_bool().unwrap_or(false))
 }
-
 #[tauri::command]
 pub(crate) fn stop_language_service(
+    workspace_root: String,
     session_id: String,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
     manager: State<'_, LanguageServiceManager>,
 ) -> Result<bool, String> {
-    manager.stop(&session_id)
+    let owner = subject(&active, &window, &workspace_root)?;
+    manager.stop(&session_id, &owner)
 }

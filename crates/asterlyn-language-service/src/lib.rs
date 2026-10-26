@@ -20,7 +20,7 @@ pub const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_PENDING_REQUESTS: usize = 128;
 pub const TYPESCRIPT_SERVER_ENTRY: &str = "servers/typescript/server.mjs";
 pub const TYPESCRIPT_IMPL_ENTRY: &str = "servers/typescript/typescript/lib/tsserver.js";
-pub const MAX_EVENTS: usize = 256;
+pub const MAX_EVENTS: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrameError {
@@ -151,10 +151,16 @@ pub enum JsonRpcId {
     String(String),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct PendingRequests {
     next_id: AtomicU64,
     pending: BTreeMap<u64, Instant>,
+}
+
+impl Default for PendingRequests {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PendingRequests {
@@ -181,6 +187,9 @@ impl PendingRequests {
     pub fn cancel(&mut self, id: u64) -> bool {
         self.complete(&JsonRpcId::Number(id))
     }
+    pub fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
     pub fn len(&self) -> usize {
         self.pending.len()
     }
@@ -206,6 +215,7 @@ pub enum SessionError {
     Cancelled,
     Closed,
     Process(String),
+    Timeout,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -246,16 +256,32 @@ impl TypeScriptServerProfile {
 
 pub struct LanguageServiceProcess {
     child: Child,
-    session: LanguageServiceSession<ChildStdin>,
+    session: LanguageServiceSession<QueuedWriter>,
     events: Receiver<ServerEvent>,
     buffered: Vec<JsonRpcMessage>,
     tsdk: PathBuf,
+    stopped: bool,
 }
 
 impl LanguageServiceProcess {
     pub fn start(profile: &TypeScriptServerProfile) -> Result<Self, SessionError> {
         profile.validate()?;
-        let mut child = Command::new(&profile.node)
+        let mut command = Command::new(&profile.node);
+        command.env_clear();
+        for key in ["HOME", "USERPROFILE", "TMPDIR", "TEMP", "SystemRoot"] {
+            if let Some(value) = std::env::var_os(key) {
+                command.env(key, value);
+            }
+        }
+        if let Some(parent) = profile.node.parent() {
+            command.env("PATH", parent);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        let mut child = command
             .arg(profile.package_root.join(TYPESCRIPT_SERVER_ENTRY))
             .arg("--stdio")
             .current_dir(&profile.package_root)
@@ -273,25 +299,47 @@ impl LanguageServiceProcess {
             .take()
             .ok_or_else(|| SessionError::Process("language server stdout unavailable".into()))?;
         let (sender, events) = sync_channel(MAX_EVENTS);
-        spawn_reader(stdout, sender);
+        spawn_reader(stdout, sender, child.id());
         if let Some(stderr) = child.stderr.take() {
             std::thread::spawn(move || drain_stderr(stderr));
         }
         let tsdk = profile.package_root.join(TYPESCRIPT_IMPL_ENTRY);
         Ok(Self {
             child,
-            session: LanguageServiceSession::new(stdin),
+            session: LanguageServiceSession::new(QueuedWriter::new(stdin)),
             events,
             buffered: Vec::new(),
             tsdk,
+            stopped: false,
         })
     }
 
     pub fn initialize(&mut self, root_uri: &str) -> Result<(), SessionError> {
         let tsdk = self.session_tsdk_path();
-        let params = serde_json::json!({"processId": null, "rootUri": root_uri, "capabilities": {"textDocument": {"hover": {}, "completion": {}, "definition": {}}, "workspace": {}}, "initializationOptions": {"typescript": {"tsserver": {"path": tsdk}}, "disableAutomaticTypingAcquisition": true, "allowAutomaticSingleRunInference": false}});
+        let params = serde_json::json!({
+            "processId": null, "rootUri": root_uri,
+            "capabilities": {
+                "general": {"positionEncodings": ["utf-16"]},
+                "textDocument": {"publishDiagnostics": {"versionSupport": true},
+                    "hover": {"contentFormat": ["plaintext"]},
+                    "completion": {"completionItem": {"snippetSupport": false}},
+                    "definition": {"linkSupport": false}},
+                "workspace": {"applyEdit": false, "configuration": false,
+                    "workspaceEdit": {"documentChanges": false}}
+            },
+            "initializationOptions": {"tsserver": {"path": tsdk, "useSyntaxServer": "never"},
+                "plugins": [], "disableAutomaticTypingAcquisition": true,
+                "maxTsServerMemory": 512}
+        });
         let response = self.request_wait("initialize", Some(params), Duration::from_secs(10))?;
-        if response.error.is_some() {
+        if response.error.is_some()
+            || response
+                .result
+                .as_ref()
+                .and_then(|v| v.pointer("/capabilities/positionEncoding"))
+                .and_then(Value::as_str)
+                .is_some_and(|v| v != "utf-16")
+        {
             return Err(SessionError::InvalidMessage(
                 "language server initialization failed".into(),
             ));
@@ -311,6 +359,29 @@ impl LanguageServiceProcess {
     }
     pub fn cancel(&mut self, id: u64) -> Result<bool, SessionError> {
         self.session.cancel(id)
+    }
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+    pub fn poll_event(&mut self) -> Result<Option<ServerEvent>, SessionError> {
+        if !self.buffered.is_empty() {
+            return Ok(Some(ServerEvent::Message(self.buffered.remove(0))));
+        }
+        match self.events.try_recv() {
+            Ok(event) => Ok(Some(event)),
+            Err(std::sync::mpsc::TryRecvError::Empty) => Ok(None),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(SessionError::Closed),
+        }
+    }
+    pub fn accept_response(&mut self, response: &JsonRpcResponse) -> bool {
+        self.session.accept_response(response)
+    }
+    pub fn reject_request(&mut self, request: &JsonRpcRequest) -> Result<(), SessionError> {
+        let bytes = serde_json::to_vec(&serde_json::json!({"jsonrpc":"2.0", "id":request.id,
+            "error":{"code":-32601,"message":"Unsupported client request"}}))
+        .map_err(|_| SessionError::InvalidMessage("invalid request".into()))?;
+        write_frame(self.session.writer_mut(), &bytes)
+            .map_err(|e| SessionError::Process(format!("{e:?}")))
     }
     pub fn read_message(&mut self) -> Result<Option<JsonRpcMessage>, SessionError> {
         let message = match self.next_event(Duration::from_secs(30))? {
@@ -387,9 +458,8 @@ impl LanguageServiceProcess {
                     "language server response deadline exceeded".into(),
                 ));
             }
-            if let Some(index) = self.buffered.iter().position(|message| matches!(message, JsonRpcMessage::Response(response) if response.id == JsonRpcId::Number(id))) {
-                if let JsonRpcMessage::Response(response) = self.buffered.remove(index) { self.session.accept_response(&response); return Ok(response); }
-            }
+            if let Some(index) = self.buffered.iter().position(|message| matches!(message, JsonRpcMessage::Response(response) if response.id == JsonRpcId::Number(id)))
+                && let JsonRpcMessage::Response(response) = self.buffered.remove(index) { self.session.accept_response(&response); return Ok(response); }
             match self
                 .events
                 .recv_timeout(remaining)
@@ -405,29 +475,142 @@ impl LanguageServiceProcess {
                     self.session.accept_response(&response);
                     return Ok(response);
                 }
-                ServerEvent::Message(message) => self.buffered.push(message),
+                ServerEvent::Message(JsonRpcMessage::Request(request)) => {
+                    self.reject_request(&request)?
+                }
+                ServerEvent::Message(message) => {
+                    if self.buffered.len() >= MAX_EVENTS {
+                        return Err(SessionError::LimitExceeded("startup events"));
+                    }
+                    self.buffered.push(message);
+                }
                 ServerEvent::Eof => return Err(SessionError::Closed),
                 ServerEvent::Io(error) => return Err(SessionError::Process(error)),
             }
         }
     }
     pub fn stop(&mut self) -> Result<(), SessionError> {
+        if self.stopped {
+            return Ok(());
+        }
+        self.stopped = true;
         self.session.close();
+        terminate_process_tree(self.child.id());
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            match self.child.try_wait() {
+                Ok(Some(_)) => return Ok(()),
+                Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+                Err(error) => return Err(SessionError::Process(error.to_string())),
+            }
+        }
         let _ = self.child.kill();
-        self.child
-            .wait()
-            .map_err(|error| SessionError::Process(format!("wait language server: {error}")))?;
         Ok(())
     }
 }
 
-fn spawn_reader(mut stdout: ChildStdout, sender: SyncSender<ServerEvent>) {
+impl Drop for LanguageServiceProcess {
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
+/// The writer never blocks the actor on a server that stops consuming stdin.
+struct QueuedWriter {
+    bytes: Vec<u8>,
+    queue: SyncSender<Vec<u8>>,
+}
+impl QueuedWriter {
+    fn new(mut stdin: ChildStdin) -> Self {
+        let (queue, rx) = sync_channel::<Vec<u8>>(8);
+        std::thread::spawn(move || {
+            while let Ok(bytes) = rx.recv() {
+                if stdin.write_all(&bytes).and_then(|_| stdin.flush()).is_err() {
+                    break;
+                }
+            }
+        });
+        Self {
+            bytes: Vec::new(),
+            queue,
+        }
+    }
+}
+impl Write for QueuedWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.bytes.len() + bytes.len() > MAX_MESSAGE_BYTES + MAX_HEADER_BYTES {
+            return Err(io::Error::other("outbound frame exceeds bound"));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.queue
+            .try_send(std::mem::take(&mut self.bytes))
+            .map_err(|_| io::Error::other("language server output queue unavailable"))
+    }
+}
+
+pub fn terminate_process_tree(pid: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    {
+        if let Some(root) = std::env::var_os("SystemRoot") {
+            let _ = Command::new(PathBuf::from(root).join("System32/taskkill.exe"))
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+        }
+    }
+}
+
+fn decode_message(body: &[u8]) -> Result<JsonRpcMessage, String> {
+    let value: Value =
+        serde_json::from_slice(body).map_err(|_| "invalid JSON-RPC JSON".to_owned())?;
+    let object = value
+        .as_object()
+        .ok_or("JSON-RPC message must be an object")?;
+    if object.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        return Err("invalid JSON-RPC version".into());
+    }
+    if object.contains_key("method") {
+        if object.contains_key("result") || object.contains_key("error") {
+            return Err("mixed JSON-RPC request/response".into());
+        }
+    } else if !object.contains_key("id")
+        || object.contains_key("result") == object.contains_key("error")
+    {
+        return Err("invalid JSON-RPC response shape".into());
+    }
+    if object
+        .get("id")
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.len() > 128)
+    {
+        return Err("JSON-RPC request identity exceeds bound".into());
+    }
+    serde_json::from_value(value).map_err(|_| "invalid JSON-RPC fields".into())
+}
+
+fn spawn_reader(mut stdout: ChildStdout, sender: SyncSender<ServerEvent>, pid: u32) {
     std::thread::spawn(move || {
         loop {
             match read_frame(&mut stdout) {
-                Ok(Some(body)) => match serde_json::from_slice::<JsonRpcMessage>(&body) {
+                Ok(Some(body)) => match decode_message(&body) {
                     Ok(message) => {
-                        if sender.send(ServerEvent::Message(message)).is_err() {
+                        let valid = match &message {
+                            JsonRpcMessage::Request(v) => v.jsonrpc == "2.0",
+                            JsonRpcMessage::Response(v) => {
+                                v.jsonrpc == "2.0" && !(v.error.is_some() && v.result.is_some())
+                            }
+                            JsonRpcMessage::Notification(v) => v.jsonrpc == "2.0",
+                        };
+                        if !valid || sender.try_send(ServerEvent::Message(message)).is_err() {
+                            terminate_process_tree(pid);
                             break;
                         }
                     }
@@ -453,11 +636,10 @@ fn spawn_reader(mut stdout: ChildStdout, sender: SyncSender<ServerEvent>) {
 
 fn drain_stderr<R: Read>(mut stderr: R) {
     let mut buffer = [0_u8; 4096];
-    let mut total = 0usize;
-    while total < 64 * 1024 {
+    loop {
         match stderr.read(&mut buffer) {
             Ok(0) | Err(_) => break,
-            Ok(read) => total += read.min(64 * 1024 - total),
+            Ok(_) => {}
         }
     }
 }
@@ -506,8 +688,12 @@ impl DocumentState {
 
     pub fn apply(&mut self, changes: &[TextChange]) -> Result<i64, SessionError> {
         let mut next = self.text.clone();
-        // Apply in reverse order so a transaction's ranges are anchored to one prior snapshot.
-        for change in changes.iter().rev() {
+        // LSP changes are sequential: each range addresses the preceding change result.
+        let next_version = self
+            .version
+            .checked_add(1)
+            .ok_or(SessionError::LimitExceeded("document versions"))?;
+        for change in changes {
             let (start, end) = match &change.range {
                 None => (0, next.len()),
                 Some(range) => (
@@ -527,10 +713,7 @@ impl DocumentState {
             next.replace_range(start..end, &change.text);
         }
         self.text = next;
-        self.version = self
-            .version
-            .checked_add(1)
-            .ok_or(SessionError::LimitExceeded("document versions"))?;
+        self.version = next_version;
         Ok(self.version)
     }
 
@@ -539,18 +722,17 @@ impl DocumentState {
     }
 }
 
-fn utf16_offset(text: &str, position: &TextPosition) -> Result<usize, SessionError> {
+pub fn utf16_offset(text: &str, position: &TextPosition) -> Result<usize, SessionError> {
     let line = usize::try_from(position.line)
         .map_err(|_| SessionError::InvalidMessage("invalid line".into()))?;
     let character = usize::try_from(position.character)
         .map_err(|_| SessionError::InvalidMessage("invalid character".into()))?;
-    let start = text
-        .split_inclusive('\n')
-        .take(line)
-        .map(str::len)
-        .sum::<usize>();
-    if line > 0 && start == text.len() && !text.ends_with('\n') {
-        return Err(SessionError::InvalidMessage("line outside document".into()));
+    let mut start = 0;
+    for _ in 0..line {
+        let length = text[start..]
+            .find('\n')
+            .ok_or_else(|| SessionError::InvalidMessage("line outside document".into()))?;
+        start += length + 1;
     }
     let line_text = text
         .get(start..)
@@ -558,6 +740,7 @@ fn utf16_offset(text: &str, position: &TextPosition) -> Result<usize, SessionErr
     let line_text = line_text
         .split_once('\n')
         .map_or(line_text, |(line, _)| line);
+    let line_text = line_text.strip_suffix('\r').unwrap_or(line_text);
     let mut units = 0;
     for (offset, ch) in line_text.char_indices() {
         if units == character {
@@ -669,6 +852,113 @@ impl<W: Write> LanguageServiceSession<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rejects_mixed_or_incomplete_json_rpc_and_accepts_null_result() {
+        for body in [
+            r#"{"jsonrpc":"2.0","id":1}"#,
+            r#"{"jsonrpc":"1.0","id":1,"result":null}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":null,"error":{"code":1,"message":"bad"}}"#,
+            r#"{"jsonrpc":"2.0","method":"x","result":null}"#,
+        ] {
+            assert!(decode_message(body.as_bytes()).is_err());
+        }
+        assert!(matches!(
+            decode_message(br#"{"jsonrpc":"2.0","id":1,"result":null}"#).unwrap(),
+            JsonRpcMessage::Response(_)
+        ));
+        assert!(matches!(
+            decode_message(br#"{"jsonrpc":"2.0","id":"server","method":"workspace/applyEdit"}"#)
+                .unwrap(),
+            JsonRpcMessage::Request(_)
+        ));
+    }
+    #[test]
+    fn framing_rejects_duplicate_headers_and_truncation() {
+        assert!(matches!(
+            read_frame(&mut &b"Content-Length: 1\r\ncontent-length: 1\r\n\r\nx"[..]),
+            Err(FrameError::InvalidHeader)
+        ));
+        assert!(matches!(
+            read_frame(&mut &b"Content-Length: 2\r\n\r\nx"[..]),
+            Err(FrameError::UnexpectedEof)
+        ));
+        assert!(read_frame(&mut &b""[..]).unwrap().is_none());
+    }
+    #[test]
+    fn line_bounds_and_document_updates_fail_atomically() {
+        assert!(
+            utf16_offset(
+                "x\n",
+                &TextPosition {
+                    line: 100,
+                    character: 0
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(
+            utf16_offset(
+                "x\r\n",
+                &TextPosition {
+                    line: 0,
+                    character: 1
+                }
+            )
+            .unwrap(),
+            1
+        );
+        assert!(
+            utf16_offset(
+                "😀",
+                &TextPosition {
+                    line: 0,
+                    character: 1
+                }
+            )
+            .is_err()
+        );
+        let identity = DocumentIdentity {
+            window_id: "w".into(),
+            worktree_root: "/r".into(),
+            generation: 1,
+            uri: "file:///r/a.ts".into(),
+        };
+        let mut doc = DocumentState::new(identity, "x".into());
+        doc.version = i64::MAX;
+        assert!(
+            doc.apply(&[TextChange {
+                range: None,
+                text: "changed".into()
+            }])
+            .is_err()
+        );
+        assert_eq!(doc.text, "x");
+        doc.version = 1;
+        assert!(
+            doc.apply(&[
+                TextChange {
+                    range: None,
+                    text: "valid first edit".into()
+                },
+                TextChange {
+                    range: Some(TextRange {
+                        start: TextPosition {
+                            line: 9,
+                            character: 0
+                        },
+                        end: TextPosition {
+                            line: 9,
+                            character: 0
+                        }
+                    }),
+                    text: "invalid".into()
+                }
+            ])
+            .is_err()
+        );
+        assert_eq!(doc.text, "x");
+        assert_eq!(doc.version, 1);
+    }
     #[test]
     fn utf8_content_length_is_bytes() {
         let body = "{\"jsonrpc\":\"2.0\",\"method\":\"x\",\"params\":{\"text\":\"😀\"}}".as_bytes();

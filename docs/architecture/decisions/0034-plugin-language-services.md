@@ -80,3 +80,18 @@ exist. Local development may vendor the new canonical SDK artifact before its fi
 but documentation must identify that unreleased dependency; no GitHub publication is authorized.
 
 See [implementation plan](../../engineering/2026-10-26-language-services-host-plan.md).
+
+## Implemented first profile
+
+The host uses TypeScript language-server 6.0.2 and TypeScript 5.9.3 (7.0.2 is not a drop-in
+`tsserver.js` resource). Initialization forces the admitted absolute `tsserver.path`, one semantic
+server (`useSyntaxServer: never`), no plugins, disabled automatic typing acquisition and a
+512 MiB tsserver heap setting. This heap option is not an OS process-tree memory limit.
+
+TLS 6 push diagnostics omit document versions. They are not relabeled with the latest editor
+clock. The fixed native profile instead requests `semanticDiagnosticsSync` and
+`syntacticDiagnosticsSync` through TLS's internal `typescript.tsserverRequest` read interface,
+after ordered document changes. Only these two internally constructed requests are allowed; no
+command name/arguments are provided by a renderer or plugin. Replies are bound to the URI/version
+that scheduled them, and obsolete replies are discarded. General execute-command and workspace
+mutation requests remain unavailable.

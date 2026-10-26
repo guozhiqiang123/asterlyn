@@ -77,6 +77,9 @@ pub(crate) async fn open_project(
     tasks: State<'_, TaskManager>,
     process_queries: State<'_, PluginProcessQueryManager>,
 ) -> Result<OpenedProject, WorkspaceError> {
+    window
+        .state::<LanguageServiceManager>()
+        .cancel_owner(window.label());
     tasks.cancel_owner(window.label());
     process_queries.cancel_owner(window.label());
     let token = active_workspaces.begin_activation(window.label())?;

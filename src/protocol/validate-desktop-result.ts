@@ -18,7 +18,7 @@ import {
   assertWorkspaceMutationRecoveryList,
 } from "./validate-workspace-mutation.ts";
 import {
-  arrays, assert, booleans, isRecord, nullableStrings, numbers, record, strings,
+  arrays, assert, booleans, isRecord, isStringArray, nullableStrings, numbers, record, strings,
   type TransportRecord,
 } from "./desktop-result-validation-primitives.ts";
 import { validateInstalledPluginManifestSnapshot, validatePluginInstallationSnapshot, validatePluginPackageAdmissionReview, validatePluginSourceSnapshot } from "./plugin-marketplace.ts";
@@ -27,7 +27,7 @@ import {
   validateInstalledPluginRuntimeDiagnostics,
   validatePluginRuntimeValue,
 } from "./plugin-runtime.ts";
-import { assertLanguageServiceResultEnvelope, assertLanguageServiceReview } from "./validate-language-service.ts";
+import { validateLanguageServiceDesktopResult } from "./validate-language-service.ts";
 
 export function validateDesktopResult<Command extends DesktopCommandName>(
   command: Command,
@@ -43,17 +43,12 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
   if (validator === "pluginRuntimeValue") return validatePluginRuntimeValue(value, command) as DesktopCommandMap[Command]["result"];
   if (validatePluginTaskCacheDesktopResult(validator, value)) return value as DesktopCommandMap[Command]["result"];
   if (validateTaskExecutionDesktopResult(validator, value, command)) return value as DesktopCommandMap[Command]["result"];
+  if (validateLanguageServiceDesktopResult(validator, value, command)) return value as DesktopCommandMap[Command]["result"];
   switch (validator) {
     case "pluginProcessQueryResult":
       throw new Error(`${command}: process query results require the feature-scoped validator.`);
     case "pluginToolOperationResult":
       throw new Error(`${command}: plugin tool-operation results require the feature-scoped validator.`);
-    case "languageServiceReview":
-      assertLanguageServiceReview(value, command);
-      break;
-    case "languageServiceResultEnvelope":
-      assertLanguageServiceResultEnvelope(value, command);
-      break;
     case "void":
       assert(value === null || value === undefined, command, "expected no response body");
       break;
@@ -752,9 +747,6 @@ function isGitOperationSnapshot(value: unknown): value is TransportRecord {
   );
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
 
 function assertStringArray(
   value: unknown,

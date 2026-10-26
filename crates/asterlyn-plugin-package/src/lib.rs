@@ -1,3 +1,4 @@
+mod language_authority;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs::{self, OpenOptions};
@@ -718,6 +719,7 @@ fn validate_manifest(
         &manifest.permissions,
         "host.process.query",
     )?;
+    language_authority::validate(&manifest.capabilities, &manifest.permissions)?;
     require_host_operation_authority(manifest)?;
     require_declared_authority(
         !manifest.tool_operations.is_empty(),

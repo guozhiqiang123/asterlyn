@@ -33,7 +33,8 @@ fn real_typescript_hover_uses_unsaved_unicode_crlf_buffer() {
     let node = env::var_os("ASTERLYN_LANGUAGE_SERVICE_NODE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
-            std::path::PathBuf::from(std::env::current_exe().expect("current executable"))
+            std::env::current_exe()
+                .expect("current executable")
                 .parent()
                 .expect("node parent")
                 .join("node")
@@ -70,8 +71,17 @@ fn real_typescript_hover_uses_unsaved_unicode_crlf_buffer() {
         "server returned error: {:?}",
         response.error
     );
-    let hover = response.result.as_ref().expect("hover result was unexpectedly absent");
-    assert!(!hover.is_null() && serde_json::to_string(hover).expect("hover JSON").contains("emojiValue"), "hover result lacked symbol contents: {hover}");
+    let hover = response
+        .result
+        .as_ref()
+        .expect("hover result was unexpectedly absent");
+    assert!(
+        !hover.is_null()
+            && serde_json::to_string(hover)
+                .expect("hover JSON")
+                .contains("emojiValue"),
+        "hover result lacked symbol contents: {hover}"
+    );
     let completion = process
         .request_wait(
             "textDocument/completion",
@@ -79,8 +89,18 @@ fn real_typescript_hover_uses_unsaved_unicode_crlf_buffer() {
             Duration::from_secs(10),
         )
         .expect("completion response");
-    let completion_result = completion.result.as_ref().expect("completion result was absent");
-    assert!(completion.error.is_none() && completion_result.get("items").and_then(serde_json::Value::as_array).is_some_and(|items| !items.is_empty()), "completion items were absent: {completion_result}");
+    let completion_result = completion
+        .result
+        .as_ref()
+        .expect("completion result was absent");
+    assert!(
+        completion.error.is_none()
+            && completion_result
+                .get("items")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|items| !items.is_empty()),
+        "completion items were absent: {completion_result}"
+    );
     let definition = process
         .request_wait(
             "textDocument/definition",
@@ -88,18 +108,50 @@ fn real_typescript_hover_uses_unsaved_unicode_crlf_buffer() {
             Duration::from_secs(10),
         )
         .expect("definition response");
-    let definitions = definition.result.as_ref().expect("definition result was absent");
-    assert!(definition.error.is_none() && definitions.as_array().is_some_and(|items| !items.is_empty()), "definition locations were absent: {definitions}");
+    let definitions = definition
+        .result
+        .as_ref()
+        .expect("definition result was absent");
+    assert!(
+        definition.error.is_none()
+            && definitions
+                .as_array()
+                .is_some_and(|items| !items.is_empty()),
+        "definition locations were absent: {definitions}"
+    );
     process.notify("textDocument/didChange", Some(json!({"textDocument":{"uri":uri,"version":2},"contentChanges":[{"text":"export const emojiValue = ; // 😀\r\nemojiValue;\r\n"}]}))).expect("invalid change");
-    let invalid_diagnostics = tsserver_diagnostics(&mut process, "/tmp/asterlyn-language-service-test/emoji.ts", "semanticDiagnosticsSync")
-        + tsserver_diagnostics(&mut process, "/tmp/asterlyn-language-service-test/emoji.ts", "syntacticDiagnosticsSync");
-    assert!(invalid_diagnostics > 0, "didChange invalid buffer produced no diagnostics");
+    let invalid_diagnostics = tsserver_diagnostics(
+        &mut process,
+        "/tmp/asterlyn-language-service-test/emoji.ts",
+        "semanticDiagnosticsSync",
+    ) + tsserver_diagnostics(
+        &mut process,
+        "/tmp/asterlyn-language-service-test/emoji.ts",
+        "syntacticDiagnosticsSync",
+    );
+    assert!(
+        invalid_diagnostics > 0,
+        "didChange invalid buffer produced no diagnostics"
+    );
     process.notify("textDocument/didChange", Some(json!({"textDocument":{"uri":uri,"version":3},"contentChanges":[{"text":"export const emojiValue = 1; // 😀\r\nemojiValue;\r\n"}]}))).expect("fixed change");
-    let fixed_diagnostics = tsserver_diagnostics(&mut process, "/tmp/asterlyn-language-service-test/emoji.ts", "semanticDiagnosticsSync")
-        + tsserver_diagnostics(&mut process, "/tmp/asterlyn-language-service-test/emoji.ts", "syntacticDiagnosticsSync");
+    let fixed_diagnostics = tsserver_diagnostics(
+        &mut process,
+        "/tmp/asterlyn-language-service-test/emoji.ts",
+        "semanticDiagnosticsSync",
+    ) + tsserver_diagnostics(
+        &mut process,
+        "/tmp/asterlyn-language-service-test/emoji.ts",
+        "syntacticDiagnosticsSync",
+    );
     assert_eq!(fixed_diagnostics, 0, "fixed buffer still has diagnostics");
-    assert!(started.elapsed() < Duration::from_secs(10), "cold startup exceeded bound");
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "cold startup exceeded bound"
+    );
     let stop_started = Instant::now();
     process.stop().expect("finite stop");
-    assert!(stop_started.elapsed() < Duration::from_secs(3), "process tree cleanup exceeded bound");
+    assert!(
+        stop_started.elapsed() < Duration::from_secs(3),
+        "process tree cleanup exceeded bound"
+    );
 }
