@@ -1,0 +1,10 @@
+{
+  "pluginId": "dev.asterlyn.lsp",
+  "pluginVersion": "0.1.0",
+  "sdkVersion": "1.11.0",
+  "sourceRevision": "970f047",
+  "artifact": "asterlyn-plugin-lsp-0.1.0.asterlyn-plugin.tgz",
+  "size": 4579083,
+  "sha256": "2a3cec68eb06fd13ece09f3935e15fda30ef853ee4d240c4c3bf9d1e82cbe6d9",
+  "integrity": "local sealed first-party artifact; upstream server integrities are recorded in the sibling repository docs/server-assets.md"
+}

@@ -30,6 +30,14 @@ const BUNDLED_ANDROID_PACKAGE_DIGEST: &str =
 const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
     "../../resources/plugins/asterlyn-plugin-android-gradle-0.5.10.asterlyn-plugin.tgz"
 );
+const BUNDLED_LSP_PLUGIN_ID: &str = "dev.asterlyn.lsp";
+const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.1.0";
+const BUNDLED_LSP_REPOSITORY: &str = "guozhiqiang123/asterlyn-plugin-lsp";
+const BUNDLED_LSP_PACKAGE_DIGEST: &str =
+    "sha256:2a3cec68eb06fd13ece09f3935e15fda30ef853ee4d240c4c3bf9d1e82cbe6d9";
+const BUNDLED_LSP_PACKAGE: &[u8] = include_bytes!(
+    "../../resources/plugins/asterlyn-plugin-lsp-0.1.0.asterlyn-plugin.tgz"
+);
 
 use crate::application::{
     PendingPluginAdmission, PluginMarketplaceCoordinator, PluginProcessQueryManager,
@@ -638,27 +646,63 @@ fn commit_admission(
 pub(crate) fn ensure_bundled_plugins(
     app: &tauri::AppHandle,
 ) -> Result<PluginInstallationSnapshot, String> {
-    ensure_bundled_android_package(&marketplace_root(app)?, BUNDLED_ANDROID_PACKAGE)
+    let root = marketplace_root(app)?;
+    ensure_bundled_android_package(&root, BUNDLED_ANDROID_PACKAGE)?;
+    ensure_bundled_lsp_package(&root, BUNDLED_LSP_PACKAGE)
 }
 
 fn ensure_bundled_android_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
 ) -> Result<PluginInstallationSnapshot, String> {
+    ensure_bundled_package(
+        marketplace_root,
+        bytes,
+        BUNDLED_ANDROID_PLUGIN_ID,
+        BUNDLED_ANDROID_PLUGIN_VERSION,
+        BUILT_IN_ANDROID_REPOSITORY,
+        BUNDLED_ANDROID_PACKAGE_DIGEST,
+        "Android",
+    )
+}
+
+fn ensure_bundled_lsp_package(
+    marketplace_root: &std::path::Path,
+    bytes: &[u8],
+) -> Result<PluginInstallationSnapshot, String> {
+    ensure_bundled_package(
+        marketplace_root,
+        bytes,
+        BUNDLED_LSP_PLUGIN_ID,
+        BUNDLED_LSP_PLUGIN_VERSION,
+        BUNDLED_LSP_REPOSITORY,
+        BUNDLED_LSP_PACKAGE_DIGEST,
+        "LSP",
+    )
+}
+
+fn ensure_bundled_package(
+    marketplace_root: &std::path::Path,
+    bytes: &[u8],
+    expected_plugin_id: &str,
+    expected_version: &str,
+    repository: &str,
+    expected_digest: &str,
+    label: &str,
+) -> Result<PluginInstallationSnapshot, String> {
     let package_digest = format!("sha256:{:x}", Sha256::digest(bytes));
-    if package_digest != BUNDLED_ANDROID_PACKAGE_DIGEST {
-        return Err("bundled Android plugin package does not match the host-pinned digest".into());
+    if package_digest != expected_digest {
+        return Err(format!("bundled {label} plugin package does not match the host-pinned digest"));
     }
-    let context = admission_context(BUILT_IN_ANDROID_REPOSITORY, BUNDLED_ANDROID_PLUGIN_VERSION);
+    let context = admission_context(repository, expected_version);
     let report = inspect_package(bytes, &context).map_err(|error| error.to_string())?;
-    if report.plugin_id != BUNDLED_ANDROID_PLUGIN_ID
-        || report.plugin_version != BUNDLED_ANDROID_PLUGIN_VERSION
+    if report.plugin_id != expected_plugin_id || report.plugin_version != expected_version
     {
-        return Err("bundled Android plugin identity does not match the host binding".into());
+        return Err(format!("bundled {label} plugin identity does not match the host binding"));
     }
     validate_external_tool_authority(
         PluginToolAuthorityIdentity {
-            repository: BUILT_IN_ANDROID_REPOSITORY,
+            repository,
             plugin_id: &report.plugin_id,
             plugin_version: &report.plugin_version,
             package_digest: &package_digest,
@@ -674,8 +718,8 @@ fn ensure_bundled_android_package(
         .expect("computed package digest has a prefix");
     let package_root = marketplace_root
         .join("packages")
-        .join(BUNDLED_ANDROID_PLUGIN_ID)
-        .join(BUNDLED_ANDROID_PLUGIN_VERSION)
+        .join(expected_plugin_id)
+        .join(expected_version)
         .join(digest_key);
     let installed_is_valid = package_root.exists()
         && inspect_extracted_package(&package_root, &context)
@@ -711,9 +755,9 @@ fn ensure_bundled_android_package(
         .map_err(|error| error.to_string())?
         .record_bundled(
             AdmittedPluginIdentity {
-                plugin_id: BUNDLED_ANDROID_PLUGIN_ID,
-                repository: BUILT_IN_ANDROID_REPOSITORY,
-                version: BUNDLED_ANDROID_PLUGIN_VERSION,
+                plugin_id: expected_plugin_id,
+                repository,
+                version: expected_version,
                 package_digest: &package_digest,
                 content_digest: &report.content_digest,
             },
@@ -1230,6 +1274,30 @@ mod tests {
         assert!(
             ensure_bundled_android_package(directory.path(), b"not the bundled package").is_err()
         );
+        assert!(!directory.path().join("packages").exists());
+    }
+
+    #[test]
+    fn bundled_lsp_package_is_admitted_enabled_and_sealed_offline() {
+        let directory = tempfile::tempdir().unwrap();
+        let snapshot = ensure_bundled_lsp_package(directory.path(), BUNDLED_LSP_PACKAGE).unwrap();
+        let plugin = snapshot.plugins.iter().find(|plugin| plugin.plugin_id == BUNDLED_LSP_PLUGIN_ID).unwrap();
+        assert!(plugin.enabled);
+        assert!(plugin.bundled_fallback);
+        let version = plugin.versions.iter().find(|version| version.version == BUNDLED_LSP_PLUGIN_VERSION).unwrap();
+        assert_eq!(version.package_digest, BUNDLED_LSP_PACKAGE_DIGEST);
+        assert!(version.content_digest.is_some());
+        let root = directory.path().join("packages").join(BUNDLED_LSP_PLUGIN_ID).join(BUNDLED_LSP_PLUGIN_VERSION).join(BUNDLED_LSP_PACKAGE_DIGEST.trim_start_matches("sha256:"));
+        assert!(root.join("runtime/plugin.js").is_file());
+        assert!(root.join("servers/typescript/server.mjs").is_file());
+        assert!(root.join("servers/typescript/typescript/lib/tsserver.js").is_file());
+        assert_eq!(ensure_bundled_lsp_package(directory.path(), BUNDLED_LSP_PACKAGE).unwrap().generation, snapshot.generation);
+    }
+
+    #[test]
+    fn bundled_lsp_package_rejects_bytes_outside_the_host_binding() {
+        let directory = tempfile::tempdir().unwrap();
+        assert!(ensure_bundled_lsp_package(directory.path(), b"bad bytes").is_err());
         assert!(!directory.path().join("packages").exists());
     }
 

@@ -64,6 +64,14 @@ evidence. Remote hosting and arbitrary executable/configuration providers requir
 
 ## Execution record
 
+- Offline bundled-package MVP: because no remote plugin publication is authorized, the host
+  development build now embeds the exact sealed sibling archive `dev.asterlyn.lsp` 0.1.0. The
+  archive is admitted with repository/identity/version/digest binding and immutable extraction,
+  alongside Android, without starting a server. Archive SHA-256 is
+  `2a3cec68eb06fd13ece09f3935e15fda30ef853ee4d240c4c3bf9d1e82cbe6d9` and size is 4,579,083 bytes.
+  Upstream provenance and licenses are recorded in the plugin repository's `docs/server-assets.md`
+  and host `docs/plugins/language-service-package.md`.
+
 - H0: plan and frozen first-provider contract recorded before implementation.
 - H1: additive SDK 1.11.0 language-service metadata, complete TypeScript/native projection,
   admission capability/permission IDs, registry guards, and refreshed canonical template SDK
