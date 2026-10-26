@@ -262,6 +262,9 @@ impl LanguageServiceProcess {
     pub fn request(&mut self, method: &str, params: Option<Value>) -> Result<u64, SessionError> {
         self.session.request(method, params)
     }
+    pub fn notify(&mut self, method: &str, params: Option<Value>) -> Result<(), SessionError> {
+        self.session.notify(method, params)
+    }
     pub fn cancel(&mut self, id: u64) -> Result<bool, SessionError> {
         self.session.cancel(id)
     }
@@ -483,6 +486,19 @@ impl<W: Write> LanguageServiceSession<W> {
             )));
         }
         Ok(id)
+    }
+    pub fn notify(&mut self, method: &str, params: Option<Value>) -> Result<(), SessionError> {
+        if self.closed {
+            return Err(SessionError::Closed);
+        }
+        let message = serde_json::to_vec(&JsonRpcNotification {
+            jsonrpc: "2.0".into(),
+            method: method.to_owned(),
+            params,
+        })
+        .map_err(|error| SessionError::InvalidMessage(error.to_string()))?;
+        write_frame(&mut self.writer, &message)
+            .map_err(|error| SessionError::InvalidMessage(format!("write notification: {error:?}")))
     }
     pub fn cancel(&mut self, id: u64) -> Result<bool, SessionError> {
         if self.closed {

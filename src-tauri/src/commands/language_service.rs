@@ -137,7 +137,7 @@ pub(crate) fn open_language_document(
     if !uri.starts_with("file://") || version < 1 || language_id.is_empty() {
         return Err("invalid language document".into());
     }
-    manager.with(&session_id, |process| { process.request("textDocument/didOpen", Some(serde_json::json!({"textDocument":{"uri":uri,"languageId":language_id,"version":version,"text":text}}))).map(|_| ()).map_err(|e| format!("{e:?}")) })
+    manager.with(&session_id, |process| { process.notify("textDocument/didOpen", Some(serde_json::json!({"textDocument":{"uri":uri,"languageId":language_id,"version":version,"text":text}}))).map_err(|e| format!("{e:?}")) })
 }
 
 #[tauri::command]
@@ -153,7 +153,7 @@ pub(crate) fn change_language_document(
         return Err("invalid language document".into());
     }
     let edits = changes.into_iter().map(|change| serde_json::json!({"range":change.range.map(|range| serde_json::json!({"start": {"line":range.start.line,"character":range.start.character}, "end": {"line":range.end.line,"character":range.end.character}})), "text":change.text})).collect::<Vec<_>>();
-    manager.with(&session_id, |process| process.request("textDocument/didChange", Some(serde_json::json!({"textDocument":{"uri":uri,"version":version},"contentChanges":edits}))).map(|_| ()).map_err(|e| format!("{e:?}")))
+    manager.with(&session_id, |process| process.notify("textDocument/didChange", Some(serde_json::json!({"textDocument":{"uri":uri,"version":version},"contentChanges":edits}))).map_err(|e| format!("{e:?}")))
 }
 
 #[tauri::command]
@@ -165,11 +165,10 @@ pub(crate) fn close_language_document(
 ) -> Result<(), String> {
     manager.with(&session_id, |process| {
         process
-            .request(
+            .notify(
                 "textDocument/didClose",
                 Some(serde_json::json!({"textDocument":{"uri":uri}})),
             )
-            .map(|_| ())
             .map_err(|e| format!("{e:?}"))
     })
 }
