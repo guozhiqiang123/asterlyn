@@ -249,6 +249,7 @@ pub struct LanguageServiceProcess {
     session: LanguageServiceSession<ChildStdin>,
     events: Receiver<ServerEvent>,
     buffered: Vec<JsonRpcMessage>,
+    tsdk: PathBuf,
 }
 
 impl LanguageServiceProcess {
@@ -276,17 +277,30 @@ impl LanguageServiceProcess {
         if let Some(stderr) = child.stderr.take() {
             std::thread::spawn(move || drain_stderr(stderr));
         }
+        let tsdk = profile.package_root.join(TYPESCRIPT_IMPL_ENTRY);
         Ok(Self {
             child,
             session: LanguageServiceSession::new(stdin),
             events,
             buffered: Vec::new(),
+            tsdk,
         })
     }
 
-    pub fn initialize(&mut self, root_uri: &str) -> Result<u64, SessionError> {
-        let params = serde_json::json!({"processId": null, "rootUri": root_uri, "capabilities": {"textDocument": {"hover": {}, "completion": {}, "definition": {}}, "workspace": {}}, "initializationOptions": {"typescript": {"tsdk": TYPESCRIPT_IMPL_ENTRY}, "disableAutomaticTypingAcquisition": true, "disableSuggestions": false}});
-        self.session.request("initialize", Some(params))
+    pub fn initialize(&mut self, root_uri: &str) -> Result<(), SessionError> {
+        let tsdk = self.session_tsdk_path();
+        let params = serde_json::json!({"processId": null, "rootUri": root_uri, "capabilities": {"textDocument": {"hover": {}, "completion": {}, "definition": {}}, "workspace": {}}, "initializationOptions": {"typescript": {"tsserver": {"path": tsdk}}, "disableAutomaticTypingAcquisition": true, "allowAutomaticSingleRunInference": false}});
+        let response = self.request_wait("initialize", Some(params), Duration::from_secs(10))?;
+        if response.error.is_some() {
+            return Err(SessionError::InvalidMessage(
+                "language server initialization failed".into(),
+            ));
+        }
+        self.notify("initialized", Some(serde_json::json!({})))
+    }
+
+    fn session_tsdk_path(&self) -> String {
+        self.tsdk.to_string_lossy().into_owned()
     }
 
     pub fn request(&mut self, method: &str, params: Option<Value>) -> Result<u64, SessionError> {
@@ -373,13 +387,25 @@ impl LanguageServiceProcess {
                     "language server response deadline exceeded".into(),
                 ));
             }
-            match self.next_event(remaining)? {
+            if let Some(index) = self.buffered.iter().position(|message| matches!(message, JsonRpcMessage::Response(response) if response.id == JsonRpcId::Number(id))) {
+                if let JsonRpcMessage::Response(response) = self.buffered.remove(index) { self.session.accept_response(&response); return Ok(response); }
+            }
+            match self
+                .events
+                .recv_timeout(remaining)
+                .map_err(|error| match error {
+                    std::sync::mpsc::RecvTimeoutError::Timeout => SessionError::InvalidMessage(
+                        "language server response deadline exceeded".into(),
+                    ),
+                    std::sync::mpsc::RecvTimeoutError::Disconnected => SessionError::Closed,
+                })? {
                 ServerEvent::Message(JsonRpcMessage::Response(response))
                     if response.id == JsonRpcId::Number(id) =>
                 {
+                    self.session.accept_response(&response);
                     return Ok(response);
                 }
-                ServerEvent::Message(message) => self.buffered.insert(0, message),
+                ServerEvent::Message(message) => self.buffered.push(message),
                 ServerEvent::Eof => return Err(SessionError::Closed),
                 ServerEvent::Io(error) => return Err(SessionError::Process(error)),
             }
