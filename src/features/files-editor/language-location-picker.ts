@@ -35,7 +35,7 @@ export class LanguageLocationPicker {
         path.textContent = choice.path.slice(-260); button.append(name, path); button.addEventListener("click", () => choose(index));
         button.addEventListener("pointermove", () => { if (selected !== index) { selected = index; highlight(); } }); buttons.push(button); fragment.append(button);
       }
-      list.replaceChildren(fragment); status.textContent = !filtered.length ? options.copy.noMatchingLocations : options.limited ? options.copy.limitedLocations.replace("{count}", String(locations.length)) : `${filtered.length} / ${locations.length}`;
+      list.replaceChildren(fragment); status.textContent = !filtered.length ? options.copy.noMatchingLocations : options.limited ? options.copy.limitedLocations.replace("{count}", String(locations.length)) : "";
       highlight();
     };
     this.release = () => { controller.abort(); root.remove(); options.dismissed(); };

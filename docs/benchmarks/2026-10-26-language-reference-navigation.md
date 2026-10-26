@@ -74,3 +74,15 @@ The final installed session retains two pre-existing `existing_project_directori
 startup-data errors; neither frontend readiness nor provider activation failed. This iteration does
 not claim to fix the separate recent-project bound issue. The user's manual acceptance and
 Windows/Linux desktop interaction acceptance are not claimed.
+
+## Picker footer refinement
+
+The user requested removal of the redundant `2 / 2` footer. Ordinary counts now appear only in
+the picker title; filtering does not add a second count. The footer is absent when empty, while
+localized no-match and partial-result warnings remain visible. This is presentation-only: query,
+filtering, selection, keyboard and resource bounds are unchanged.
+
+Typecheck, production build and 34 ownership/style checks pass. The existing Chromium/WebKit real
+gesture suite passes, retaining no-match/512-result warning coverage and keyboard selection.
+No new tests are added for this reversible presentation refinement. Native delivery follows the
+existing canonical signing, replacement and saved-icon restart process; exact evidence follows.

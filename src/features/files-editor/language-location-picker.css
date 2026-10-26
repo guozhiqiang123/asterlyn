@@ -14,6 +14,7 @@
   box-shadow: 0 8px 28px var(--shadow-dialog);
 }
 .language-location-picker > input { flex: 0 0 auto; width: 100%; }
+.language-location-picker > [role="status"]:empty { display: none; }
 .language-location-results { min-height: 0; overflow: auto; }
 .language-location-results > button {
   display: flex;
