@@ -44,6 +44,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0031-supervised-staged-plugin-run-sessions.md`](architecture/decisions/0031-supervised-staged-plugin-run-sessions.md) — staged plugin Run sessions, authoritative final-artifact identity, and typed declared tool operations.
 - [`architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md`](architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md) — direct GitHub Release plugin sources, static admission, immutable installation, isolated activation, restart recovery, and rollback.
 - [`architecture/decisions/0033-structured-local-diagnostics.md`](architecture/decisions/0033-structured-local-diagnostics.md) — one bounded local JSONL timeline across the webview, native host, capabilities, and isolated plugin lifecycle.
+- [`architecture/decisions/0034-plugin-language-services.md`](architecture/decisions/0034-plugin-language-services.md) — language-provider plugins, real document versions, supervised LSP sessions and execution authority.
 
 ## Plugin development
 
@@ -53,6 +54,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`../templates/plugin-typescript`](../templates/plugin-typescript) — executable isolated TypeScript plugin repository template and pinned Release workflow.
 
 ## Delivery
+
+- [`engineering/2026-10-26-language-services-host-plan.md`](engineering/2026-10-26-language-services-host-plan.md) — parallel host/plugin implementation stages, frozen TS/JS contract and integration acceptance gates.
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
 - [`engineering/quality-gates.md`](engineering/quality-gates.md) — durable quality, performance, compatibility, and release rules.
