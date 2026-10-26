@@ -51,4 +51,14 @@
 
 ## 原生交付
 
-待签名原生包、真实本项目启动、规范 Contents 交换安装、图标 bookmark 重开和安装哈希完成后追加实测记录。
+- 宿主代码提交：`96c73fe`（SDK 提交 `0543766`；插件提交 `a80753e`）。
+- 签名：完整 bundle ad-hoc + runtime，`codesign --verify --deep --strict` 成功；Sealed Resources v2。
+- 真实本项目原生启动：两个 LSP contribution / 两个 registered provider，插件 0.2.0 `knownGood`，LSP 错误 0。
+- 使用规范安装器交换 `Contents`；`/Applications/Asterlyn.app` 根身份保持，inode `203606126`。
+- 原安装保留为验证过的 ZIP；没有新增展开的 `.app.backup`。原图标 bookmark 首次启动和退出重开均记录 frontend-ready。
+- 安装的 executable SHA-256：`e069748d3a6002943ddf138af40e7e3ae8329fbeff5dcfaf13ca70fcb6bc1058`，与验收包一致。
+- ZIP SHA-256：`011047b0d99188fbf3639d7203a7923ba2b402d08ea83c4af06f32aafb93b47e`；`Asterlyn-0.1.21-macos.app.zip` CRC 校验通过。
+- 安装 buildId：`96c73fee28650da1236cc4bc862c9d779a98cab8-clean-1793009516351`。
+- 重开 session：`session-1793009744041-34688-0`；该日志再次确认 LSP 0.2.0 的 2 个 contribution 和 provider。
+- 仍有基线 `existing_project_directories` 的两个失败日志；未计为 LSP 错误，也不声称修复了此既有问题。
+- 原生 UI 的真实执行授权留给用户首次启用 Rust；没有通过测试端口替实际应用批准。
