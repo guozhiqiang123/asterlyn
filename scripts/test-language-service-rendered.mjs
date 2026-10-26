@@ -22,13 +22,19 @@ try {
       request(_handle, method) {
         if (method !== "textDocument/completion") return Promise.resolve(null);
         if (deferredCompletion) return new Promise((resolve) => { deferredCompletion = resolve; });
-        return Promise.resolve({ items: [{ label: "answer", detail: "UTF-16 edit", textEdit: { range: { start: { line: 0, character: 6 }, end: { line: 0, character: 11 } }, newText: "answer" } }] });
+        const text = window.languageServiceFixture?.editor.activeEntry()?.view.state.doc.toString() ?? "";
+        const value = text.indexOf("value");
+        const emoji = text.indexOf("😀");
+        const range = window.languageServiceFixture?.completionMode === "invalid-surrogate"
+          ? { start: { line: 0, character: emoji + 1 }, end: { line: 0, character: emoji + 2 } }
+          : { start: { line: 0, character: value }, end: { line: 0, character: value + 5 } };
+        return Promise.resolve({ items: [{ label: "answer", detail: "UTF-16 edit", textEdit: { range, newText: "answer" } }] });
       },
     };
     const editor = new TextEditor({ load: async () => null, openCommit() {}, status() {}, error() {} }, EN_US.editor);
     editor.setLanguageServices(() => port);
     editor.mount(document.querySelector("#editor"), "tab-a", 1, "const value = 1;\n", "const value = 1;\n", "/repo/main.ts", DEFAULT_APP_PREFERENCES, null, "untracked", () => {});
-    window.languageServiceFixture = { editor, port, events, preferences: DEFAULT_APP_PREFERENCES, startCompletion, undo, deferCompletion() { deferredCompletion = true; }, resolveCompletion(value) { const resolve = deferredCompletion; deferredCompletion = null; if (typeof resolve === "function") resolve(value); }, get diagnosticsListener() { return diagnosticsListener; } };
+    window.languageServiceFixture = { editor, port, events, preferences: DEFAULT_APP_PREFERENCES, completionMode: "ascii", startCompletion, undo, deferCompletion() { deferredCompletion = true; }, resolveCompletion(value) { const resolve = deferredCompletion; deferredCompletion = null; if (typeof resolve === "function") resolve(value); }, get diagnosticsListener() { return diagnosticsListener; } };
   });
   await page.locator(".cm-content").click();
   await page.locator(".cm-content").press("End");
@@ -59,6 +65,30 @@ try {
   const events = await page.evaluate(() => window.languageServiceFixture.events);
   assert.ok(events.some((event) => event.type === "close" && event.handle.loadEpoch === 1), "epoch replacement closes the old handle");
   assert.ok(events.some((event) => event.type === "open" && event.handle.loadEpoch === 2), "epoch replacement opens a fresh handle");
+  await page.evaluate(() => window.languageServiceFixture.editor.mount(document.querySelector("#editor"), "tab-a", 3, "const emoji = '😀'; const value = 1;\n", "const emoji = '😀'; const value = 1;\n", "/repo/main.ts", window.languageServiceFixture.preferences, null, "untracked", () => {}));
+  await page.waitForFunction(() => window.languageServiceFixture.events.filter((event) => event.type === "open").some((event) => event.handle.loadEpoch === 3), null, { timeout: 10000 });
+  const nonBmp = await page.evaluate(async () => {
+    const fixture = window.languageServiceFixture; const entry = fixture.editor.activeEntry(); const view = entry.view; const original = view.state.doc.toString();
+    fixture.completionMode = "non-bmp";
+    const value = original.indexOf("value");
+    const result = await fixture.editor.complete(entry, { state: view.state, pos: value + 5, explicit: true, matchBefore: () => ({ from: value, to: value + 5, text: "value" }) });
+    if (!result?.options?.length) return { original, text: view.state.doc.toString(), applied: false };
+    result.options[0].apply(view, result.options[0], value, value + 5);
+    const applied = view.state.doc.toString(); fixture.undo(view);
+    return { original, text: applied, undone: view.state.doc.toString(), applied: true };
+  });
+  assert.equal(nonBmp.applied, true, "non-BMP completion was not offered");
+  assert.equal(nonBmp.text, "const emoji = '😀'; const answer = 1;\n", "non-BMP UTF-16 range replaced the wrong span");
+  assert.equal(nonBmp.undone, nonBmp.original, "non-BMP completion was not undoable");
+  const invalid = await page.evaluate(async () => {
+    const fixture = window.languageServiceFixture; const entry = fixture.editor.activeEntry(); const view = entry.view; const original = view.state.doc.toString();
+    fixture.completionMode = "invalid-surrogate";
+    const emoji = original.indexOf("😀");
+    const result = await fixture.editor.complete(entry, { state: view.state, pos: emoji + 2, explicit: true, matchBefore: () => ({ from: emoji + 1, to: emoji + 2, text: "\\ud83d" }) });
+    if (result?.options?.length) result.options[0].apply(view, result.options[0], emoji + 1, emoji + 2);
+    return { original, text: view.state.doc.toString() };
+  });
+  assert.equal(invalid.text, invalid.original, "invalid UTF-16 edit changed the document");
 } finally {
   await browser.close();
   await server.close();
