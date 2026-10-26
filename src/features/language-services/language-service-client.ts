@@ -5,8 +5,10 @@ export interface LanguageDocumentIdentity {
   readonly languageId: string; readonly pluginId: string; readonly providerVersion?: string;
 }
 export type { NativeLanguageServiceBridge, LanguageServiceEvent } from "../../protocol/language-service.ts";
-import type { NativeLanguageServiceBridge, LanguageServiceEvent } from "../../protocol/language-service.ts";
-export type LanguageServiceFactory = EditorLanguageServicePortFactory & { dispose(): void; reconcile(): void };
+import type { NativeLanguageServiceBridge, LanguageServiceEvent, LanguageServiceApprovalEvent } from "../../protocol/language-service.ts";
+export type LanguageConsentScope = Pick<LanguageDocumentIdentity, "workspaceRoot" | "workspaceGeneration" | "pluginId" | "providerVersion">;
+export type LanguageServiceFactory = EditorLanguageServicePortFactory & { dispose(): void; reconcile(retainConsent?: (identity: LanguageConsentScope) => boolean): void; revoke(pluginId: string): void };
+interface Consent { readonly scope: LanguageConsentScope; approvedIdentity: string | null; denied: boolean; }
 type Listener = Parameters<EditorLanguageServicePort["subscribeDiagnostics"]>[0];
 interface Document {
   handle: EditorLanguageServiceHandle; info: LanguageDocumentIdentity; latest: EditorLanguageServiceSnapshot;
@@ -19,8 +21,15 @@ const sessionKey = (i: LanguageDocumentIdentity) => JSON.stringify([i.workspaceR
 const validSnapshot = (s: EditorLanguageServiceSnapshot) => Number.isSafeInteger(s.version) && s.version > 0 && s.text.length <= MAX_TEXT_BYTES && new TextEncoder().encode(s.text).length <= MAX_TEXT_BYTES;
 
 /** Owns current overlays, ordered synchronization and result identity independently of editor UI. */
-export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, definitionTrace?: (event: EditorDefinitionEvent) => void): LanguageServiceFactory {
+export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, definitionTrace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void): LanguageServiceFactory {
   const sessions = new Map<string, Session>();
+  const consents = new Map<string, Consent>();
+  const invalidate = (key: string, reason: "scope-changed" | "shutdown") => {
+    const consent = consents.get(key); consents.delete(key);
+    if (consent && (consent.approvedIdentity !== null || consent.denied)) {
+      try { approvalTrace?.({ outcome: "invalidated", reason }); } catch { /* Logging cannot change consent. */ }
+    }
+  };
   let disposed = false;
   const unsubscribe = native.subscribe((event) => { if (!disposed) for (const session of sessions.values()) session.event(event); });
   const factory = ((handle: EditorLanguageServiceHandle) => {
@@ -28,17 +37,38 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
     if (disposed || !info) return null;
     const key = sessionKey(info);
     let session = sessions.get(key);
-    if (!session) { session = new Session(info, native, resolve, reportError, navigate, definitionTrace); sessions.set(key, session); }
+    if (!session) {
+      let consent = consents.get(key);
+      if (!consent) {
+        if (consents.size >= 32) { reportError(new Error("Language consent scope limit reached")); return null; }
+        consent = {
+          scope: { workspaceRoot: info.workspaceRoot, workspaceGeneration: info.workspaceGeneration, pluginId: info.pluginId, providerVersion: info.providerVersion },
+          approvedIdentity: null, denied: false,
+        };
+        consents.set(key, consent);
+      }
+      const created = new Session(info, native, resolve, reportError, consent, () => {
+        if (sessions.get(key) === created) { sessions.delete(key); created.dispose(); }
+      }, navigate, definitionTrace, approvalTrace);
+      session = created; sessions.set(key, session);
+    }
     return session.port(handle, info);
   }) as LanguageServiceFactory;
-  factory.reconcile = () => {
+  factory.reconcile = (retainConsent) => {
     for (const [key, session] of sessions) {
       if (!session.reconcile()) { session.dispose(); sessions.delete(key); }
+    }
+    for (const [key, consent] of consents) if (!sessions.has(key) && retainConsent?.(consent.scope) !== true) invalidate(key, "scope-changed");
+  };
+  factory.revoke = (pluginId) => {
+    for (const [key, consent] of consents) if (consent.scope.pluginId === pluginId) {
+      sessions.get(key)?.dispose(); sessions.delete(key); invalidate(key, "scope-changed");
     }
   };
   factory.dispose = () => {
     if (disposed) return; disposed = true; unsubscribe();
-    for (const session of sessions.values()) session.dispose(); sessions.clear(); native.dispose?.();
+    for (const session of sessions.values()) session.dispose(); sessions.clear();
+    for (const key of consents.keys()) invalidate(key, "shutdown"); native.dispose?.();
   };
   return factory;
 }
@@ -47,15 +77,18 @@ class Session {
   private sessionId: string | null = null;
   private starting: Promise<string | null> | null = null;
   private serial: Promise<void> = Promise.resolve();
-  private dead = false; private denied = false; private failed = false; private sequence = 0;
-  private approvedIdentity: string | null = null;
+  private dead = false; private failed = false; private sequence = 0;
+  private readonly consent: Consent;
+  private readonly idle: () => void;
   private readonly info: LanguageDocumentIdentity;
   private readonly native: NativeLanguageServiceBridge;
   private readonly resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null;
   private readonly reportError: (error: unknown) => void;
   private readonly navigate: ((location: EditorLanguageServiceLocation) => void) | undefined;
   private readonly trace: ((event: EditorDefinitionEvent) => void) | undefined;
-  constructor(info: LanguageDocumentIdentity, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, trace?: (event: EditorDefinitionEvent) => void) { this.trace = trace; this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
+  private readonly approvalTrace: ((event: LanguageServiceApprovalEvent) => void) | undefined;
+  constructor(info: LanguageDocumentIdentity, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, consent: Consent, idle: () => void, navigate?: (location: EditorLanguageServiceLocation) => void, trace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void) { this.idle = idle; this.consent = consent; this.approvalTrace = approvalTrace; this.trace = trace; this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
+  private approval(event: LanguageServiceApprovalEvent): void { try { this.approvalTrace?.(event); } catch { /* Logging cannot change consent. */ } }
   port(handle: EditorLanguageServiceHandle, info: LanguageDocumentIdentity): EditorLanguageServicePort | null {
     const key = handleKey(handle); const existing = this.docs.get(key);
     if (existing && !existing.closed) return existing.port;
@@ -85,20 +118,24 @@ class Session {
     this.publish(doc, []); return true;
   }
   private enqueue(action: () => Promise<void>): Promise<void> {
-    this.serial = this.serial.then(action).catch((error) => { if (!this.dead && !this.denied && !this.failed) { this.failed = true; this.reportError(error); } });
+    this.serial = this.serial.then(action).catch((error) => { if (!this.dead && !this.consent.denied && !this.failed) { this.failed = true; this.reportError(error); } });
     return this.serial;
   }
   private async ensure(): Promise<string | null> {
-    if (this.dead || this.denied || this.failed || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
+    if (this.dead || this.consent.denied || this.failed || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
     if (this.sessionId) return this.sessionId;
     if (this.starting) return this.starting;
     this.starting = (async () => {
       const review = await this.native.prepare(this.info.workspaceRoot, this.info.pluginId);
-      const identity = JSON.stringify([review.pluginVersion, review.packageDigest, review.resourceDigest, review.executableIdentity]);
+      const identity = JSON.stringify([review.pluginId, review.serverId, review.pluginVersion, review.packageDigest, review.resourceDigest, review.executableIdentity]);
       if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
-      if (this.approvedIdentity !== identity && !await this.native.confirm(review)) { this.denied = true; return null; }
-      this.approvedIdentity = identity;
-      if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
+      if (this.consent.approvedIdentity !== identity) {
+        this.approval({ outcome: "requested", reason: this.consent.approvedIdentity === null ? "first-use" : "identity-changed" });
+        const approved = await this.native.confirm(review);
+        if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) { this.approval({ outcome: "discarded" }); return null; }
+        if (!approved) { this.consent.denied = true; this.approval({ outcome: "declined" }); return null; }
+        this.consent.approvedIdentity = identity; this.approval({ outcome: "approved" });
+      } else this.approval({ outcome: "reused" });
       const session = await this.native.start(this.info.workspaceRoot, review.reviewId);
       if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) { await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); return null; }
       this.sessionId = session; return session;
@@ -127,6 +164,7 @@ class Session {
       const session = this.sessionId;
       if (session && doc.opened) await this.native.close(this.info.workspaceRoot, session, doc.info.uri).catch(() => undefined);
       if (!this.docs.size && session) { this.sessionId = null; await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); }
+      if (!this.docs.size) this.idle();
     });
   }
   private async request(doc: Document, method: string, params: unknown, version: number): Promise<unknown | null> {

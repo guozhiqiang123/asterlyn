@@ -23,6 +23,7 @@ export interface PluginManagementBindingOptions {
   readonly visible: () => boolean;
   readonly render: (focusSelector?: string) => void;
   readonly reportError: (error: unknown) => void;
+  readonly revokePluginExecution?: (pluginId: string) => void;
 }
 
 export interface PluginSettingsFocusTarget {
@@ -113,6 +114,7 @@ export class PluginManagementBinding {
       .forEach((input) => input.addEventListener("change", () => {
         const pluginId = input.dataset.pluginId;
         if (pluginId && this.host.setPluginEnabled(pluginId, input.checked)) {
+          if (!input.checked) this.options.revokePluginExecution?.(pluginId);
           this.options.render(`#${CSS.escape(input.id)}`);
         }
       }));
@@ -412,6 +414,7 @@ export class PluginManagementBinding {
     if (this.options.visible()) this.options.render();
     try {
       this.installations = await operation();
+      if (!this.installations.plugins.some((plugin) => plugin.pluginId === pluginId && plugin.enabled)) this.options.revokePluginExecution?.(pluginId);
       await this.host.loadPluginManagement();
       this.restartRequired ||= requiresRestart;
       completed();

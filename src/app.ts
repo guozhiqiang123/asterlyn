@@ -1,6 +1,6 @@
 import { createLanguageDefinitionNavigator } from "./composition/language-definition-navigation.ts";
 import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
-import { createLanguageServicesRuntime, languageExecutionConfirmation, workspaceFileUri } from "./composition/language-services-runtime.ts";
+import { createLanguageServicesRuntime, languageExecutionConfirmation, languageWorkspaceForWindow, workspaceFileUri } from "./composition/language-services-runtime.ts";
 import { createTauriLanguageServiceBridge } from "./adapters/tauri/tauri-language-service-bridge.ts";
 import { bridge } from "./bridge";
 import { diagnostics } from "./application/diagnostics.ts";
@@ -658,7 +658,7 @@ export class AsterlynApp {
       keyboard: this.shortcuts.handleTerminalKeyEvent, presentationChanged: () => this.refreshShortcutPresentation(),
     }, initialCatalog.locale);
     this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), confirm: (request) => this.dialogRuntime.confirm(request), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, processQueryBridge: bridge, toolOperationBridge: bridge, installedPluginRuntimeBridge: bridge, pluginMarketplaceBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), identityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
-    const languageWorkspace = () => this.windowSession.workspace.state.root ? { root: this.windowSession.workspace.state.root, generation: this.windowSession.generation } : null;
+    const languageWorkspace = languageWorkspaceForWindow(this.windowSession);
     const definitionNavigator = createLanguageDefinitionNavigator({ workspace: languageWorkspace, files: () => this.filesState.files, open: (root, file) => this.openProjectFile(root, file),
       activeUri: () => { const active = this.activeDocument(); return active.kind === "project-file" ? workspaceFileUri(active.repositoryRoot, active.workspacePath) : null; },
       content: () => { this.captureMountedTextEditor(); return activeTextTab(this.editorState.session)?.content ?? null; }, select: (from, to) => this.editorSurface.selectRange(from, to),
@@ -673,8 +673,9 @@ export class AsterlynApp {
       bind: (factory) => this.editorSurface.setLanguageServices(factory), reportError: (error) => this.showError(error),
       navigate: (location) => { void definitionNavigator(location).catch((error) => this.showError(error)); },
       definitionDiagnostic: (event) => diagnostics.report("info", "language.definition.lookup", `kind=${event.kind ?? "definition"};outcome=${event.outcome};targets=${event.targetCount}`),
+      approvalDiagnostic: (event) => diagnostics.report("info", "language.approval", `outcome=${event.outcome};reason=${event.reason ?? "none"}`),
     }) : null;
-    this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, bridge, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
+    this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, bridge, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error), revokePluginExecution: (pluginId) => this.languageServices?.revoke(pluginId) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.findResultsRuntime = new FindResultsRuntime(root, {
       copy: () => this.localization.catalog,

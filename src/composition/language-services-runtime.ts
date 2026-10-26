@@ -2,6 +2,12 @@ import type { PluginContributionRegistry } from "../application/plugins/index.ts
 import { createEditorLanguageServicePort, type NativeLanguageServiceBridge } from "../features/language-services/language-service-client.ts";
 import type { EditorLanguageServiceHandle, EditorLanguageServiceLocation, EditorLanguageServicePortFactory } from "../protocol/editor-language-service.ts";
 import type { ApplicationConfirmationRequest } from "../shared/application-confirmation-dialog.ts";
+import type { WindowSession } from "../application/window-session.ts";
+
+/** One callback supplies both language services and target navigation with their workspace scope. */
+export function languageWorkspaceForWindow(session: Pick<WindowSession, "workspace">) {
+  return () => session.workspace.identity();
+}
 
 export interface LanguageServicesRuntimeOptions {
   readonly registry: PluginContributionRegistry;
@@ -12,6 +18,7 @@ export interface LanguageServicesRuntimeOptions {
   readonly reportError: (error: unknown) => void;
   readonly navigate: (location: EditorLanguageServiceLocation) => void;
   readonly definitionDiagnostic?: (event: import("../protocol/editor-language-service.ts").EditorDefinitionEvent) => void;
+  readonly approvalDiagnostic?: (event: import("../protocol/language-service.ts").LanguageServiceApprovalEvent) => void;
   readonly diagnostic?: (fields: { providerCount: number; workspaceGeneration: number | null }) => void;
 }
 const LANGUAGES: Readonly<Record<string, string>> = { ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
@@ -32,28 +39,29 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     if (providers.length !== 1 || !languageId) return null;
     const provider = providers[0]!; const uri = workspaceFileUri(workspace.root, document.workspacePath);
     return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion } : null;
-  }, options.native, options.reportError, options.navigate, options.definitionDiagnostic);
+  }, options.native, options.reportError, options.navigate, options.definitionDiagnostic, options.approvalDiagnostic);
   let key = "";
   const refresh = () => {
     const workspace = options.workspace();
     const next = JSON.stringify([workspace, options.registry.list().filter((item) => item.kind === "language-service").map((item) => [item.qualifiedId, item.pluginVersion])]);
     if (key === next) return;
-    key = next; factory.reconcile();
+    key = next; factory.reconcile((info) => workspace?.root === info.workspaceRoot && workspace.generation === info.workspaceGeneration
+      && !options.registry.list().some((item) => item.kind === "language-service" && item.pluginId === info.pluginId && item.pluginVersion !== info.providerVersion));
     options.diagnostic?.({ providerCount: options.registry.list().filter((item) => item.kind === "language-service").length, workspaceGeneration: workspace?.generation ?? null });
     // A new binding identity refreshes existing cached editors once when admission/activation changes.
     options.bind((handle) => factory(handle));
   };
   const release = options.registry.subscribe(refresh);
-  return { refresh, dispose: () => { release(); options.bind(null); factory.dispose(); } };
+  return { refresh, revoke: (pluginId: string) => { factory.revoke(pluginId); }, dispose: () => { release(); options.bind(null); factory.dispose(); } };
 }
 export function languageExecutionConfirmation(review: Parameters<NativeLanguageServiceBridge["confirm"]>[0], chinese: boolean): ApplicationConfirmationRequest {
   return chinese ? {
     title: "启用 TypeScript / JavaScript 语言服务？",
-    message: `插件 ${review.pluginId} ${review.pluginVersion} 将通过本机 Node.js 运行随包附带的语言服务，并读取当前项目与打开的源文件。该进程具有当前用户的系统权限。\n\n执行程序：${review.executableIdentity}\n插件校验：${review.packageDigest}\n\n本次项目会话内记住此选择。`,
+    message: `插件 ${review.pluginId} ${review.pluginVersion} 将通过本机 Node.js 运行随包附带的语言服务，并读取当前项目与打开的源文件。该进程具有当前用户的系统权限。\n\n执行程序：${review.executableIdentity}\n插件校验：${review.packageDigest}\n\n当前窗口的项目会话内记住此选择，刷新和切换文件不会重复询问。重启应用、切换项目或插件／Node 身份变化后需要重新确认。`,
     confirmLabel: "启用语言服务", cancelLabel: "暂不启用",
   } : {
     title: "Enable TypeScript / JavaScript language services?",
-    message: `Plugin ${review.pluginId} ${review.pluginVersion} will run its packaged language server with local Node.js and read this project and its open source files. The process has your user account's system permissions.\n\nExecutable: ${review.executableIdentity}\nPackage: ${review.packageDigest}\n\nRemember this choice for this project session.`,
+    message: `Plugin ${review.pluginId} ${review.pluginVersion} will run its packaged language server with local Node.js and read this project and its open source files. The process has your user account's system permissions.\n\nExecutable: ${review.executableIdentity}\nPackage: ${review.packageDigest}\n\nRemember this choice for this project's session in the current window. Refreshing or switching files will not ask again. Restarting the app, changing projects, or a changed plugin/Node identity requires confirmation again.`,
     confirmLabel: "Enable language services", cancelLabel: "Not now",
   };
 }

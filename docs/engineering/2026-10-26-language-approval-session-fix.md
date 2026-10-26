@@ -1,6 +1,7 @@
 # Language execution consent lifetime — 2026-10-26
 
-Status: planned before implementation. Baseline `ff81716`.
+Status: implemented; automated gates pass, native delivery pending. Baseline `ff81716`.
+Plan committed as `3ffa8c6` before source changes.
 
 The enable-language-services dialog promises to remember the choice for the current project
 session. It intentionally has no cross-restart persistence. The installed session log nevertheless
@@ -14,11 +15,14 @@ Reconciliation then disposes the Session that owns the approval fingerprint.
 1. Bind language services and navigation to the real WorkspaceSession identity. Ordinary Git
    operations/refresh and tab activity must not create a new consent scope. Changing project,
    clearing/reopening a workspace or closing the application ends the scope.
-2. Retain one bounded idle consent-bearing Session for the currently admitted workspace/provider,
-   independently of how many eligible documents are open. Stop its native process at zero documents
-   as before; do not retain closed document text/listeners. Unrelated contribution refresh cannot
-   discard this idle choice. Provider removal/disable, provider-version change, workspace change
-   and disposal invalidate it; stale approval dialogs cannot authorize a replacement scope.
+2. Keep the project-scoped decision separate from the transport Session, independently of eligible
+   documents or a temporary absent provider during full refresh/reactivation. Native `open_project`
+   deliberately revokes processes and plugin activation even on full refresh; keep that authority
+   behavior, rebuild transport, and reuse only an identical decision after a fresh review. Stop
+   native processes at zero documents and discard closed document text/listeners. Explicit plugin
+   disable/uninstall revokes the decision before catalog reload. Provider-version change, workspace
+   change and disposal invalidate it; stale dialogs cannot authorize a replacement scope. Cache
+   records are capped at 32 and pruned on scope changes (one for the admitted first profile).
 3. A process restart still prepares a fresh one-use native review. Reuse the user's decision only
    for the same package/resource/executable fingerprint in that project session. Node/plugin
    identity changes require confirmation. No durable grant, localStorage bypass, native review
@@ -35,3 +39,20 @@ Run existing client/editor/real-pointer tests, typecheck/build/full scripts and 
 checks. Record results and boundaries, make staged local commits, build/sign/strictly verify a fresh
 native artifact, install only through the canonical installer, and check saved-icon reopen logs.
 The user's manual acceptance and cross-restart remember feature remain explicitly open/deferred.
+
+## Execution record
+
+- A behavior-preserving extraction of the original App scope wiring reproduced three failures:
+  five operation transitions caused six confirmations, an idle contribution refresh caused two,
+  and a remembered denial was asked twice. The corrected production composition passes all three.
+- Language scope now reads WorkspaceSession.identity; a bounded in-memory decision ledger is
+  independent of native transports and temporary missing contributions during full reactivation.
+  Native processes, documents and listeners are released while idle. Explicit Settings disable/
+  uninstall revokes the decision before catalog reload. Every start still consumes a fresh review.
+- Nineteen focused client/approval/Settings lifecycle tests and all 1332 scripts pass. A 100-cycle
+  idle test confirms one decision, 100 independently reviewed starts/stops, and subscription cleanup;
+  project churn prunes old records below the cache bound. Late answers cannot authorize a new scope.
+- Typecheck/production build, existing language-editor rendering, real Chromium/WebKit definition/
+  reference gestures, actual package activation through execution review, and the native one-use
+  owner/activation/package review test pass. Actual installed-app approval is never auto-granted.
+- Native signed artifact, canonical installation and icon reopen evidence follow these gates.

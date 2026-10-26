@@ -8,6 +8,10 @@ export interface LanguageServiceTextPosition { readonly line: number; readonly c
 export interface LanguageServiceTextRange { readonly start: LanguageServiceTextPosition; readonly end: LanguageServiceTextPosition; }
 export interface LanguageServiceTextChange { readonly range: LanguageServiceTextRange | null; readonly text: string; }
 export interface LanguageServiceResultEnvelope { readonly sessionId: string; readonly uri: string; readonly version: number; readonly result: unknown; }
+export interface LanguageServiceApprovalEvent {
+  readonly outcome: "requested" | "approved" | "declined" | "reused" | "discarded" | "invalidated";
+  readonly reason?: "first-use" | "identity-changed" | "scope-changed" | "shutdown";
+}
 
 export interface LanguageServiceEvent {
   readonly sessionId: string; readonly kind: "diagnostics" | "terminated";
