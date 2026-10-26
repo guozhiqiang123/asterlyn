@@ -234,3 +234,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-26-language-approval-session.md`](benchmarks/2026-10-26-language-approval-session.md) — repeated-dialog root cause, session consent lifetime, revocation and local delivery evidence.
 
 - [`benchmarks/2026-10-26-android-jvm-a0.md`](benchmarks/2026-10-26-android-jvm-a0.md) — Android/JVM real-server probes, pinned distributions, failed semantic gates and transport/model prerequisites.
+- [`benchmarks/2026-10-26-jvm-transport-foundation.md`](benchmarks/2026-10-26-jvm-transport-foundation.md) — bounded import-status coalescing, ordered startup buffering and real TS/Rust regressions.

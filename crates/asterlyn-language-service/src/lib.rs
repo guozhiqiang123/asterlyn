@@ -9,12 +9,14 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
+use std::sync::mpsc::{SyncSender, sync_channel};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+mod inbox;
 mod rust_profile;
+use inbox::{EventBuffer, EventReceiver, EventSender};
 pub use rust_profile::RustServerProfile;
 
 pub const MAX_HEADER_BYTES: usize = 8 * 1024;
@@ -259,8 +261,8 @@ impl TypeScriptServerProfile {
 pub struct LanguageServiceProcess {
     child: Child,
     session: LanguageServiceSession<QueuedWriter>,
-    events: Receiver<ServerEvent>,
-    buffered: Vec<JsonRpcMessage>,
+    events: EventReceiver,
+    buffered: EventBuffer,
     initialization_options: Value,
     profile: &'static str,
     capabilities: Value,
@@ -314,7 +316,7 @@ impl LanguageServiceProcess {
             .stdout
             .take()
             .ok_or_else(|| SessionError::Process("language server stdout unavailable".into()))?;
-        let (sender, events) = sync_channel(MAX_EVENTS);
+        let (sender, events) = inbox::channel();
         spawn_reader(stdout, sender, child.id());
         if let Some(stderr) = child.stderr.take() {
             std::thread::spawn(move || drain_stderr(stderr));
@@ -323,7 +325,7 @@ impl LanguageServiceProcess {
             child,
             session: LanguageServiceSession::new(QueuedWriter::new(stdin)),
             events,
-            buffered: Vec::new(),
+            buffered: EventBuffer::default(),
             initialization_options,
             profile,
             capabilities: Value::Null,
@@ -391,8 +393,8 @@ impl LanguageServiceProcess {
         self.child.id()
     }
     pub fn poll_event(&mut self) -> Result<Option<ServerEvent>, SessionError> {
-        if !self.buffered.is_empty() {
-            return Ok(Some(ServerEvent::Message(self.buffered.remove(0))));
+        if let Some(event) = self.buffered.pop() {
+            return Ok(Some(event));
         }
         match self.events.try_recv() {
             Ok(event) => Ok(Some(event)),
@@ -457,8 +459,8 @@ impl LanguageServiceProcess {
         Ok(Some(message))
     }
     pub fn next_event(&mut self, timeout: Duration) -> Result<ServerEvent, SessionError> {
-        if let Some(message) = self.buffered.pop() {
-            return Ok(ServerEvent::Message(message));
+        if let Some(event) = self.buffered.pop() {
+            return Ok(event);
         }
         self.events
             .recv_timeout(timeout)
@@ -485,8 +487,10 @@ impl LanguageServiceProcess {
                     "language server response deadline exceeded".into(),
                 ));
             }
-            if let Some(index) = self.buffered.iter().position(|message| matches!(message, JsonRpcMessage::Response(response) if response.id == JsonRpcId::Number(id)))
-                && let JsonRpcMessage::Response(response) = self.buffered.remove(index) { self.session.accept_response(&response); return Ok(response); }
+            if let Some(response) = self.buffered.take_response(&JsonRpcId::Number(id)) {
+                self.session.accept_response(&response);
+                return Ok(response);
+            }
             match self
                 .events
                 .recv_timeout(remaining)
@@ -506,10 +510,9 @@ impl LanguageServiceProcess {
                     self.reject_request(&request)?
                 }
                 ServerEvent::Message(message) => {
-                    if self.buffered.len() >= MAX_EVENTS {
-                        return Err(SessionError::LimitExceeded("startup events"));
-                    }
-                    self.buffered.push(message);
+                    self.buffered
+                        .push(ServerEvent::Message(message))
+                        .map_err(SessionError::LimitExceeded)?;
                 }
                 ServerEvent::Eof => return Err(SessionError::Closed),
                 ServerEvent::Io(error) => return Err(SessionError::Process(error)),
@@ -623,7 +626,7 @@ fn decode_message(body: &[u8]) -> Result<JsonRpcMessage, String> {
     serde_json::from_value(value).map_err(|_| "invalid JSON-RPC fields".into())
 }
 
-fn spawn_reader(mut stdout: ChildStdout, sender: SyncSender<ServerEvent>, pid: u32) {
+fn spawn_reader(mut stdout: ChildStdout, sender: EventSender, pid: u32) {
     std::thread::spawn(move || {
         loop {
             match read_frame(&mut stdout) {
@@ -636,24 +639,31 @@ fn spawn_reader(mut stdout: ChildStdout, sender: SyncSender<ServerEvent>, pid: u
                             }
                             JsonRpcMessage::Notification(v) => v.jsonrpc == "2.0",
                         };
-                        if !valid || sender.try_send(ServerEvent::Message(message)).is_err() {
+                        if !valid {
+                            sender
+                                .finish(ServerEvent::Io("invalid server JSON-RPC version".into()));
+                            terminate_process_tree(pid);
+                            break;
+                        }
+                        if let Err(reason) = sender.send(ServerEvent::Message(message)) {
+                            sender.finish(ServerEvent::Io(format!(
+                                "language server event limit: {reason}"
+                            )));
                             terminate_process_tree(pid);
                             break;
                         }
                     }
                     Err(error) => {
-                        let _ = sender
-                            .send(ServerEvent::Io(format!("invalid server JSON-RPC: {error}")));
+                        sender.finish(ServerEvent::Io(format!("invalid server JSON-RPC: {error}")));
                         break;
                     }
                 },
                 Ok(None) => {
-                    let _ = sender.send(ServerEvent::Eof);
+                    sender.finish(ServerEvent::Eof);
                     break;
                 }
                 Err(error) => {
-                    let _ =
-                        sender.send(ServerEvent::Io(format!("server framing error: {error:?}")));
+                    sender.finish(ServerEvent::Io(format!("server framing error: {error:?}")));
                     break;
                 }
             }
@@ -879,6 +889,83 @@ impl<W: Write> LanguageServiceSession<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    fn scripted_process(events: &[JsonRpcMessage]) -> LanguageServiceProcess {
+        use std::os::unix::process::CommandExt;
+        let mut stream = Vec::new();
+        for event in events {
+            write_frame(&mut stream, &serde_json::to_vec(event).unwrap()).unwrap();
+        }
+        let quoted = String::from_utf8(stream).unwrap().replace('\'', "'\"'\"'");
+        let mut command = Command::new("/bin/sh");
+        command
+            .process_group(0)
+            .args(["-c", &format!("printf '%s' '{quoted}'; cat >/dev/null")])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        LanguageServiceProcess::spawn_command(command, "transport-fixture", Value::Null).unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_reader_and_startup_buffer_survive_import_flood_in_fifo_order() {
+        let notification = |method: &str, params: Value| {
+            JsonRpcMessage::Notification(JsonRpcNotification {
+                jsonrpc: "2.0".into(),
+                method: method.into(),
+                params: Some(params),
+            })
+        };
+        let mut events = vec![notification(
+            "language/status",
+            serde_json::json!({"type":"Starting"}),
+        )];
+        for index in 0..600 {
+            events.push(notification(
+                "language/progressReport",
+                serde_json::json!({"id":index,"workDone":index}),
+            ));
+            events.push(notification(
+                "language/status",
+                serde_json::json!({"type":"ProjectStatus","count":index}),
+            ));
+        }
+        events.push(notification(
+            "language/status",
+            serde_json::json!({"type":"ServiceReady"}),
+        ));
+        events.push(JsonRpcMessage::Response(JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            id: JsonRpcId::Number(1),
+            result: Some(serde_json::json!({"capabilities":{}})),
+            error: None,
+        }));
+        let mut process = scripted_process(&events);
+        process.initialize("file:///transport-fixture").unwrap();
+        let mut retained = Vec::new();
+        for _ in 0..4 {
+            let ServerEvent::Message(message) = process.next_event(Duration::from_secs(1)).unwrap()
+            else {
+                panic!("startup status was lost");
+            };
+            retained.push(message);
+        }
+        assert!(process.poll_event().unwrap().is_none());
+        assert_eq!(retained.len(), 4);
+        assert_eq!(retained.first(), events.first());
+        assert_eq!(retained.last(), Some(&events[events.len() - 2]));
+        assert!(retained.contains(&notification(
+            "language/progressReport",
+            serde_json::json!({"id":599,"workDone":599})
+        )));
+        assert!(retained.contains(&notification(
+            "language/status",
+            serde_json::json!({"type":"ProjectStatus","count":599})
+        )));
+        process.stop().unwrap();
+    }
+
     #[test]
     fn rejects_mixed_or_incomplete_json_rpc_and_accepts_null_result() {
         for body in [
