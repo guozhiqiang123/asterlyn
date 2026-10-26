@@ -3,29 +3,33 @@ mod commit_file_restore;
 mod diagnostics;
 mod git_operations;
 mod git_recovery;
+mod language_service;
 mod plugin_cache;
 mod plugin_marketplace;
 mod plugin_marketplace_cleanup;
 mod plugin_marketplace_verification;
 mod plugin_process_query;
 mod plugin_runtime;
-mod language_service;
-pub(crate) use language_service::{prepare_language_service, start_language_service, open_language_document, change_language_document, close_language_document, request_language_service, cancel_language_request, stop_language_service};
 pub(crate) use git_recovery::{
     list_git_worktree_recoveries, prepare_restore_changes, undo_git_worktree_recovery,
+};
+pub(crate) use language_service::{
+    cancel_language_request, change_language_document, close_language_document,
+    open_language_document, prepare_language_service, request_language_service,
+    start_language_service, stop_language_service,
 };
 pub(crate) use plugin_cache::{
     cleanup_plugin_task_cache, compute_workspace_fingerprint, mark_plugin_task_cache_dirty,
     read_plugin_task_cache, write_plugin_task_cache,
 };
 pub(crate) use plugin_marketplace::{
-    abandon_plugin_activations, cancel_plugin_install, confirm_plugin_install,
-    ensure_bundled_plugins, installation_store, list_installed_plugin_manifests,
-    list_plugin_installations, list_plugin_sources, prepare_plugin_install,
-    recover_interrupted_plugin_activations, refresh_plugin_source, remove_plugin_source,
-    repair_installed_plugin_version, restart_for_plugin_changes, select_installed_plugin_rollback,
-    set_installed_plugin_enabled, set_plugin_source_enabled, uninstall_installed_plugin,
-    upsert_plugin_source,
+    abandon_plugin_activations, admission_context, cancel_plugin_install, confirm_plugin_install,
+    ensure_bundled_plugins, installation_store, installed_package_root,
+    list_installed_plugin_manifests, list_plugin_installations, list_plugin_sources,
+    prepare_plugin_install, recover_interrupted_plugin_activations, refresh_plugin_source,
+    remove_plugin_source, repair_installed_plugin_version, restart_for_plugin_changes,
+    select_installed_plugin_rollback, set_installed_plugin_enabled, set_plugin_source_enabled,
+    uninstall_installed_plugin, upsert_plugin_source, verify_installed_package_archive,
 };
 pub(crate) use plugin_process_query::{
     cancel_plugin_tool_operation, execute_plugin_process_query, execute_plugin_tool_operation,
@@ -34,7 +38,7 @@ pub(crate) use plugin_runtime::{
     abandon_installed_plugin_runtime_activation, activate_installed_plugin_runtime,
     confirm_installed_plugin_runtime_healthy, deactivate_installed_plugin_runtime,
     fail_installed_plugin_runtime_activation, invoke_installed_plugin_callback,
-    read_installed_plugin_runtime_diagnostics,
+    read_installed_plugin_runtime_diagnostics, select_installed_plugin,
 };
 mod git_reads;
 mod image;

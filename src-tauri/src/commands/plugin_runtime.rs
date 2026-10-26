@@ -448,14 +448,14 @@ pub(crate) fn read_installed_plugin_runtime_diagnostics(
 }
 
 #[derive(Debug)]
-struct InstalledPluginSelection {
-    repository: String,
-    version: String,
-    package_digest: String,
-    content_digest: String,
+pub(crate) struct InstalledPluginSelection {
+    pub(crate) repository: String,
+    pub(crate) version: String,
+    pub(crate) package_digest: String,
+    pub(crate) content_digest: String,
 }
 
-fn select_installed_plugin(
+pub(crate) fn select_installed_plugin(
     snapshot: &PluginInstallationSnapshot,
     plugin_id: &str,
 ) -> Result<InstalledPluginSelection, String> {

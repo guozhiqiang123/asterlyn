@@ -1,4 +1,9 @@
 use crate::application::{ActiveWorkspaces, LanguageServiceManager};
+use crate::commands::{
+    admission_context, installation_store, installed_package_root, select_installed_plugin,
+    verify_installed_package_archive,
+};
+use asterlyn_plugin_package::inspect_extracted_package;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, Window};
 
@@ -67,12 +72,55 @@ pub(crate) fn start_language_service(
         .resolve(window.label(), &workspace_root)
         .map_err(|error| format!("workspace is not active: {error}"))?;
     manager.consume_review(&review_id, canonical.to_string_lossy().as_ref())?;
+    let snapshot = installation_store(&app)?
+        .snapshot()
+        .map_err(|error| error.to_string())?;
+    let selection = select_installed_plugin(&snapshot, "dev.asterlyn.lsp")?;
+    verify_installed_package_archive(
+        &app,
+        "dev.asterlyn.lsp",
+        &selection.version,
+        &selection.package_digest,
+    )?;
+    let package_root = installed_package_root(
+        &app,
+        "dev.asterlyn.lsp",
+        &selection.version,
+        &selection.package_digest,
+    )?;
+    let report = inspect_extracted_package(
+        &package_root,
+        &admission_context(&selection.repository, &selection.version),
+    )
+    .map_err(|error| format!("installed language-service package failed revalidation: {error}"))?;
+    if report.content_digest != selection.content_digest
+        || report.plugin_id != "dev.asterlyn.lsp"
+        || !report
+            .capabilities
+            .iter()
+            .any(|value| value == "languageServices")
+        || !report
+            .permissions
+            .iter()
+            .any(|value| value == "host.language-services.execute")
+        || !report
+            .files
+            .iter()
+            .any(|file| file.path == "servers/typescript/server.mjs")
+        || !report
+            .files
+            .iter()
+            .any(|file| file.path == "servers/typescript/typescript/lib/tsserver.js")
+    {
+        return Err(
+            "installed language-service package identity, authority, or resources changed".into(),
+        );
+    }
     let root = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let session_id = format!("ls-session-{}-{}", window.label(), std::process::id());
-    manager.start(
-        session_id.clone(),
-        crate::application::language_service::package_profile(root),
-    )?;
+    let mut profile = crate::application::language_service::package_profile(root);
+    profile.package_root = package_root;
+    manager.start(session_id.clone(), profile)?;
     Ok(session_id)
 }
 
