@@ -17,6 +17,8 @@
     "InstalledPluginRuntimeDiagnostics": "./plugin-runtime",
     "PluginRuntimeTheme": "./plugin-runtime",
     "PluginRuntimeValue": "./plugin-runtime"
+    ,"LanguageServiceReview": "./language-service"
+    ,"LanguageServiceTextChange": "./language-service"
   },
   "diagnosticContextCommands": ["activate_installed_plugin_runtime", "invoke_installed_plugin_callback", "prepare_task_execution", "start_task_execution"],
   "commands": [
@@ -48,7 +50,7 @@
     { "name": "prepare_language_service", "args": { "workspaceRoot": "string", "pluginId": "string" }, "result": "LanguageServiceReview", "validator": "languageServiceReview" },
     { "name": "start_language_service", "args": { "workspaceRoot": "string", "reviewId": "string" }, "result": "string", "validator": "string" },
     { "name": "open_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "languageId": "string", "version": "number", "text": "string" }, "result": "void", "validator": "void" },
-    { "name": "change_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "version": "number", "changes": "unknown" }, "result": "void", "validator": "void" },
+    { "name": "change_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "version": "number", "changes": "array:LanguageServiceTextChange" }, "result": "void", "validator": "void" },
     { "name": "close_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string" }, "result": "void", "validator": "void" },
     { "name": "request_language_service", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "feature": "string", "line": "number", "character": "number" }, "result": "number", "validator": "number" },
     { "name": "cancel_language_request", "args": { "sessionId": "string", "requestId": "number" }, "result": "boolean", "validator": "boolean" },
