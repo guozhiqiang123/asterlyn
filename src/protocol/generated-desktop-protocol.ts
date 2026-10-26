@@ -36,6 +36,14 @@ export interface DesktopCommandMap {
   invoke_installed_plugin_callback: { args: { pluginId: string; callbackHandle: string; operation: string; payload: PluginRuntimeValue; } & { diagnosticTraceId?: string }; result: PluginRuntimeValue };
   deactivate_installed_plugin_runtime: { args: { pluginId: string; }; result: void };
   read_installed_plugin_runtime_diagnostics: { args: { pluginId: string; }; result: InstalledPluginRuntimeDiagnostics };
+  prepare_language_service: { args: { workspaceRoot: string; pluginId: string; }; result: Model.LanguageServiceReview };
+  start_language_service: { args: { workspaceRoot: string; reviewId: string; }; result: string };
+  open_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; languageId: string; version: number; text: string; }; result: void };
+  change_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; version: number; changes: Model.unknown; }; result: void };
+  close_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; }; result: void };
+  request_language_service: { args: { workspaceRoot: string; sessionId: string; uri: string; feature: string; line: number; character: number; }; result: number };
+  cancel_language_request: { args: { sessionId: string; requestId: number; }; result: boolean };
+  stop_language_service: { args: { sessionId: string; }; result: boolean };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
   is_last_project_window: { args: Record<string, never>; result: boolean };
   initial_repository: { args: Record<string, never>; result: string | null };
@@ -190,6 +198,14 @@ export const DESKTOP_RESULT_VALIDATORS: {
   invoke_installed_plugin_callback: "pluginRuntimeValue",
   deactivate_installed_plugin_runtime: "void",
   read_installed_plugin_runtime_diagnostics: "installedPluginRuntimeDiagnostics",
+  prepare_language_service: "languageServiceReview",
+  start_language_service: "string",
+  open_language_document: "void",
+  change_language_document: "void",
+  close_language_document: "void",
+  request_language_service: "number",
+  cancel_language_request: "boolean",
+  stop_language_service: "boolean",
   window_chrome_mode: "windowChromeMode",
   is_last_project_window: "boolean",
   initial_repository: "nullableString",

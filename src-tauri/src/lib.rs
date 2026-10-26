@@ -299,6 +299,7 @@ pub fn run() {
         .manage(TaskManager::default())
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
+        .manage(LanguageServiceManager::default())
         .setup(|app| {
             let diagnostics = app
                 .path()
@@ -401,6 +402,14 @@ pub fn run() {
             invoke_installed_plugin_callback,
             deactivate_installed_plugin_runtime,
             read_installed_plugin_runtime_diagnostics,
+            prepare_language_service,
+            start_language_service,
+            open_language_document,
+            change_language_document,
+            close_language_document,
+            request_language_service,
+            cancel_language_request,
+            stop_language_service,
             initial_repository,
             window_chrome_mode,
             is_last_project_window,

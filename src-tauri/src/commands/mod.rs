@@ -9,6 +9,8 @@ mod plugin_marketplace_cleanup;
 mod plugin_marketplace_verification;
 mod plugin_process_query;
 mod plugin_runtime;
+mod language_service;
+pub(crate) use language_service::{prepare_language_service, start_language_service, open_language_document, change_language_document, close_language_document, request_language_service, cancel_language_request, stop_language_service};
 pub(crate) use git_recovery::{
     list_git_worktree_recoveries, prepare_restore_changes, undo_git_worktree_recovery,
 };
