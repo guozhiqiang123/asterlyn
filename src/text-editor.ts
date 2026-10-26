@@ -93,6 +93,8 @@ interface CachedTextEditor {
   languageServiceHandle: EditorLanguageServiceHandle;
   languageServiceVersion: number;
   disposeLanguageDiagnostics: (() => void) | null;
+  languageServiceUpdateTimer: number | null;
+  languageServicePendingText: string | null;
 }
 
 /**
@@ -136,8 +138,11 @@ export class TextEditor {
       active.path === path
     ) {
       const loadEpochChanged = active.loadEpoch !== loadEpoch;
-      active.loadEpoch = loadEpoch;
-      active.languageServiceHandle = { tabId, path, loadEpoch };
+      if (loadEpochChanged) {
+        this.closeLanguageService(active);
+        active.loadEpoch = loadEpoch;
+        active.languageServiceHandle = { tabId, path, loadEpoch };
+      }
       active.onChange = onChange;
       active.changeIndicators.setBaseline(active.view, baselineContent);
       active.changeIndicators.setCopy(active.view, editorChangeIndicatorCopy(this.blameCopy));
@@ -179,6 +184,7 @@ export class TextEditor {
       entry = undefined;
     }
     if (entry && entry.loadEpoch !== loadEpoch) {
+      this.closeLanguageService(entry);
       entry.loadEpoch = loadEpoch;
       entry.languageServiceHandle = { tabId, path, loadEpoch };
       const decoded = decodeExactText(content);
@@ -342,6 +348,7 @@ export class TextEditor {
   }
 
   setLanguageServices(factory: EditorLanguageServicePortFactory | null): void {
+    if (this.languageServiceFactory === factory) return;
     this.languageServiceFactory = factory;
     for (const entry of this.entries.values()) this.refreshLanguageService(entry);
   }
@@ -446,8 +453,7 @@ export class TextEditor {
     if (entry.changeFrame !== null) window.cancelAnimationFrame(entry.changeFrame);
     entry.languageActivation += 1;
     entry.languageLoader.cancel();
-    entry.disposeLanguageDiagnostics?.();
-    entry.languageServicePort?.close(entry.languageServiceHandle);
+    this.closeLanguageService(entry);
     entry.blameController.destroy();
     if (entry.view) {
       const dom = entry.view.dom;
@@ -525,6 +531,8 @@ export class TextEditor {
       languageServiceHandle,
       languageServiceVersion: 1,
       disposeLanguageDiagnostics: null,
+      languageServiceUpdateTimer: null,
+      languageServicePendingText: null,
     };
     this.updateBlameAvailability(entry, blameSource, blameUnavailableReason);
     entry.state = EditorState.create({
@@ -565,7 +573,15 @@ export class TextEditor {
           if (!update.docChanged || this.synchronizing) return;
           if (entry.languageServicePort && !this.readOnlyValue) {
             entry.languageServiceVersion += 1;
-            entry.languageServicePort.update(entry.languageServiceHandle, { version: entry.languageServiceVersion, text: update.state.doc.toString() });
+            entry.languageServicePendingText = update.state.doc.toString();
+            if (entry.languageServiceUpdateTimer === null) {
+              entry.languageServiceUpdateTimer = window.setTimeout(() => {
+                entry.languageServiceUpdateTimer = null;
+                const text = entry.languageServicePendingText;
+                entry.languageServicePendingText = null;
+                if (text !== null && entry.languageServicePort && !this.readOnlyValue) entry.languageServicePort.update(entry.languageServiceHandle, { version: entry.languageServiceVersion, text });
+              }, 50);
+            }
           }
           this.invalidateBlameForEdit(entry);
           const changes: LineSeparatorChange[] = [];
@@ -593,9 +609,7 @@ export class TextEditor {
   }
 
   private refreshLanguageService(entry: CachedTextEditor): void {
-    entry.disposeLanguageDiagnostics?.();
-    entry.disposeLanguageDiagnostics = null;
-    entry.languageServicePort?.close(entry.languageServiceHandle);
+    this.closeLanguageService(entry);
     const next = this.readOnlyValue ? null : this.languageServiceFactory?.(entry.languageServiceHandle) ?? null;
     entry.languageServicePort = next;
     this.dispatchEffects(entry, [entry.languageServices.reconfigure(next ? this.languageServiceExtensions(entry) : [])]);
@@ -603,9 +617,19 @@ export class TextEditor {
     entry.languageServiceVersion = 1;
     next.open(entry.languageServiceHandle, { version: 1, text: entry.state.doc.toString() });
     entry.disposeLanguageDiagnostics = next.subscribeDiagnostics((event) => {
-      if (event.handle.tabId !== entry.id || event.handle.loadEpoch !== entry.loadEpoch || event.version < entry.languageServiceVersion || !entry.view) return;
+      if (event.handle.tabId !== entry.id || event.handle.loadEpoch !== entry.loadEpoch || event.version !== entry.languageServiceVersion || !entry.view) return;
       entry.view.dispatch(setDiagnostics(entry.view.state, event.diagnostics.map((diagnostic) => this.toCodeMirrorDiagnostic(entry.view!, diagnostic))));
     });
+  }
+
+  private closeLanguageService(entry: CachedTextEditor): void {
+    entry.disposeLanguageDiagnostics?.();
+    entry.disposeLanguageDiagnostics = null;
+    if (entry.languageServiceUpdateTimer !== null) window.clearTimeout(entry.languageServiceUpdateTimer);
+    entry.languageServiceUpdateTimer = null;
+    entry.languageServicePendingText = null;
+    entry.languageServicePort?.close(entry.languageServiceHandle);
+    entry.languageServicePort = null;
   }
 
   private toCodeMirrorDiagnostic(view: EditorView, diagnostic: EditorLanguageServiceDiagnostic): Diagnostic {
@@ -656,11 +680,25 @@ export class TextEditor {
     if (!port || this.readOnlyValue) return null;
     const version = entry.languageServiceVersion;
     const line = context.state.doc.lineAt(context.pos);
-    const response = await port.request<{ items?: readonly EditorLanguageServiceCompletionItem[] }>(entry.languageServiceHandle, "textDocument/completion", { position: { line: line.number - 1, character: context.pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
+    const response = await port.request<{ items?: readonly EditorLanguageServiceCompletionItem[] } | readonly EditorLanguageServiceCompletionItem[]>(entry.languageServiceHandle, "textDocument/completion", { position: { line: line.number - 1, character: context.pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
     if (!response || entry.languageServicePort !== port || entry.languageServiceVersion !== version) return null;
     const match = context.matchBefore(/[\w$]*/);
     const from = match?.from ?? context.pos;
-    return { from, options: (response.items ?? []).filter((item) => item.insertTextFormat !== 2 && !item.textEdit?.range).map((item) => ({ label: item.label, detail: item.detail, type: "text", apply: (view: EditorView, _completion: unknown, _from: number, to: number) => { if (entry.languageServiceVersion !== version || entry.languageServicePort !== port) return; view.dispatch({ changes: { from, to, insert: item.insertText ?? item.label }, userEvent: "input.complete" }); } })) };
+    const items: readonly EditorLanguageServiceCompletionItem[] = Array.isArray(response) ? response : ("items" in response ? response.items ?? [] : []);
+    const toOffset = (position: EditorLanguageServicePosition): number | null => {
+      if (position.line < 0 || position.line >= context.state.doc.lines || position.character < 0) return null;
+      const target = context.state.doc.line(position.line + 1);
+      const offset = target.from + position.character;
+      return offset <= target.to ? offset : null;
+    };
+    return { from, options: items.filter((item) => item.insertTextFormat !== 2 && !item.insertReplaceEdit && !item.additionalTextEdits?.length && !item.command).map((item) => ({ label: item.label, detail: item.detail, type: "text", apply: (view: EditorView, _completion: unknown, _from: number, to: number) => {
+      if (entry.languageServiceVersion !== version || entry.languageServicePort !== port) return;
+      const edit = item.textEdit;
+      const editFrom = edit ? toOffset(edit.range.start) : from;
+      const editTo = edit ? toOffset(edit.range.end) : to;
+      if (edit && (editFrom === null || editTo === null || editFrom > editTo)) return;
+      view.dispatch({ changes: { from: editFrom ?? from, to: editTo ?? to, insert: edit?.newText ?? item.insertText ?? item.label }, userEvent: "input.complete" });
+    } })) };
   }
 
   private invalidateBlameForEdit(entry: CachedTextEditor): void {

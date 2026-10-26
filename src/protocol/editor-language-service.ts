@@ -20,7 +20,7 @@ export interface EditorLanguageServiceDiagnostic {
 
 export interface EditorLanguageServicePosition { readonly line: number; readonly character: number; }
 export interface EditorLanguageServiceLocation { readonly uri: string; readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition } }
-export interface EditorLanguageServiceCompletionItem { readonly label: string; readonly detail?: string; readonly kind?: number; readonly insertText?: string; readonly textEdit?: { readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition }; readonly newText: string }; readonly insertTextFormat?: number; }
+export interface EditorLanguageServiceCompletionItem { readonly label: string; readonly detail?: string; readonly kind?: number; readonly insertText?: string; readonly textEdit?: { readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition }; readonly newText: string }; readonly insertReplaceEdit?: unknown; readonly additionalTextEdits?: readonly unknown[]; readonly command?: unknown; readonly insertTextFormat?: number; }
 
 export interface EditorLanguageServicePort {
   open(handle: EditorLanguageServiceHandle, snapshot: EditorLanguageServiceSnapshot): void;
