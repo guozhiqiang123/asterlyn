@@ -86,6 +86,12 @@ but documentation must identify that unreleased dependency; no GitHub publicatio
 
 See [implementation plan](../../engineering/2026-10-26-language-services-host-plan.md).
 
+Rust remains a planned follow-up, documented in the
+[Rust compatibility plan](../../engineering/2026-10-26-rust-language-services-plan.md). The accepted
+runtime/SDK still exposes only the TypeScript profile. Multi-profile identity/lifecycle, Cargo
+execution policy and authorized read-only dependency sources must pass their own gates before Rust
+is enabled; adding a language extension alone does not satisfy this ADR.
+
 The [reference navigation follow-up](../../engineering/2026-10-26-language-reference-navigation-plan.md)
 adds only the read-only `textDocument/references` operation. The host constructs
 `includeDeclaration: false` and validates the existing document/version/position/owner. Definition
