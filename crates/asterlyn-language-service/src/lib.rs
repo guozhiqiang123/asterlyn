@@ -174,6 +174,123 @@ pub enum SessionError {
     Closed,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentIdentity {
+    pub window_id: String,
+    pub worktree_root: String,
+    pub generation: u64,
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentState {
+    pub identity: DocumentIdentity,
+    pub text: String,
+    pub version: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextPosition {
+    pub line: u32,
+    pub character: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextRange {
+    pub start: TextPosition,
+    pub end: TextPosition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextChange {
+    pub range: Option<TextRange>,
+    pub text: String,
+}
+
+impl DocumentState {
+    pub fn new(identity: DocumentIdentity, text: String) -> Self {
+        Self {
+            identity,
+            text,
+            version: 1,
+        }
+    }
+
+    pub fn apply(&mut self, changes: &[TextChange]) -> Result<i64, SessionError> {
+        let mut next = self.text.clone();
+        // Apply in reverse order so a transaction's ranges are anchored to one prior snapshot.
+        for change in changes.iter().rev() {
+            let (start, end) = match &change.range {
+                None => (0, next.len()),
+                Some(range) => (
+                    utf16_offset(&next, &range.start)?,
+                    utf16_offset(&next, &range.end)?,
+                ),
+            };
+            if start > end
+                || end > next.len()
+                || !next.is_char_boundary(start)
+                || !next.is_char_boundary(end)
+            {
+                return Err(SessionError::InvalidMessage(
+                    "invalid UTF-16 text range".into(),
+                ));
+            }
+            next.replace_range(start..end, &change.text);
+        }
+        self.text = next;
+        self.version = self
+            .version
+            .checked_add(1)
+            .ok_or(SessionError::LimitExceeded("document versions"))?;
+        Ok(self.version)
+    }
+
+    pub fn accepts_result(&self, identity: &DocumentIdentity, version: i64) -> bool {
+        self.identity == *identity && self.version == version
+    }
+}
+
+fn utf16_offset(text: &str, position: &TextPosition) -> Result<usize, SessionError> {
+    let line = usize::try_from(position.line)
+        .map_err(|_| SessionError::InvalidMessage("invalid line".into()))?;
+    let character = usize::try_from(position.character)
+        .map_err(|_| SessionError::InvalidMessage("invalid character".into()))?;
+    let start = text
+        .split_inclusive('\n')
+        .take(line)
+        .map(str::len)
+        .sum::<usize>();
+    if line > 0 && start == text.len() && !text.ends_with('\n') {
+        return Err(SessionError::InvalidMessage("line outside document".into()));
+    }
+    let line_text = text
+        .get(start..)
+        .ok_or_else(|| SessionError::InvalidMessage("line outside document".into()))?;
+    let line_text = line_text
+        .split_once('\n')
+        .map_or(line_text, |(line, _)| line);
+    let mut units = 0;
+    for (offset, ch) in line_text.char_indices() {
+        if units == character {
+            return Ok(start + offset);
+        }
+        units += ch.len_utf16();
+        if units > character {
+            return Err(SessionError::InvalidMessage(
+                "UTF-16 position splits a scalar".into(),
+            ));
+        }
+    }
+    if units == character {
+        Ok(start + line_text.len())
+    } else {
+        Err(SessionError::InvalidMessage(
+            "character outside line".into(),
+        ))
+    }
+}
+
 pub struct LanguageServiceSession<W: Write> {
     writer: W,
     pending: PendingRequests,
@@ -274,5 +391,42 @@ mod tests {
         assert_eq!(session.pending_len(), 1);
         assert!(session.cancel(id).unwrap());
         assert_eq!(session.pending_len(), 0);
+    }
+
+    #[test]
+    fn document_versions_and_utf16_positions_are_monotonic_and_exact() {
+        let identity = DocumentIdentity {
+            window_id: "w1".into(),
+            worktree_root: "/repo".into(),
+            generation: 2,
+            uri: "file:///repo/a.ts".into(),
+        };
+        let mut document = DocumentState::new(identity.clone(), "const 😀 = 1;\n".into());
+        let version = document
+            .apply(&[TextChange {
+                range: Some(TextRange {
+                    start: TextPosition {
+                        line: 0,
+                        character: 6,
+                    },
+                    end: TextPosition {
+                        line: 0,
+                        character: 8,
+                    },
+                }),
+                text: "x".into(),
+            }])
+            .unwrap();
+        assert_eq!(version, 2);
+        assert_eq!(document.text, "const x = 1;\n");
+        assert!(document.accepts_result(&identity, 2));
+        assert!(!document.accepts_result(&identity, 1));
+        assert!(!document.accepts_result(
+            &DocumentIdentity {
+                generation: 3,
+                ..identity
+            },
+            2
+        ));
     }
 }
