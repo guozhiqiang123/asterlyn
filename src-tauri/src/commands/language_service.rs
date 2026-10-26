@@ -50,7 +50,7 @@ pub(crate) fn prepare_language_service(
         .resolve(window.label(), &workspace_root)
         .map_err(|error| format!("workspace is not active: {error}"))?;
     let _ = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let review_id = format!("ls-review-{}-{}", window.label(), std::process::id());
+    let review_id = manager.next_id("ls-review", window.label());
     manager.review(review_id.clone(), canonical.to_string_lossy().into_owned())?;
     Ok(LanguageServiceReview {
         review_id,
@@ -117,7 +117,7 @@ pub(crate) fn start_language_service(
         );
     }
     let root = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let session_id = format!("ls-session-{}-{}", window.label(), std::process::id());
+    let session_id = manager.next_id("ls-session", window.label());
     let mut profile = crate::application::language_service::package_profile(root);
     profile.package_root = package_root;
     manager.start(session_id.clone(), profile)?;

@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use asterlyn_language_service::{LanguageServiceProcess, TypeScriptServerProfile};
 
 pub(crate) struct LanguageServiceManager {
     sessions: Mutex<HashMap<String, LanguageServiceProcess>>,
-    reviews: Mutex<HashMap<String, String>>,
+    reviews: Mutex<HashMap<String, (String, Instant)>>,
+    sequence: std::sync::atomic::AtomicU64,
 }
 
 impl Default for LanguageServiceManager {
@@ -14,6 +16,7 @@ impl Default for LanguageServiceManager {
         Self {
             sessions: Mutex::new(HashMap::new()),
             reviews: Mutex::new(HashMap::new()),
+            sequence: std::sync::atomic::AtomicU64::new(1),
         }
     }
 }
@@ -36,7 +39,7 @@ impl LanguageServiceManager {
         self.reviews
             .lock()
             .map_err(|_| "language service lock poisoned".to_owned())?
-            .insert(id, workspace);
+            .insert(id, (workspace, Instant::now() + Duration::from_secs(300)));
         Ok(())
     }
     pub(crate) fn consume_review(&self, id: &str, workspace: &str) -> Result<(), String> {
@@ -44,11 +47,21 @@ impl LanguageServiceManager {
             .reviews
             .lock()
             .map_err(|_| "language service lock poisoned".to_owned())?;
-        if reviews.get(id).map(String::as_str) != Some(workspace) {
+        if reviews
+            .get(id)
+            .is_none_or(|(root, expires)| root != workspace || *expires <= Instant::now())
+        {
             return Err("language-service review is invalid or expired".into());
         }
         reviews.remove(id);
         Ok(())
+    }
+    pub(crate) fn next_id(&self, prefix: &str, owner: &str) -> String {
+        format!(
+            "{prefix}-{owner}-{}",
+            self.sequence
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        )
     }
     pub(crate) fn with<F, T>(&self, id: &str, callback: F) -> Result<T, String>
     where
