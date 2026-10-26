@@ -1,5 +1,4 @@
 import { definitionGestureExtension } from "./language-definition-gesture.ts";
-import type { ContextMenuPort } from "../../shared/context-menu/context-menu-model.ts";
 import type { LanguageServiceCopy } from "../../localization/language-service-copy.ts";
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { lintGutter, type Diagnostic } from "@codemirror/lint";
@@ -8,7 +7,7 @@ import type { EditorLanguageServicePort, EditorLanguageServiceHandle, EditorLang
 export interface LanguageEditorContext {
   readonly port: EditorLanguageServicePort; readonly handle: EditorLanguageServiceHandle;
   version(): number; active(): boolean; flush(): void;
-  definitionUi?: { menu: ContextMenuPort; copy(): LanguageServiceCopy; status(message: string, kind: "information" | "warning"): void };
+  definitionUi?: { copy(): LanguageServiceCopy; status(message: string, kind: "information" | "warning"): void };
 }
 export function languageServiceEditorExtensions(context: LanguageEditorContext, complete = (completion: CompletionContext) => completeLanguageService(context, completion)) {
   return [lintGutter(), autocompletion({ override: [complete] }),

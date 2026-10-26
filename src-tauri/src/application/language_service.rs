@@ -776,9 +776,14 @@ fn actor(
                         "hover" => "textDocument/hover",
                         "definition" => "textDocument/definition",
                         "completion" => "textDocument/completion",
+                        "references" => "textDocument/references",
                         _ => return Err("unsupported language feature".into()),
                     };
-                    process.request(method,Some(json!({"textDocument":{"uri":uri},"position":{"line":position.line,"character":position.character}}))).map_err(safe_error)
+                    let mut params = json!({"textDocument":{"uri":uri},"position":{"line":position.line,"character":position.character}});
+                    if feature == "references" {
+                        params["context"] = json!({"includeDeclaration":false});
+                    }
+                    process.request(method, Some(params)).map_err(safe_error)
                 })();
                 match result {
                     Ok(number) => {
@@ -1093,6 +1098,25 @@ mod tests {
             )
             .unwrap();
         assert!(wait(hover).get("contents").is_some());
+        let references = wait(
+            manager
+                .request(
+                    &id,
+                    &subject,
+                    uri.clone(),
+                    1,
+                    "references".into(),
+                    "references".into(),
+                    TextPosition {
+                        line: 1,
+                        character: 7,
+                    },
+                )
+                .unwrap(),
+        );
+        let uses = references.as_array().unwrap();
+        assert_eq!(uses.len(), 1, "native references exclude the declaration");
+        assert_eq!(uses[0]["range"]["start"]["line"], json!(2));
         let deadline = Instant::now() + Duration::from_secs(12);
         let mut got_error = false;
         while Instant::now() < deadline {

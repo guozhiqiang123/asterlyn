@@ -1,0 +1,30 @@
+.language-location-picker {
+  position: fixed;
+  z-index: 10000;
+  width: min(580px, calc(100vw - 24px));
+  max-height: min(480px, calc(100vh - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 8px 28px var(--shadow-dialog);
+}
+.language-location-picker > input { flex: 0 0 auto; width: 100%; }
+.language-location-results { min-height: 0; overflow: auto; }
+.language-location-results > button {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  padding: 8px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.language-location-results > button[aria-selected="true"] { background: var(--accent-soft); }
+.language-location-results small { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

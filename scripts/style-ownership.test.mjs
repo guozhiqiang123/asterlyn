@@ -22,6 +22,7 @@ const ownedStyles = [
   ["features/files-editor/project-files.css", "main.ts"],
   ["features/files-editor/welcome.css", "main.ts"],
   ["features/files-editor/files-editor.css", "main.ts"],
+  ["features/files-editor/language-location-picker.css", "main.ts"],
   ["features/files-editor/read-only-diff.css", "main.ts"],
   ["features/files-editor/editable-diff.css", "main.ts"],
   ["features/files-editor/change-overview.css", "main.ts"],

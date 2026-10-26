@@ -20,7 +20,7 @@ export interface NativeLanguageServiceBridge {
   open(root: string, session: string, uri: string, language: string, version: number, text: string): Promise<void>;
   change(root: string, session: string, uri: string, version: number, changes: readonly { range: null; text: string }[]): Promise<void>;
   close(root: string, session: string, uri: string): Promise<void>;
-  request(root: string, session: string, uri: string, version: number, requestId: string, feature: "hover" | "definition" | "completion", line: number, character: number): Promise<LanguageServiceResultEnvelope>;
+  request(root: string, session: string, uri: string, version: number, requestId: string, feature: "hover" | "definition" | "completion" | "references", line: number, character: number): Promise<LanguageServiceResultEnvelope>;
   cancel(root: string, session: string, requestId: string): Promise<void>;
   stop(root: string, session: string): Promise<void>;
   subscribe(listener: (event: LanguageServiceEvent) => void): () => void;

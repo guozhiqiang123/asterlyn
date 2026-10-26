@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { definitionFileKey, definitionOffsets, normalizeDefinitionTargets } from "../src/application/language-services/definition-targets.ts";
+import { definitionFileKey, definitionOffsets, isCurrentSymbolDefinition, normalizeDefinitionTargets } from "../src/application/language-services/definition-targets.ts";
 import { createLanguageDefinitionNavigator } from "../src/composition/language-definition-navigation.ts";
 import { workspaceFileUri } from "../src/composition/language-services-runtime.ts";
 import { EN_US_LANGUAGE_SERVICE_COPY } from "../src/localization/language-service-copy.ts";
@@ -36,6 +36,20 @@ test("UTF-16 target positions preserve BOM/CRLF and reject split surrogates/out-
   assert.deepEqual(definitionOffsets(text, location(undefined, range(1, 6, 11))), { from: 12, to: 17 });
   assert.deepEqual(definitionOffsets(text, location(undefined, range(0, 1, 3))), { from: 1, to: 3 });
   for (const r of [range(0, 2, 3), range(99, 0, 1), range(0, 99, 100)]) assert.equal(definitionOffsets(text, location(undefined, r)), null);
+});
+test("references retain more than sixteen choices with an explicit bounded truncation signal", () => {
+  const raw = Array.from({ length: 600 }, (_, i) => location(`file:///repo/${i}.ts`));
+  const result = normalizeDefinitionTargets(raw, "references");
+  assert.equal(result.locations.length, 512); assert.equal(result.limited, true);
+  assert.equal(normalizeDefinitionTargets(raw.slice(0, 80), "references").locations.length, 80);
+});
+test("only the current symbol's own definition triggers the usages fallback", () => {
+  const value = location("file:///repo/a%20b.ts", range(2, 4, 10));
+  assert.equal(isCurrentSymbolDefinition(value, "file:///repo/a b.ts", range(2, 4, 10)), true);
+  for (const symbol of [range(1, 4, 10), range(2, 3, 10), range(2, 4, 9), null]) assert.equal(isCurrentSymbolDefinition(value, value.uri, symbol), false);
+  assert.equal(isCurrentSymbolDefinition(location(value.uri, range(2, 0, 100)), value.uri, range(2, 4, 10)), false, "a containing function/body range is not proof that this word is its declaration");
+  assert.equal(isCurrentSymbolDefinition(value, "file:///repo/other.ts", range(2, 4, 10)), false);
+  assert.equal(isCurrentSymbolDefinition(value, undefined, range(2, 4, 10)), false);
 });
 function fixture() {
   const state = { workspace: { root: "/repo", generation: 1 }, active: "file:///repo/a.ts", content: "const value = 1;", selections: [], statuses: [], outcomes: [], opens: [] };

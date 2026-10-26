@@ -15,11 +15,12 @@ function point(value: unknown): EditorLanguageServicePosition | null {
   const p = value as Partial<EditorLanguageServicePosition> | null;
   return p && Number.isSafeInteger(p.line) && Number.isSafeInteger(p.character) && Number(p.line) >= 0 && Number(p.character) >= 0 && Number(p.line) <= 0xffff_ffff && Number(p.character) <= 0xffff_ffff ? { line: p.line!, character: p.character! } : null;
 }
-export function normalizeDefinitionTargets(value: unknown): { locations: readonly EditorLanguageServiceLocation[]; limited: boolean; invalid: boolean } {
+export function normalizeDefinitionTargets(value: unknown, kind: "definition" | "references" = "definition"): { locations: readonly EditorLanguageServiceLocation[]; limited: boolean; invalid: boolean } {
+  const maxTargets = kind === "references" ? 512 : MAX_DEFINITION_TARGETS, maxScan = kind === "references" ? 512 : 128;
   const raw = value === null || value === undefined ? [] : Array.isArray(value) ? value : [value];
   const locations: EditorLanguageServiceLocation[] = [], seen = new Set<string>();
-  let invalid = false, limited = raw.length > 128;
-  for (const item of raw.slice(0, 128)) {
+  let invalid = false, limited = raw.length > maxScan;
+  for (const item of raw.slice(0, maxScan)) {
     if (!item || typeof item !== "object") { invalid = true; continue; }
     const uri = "targetUri" in item ? item.targetUri : item.uri;
     const range = "targetUri" in item ? item.targetSelectionRange ?? item.targetRange : item.range;
@@ -27,10 +28,16 @@ export function normalizeDefinitionTargets(value: unknown): { locations: readonl
     if (!file || !start || !end || end.line < start.line || (end.line === start.line && end.character < start.character)) { invalid = true; continue; }
     const key = JSON.stringify([file, start.line, start.character, end.line, end.character]);
     if (seen.has(key)) continue; seen.add(key);
-    if (locations.length === MAX_DEFINITION_TARGETS) { limited = true; continue; }
+    if (locations.length === maxTargets) { limited = true; continue; }
     locations.push({ uri: new URL(uri).href, range: { start, end } });
   }
   return { locations, limited, invalid };
+}
+export function isCurrentSymbolDefinition(location: EditorLanguageServiceLocation, uri: string | undefined, symbol: EditorLanguageServiceLocation["range"] | null): boolean {
+  if (!uri || !symbol || definitionFileKey(location.uri) !== definitionFileKey(uri)) return false;
+  const { start, end } = location.range;
+  return start.line === symbol.start.line && start.character === symbol.start.character
+    && end.line === symbol.end.line && end.character === symbol.end.character;
 }
 /** UTF-16 offsets with normalized line separators; a BOM remains a code unit. */
 export function definitionOffsets(content: string, location: EditorLanguageServiceLocation): { from: number; to: number } | null {

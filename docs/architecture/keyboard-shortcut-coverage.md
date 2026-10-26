@@ -174,6 +174,9 @@ this is a routing and accessibility contract, not permission to modify a read-on
 | User action | Family | Command / local route | State / default |
 | --- | --- | --- | --- |
 | Find/replace in active editor or Diff | editing | `editor.find.open` | **Default:** Primary+F in editor/Diff scopes |
+| Go to definition; from the declaration, find usages | navigation | eligible language editor's versioned navigation | **Local:** F12, Ctrl+click, Command+click on macOS |
+| Show reference choices explicitly | navigation | eligible language editor's read-only references query | **Local:** Shift+F12; Alt+F7 (Option+F7 on macOS) |
+| Filter/choose a language location | navigation | language location picker | **Local:** type path filter, Up/Down/Home/End, Enter; Escape restores source focus |
 | Save active editable file | write | `editor.file.save` | **Default:** Primary+S |
 | Close active tab/preview | navigation | `editor.tab.close` | **Default:** Control+Shift+F4 on macOS; dirty confirmation remains intact; Command+W stays window-reserved |
 | Activate previous/next tab | navigation | `editor.tab.previous`, `editor.tab.next` | **Default:** Control+Shift+Left/Right on macOS; follows the visible tab order and wraps |

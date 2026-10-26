@@ -62,6 +62,7 @@ class Session {
     if (this.dead || this.docs.size >= 32) return null;
     const doc = { handle: { ...handle }, info, latest: { version: 0, text: "" }, sent: 0, opened: false, closed: false, timer: null, listeners: new Set<Listener>(), requests: new Map<string, number>() } as unknown as Document;
     doc.port = {
+      documentUri: info.uri,
       definitionEvent: (event) => { try { this.trace?.(event); } catch { /* Diagnostics cannot block navigation. */ } },
       open: (_handle, snapshot) => { this.accept(doc, snapshot); this.enqueue(() => this.flush(doc)); },
       update: (_handle, snapshot) => {
@@ -129,7 +130,7 @@ class Session {
     });
   }
   private async request(doc: Document, method: string, params: unknown, version: number): Promise<unknown | null> {
-    const feature = ({ "textDocument/hover": "hover", "textDocument/definition": "definition", "textDocument/completion": "completion", hover: "hover", definition: "definition", completion: "completion" } as const)[method as "hover"];
+    const feature = ({ "textDocument/hover": "hover", "textDocument/definition": "definition", "textDocument/completion": "completion", "textDocument/references": "references", hover: "hover", definition: "definition", completion: "completion", references: "references" } as const)[method as "hover"];
     const pos = (params as { position?: { line?: unknown; character?: unknown } } | null)?.position;
     if (!feature || !pos || !Number.isSafeInteger(pos.line) || !Number.isSafeInteger(pos.character) || Number(pos.line) < 0 || Number(pos.character) < 0 || !this.current(doc) || doc.latest.version !== version || doc.requests.size >= 16 || [...this.docs.values()].reduce((count, item) => count + item.requests.size, 0) >= 64) return null;
     if (doc.timer) { clearTimeout(doc.timer); doc.timer = null; }

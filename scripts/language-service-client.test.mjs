@@ -55,6 +55,15 @@ test("reconcile closes and stops the old generation", async () => {
   const native = fakeNative(); let generation = 1; const factory = createEditorLanguageServicePort((handle) => identityFor(handle, generation), native, () => undefined); const port = factory(handleA); port.open(handleA, { version: 1, text: "x" }); await wait(); generation = 2; factory.reconcile(); await wait();
   assert.ok(native.calls.some((call) => call[0] === "stop")); factory.dispose();
 });
+test("references use the approved session, flush current text and keep raw method/params out of native requests", async () => {
+  const native = fakeNative({ requestResult: [] }); const factory = createEditorLanguageServicePort(identityFor, native, () => undefined); const port = factory(handleA);
+  assert.equal(port.documentUri, handleA.path); port.open(handleA, { version: 1, text: "const value = 1; value;" }); await wait();
+  port.update(handleA, { version: 2, text: "const value = 2; value;" });
+  assert.deepEqual(await port.request(handleA, "textDocument/references", { position: { line: 0, character: 7 }, context: { includeDeclaration: true }, command: "untrusted" }, 2), []);
+  const request = native.calls.findLast((call) => call[0] === "request"); assert.equal(request[6], "references"); assert.equal(request.length, 9);
+  assert.equal(native.calls.findLastIndex((call) => call[0] === "change") < native.calls.findLastIndex((call) => call[0] === "request"), true);
+  assert.equal(await port.request(handleA, "workspace/executeCommand", { position: { line: 0, character: 7 } }, 2), null); factory.dispose();
+});
 
 test("closing before approval prevents start and dispose removes native listener", async () => {
   const native = fakeNative(); const preparing = native.deferPrepare(); const factory = createEditorLanguageServicePort((handle) => identityFor(handle), native, () => undefined); const port = factory(handleA); port.open(handleA, { version: 1, text: "x" }); await wait();

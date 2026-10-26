@@ -1,6 +1,7 @@
 # Declaration and reference selection — 2026-10-26
 
-Status: planned before implementation. Baseline: `7a71d92`.
+Status: implemented; automated gates pass, native delivery pending. Baseline: `7a71d92`.
+Initial plan commit: `1f4d58a`, before implementation.
 
 The user asks to choose among multiple references and align navigation with Android Studio and
 VS Code. The previous iteration handles several **definitions**, but does not query **references**.
@@ -11,9 +12,11 @@ from a use to its single definition ambiguous.
 
 - A use's Ctrl/Command-click or F12 queries its definition. One foreign target opens directly.
   Several definitions require a picker; do not choose the first silently.
-- When the only definition is the symbol containing the original hit/caret in the same buffer,
+- When the only definition is exactly the hit/caret word's range in the same buffer,
   query references instead of jumping to the same selection. This is our declaration/usages
-  convenience behavior. Shift+F12 explicitly queries references from any supported source location.
+  convenience behavior. A broad containing function/body range is insufficient evidence. Shift+F12
+  explicitly queries references from any supported source location; Alt+F7 (Option+F7 on macOS)
+  provides the Android Studio Find Usages alias.
 - One reference from declaration navigation opens directly. Multiple references require choosing;
   explicit Shift+F12 always opens the reference list, including a singleton.
 - Use a bounded searchable location picker for definitions/references: file name, line/column and
@@ -47,3 +50,16 @@ Peek, Android Studio's full Find Usages tool window, or its complete keymap.
 4. Typecheck/build/scripts, relevant Rust actor/format/Clippy gates, then fresh signed native
    package, canonical local replacement and saved-icon restart logs. Record artifact identities,
    resource/accessibility samples and remaining limitations. Make staged local commits; no push.
+
+## Execution record
+
+- Stages 1–3 implemented. Native constructs a read-only references request excluding declarations;
+  source URI and exact identifier range control declaration fallback. A searchable accessible
+  location picker replaces the transient command menu for all multiple-definition/reference choices.
+- Eleven focused navigation tests and all 1320 scripts pass; typecheck/build, existing language
+  editor rendering, formatting and strict all-target Clippy for the host and language crate pass.
+- Chromium/WebKit real mouse/keyboard tests include Ctrl/Command declaration-to-usages, explicit
+  references/Find Usages, filtering without new requests, mouse/keyboard selection, viewport bounds,
+  512-result clipping feedback, stale intermediate responses and all prior definition checks.
+- Actual native actor proves declarations are excluded from references; real Asterlyn `app.ts`
+  call → declaration → references loop passes without saving source. Native delivery follows.

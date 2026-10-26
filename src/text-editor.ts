@@ -403,7 +403,6 @@ export class TextEditor {
 
   detach(): void {
     this.contextMenu.close("editor.text.git-blame");
-    this.contextMenu.close("editor.text.definition");
     this.releaseActiveView(false);
   }
 
@@ -655,7 +654,7 @@ export class TextEditor {
     return { port, handle: entry.languageServiceHandle, version: () => entry.languageServiceVersion,
       active: () => entry.languageServicePort === port && !this.readOnlyValue && entry.view !== null,
       flush: () => this.flushLanguageServiceUpdate(entry),
-      definitionUi: { menu: this.contextMenu, copy: () => this.blameCopy.languageService, status: (message, kind) => this.blameRuntime.status(message, kind) } };
+      definitionUi: { copy: () => this.blameCopy.languageService, status: (message, kind) => this.blameRuntime.status(message, kind) } };
   }
 
   private languageServiceExtensions(entry: CachedTextEditor) {

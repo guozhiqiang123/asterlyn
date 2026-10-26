@@ -14,6 +14,7 @@ import "./features/changes-commit/changes-commit.css";
 import "./features/files-editor/project-files.css";
 import "./features/files-editor/welcome.css";
 import "./features/files-editor/files-editor.css";
+import "./features/files-editor/language-location-picker.css";
 import "./features/files-editor/read-only-diff.css";
 import "./features/files-editor/editable-diff.css";
 import "./shared/diff-review.css";

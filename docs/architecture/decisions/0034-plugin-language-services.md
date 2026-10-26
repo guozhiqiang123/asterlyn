@@ -81,6 +81,12 @@ but documentation must identify that unreleased dependency; no GitHub publicatio
 
 See [implementation plan](../../engineering/2026-10-26-language-services-host-plan.md).
 
+The [reference navigation follow-up](../../engineering/2026-10-26-language-reference-navigation-plan.md)
+adds only the read-only `textDocument/references` operation. The host constructs
+`includeDeclaration: false` and validates the existing document/version/position/owner. Definition
+and reference results share bounded workspace-catalog navigation; querying them does not grant a
+new executable, arbitrary JSON-RPC method, file read, preview transaction or WorkspaceEdit permission.
+
 ## Implemented first profile
 
 The host uses TypeScript language-server 6.0.2 and TypeScript 5.9.3 (7.0.2 is not a drop-in

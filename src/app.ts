@@ -672,7 +672,7 @@ export class AsterlynApp {
       document: (handle) => { const tab = textTab(this.editorState.session, handle.tabId); return tab?.status === "ready" && tab.document.repositoryRoot === this.windowSession.workspace.state.root ? { workspacePath: tab.document.workspacePath, readOnly: tab.document.readOnly === true || this.state.loading, loadEpoch: tab.loadEpoch } : null; },
       bind: (factory) => this.editorSurface.setLanguageServices(factory), reportError: (error) => this.showError(error),
       navigate: (location) => { void definitionNavigator(location).catch((error) => this.showError(error)); },
-      definitionDiagnostic: (event) => diagnostics.report("info", "language.definition.lookup", `outcome=${event.outcome};targets=${event.targetCount}`),
+      definitionDiagnostic: (event) => diagnostics.report("info", "language.definition.lookup", `kind=${event.kind ?? "definition"};outcome=${event.outcome};targets=${event.targetCount}`),
     }) : null;
     this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, bridge, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
