@@ -9,7 +9,7 @@ import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codem
 import { asterlynSearch } from "./editor-search";
 import { Compartment, EditorState, type Text, type TransactionSpec } from "@codemirror/state";
 import type { CompletionContext } from "@codemirror/autocomplete";
-import { setDiagnostics } from "@codemirror/lint";
+import { setDiagnostics, diagnosticCount } from "@codemirror/lint";
 import {
   drawSelection,
   EditorView,
@@ -638,6 +638,7 @@ export class TextEditor {
   }
 
   private closeLanguageService(entry: CachedTextEditor): void {
+    if (diagnosticCount(entry.state) > 0) this.dispatchEffects(entry, setDiagnostics(entry.state, []).effects!);
     entry.disposeLanguageDiagnostics?.();
     entry.disposeLanguageDiagnostics = null;
     if (entry.languageServiceUpdateTimer !== null) window.clearTimeout(entry.languageServiceUpdateTimer);
