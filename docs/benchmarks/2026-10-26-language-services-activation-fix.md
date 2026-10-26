@@ -43,7 +43,16 @@ reproduced the installed error before the fix.
 - Native bundled-package → real isolated helper → desktop validator → contribution registry →
   editable buffer → execution review passes. Execution approval is deliberately declined in this
   automated bridge test; actual LSP transport is exercised separately against the real workspace.
-- Final signed package, canonical recovery/install and installed-log activation: pending.
+- Fixed native build `c322d41` passed strict signing, actual-project native application startup,
+  canonical replacement and two saved-icon launches. App root identity is preserved; the installed
+  executable SHA-256 matches the accepted signed source. Installed logs record LSP activation with
+  one contribution and `language.provider.changed` with one registered provider. The installation
+  index is `knownGood`, and the invalid-contribution-kind error is absent from the new session.
+- Exact immutable package was recovered through the existing native store transition from
+  `quarantined` to `pendingRestart` (generation 41 → 42), then activated and confirmed healthy.
+  [Machine-readable evidence](2026-10-26-language-services-activation-evidence.json) records the
+  repair, build, archive/executable hashes and installed-log session. No server execution approval
+  was automatically granted during application verification.
 
 The first provider still supports TS/JS-family ordinary editable files. Rust files and historical,
 Diff and conflict surfaces do not receive this first-provider overlay. Native server execution

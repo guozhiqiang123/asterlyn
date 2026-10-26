@@ -1,0 +1,38 @@
+{
+  "sourceCodeRevision": "c322d416e224e624fdead4b66ff2c03a9143a6fc",
+  "buildId": "c322d416e224e624fdead4b66ff2c03a9143a6fc-clean-1792988713907",
+  "version": "0.1.20",
+  "executableSha256": "aad00298a82d0f2f300dad3b28eb860314a2fbf893482bec1caf2f7a32cb734a",
+  "archiveSha256": "eddf841dcdda410b0082f11bc4b221d576af775ec3f97c7f89b933a7ad2962f7",
+  "installedRootIdentityPreserved": true,
+  "firstIconLaunchFrontendReady": true,
+  "quitAndIconReopenFrontendReady": true,
+  "reopenSession": "session-1792988898239-10927-0",
+  "nativeLspContributionCount": 1,
+  "registeredLanguageProviders": 1,
+  "lspRuntimeStatus": "knownGood",
+  "invalidContributionKindErrors": 0,
+  "quarantineRepair": {
+    "action": "canonical-store-repair",
+    "afterGeneration": 42,
+    "beforeGeneration": 41,
+    "contentVerified": true,
+    "packageDigest": "sha256:2a3cec68eb06fd13ece09f3935e15fda30ef853ee4d240c4c3bf9d1e82cbe6d9",
+    "pluginId": "dev.asterlyn.lsp",
+    "runtimeStatus": "PendingRestart",
+    "version": "0.1.0"
+  },
+  "nativeAppProbe": {
+    "nativePid": 10361,
+    "session": "session-1792988823253-10361-0",
+    "buildId": "c322d416e224e624fdead4b66ff2c03a9143a6fc-clean-1792988713907",
+    "frontendReady": true,
+    "pluginId": "dev.asterlyn.lsp",
+    "pluginVersion": "0.1.0",
+    "nativeContributionCount": 1,
+    "registeredLanguageProviders": 1,
+    "runtimeStatus": "knownGood",
+    "lspErrors": 0,
+    "sourceFilesModified": false
+  }
+}
