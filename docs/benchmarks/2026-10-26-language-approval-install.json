@@ -1,0 +1,61 @@
+{
+  "version": "0.1.20",
+  "sourceCodeRevision": "09998c3b1192b4afd923f20ac823bf36955147e3",
+  "buildId": "09998c3b1192b4afd923f20ac823bf36955147e3-clean-1793000772677",
+  "archive": "target/release/bundle/macos/Asterlyn-0.1.20-lsp-consent-20261026-macos.app.zip",
+  "archiveBytes": 19991025,
+  "archiveSha256": "43c43334d1f3145e139fcf751fde29c9dc3a6e432c9134c0e740b6a74a19bcbe",
+  "executableSha256": "3be5387bef1daea212dbc89e6e5f510a0e71c26b64288c6709be5abced996026",
+  "installedExecutableSha256": "3be5387bef1daea212dbc89e6e5f510a0e71c26b64288c6709be5abced996026",
+  "strictSignatureVerification": true,
+  "bundleIdentifier": "dev.asterlyn.desktop",
+  "sealedResourcesVersion": 2,
+  "installedRootIdentityPreserved": true,
+  "backupFormat": "verified ZIP",
+  "backupSha256": "dbd65b267b12ea73f8751943bff535c998af2920ecaf840f8417bbebb3b106ee",
+  "firstLaunch": {
+    "pid": 67865,
+    "session": "session-1793001037932-67865-0",
+    "buildId": "09998c3b1192b4afd923f20ac823bf36955147e3-clean-1793000772677",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "reopen": {
+    "pid": 67961,
+    "session": "session-1793001039745-67961-0",
+    "buildId": "09998c3b1192b4afd923f20ac823bf36955147e3-clean-1793000772677",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "nativeProbe": {
+    "nativePid": 67509,
+    "session": "session-1793000889446-67509-0",
+    "buildId": "09998c3b1192b4afd923f20ac823bf36955147e3-clean-1793000772677",
+    "frontendReady": true,
+    "pluginId": "dev.asterlyn.lsp",
+    "pluginVersion": "0.1.0",
+    "nativeContributionCount": 1,
+    "registeredLanguageProviders": 1,
+    "runtimeStatus": "knownGood",
+    "lspErrors": 0,
+    "sourceFilesModified": false
+  },
+  "installedLanguageProviders": 1,
+  "installedStartupErrors": [
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    },
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    }
+  ],
+  "scriptTestsPassed": 1332,
+  "focusedTestsPassed": 19,
+  "nativeReviewBindingTestPassed": true,
+  "originalOperationConfirmations": 6,
+  "fixedOperationConfirmations": 1,
+  "crossRestartConsent": false,
+  "manualUiAcceptance": false
+}

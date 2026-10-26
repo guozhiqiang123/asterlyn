@@ -52,7 +52,20 @@ yielded two, and Not now was asked twice. These tests pass after correction.
 
 ## Native delivery and boundaries
 
-Fresh signed package and canonical installation are pending. Exact build/hash/icon restart evidence
-will be recorded afterward. Cross-restart remembered consent is deliberately not introduced by this
-fix: after app restart, switching projects, explicit revocation or a changed execution identity,
-the user must confirm again. Windows/Linux native acceptance remains open.
+Clean source `09998c3b1192b4afd923f20ac823bf36955147e3` was freshly packaged, whole-bundle ad-hoc
+signed and strictly verified (`dev.asterlyn.desktop`, sealed resources version 2, version 0.1.20).
+The actual-project probe and installed logs register one healthy LSP provider. Canonical installation
+preserves the app root, keeps the old installation as a verified ZIP, matches the executable digest,
+and verifies initial and quit/reopen saved-icon frontend readiness. No installed-app approval is
+automatically granted. [Machine-readable evidence](2026-10-26-language-approval-install.json).
+
+Build ID: `09998c3b1192b4afd923f20ac823bf36955147e3-clean-1793000772677`.
+Archive: [`Asterlyn-0.1.20-lsp-consent-20261026-macos.app.zip`](../../target/release/bundle/macos/Asterlyn-0.1.20-lsp-consent-20261026-macos.app.zip),
+19,991,025 bytes, SHA-256 `43c43334d1f3145e139fcf751fde29c9dc3a6e432c9134c0e740b6a74a19bcbe`.
+Installed executable SHA-256: `3be5387bef1daea212dbc89e6e5f510a0e71c26b64288c6709be5abced996026`.
+
+Two existing `existing_project_directories` invalidPath startup-data errors remain in the installed
+session; frontend readiness/provider registration pass. They are outside this fix. Cross-restart
+remembered consent is deliberately not introduced: after app restart, switching projects, explicit
+revocation or changed execution identity, the user must confirm again. Windows/Linux native
+acceptance and the user's manual approval-dialog acceptance remain open.

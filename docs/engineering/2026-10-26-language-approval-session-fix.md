@@ -1,6 +1,7 @@
 # Language execution consent lifetime — 2026-10-26
 
-Status: implemented; automated gates pass, native delivery pending. Baseline `ff81716`.
+Status: implemented; automated and native delivery gates pass. User manual acceptance remains open.
+Baseline `ff81716`.
 Plan committed as `3ffa8c6` before source changes.
 
 The enable-language-services dialog promises to remember the choice for the current project
@@ -55,4 +56,7 @@ The user's manual acceptance and cross-restart remember feature remain explicitl
 - Typecheck/production build, existing language-editor rendering, real Chromium/WebKit definition/
   reference gestures, actual package activation through execution review, and the native one-use
   owner/activation/package review test pass. Actual installed-app approval is never auto-granted.
-- Native signed artifact, canonical installation and icon reopen evidence follow these gates.
+- Implementation `50b2989`, automated evidence `09998c3`: freshly built, whole-bundle ad-hoc signed,
+  strictly verified, actual-project probed and installed through the canonical installer. Installed
+  hashes match, app root identity is preserved, backup is a verified ZIP, and both saved-icon
+  launches record frontend readiness. [Acceptance/artifact evidence](../benchmarks/2026-10-26-language-approval-session.md).
