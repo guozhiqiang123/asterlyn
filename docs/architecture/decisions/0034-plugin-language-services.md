@@ -124,3 +124,15 @@ after ordered document changes. Only these two internally constructed requests a
 command name/arguments are provided by a renderer or plugin. Replies are bound to the URI/version
 that scheduled them, and obsolete replies are discarded. General execute-command and workspace
 mutation requests remain unavailable.
+
+
+## Planned Android / JVM follow-up
+
+The [Android language-services plan](../../engineering/2026-10-26-android-language-services-plan.md)
+proposes Java/Kotlin/Groovy and Gradle DSL support. It does not add accepted runtime profiles yet.
+Candidate admission must first prove Android import, JDK separation, distribution terms, actual
+transport and mixed-language behavior. Typed build context, selected-variant identity, bounded
+import jobs, read-only dependency sources and profile-specific client requests precede claiming
+Android compatibility. SDK/native/helper/desktop/editor admission must change together; merely
+recognizing `.kt` or `.java` is insufficient. Keep Android task/run ownership separate from the
+language data path and preserve the existing TS/Rust behavior while those gates are developed.

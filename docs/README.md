@@ -58,7 +58,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/2026-10-26-language-definition-navigation-plan.md`](engineering/2026-10-26-language-definition-navigation-plan.md) — Ctrl/Command-click definition navigation, target identity, feedback and real gesture acceptance.
 - [`engineering/2026-10-26-language-reference-navigation-plan.md`](engineering/2026-10-26-language-reference-navigation-plan.md) — declaration-to-usages behavior, explicit reference lookup and searchable multi-target selection.
 - [`engineering/2026-10-26-language-approval-session-fix.md`](engineering/2026-10-26-language-approval-session-fix.md) — correct project-scoped consent lifetime, idle retention and repeated-dialog regression.
-- [`engineering/2026-10-26-rust-language-services-plan.md`](engineering/2026-10-26-rust-language-services-plan.md) — planned Rust profile, dual-language sessions, trusted Cargo analysis, read-only dependency sources and staged acceptance.
+- [`engineering/2026-10-26-android-language-services-plan.md`](engineering/2026-10-26-android-language-services-plan.md) — planned Android/JVM LSP candidates, separate JDKs, Gradle/variant models, mixed-language overlays, dependency sources and staged Kotlin/Java/Groovy/DSL acceptance.
+- [`engineering/2026-10-26-rust-language-services-plan.md`](engineering/2026-10-26-rust-language-services-plan.md) — implemented Rust workspace profile and dual-language sessions, trusted Cargo analysis, remaining read-only dependency sources and staged acceptance.
 - [`engineering/2026-10-26-language-services-host-plan.md`](engineering/2026-10-26-language-services-host-plan.md) — parallel host/plugin implementation stages, frozen TS/JS contract and integration acceptance gates.
 
 - [`milestones/m1-git-gui-first.md`](milestones/m1-git-gui-first.md) — first vertical slice and acceptance gates.
@@ -224,6 +225,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-19-android-plugin-marketplace-release.md`](benchmarks/2026-10-19-android-plugin-marketplace-release.md) — first-party Android plugin GitHub Release workflow, online digest/package inspection, Marketplace MKT4 acceptance, and the explicit pending-runtime boundary.
 - [`benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md`](benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md) — independent Hello and Android GitHub Releases, production discovery/download/admission, pinned inspector/runtime parity, and remaining installed-app MKT8D gates.
 
+- [`benchmarks/2026-10-26-rust-language-services.md`](benchmarks/2026-10-26-rust-language-services.md) — real Rust workspace navigation, mixed-profile/diagnostic acceptance, cold/warm metrics and signed local installation.
 - [`benchmarks/2026-10-26-language-services.md`](benchmarks/2026-10-26-language-services.md) — TS/JS host/plugin automated, resource and native-install acceptance evidence.
 
 - [`benchmarks/2026-10-26-language-services-activation-fix.md`](benchmarks/2026-10-26-language-services-activation-fix.md) — desktop validation regression, immutable quarantine repair and actual-project LSP acceptance.

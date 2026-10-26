@@ -55,7 +55,7 @@ Every contract entry records:
 | `plugin.package-admission` | package supplies static bytes; host validates | experimental-public | package schemas `2`–`3` plus SDK/runtime/capability versions | ADR-0032; no execution before source, archive, manifest, integrity, license, compatibility, and permission validation |
 | `plugin.installation-lifecycle` | host owns; Settings requests | experimental-public | installation-index schema `1` | ADR-0032; immutable content-addressed packages, atomic pending/current/known-good/quarantine state, restart recovery |
 | `plugin.external-runtime` | plugin bundle runs; host supervises | experimental-public | plugin-host protocol `1` | ADR-0032; one sidecar process per plugin, no ambient authority, bounded typed capability messages, transactional contributions |
-| `plugin.language-services` | plugin declares language metadata; host owns documents, approval, process and editor UI | experimental-first-party | additive Plugin SDK `1.11` (development); package schema `3`; runtime protocol `1` | ADR-0034; `SdkLanguageServiceContribution`; `languageServices` / `host.language-services.execute`; fixed packaged TypeScript profile, no raw process or workspace edit authority |
+| `plugin.language-services` | plugin declares language metadata; host owns documents, approval, process and editor UI | experimental-first-party | additive Plugin SDK `1.12` (development); package schema `3`; runtime protocol `1` | ADR-0034; `SdkLanguageServiceContribution`; `languageServices` / `host.language-services.execute`; fixed TypeScript and Rust profiles, no raw process or workspace edit authority |
 | `host.plugin-restart` | host owns; package lifecycle consumes | experimental-host | restart transaction schema `1` | ADR-0032; cancel/drain, persist pending selection, exact relaunch, activation-attempt checkpoint, loop-safe rollback |
 
 `stable-first-party` means the contract is exercised across the independent Android/Gradle
@@ -131,10 +131,11 @@ The following versions solve different compatibility problems and must not be co
 
 ## Language services (development)
 
-The SDK 1.11 declaration is additive but its new required capability must be rejected by older
+The language-service declaration introduced by SDK 1.11 is additive, with the fixed Rust profile
+added in SDK 1.12 / host 0.1.21. Its required capability must be rejected by older
 hosts. A package cannot claim compatibility based only on SDK major 1: the host must recognize
-`languageServices` and require `host.language-services.execute` before execution. SDK 1.11 is not
-published by this change. See the [implementation plan](../engineering/2026-10-26-language-services-host-plan.md)
+`languageServices` and require `host.language-services.execute` before execution. SDK 1.12 remains a
+development artifact until a compatible host Release publishes it. See the [implementation plan](../engineering/2026-10-26-language-services-host-plan.md)
 for implemented stages and remaining gates; declaration/transport tests alone do not establish a
 working editor service.
 
@@ -144,5 +145,14 @@ without controls, at most four unique language IDs, eight unique suffixes, and e
 markers. Each marker is one plain filename (1–128 characters, alphanumeric first, then
 alphanumeric/dot/underscore/hyphen). Absolute paths, traversal, nested paths and malformed array
 members fail the entire contribution batch before projection. Metadata is not silently repaired
-or mapped to a different server. Native launch authority independently revalidates the installed
+or mapped to a different server. The fixed Rust addition accepts only `rust` / `.rs`, with the
+reviewed Rustup/toolchain policy in ADR-0034. Native launch authority independently revalidates the installed
 package and fixed resources; frontend metadata is never execution authorization.
+
+
+Android/JVM profiles are [planned](../engineering/2026-10-26-android-language-services-plan.md),
+not admitted by the present SDK/runtime. Their proposal must cover JDK versus Gradle runtime,
+variant/model identity, distribution integrity, client requests, compound suffix routing and
+cross-language overlays. Any new SDK minor and first supported host version are frozen only after
+candidate probes. Do not mutate existing canonical SDK archives or let old hosts activate an
+unknown JVM profile based on SDK major alone.
