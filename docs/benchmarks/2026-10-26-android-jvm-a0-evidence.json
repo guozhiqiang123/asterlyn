@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "profile": "jdtls",
+  "workspaceHash": "abde5431cf6dabfb",
+  "initializeMs": 1906,
+  "ready": true,
+  "documents": [
+    {
+      "path": "common/src/main/java/com/swiftcleaner/lib/storage/RecommendConfig.java",
+      "definitions": [
+        {
+          "elapsedMs": 8,
+          "targetCount": 0,
+          "targets": [],
+          "matched": false
+        }
+      ],
+      "passed": false,
+      "diagnostics": null,
+      "unsavedDiagnosticVersionVerified": false
+    }
+  ],
+  "passed": false,
+  "capabilities": [
+    "textDocumentSync",
+    "hoverProvider",
+    "completionProvider",
+    "signatureHelpProvider",
+    "definitionProvider",
+    "typeDefinitionProvider",
+    "implementationProvider",
+    "referencesProvider",
+    "documentHighlightProvider",
+    "documentSymbolProvider",
+    "workspaceSymbolProvider",
+    "codeActionProvider",
+    "codeLensProvider",
+    "documentFormattingProvider",
+    "documentRangeFormattingProvider",
+    "documentOnTypeFormattingProvider",
+    "renameProvider",
+    "foldingRangeProvider",
+    "declarationProvider",
+    "executeCommandProvider",
+    "workspace",
+    "typeHierarchyProvider",
+    "callHierarchyProvider",
+    "selectionRangeProvider",
+    "semanticTokensProvider",
+    "inlayHintProvider"
+  ],
+  "projectCount": 0,
+  "failure": "semantic-acceptance-failed",
+  "elapsedMs": 14599,
+  "counts": {
+    "language/progressReport": 39,
+    "language/status": 11,
+    "language/eventNotification": 1,
+    "window/logMessage": 3,
+    "textDocument/publishDiagnostics": 2
+  },
+  "statuses": [
+    "Starting",
+    "ProjectStatus",
+    "Started",
+    "ServiceReady"
+  ],
+  "protocolFailed": false,
+  "stderrBytes": 791,
+  "exit": {
+    "code": 143,
+    "signal": null
+  }
+}

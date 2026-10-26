@@ -232,3 +232,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-26-language-definition-navigation.md`](benchmarks/2026-10-26-language-definition-navigation.md) — real Ctrl/Command gestures, safe cross-file selection, actual workspace definitions and native delivery.
 - [`benchmarks/2026-10-26-language-reference-navigation.md`](benchmarks/2026-10-26-language-reference-navigation.md) — declaration/usages navigation, searchable choices, actual references and native delivery.
 - [`benchmarks/2026-10-26-language-approval-session.md`](benchmarks/2026-10-26-language-approval-session.md) — repeated-dialog root cause, session consent lifetime, revocation and local delivery evidence.
+
+- [`benchmarks/2026-10-26-android-jvm-a0.md`](benchmarks/2026-10-26-android-jvm-a0.md) — Android/JVM real-server probes, pinned distributions, failed semantic gates and transport/model prerequisites.

@@ -1,9 +1,9 @@
 # Android / JVM 语言服务兼容计划
 
-- 日期：2026-10-26；状态：**计划已落档，尚未实施 Android LSP**。
+- 日期：2026-10-26；状态：**实施已获授权；A0 探针已执行，上线闸门未通过；A1 通用前置分步推进**。
 - 基线：宿主 `d9dfffd`，已安装代码 `96c73fe` / Asterlyn 0.1.21；SDK 1.12.0；LSP 插件 0.2.0 / `2237b3d`。
 - 目标：为真实 Android Gradle 项目提供 Kotlin、Java、Groovy 和构建脚本的语义服务，复用既有编辑、导航、日志和插件边界。
-- 本次仅调查、制定计划和更新文档；不改运行时、SDK、manifest、版本或安装包，不执行目标项目的 Gradle，不下载安装工具，也不发布远端。
+- 原规划回合未执行工具/Gradle；后续用户已授权实施。当前执行与失败闸门见 [A0 记录](../benchmarks/2026-10-26-android-jvm-a0.md)。未通过真实语义闸门的 profile 不进入 SDK/插件；不发布远端。
 - 插件侧执行计划：[android-support-plan.md](../../../asterlyn-plugin-lsp/docs/android-support-plan.md)。规范边界仍为 [ADR-0034](../architecture/decisions/0034-plugin-language-services.md)。
 
 ## 1. 决策与首版范围
@@ -141,7 +141,7 @@ Gradle 项目导入会配置项目并执行构建逻辑；离线或 dry-run 不�
 
 UI 分清缺工具、等待授权、同步中、索引中、可用、部分可用、需要同步、失败。构建文件变更使模型过期，不反复启动整个插件；模型旧结果不能覆盖新变体。已有缓存需标注 stale，在支持明确一致性前不能当当前权威。
 
-本次已完成 CodeGraph→定点源码/文档检查、官方候选文档核对和三个本机项目的只读版本/文件类型采样。尚未运行任何 JVM LSP、Android 语义请求或 Gradle 导入探针；不存在 Android 实现、性能达标或安装验收结论。本次文档检查仅做 diff/链接校验，不为文档变更重新打包应用。
+原规划回合已完成 CodeGraph→定点源码/文档检查、官方候选文档核对和三个本机项目的只读版本/文件类型采样。尚未运行任何 JVM LSP、Android 语义请求或 Gradle 导入探针；不存在 Android 实现、性能达标或安装验收结论。本次文档检查仅做 diff/链接校验，不为文档变更重新打包应用。
 
 [jdtls]: https://github.com/eclipse-jdtls/eclipse.jdt.ls
 [kotlin]: https://github.com/Kotlin/kotlin-lsp
@@ -153,3 +153,7 @@ UI 分清缺工具、等待授权、同步中、索引中、可用、部分可�
 [gradle-tooling]: https://docs.gradle.org/current/userguide/tooling_api.html
 [android-jdks]: https://developer.android.com/build/jdks
 [agp]: https://developer.android.com/build/extend-agp
+
+## 9. 实施记录（2026-10-26）
+
+A0 已完成独立发行下载核验、JDT/JDK 启动、boostCleaner 测试 worktree 导入/实际定义/dirty 诊断与 Kotlin 候选启动探针。结果与原规划回合的只读调查分开，见 [A0 证据](../benchmarks/2026-10-26-android-jvm-a0.md)。当前结论为上线闸门未通过，不把 Java/Kotlin/Groovy 注册成可用 provider。先交付可重复失败探针和不依赖后端选择的有界传输基础；A2 模型与 Kotlin 后端问题仍需解决。
