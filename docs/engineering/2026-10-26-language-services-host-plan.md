@@ -1,6 +1,6 @@
 # Host language-service implementation plan
 
-- Date: 2026-10-26. Status: H0–H3 implemented; H4 automated acceptance passed and native package acceptance in progress.
+- Date: 2026-10-26. Status: H0–H4 implemented and automated/native package acceptance recorded; installed LSP UI awaits user manual acceptance.
 - User authorization: host foundations and sibling LSP plugin may be developed in parallel by
   subagents; the primary agent reviews, corrects, verifies and makes staged local commits.
 - Governing contract: [ADR-0034](../architecture/decisions/0034-plugin-language-services.md).
@@ -95,7 +95,9 @@ evidence. Remote hosting and arbitrary executable/configuration providers requir
   tests remain ignored. The real sibling-server tests were explicitly enabled, including native
   actor unsaved-error/fix/cleanup and stalled-request cancellation. Typecheck, production build,
   canonical standalone plugin-template verification, Rust formatting and all-target strict Clippy
-  passed. Native signing, smoke, canonical replacement and icon reopening are the remaining gate.
+  passed. Final native signing, rendered-shell smoke, canonical local replacement and two saved-icon
+  launches also passed; exact signed-build evidence and unrelated startup-data errors are recorded
+  in the acceptance document. The user's manual LSP UI acceptance is not claimed.
 - Resource measurements and limitations are recorded in the sibling plugin's
   `docs/acceptance-2026-10-26.md`; host acceptance is recorded in
   [the host evidence](../benchmarks/2026-10-26-language-services.md).

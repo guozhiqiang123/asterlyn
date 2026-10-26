@@ -1,0 +1,15 @@
+{
+  "version": "0.1.20",
+  "sourceCodeRevision": "10df7d69a30f070232ed97fe8737f3e7d567cd27",
+  "buildId": "10df7d69a30f070232ed97fe8737f3e7d567cd27-clean-1792985414996",
+  "executableSha256": "e3d30318916ae055b5d849f59895b40c5331536cc14f98d277e4153b8e550ad0",
+  "archiveSha256": "9a4b5406448d11926ac5efb8251ef974e587e7c79aac5946b0455c9f07393b6f",
+  "installedRootIdentityPreserved": true,
+  "backupFormat": "verified ZIP",
+  "strictSignatureVerification": true,
+  "bundleIdentifier": "dev.asterlyn.desktop",
+  "sealedResourcesVersion": 2,
+  "initialIconLaunchFrontendReady": true,
+  "quitAndIconReopenFrontendReady": true,
+  "launchVia": "icon-bookmark"
+}

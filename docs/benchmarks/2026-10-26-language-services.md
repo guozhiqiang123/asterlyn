@@ -27,11 +27,22 @@ archive is 4,579,083 bytes, SHA-256
 - `npm run check`, `npm run build`, standalone `npm run plugin-template:verify`, locked all-target
   strict Clippy, and Rust formatting pass. Existing architecture budgets were preserved by moving
   capability-specific editor code and native fixtures to their own modules, not raising ceilings.
-- Initial signed native package passed strict signing, native rendered-shell smoke and canonical
-  local replacement with preserved installed-root inode and two saved-icon launches. A final
-  follow-up rendered fixture exposed stale inline diagnostics when the service detaches; the
-  clearing fix and its regression assertion are applied. Fresh final package evidence follows
-  after the repeat installation.
+- Final signed native package: strict ad-hoc signature verification passed with identifier
+  `dev.asterlyn.desktop` and sealed resources version 2; the native app rendered its shell during
+  the 15-second smoke window. The canonical installer preserved the installed `.app` root identity
+  and verified frontend readiness on initial saved-icon launch and quit/reopen via the same icon.
+  The installed executable matches the accepted signed artifact. The detach-diagnostics regression
+  assertion passes on the final code. Exact build/digests are in
+  [the native evidence](2026-10-26-language-services-install.json).
+- Installed build: `10df7d69a30f070232ed97fe8737f3e7d567cd27-clean-1792985414996`; application version remains 0.1.20.
+  Archive SHA-256: `9a4b5406448d11926ac5efb8251ef974e587e7c79aac5946b0455c9f07393b6f`.
+  The final archive is `target/release/bundle/macos/Asterlyn-0.1.20-lsp-20261026-final-macos.app.zip`.
+- Installed startup logs also contained `existing_project_directories` validation errors and one
+  initial `open_project` I/O failure; frontend readiness succeeded for both icon launches, and no
+  language server was started at Welcome. These recent-project/startup-data errors are not claimed
+  fixed by this milestone. Follow up on the existing native eight-path recent-directory bound and
+  macOS smoke profile isolation (XDG-only variables do not isolate WebKit's saved project state).
+
 
 ## Resource behavior
 
