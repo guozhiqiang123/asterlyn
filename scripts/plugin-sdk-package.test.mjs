@@ -11,11 +11,17 @@ const packageRoot = path.join(repositoryRoot, "packages/plugin-sdk");
 
 test("public Plugin SDK pack exposes only the reviewed types and metadata", async () => {
   const packageJson = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8"));
+  const indexSource = await readFile(path.join(packageRoot, "index.ts"), "utf8");
   assert.equal(packageJson.name, "@asterlyn/plugin-sdk");
-  assert.equal(packageJson.version, "1.10.0");
+  assert.equal(packageJson.version, "1.11.0");
   assert.equal(packageJson.private, undefined);
   assert.equal(packageJson.license, "MIT");
   assert.equal(packageJson.sideEffects, false);
+  assert.match(indexSource, /export const PLUGIN_SDK_VERSION = "1\.11\.0"/);
+  assert.match(indexSource, /export interface SdkLanguageServiceContribution \{/);
+  for (const field of ["kind", "id", "label", "serverId", "languageIds", "extensions", "rootMarkers"]) {
+    assert.match(indexSource, new RegExp(`readonly ${field}:`), `language-service contract omits ${field}`);
+  }
 
   const executable = process.platform === "win32" ? "npm.cmd" : "npm";
   const packed = spawnSync(executable, ["pack", packageRoot, "--dry-run", "--json"], {
@@ -40,7 +46,7 @@ test("Plugin SDK packer emits the reviewed canonical artifact with a matching ch
   );
   assert.equal(packed.status, 0, packed.stderr || packed.stdout);
   const summary = JSON.parse(packed.stdout);
-  assert.equal(summary.artifact, "asterlyn-plugin-sdk-1.10.0.tgz");
+  assert.equal(summary.artifact, "asterlyn-plugin-sdk-1.11.0.tgz");
   const bytes = await readFile(path.join(output, summary.artifact));
   const canonical = await readFile(path.join(
     repositoryRoot,

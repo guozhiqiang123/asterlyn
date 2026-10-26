@@ -1,6 +1,6 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog rooted at Asterlyn `0.1.20`; current SDK `1.10.0`, package schema `3`, and
+Status: experimental public catalog rooted at Asterlyn `0.1.20`; current SDK `1.11.0`, package schema `3`, and
 plugin-host protocol `1`.
 
 Security containment in `0.1.19`: installable packages cannot receive authority from legacy raw
@@ -37,7 +37,7 @@ contributions remain available.
 | `languageServices` | Contribute metadata for the host-owned TypeScript language-service profile | `host.language-services.execute` | Fixed packaged server/resources only; no arbitrary executable, argv, environment, or plugin handle |
 | `notifications` | Publish semantic info/success/warning/error by localization key | `host.notifications.publish` | Host owns resolved text, source attribution, timing, accessibility and dismissal |
 
-SDK `1.10.0` retains legacy candidate types only so migration tooling can diagnose old source. The
+SDK `1.11.0` retains the legacy `1.10.0` candidate types only so migration tooling can diagnose old source. The
 schema-3 package manifest forbids those fields, no bundled code executes in the WebView, and runtime
 authority is granted only through semantic IDs.
 
