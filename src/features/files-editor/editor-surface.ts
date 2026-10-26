@@ -1,3 +1,4 @@
+import { markdownSplitRange, errorMessage, escapeHtml } from "./editor-surface-helpers.ts";
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { GitConflictContent, ImageDiffPreview, ImagePreview } from "../../models.ts";
 import { attachSplitter } from "../../presentation/splitter.ts";
@@ -787,18 +788,4 @@ export class EditorSurface {
     if (!element) throw new Error(`Missing editor surface element: ${selector}`);
     return element;
   }
-}
-
-function markdownSplitRange(width: number): { minimum: number; maximum: number } {
-  const usableWidth = Math.max(0, width - 5);
-  const minimum = Math.min(220, usableWidth / 2);
-  return { minimum, maximum: Math.max(minimum, usableWidth - minimum) };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 }

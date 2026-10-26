@@ -1,3 +1,6 @@
+import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
+import { createLanguageServicesRuntime, languageExecutionConfirmation, navigateLanguageDefinition } from "./composition/language-services-runtime.ts";
+import { createTauriLanguageServiceBridge } from "./adapters/tauri/tauri-language-service-bridge.ts";
 import { bridge } from "./bridge";
 import { diagnostics } from "./application/diagnostics.ts";
 import { changeWorkspacePath, fileChangeKey, findFileChange } from "./change-identity.ts";
@@ -404,6 +407,7 @@ export class AsterlynApp {
   private localeRequestGeneration = 0;
   private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
+  private readonly languageServices: ReturnType<typeof createLanguageServicesRuntime> | null;
   private readonly contextMenuHost: LazyContextMenuHost;
   private readonly stashRuntime: StashRuntime;
   private readonly dialogRuntime: ApplicationDialogRuntime;
@@ -653,6 +657,15 @@ export class AsterlynApp {
       keyboard: this.shortcuts.handleTerminalKeyEvent, presentationChanged: () => this.refreshShortcutPresentation(),
     }, initialCatalog.locale);
     this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), confirm: (request) => this.dialogRuntime.confirm(request), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, processQueryBridge: bridge, toolOperationBridge: bridge, installedPluginRuntimeBridge: bridge, pluginMarketplaceBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), identityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
+    const languageWorkspace = () => this.windowSession.workspace.state.root ? { root: this.windowSession.workspace.state.root, generation: this.windowSession.generation } : null;
+    this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({
+      registry: this.pluginTasksRuntime.contributionRegistry,
+      native: createTauriLanguageServiceBridge((review) => this.dialogRuntime.confirm(languageExecutionConfirmation(review, this.localization.catalog.locale === "zh-CN"))),
+      workspace: languageWorkspace,
+      document: (handle) => { const tab = textTab(this.editorState.session, handle.tabId); return tab?.status === "ready" && tab.document.repositoryRoot === this.windowSession.workspace.state.root ? { workspacePath: tab.document.workspacePath, readOnly: tab.document.readOnly === true || this.state.loading, loadEpoch: tab.loadEpoch } : null; },
+      bind: (factory) => this.editorSurface.setLanguageServices(factory), reportError: (error) => this.showError(error),
+      navigate: (location) => { void navigateLanguageDefinition(location, { workspace: languageWorkspace, files: () => this.filesState.files, open: (root, file) => this.openProjectFile(root, file), content: () => { this.captureMountedTextEditor(); return activeTextTab(this.editorState.session)?.content ?? null; }, select: (from, to) => { this.editorSurface.selectRange(from, to); } }).catch((error) => this.showError(error)); },
+    }) : null;
     this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, bridge, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error) });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.findResultsRuntime = new FindResultsRuntime(root, {
@@ -2036,6 +2049,7 @@ export class AsterlynApp {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.languageServices?.dispose();
     this.shellEventBinding.dispose();
     this.notificationPresentationRuntime.dispose();
     this.notificationCenter.dispose();
@@ -5824,6 +5838,7 @@ export class AsterlynApp {
   }
 
   private renderEditor(): void {
+    this.languageServices?.refresh();
     const snapshot = this.windowSession.repository.state.snapshot;
     const document = this.activeDocument();
     const retainedEditorKeys = this.editorState.session.textTabs.map((tab) => tab.id);
@@ -6422,41 +6437,7 @@ export class AsterlynApp {
   }
 
   private textBlameAvailability(tab: TextTabState): GitBlameAvailability {
-    const snapshot = this.windowSession.repository.state.snapshot;
-    const document = tab.document;
-    if (
-      !snapshot ||
-      snapshot.root !== document.repositoryRoot ||
-      !snapshot.repositoryRoots.some((root) => root.id === document.repositoryId)
-    ) {
-      return unavailableBlame(this.localization.catalog.editor.gitBlameRequiresGit);
-    }
-    if (isTextTabDirty(tab) || tab.saveRequest !== null) {
-      return unavailableBlame(
-        this.localization.catalog.editor.gitBlameRequiresSavedFile,
-      );
-    }
-    const untracked = document.ignored === true || snapshot.changes.some((change) =>
-        (change.repositoryId || ".") === document.repositoryId &&
-        change.path === document.path && (
-          change.indexStatus === "untracked" || change.worktreeStatus === "untracked"
-        )
-      );
-    if (untracked) {
-      return unavailableBlame(
-        this.localization.catalog.editor.gitBlameRequiresTrackedFile,
-      );
-    }
-    return {
-      source: {
-        repositoryRoot: document.repositoryRoot,
-        repositoryId: document.repositoryId,
-        path: document.path,
-        commitOid: null,
-        parent: false,
-      },
-      unavailableReason: null,
-    };
+    return projectTextBlameAvailability(tab, this.windowSession.repository.state.snapshot, this.localization.catalog.editor);
   }
 
   private diffBlameSources(

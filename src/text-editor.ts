@@ -1,3 +1,4 @@
+import { completeLanguageService, languageServiceEditorExtensions, languageDiagnostic, type LanguageEditorContext } from "./features/files-editor/language-service-editor.ts";
 import {
   defaultKeymap,
   history,
@@ -7,14 +8,13 @@ import { foldGutter, foldKeymap, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
 import { Compartment, EditorState, type Text, type TransactionSpec } from "@codemirror/state";
-import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
-import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
+import type { CompletionContext } from "@codemirror/autocomplete";
+import { setDiagnostics } from "@codemirror/lint";
 import {
   drawSelection,
   EditorView,
   highlightActiveLine,
   highlightActiveLineGutter,
-  hoverTooltip,
   keymap,
 } from "@codemirror/view";
 import { withEditorFolding } from "./editor-folding";
@@ -57,7 +57,7 @@ import {
   applyEditorPreferences,
   codeMirrorFocusOwnership,
 } from "./features/files-editor/editor-runtime-shared.ts";
-import type { EditorLanguageServiceHandle, EditorLanguageServicePort, EditorLanguageServicePortFactory, EditorLanguageServiceDiagnostic, EditorLanguageServicePosition, EditorLanguageServiceCompletionItem, EditorLanguageServiceLocation } from "./protocol/editor-language-service.ts";
+import type { EditorLanguageServiceHandle, EditorLanguageServicePort, EditorLanguageServicePortFactory } from "./protocol/editor-language-service.ts";
 
 interface CachedTextEditor {
   id: string;
@@ -94,7 +94,7 @@ interface CachedTextEditor {
   languageServiceVersion: number;
   disposeLanguageDiagnostics: (() => void) | null;
   languageServiceUpdateTimer: number | null;
-  languageServicePendingText: string | null;
+  languageServicePendingText: Text | null;
 }
 
 /**
@@ -337,6 +337,7 @@ export class TextEditor {
   }
 
   setReadOnly(readOnly: boolean): void {
+    if (this.readOnlyValue === readOnly) return;
     this.readOnlyValue = readOnly;
     for (const entry of this.entries.values()) {
       this.dispatchEffects(entry, [
@@ -440,9 +441,14 @@ export class TextEditor {
   }
 
   remap(remaps: readonly EditorRuntimeTabRemap[]): boolean {
+    for (const entry of this.entries.values()) if (remaps.some((remap) => remap.sourceId === entry.id)) this.closeLanguageService(entry);
     const result = remapEditorCacheEntries(this.entries, this.activeId, remaps);
     if (result.status === "conflict") return false;
     this.activeId = result.activeId;
+    for (const entry of this.entries.values()) {
+      entry.languageServiceHandle = { tabId: entry.id, path: entry.path, loadEpoch: entry.loadEpoch };
+      this.refreshLanguageService(entry);
+    }
     return true;
   }
 
@@ -570,19 +576,18 @@ export class TextEditor {
         ]),
         EditorView.updateListener.of((update) => {
           entry.state = update.state;
-          if (!update.docChanged || this.synchronizing) return;
+          if (!update.docChanged) return;
           if (entry.languageServicePort && !this.readOnlyValue) {
             entry.languageServiceVersion += 1;
-            entry.languageServicePendingText = update.state.doc.toString();
+            entry.languageServicePendingText = update.state.doc;
             if (entry.languageServiceUpdateTimer === null) {
               entry.languageServiceUpdateTimer = window.setTimeout(() => {
                 entry.languageServiceUpdateTimer = null;
-                const text = entry.languageServicePendingText;
-                entry.languageServicePendingText = null;
-                if (text !== null && entry.languageServicePort && !this.readOnlyValue) entry.languageServicePort.update(entry.languageServiceHandle, { version: entry.languageServiceVersion, text });
+                this.flushLanguageServiceUpdate(entry);
               }, 50);
             }
           }
+          if (this.synchronizing) return;
           this.invalidateBlameForEdit(entry);
           const changes: LineSeparatorChange[] = [];
           update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
@@ -618,8 +623,18 @@ export class TextEditor {
     next.open(entry.languageServiceHandle, { version: 1, text: entry.state.doc.toString() });
     entry.disposeLanguageDiagnostics = next.subscribeDiagnostics((event) => {
       if (event.handle.tabId !== entry.id || event.handle.loadEpoch !== entry.loadEpoch || event.version !== entry.languageServiceVersion || !entry.view) return;
-      entry.view.dispatch(setDiagnostics(entry.view.state, event.diagnostics.map((diagnostic) => this.toCodeMirrorDiagnostic(entry.view!, diagnostic))));
+      entry.view.dispatch(setDiagnostics(entry.view.state, event.diagnostics.map((diagnostic) => languageDiagnostic(entry.view!, diagnostic))));
     });
+  }
+
+  private flushLanguageServiceUpdate(entry: CachedTextEditor): void {
+    if (entry.languageServiceUpdateTimer !== null) window.clearTimeout(entry.languageServiceUpdateTimer);
+    entry.languageServiceUpdateTimer = null;
+    const text = entry.languageServicePendingText;
+    entry.languageServicePendingText = null;
+    if (text && entry.languageServicePort && !this.readOnlyValue) {
+      entry.languageServicePort.update(entry.languageServiceHandle, { version: entry.languageServiceVersion, text: text.toString() });
+    }
   }
 
   private closeLanguageService(entry: CachedTextEditor): void {
@@ -632,73 +647,19 @@ export class TextEditor {
     entry.languageServicePort = null;
   }
 
-  private toCodeMirrorDiagnostic(view: EditorView, diagnostic: EditorLanguageServiceDiagnostic): Diagnostic {
-    const position = (value: EditorLanguageServicePosition): number => {
-      const line = view.state.doc.line(Math.min(view.state.doc.lines, Math.max(1, value.line + 1)));
-      return Math.min(line.to, line.from + Math.max(0, value.character));
-    };
-    return { from: position(diagnostic.range.start), to: position(diagnostic.range.end), severity: diagnostic.severity === 1 ? "error" : diagnostic.severity === 2 ? "warning" : "info", message: diagnostic.message, source: diagnostic.source };
+  private languageContext(entry: CachedTextEditor): LanguageEditorContext {
+    const port = entry.languageServicePort!;
+    return { port, handle: entry.languageServiceHandle, version: () => entry.languageServiceVersion,
+      active: () => entry.languageServicePort === port && !this.readOnlyValue && entry.view !== null,
+      flush: () => this.flushLanguageServiceUpdate(entry) };
   }
 
   private languageServiceExtensions(entry: CachedTextEditor) {
-    const port = entry.languageServicePort;
-    if (!port) return [];
-    return [
-      lintGutter(),
-      autocompletion({ override: [(context) => this.complete(entry, context)] }),
-      hoverTooltip((view, pos) => this.hover(entry, view, pos)),
-      keymap.of([{ key: "F12", run: (view) => { void this.definition(entry, view); return true; } }]),
-    ];
+    return languageServiceEditorExtensions(this.languageContext(entry), (context) => this.complete(entry, context));
   }
 
-  private async hover(entry: CachedTextEditor, view: EditorView, pos: number) {
-    const port = entry.languageServicePort;
-    if (!port || this.readOnlyValue) return null;
-    const version = entry.languageServiceVersion;
-    const line = view.state.doc.lineAt(pos);
-    const response = await port.request<{ contents?: unknown }>(entry.languageServiceHandle, "textDocument/hover", { position: { line: line.number - 1, character: pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
-    if (!response || entry.languageServicePort !== port || entry.languageServiceVersion !== version) return null;
-    const plain = typeof response.contents === "string" ? response.contents : Array.isArray(response.contents) ? response.contents.map((item) => typeof item === "string" ? item : (item as { value?: string }).value ?? "").join("\n") : (response.contents as { value?: string } | undefined)?.value ?? "";
-    if (!plain) return null;
-    return { pos, end: pos, above: true, create: () => { const dom = document.createElement("div"); dom.className = "cm-tooltip-language-service"; dom.textContent = plain; return { dom }; } };
-  }
-
-  private async definition(entry: CachedTextEditor, view: EditorView): Promise<void> {
-    const port = entry.languageServicePort;
-    if (!port || this.readOnlyValue) return;
-    const version = entry.languageServiceVersion;
-    const pos = view.state.selection.main.head;
-    const line = view.state.doc.lineAt(pos);
-    const response = await port.request<EditorLanguageServiceLocation | readonly EditorLanguageServiceLocation[]>(entry.languageServiceHandle, "textDocument/definition", { position: { line: line.number - 1, character: pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
-    if (!response || entry.languageServicePort !== port || entry.languageServiceVersion !== version) return;
-    const location = Array.isArray(response) ? response[0] : response;
-    if (location) port.navigate?.(location);
-  }
-
-  private async complete(entry: CachedTextEditor, context: CompletionContext): Promise<CompletionResult | null> {
-    const port = entry.languageServicePort;
-    if (!port || this.readOnlyValue) return null;
-    const version = entry.languageServiceVersion;
-    const line = context.state.doc.lineAt(context.pos);
-    const response = await port.request<{ items?: readonly EditorLanguageServiceCompletionItem[] } | readonly EditorLanguageServiceCompletionItem[]>(entry.languageServiceHandle, "textDocument/completion", { position: { line: line.number - 1, character: context.pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
-    if (!response || entry.languageServicePort !== port || entry.languageServiceVersion !== version) return null;
-    const match = context.matchBefore(/[\w$]*/);
-    const from = match?.from ?? context.pos;
-    const items: readonly EditorLanguageServiceCompletionItem[] = Array.isArray(response) ? response : ("items" in response ? response.items ?? [] : []);
-    const toOffset = (position: EditorLanguageServicePosition): number | null => {
-      if (position.line < 0 || position.line >= context.state.doc.lines || position.character < 0) return null;
-      const target = context.state.doc.line(position.line + 1);
-      const offset = target.from + position.character;
-      return offset <= target.to ? offset : null;
-    };
-    return { from, options: items.filter((item) => item.insertTextFormat !== 2 && !item.insertReplaceEdit && !item.additionalTextEdits?.length && !item.command).map((item) => ({ label: item.label, detail: item.detail, type: "text", apply: (view: EditorView, _completion: unknown, _from: number, to: number) => {
-      if (entry.languageServiceVersion !== version || entry.languageServicePort !== port) return;
-      const edit = item.textEdit;
-      const editFrom = edit ? toOffset(edit.range.start) : from;
-      const editTo = edit ? toOffset(edit.range.end) : to;
-      if (edit && (editFrom === null || editTo === null || editFrom > editTo)) return;
-      view.dispatch({ changes: { from: editFrom ?? from, to: editTo ?? to, insert: edit?.newText ?? item.insertText ?? item.label }, userEvent: "input.complete" });
-    } })) };
+  private complete(entry: CachedTextEditor, context: CompletionContext) {
+    return completeLanguageService(this.languageContext(entry), context);
   }
 
   private invalidateBlameForEdit(entry: CachedTextEditor): void {
