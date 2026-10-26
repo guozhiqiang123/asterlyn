@@ -56,6 +56,12 @@ jobs:
       - name: Test delivery scripts
         run: npm run test:scripts
 
+      - name: Install definition gesture test browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Test definition pointer navigation
+        run: npm run test:lsp:definition
+
       - name: Verify public plugin template
         run: npm run plugin-template:verify
 

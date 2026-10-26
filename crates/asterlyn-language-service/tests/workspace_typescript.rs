@@ -85,6 +85,56 @@ fn actual_workspace_unsaved_diagnostics_hover_definition_and_completion() {
             .iter()
             .any(|item| item["label"] == "__asterlynLspProbe")
     );
+    if workspace.join("src/app.ts").is_file()
+        && file.ends_with("src/features/files-editor/text-blame-availability.ts")
+    {
+        let app_file = workspace.join("src/app.ts");
+        let app_bytes = fs::read(&app_file).unwrap();
+        let app_source = String::from_utf8(app_bytes.clone())
+            .unwrap()
+            .replace("\r\n", "\n");
+        let symbol = "projectTextBlameAvailability";
+        let start = app_source.rfind(symbol).unwrap();
+        let prefix = &app_source[..start];
+        let line = prefix.bytes().filter(|byte| *byte == b'\n').count();
+        let character = prefix.rsplit('\n').next().unwrap().encode_utf16().count() + 2;
+        let app_uri = format!("file://{}", app_file.display());
+        process
+            .notify(
+                "textDocument/didOpen",
+                Some(json!({"textDocument": {
+                    "uri": app_uri, "languageId": "typescript", "version": 1, "text": app_source
+                }})),
+            )
+            .unwrap();
+        let response = process.request_wait("textDocument/definition", Some(json!({
+            "textDocument": { "uri": app_uri }, "position": { "line": line, "character": character }
+        })), Duration::from_secs(10)).unwrap();
+        assert!(response.error.is_none());
+        let definitions = response.result.unwrap();
+        let definition = definitions
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item.get("targetUri").or_else(|| item.get("uri")) == Some(&json!(uri)))
+            .expect("the real app call must resolve its imported definition across files");
+        let selection = definition
+            .get("targetSelectionRange")
+            .or_else(|| definition.get("range"))
+            .unwrap();
+        let target_line = source
+            .lines()
+            .nth(selection["start"]["line"].as_u64().unwrap() as usize)
+            .unwrap();
+        let units: Vec<u16> = target_line.encode_utf16().collect();
+        let from = selection["start"]["character"].as_u64().unwrap() as usize;
+        let to = selection["end"]["character"].as_u64().unwrap() as usize;
+        assert_eq!(String::from_utf16(&units[from..to]).unwrap(), symbol);
+        assert_eq!(fs::read(&app_file).unwrap(), app_bytes);
+        eprintln!(
+            "real src/app.ts import resolves the exact cross-file declaration range; disk unchanged"
+        );
+    }
     process.stop().unwrap();
     assert_eq!(
         fs::read(&file).unwrap(),

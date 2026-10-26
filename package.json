@@ -21,7 +21,8 @@
     "test:native:rendered": "node scripts/smoke-native-app.mjs --require-rendered target/release/asterlyn",
     "test:native:rendered:build": "tauri build --no-bundle && npm run test:native:rendered",
     "tauri": "tauri",
-    "test:lsp:activation": "node scripts/test-lsp-package-activation.mjs"
+    "test:lsp:activation": "node scripts/test-lsp-package-activation.mjs",
+    "test:lsp:definition": "node scripts/test-language-definition-rendered.mjs"
   },
   "dependencies": {
     "@asterlyn/plugin-sdk": "file:packages/plugin-sdk",

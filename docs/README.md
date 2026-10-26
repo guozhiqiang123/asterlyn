@@ -224,3 +224,4 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-26-language-services.md`](benchmarks/2026-10-26-language-services.md) — TS/JS host/plugin automated, resource and native-install acceptance evidence.
 
 - [`benchmarks/2026-10-26-language-services-activation-fix.md`](benchmarks/2026-10-26-language-services-activation-fix.md) — desktop validation regression, immutable quarantine repair and actual-project LSP acceptance.
+- [`benchmarks/2026-10-26-language-definition-navigation.md`](benchmarks/2026-10-26-language-definition-navigation.md) — real Ctrl/Command gestures, safe cross-file selection, actual workspace definitions and native delivery.
