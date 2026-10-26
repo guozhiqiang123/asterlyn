@@ -116,6 +116,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asterlyn-language-service"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "asterlyn-plugin-host"
 version = "0.1.0"
 dependencies = [
