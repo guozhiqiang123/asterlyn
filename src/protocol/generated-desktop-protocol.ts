@@ -6,7 +6,7 @@ import type { PluginProcessQueryResult } from "./plugin-process-query";
 import type { PluginToolOperationParameters, PluginToolOperationResult } from "./plugin-tool-operation";
 import type { PluginSourceSnapshot, PluginInstallationSnapshot, InstalledPluginManifestSnapshot, PluginPackageAdmissionReview } from "./plugin-marketplace";
 import type { InstalledPluginActivation, InstalledPluginRuntimeDiagnostics, PluginRuntimeTheme, PluginRuntimeValue } from "./plugin-runtime";
-import type { LanguageServiceReview, LanguageServiceTextChange } from "./language-service";
+import type { LanguageServiceReview, LanguageServiceTextChange, LanguageServiceResultEnvelope } from "./language-service";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 export const DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS = ["activate_installed_plugin_runtime","invoke_installed_plugin_callback","prepare_task_execution","start_task_execution"] as const;
@@ -42,7 +42,7 @@ export interface DesktopCommandMap {
   open_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; languageId: string; version: number; text: string; }; result: void };
   change_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; version: number; changes: Array<LanguageServiceTextChange>; }; result: void };
   close_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; }; result: void };
-  request_language_service: { args: { workspaceRoot: string; sessionId: string; uri: string; feature: string; line: number; character: number; }; result: number };
+  request_language_service: { args: { workspaceRoot: string; sessionId: string; uri: string; feature: string; version: number; line: number; character: number; }; result: LanguageServiceResultEnvelope };
   cancel_language_request: { args: { sessionId: string; requestId: number; }; result: boolean };
   stop_language_service: { args: { sessionId: string; }; result: boolean };
   window_chrome_mode: { args: Record<string, never>; result: WindowChromeMode };
@@ -204,7 +204,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   open_language_document: "void",
   change_language_document: "void",
   close_language_document: "void",
-  request_language_service: "number",
+  request_language_service: "languageServiceResultEnvelope",
   cancel_language_request: "boolean",
   stop_language_service: "boolean",
   window_chrome_mode: "windowChromeMode",

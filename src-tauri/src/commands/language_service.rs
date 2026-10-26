@@ -171,6 +171,7 @@ pub(crate) fn close_language_document(
     uri: String,
     manager: State<'_, LanguageServiceManager>,
 ) -> Result<(), String> {
+    let response_session_id = session_id.clone();
     manager.with(&session_id, |process| {
         process
             .notify(
@@ -203,7 +204,7 @@ pub(crate) fn request_language_service(
     };
     manager.with(&session_id, |process| {
         let response = process.request_wait(method, Some(serde_json::json!({"textDocument":{"uri":uri},"position":{"line":line,"character":character}})), std::time::Duration::from_secs(10)).map_err(|e| format!("{e:?}"))?;
-        Ok(LanguageServiceResultEnvelope { session_id, uri, version, result: response.result.or_else(|| response.error.map(|error| serde_json::json!({"error": error.message}))).unwrap_or(serde_json::Value::Null) })
+        Ok(LanguageServiceResultEnvelope { session_id: response_session_id, uri, version, result: response.result.or_else(|| response.error.map(|error| serde_json::json!({"error": error.message}))).unwrap_or(serde_json::Value::Null) })
     })
 }
 
