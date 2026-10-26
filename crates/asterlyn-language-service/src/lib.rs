@@ -9,6 +9,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -151,7 +152,7 @@ pub enum JsonRpcId {
 #[derive(Debug, Default)]
 pub struct PendingRequests {
     next_id: AtomicU64,
-    pending: BTreeMap<u64, ()>,
+    pending: BTreeMap<u64, Instant>,
 }
 
 impl PendingRequests {
@@ -166,7 +167,7 @@ impl PendingRequests {
             return Err(SessionError::LimitExceeded("pending requests"));
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.pending.insert(id, ());
+        self.pending.insert(id, Instant::now());
         Ok(id)
     }
     pub fn complete(&mut self, id: &JsonRpcId) -> bool {
@@ -180,6 +181,19 @@ impl PendingRequests {
     }
     pub fn len(&self) -> usize {
         self.pending.len()
+    }
+    pub fn expire_older_than(&mut self, age: Duration) -> Vec<u64> {
+        let now = Instant::now();
+        let expired = self
+            .pending
+            .iter()
+            .filter(|(_, started)| now.duration_since(**started) >= age)
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        for id in &expired {
+            self.pending.remove(id);
+        }
+        expired
     }
 }
 
@@ -562,6 +576,14 @@ mod tests {
         assert_eq!(session.pending_len(), 1);
         assert!(session.cancel(id).unwrap());
         assert_eq!(session.pending_len(), 0);
+    }
+
+    #[test]
+    fn expired_requests_are_removed_without_waiting_for_server() {
+        let mut pending = PendingRequests::new();
+        let id = pending.reserve().unwrap();
+        assert_eq!(pending.expire_older_than(Duration::ZERO), vec![id]);
+        assert_eq!(pending.len(), 0);
     }
 
     #[test]
