@@ -539,3 +539,47 @@ test("quarantines an activation whose projected contribution violates the host c
   assert.match(errors[0].message, /bounded non-empty text/u);
   await runtime.dispose();
 });
+
+for (const payload of [
+  { serverId: "untrusted-server" },
+  { languageIds: ["typescript", 17] },
+  { extensions: [".ts", null] },
+  { rootMarkers: ["package.json", "../escape"] },
+]) {
+  test(`rejects malformed external language metadata before projection: ${JSON.stringify(payload)}`, async () => {
+    const registry = new PluginContributionRegistry();
+    let failed = 0;
+    const errors = [];
+    const runtime = new ExternalPluginRuntime({
+      registry,
+      bridge: {
+        activate: async () => ({
+          pluginId, pluginVersion: "1.2.3", packageDigest: `sha256:${"a".repeat(64)}`,
+          sessionId: "invalid-language", contributions: [{
+            kind: "languageService", id: "language", callbacks: {},
+            payload: {
+              label: "TypeScript", serverId: "typescript", languageIds: ["typescript"],
+              extensions: [".ts"], rootMarkers: ["package.json"], ...payload,
+            },
+          }],
+        }),
+        invoke: async () => { throw new Error("metadata must not invoke plugin callbacks"); },
+        deactivate: async () => undefined,
+        confirmHealthy: async () => installation(),
+        failActivation: async () => { failed += 1; return installation(); },
+        abandonActivation: async () => installation(),
+        diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }),
+        subscribe: async () => () => undefined,
+        subscribeNotifications: async () => () => undefined,
+        subscribeTerminations: async () => () => undefined,
+      },
+      marketplace: { listPluginInstallations: async () => installation() },
+      locale: () => "en-US", reportError: (error) => errors.push(error), healthCheckpointMs: 0,
+    });
+    assert.deepEqual(await runtime.activate(identity, evidence, () => true), []);
+    assert.equal(registry.list().length, 0);
+    assert.equal(failed, 1);
+    assert.match(errors[0]?.message ?? "", /Invalid language service contribution/u);
+    await runtime.dispose();
+  });
+}

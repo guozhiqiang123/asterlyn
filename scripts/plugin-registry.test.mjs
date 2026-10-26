@@ -48,6 +48,36 @@ test("registers external contribution batches atomically and releases them as on
   assert.deepEqual(observed, [2, 0]);
 });
 
+const languageService = () => ({
+  kind: "language-service", id: "typescript-javascript", label: "TypeScript / JavaScript",
+  serverId: "typescript", languageIds: ["typescript", "javascript"],
+  extensions: [".ts", ".js"], rootMarkers: ["tsconfig.json", "package.json"],
+});
+
+test("language profile declarations are bounded, unique and contain no path authority", () => {
+  const owner = { id: "dev.asterlyn.lsp", version: "0.1.0" };
+  const registry = new PluginContributionRegistry();
+  const release = registry.registerExternalBatch(owner, [languageService()]);
+  assert.equal(registry.get("dev.asterlyn.lsp.typescript-javascript")?.serverId, "typescript");
+  release.dispose();
+  const mutations = [
+    { serverId: "arbitrary-executable" }, { label: null }, { label: "x".repeat(121) },
+    { label: "bad\nlabel" }, { languageIds: ["typescript", 1] },
+    { languageIds: ["typescript", "typescript"] }, { languageIds: ["kotlin"] },
+    { extensions: [".TS"] }, { extensions: [".ts", ".ts"] }, { extensions: ["../ts"] },
+    { rootMarkers: ["../package.json"] }, { rootMarkers: ["/package.json"] },
+    { rootMarkers: ["nested/package.json"] }, { rootMarkers: ["."] },
+    { rootMarkers: ["a".repeat(129)] }, { rootMarkers: Array.from({ length: 9 }, (_, i) => `file${i}`) },
+    { rootMarkers: ["tsconfig.json", null] }, { rootMarkers: [] },
+  ];
+  for (const mutation of mutations) {
+    assert.throws(() => registry.registerExternalBatch(owner, [languageService(), {
+      ...languageService(), id: "invalid", ...mutation,
+    }]), /Invalid language service contribution/u, JSON.stringify(mutation));
+    assert.equal(registry.list().length, 0, "an invalid batch must publish nothing");
+  }
+});
+
 test("activates matching plugins in declared order and namespaces contributions", async () => {
   const events = [];
   const runtime = new PluginRuntime();

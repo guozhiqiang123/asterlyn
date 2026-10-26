@@ -18,6 +18,7 @@ import {
   SDK_PLUGIN_EXECUTION_TARGET_LIMITS,
   SDK_PLUGIN_RUN_CONFIGURATION_LIMITS,
 } from "../../../packages/plugin-sdk/index.ts";
+import { validateLanguageServiceContribution } from "./language-service-contract.ts";
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const SETTING_IDENTIFIER = /^[a-z][a-zA-Z0-9]*(?:[.-][a-zA-Z0-9]+)*$/;
@@ -560,16 +561,7 @@ function validateContribution(contribution: PluginContribution): void {
         (contribution.run !== undefined && typeof contribution.run !== "function"))) {
       throw new Error(`Invalid provider contribution: ${contribution.id}`);
     }
-    if (contribution.kind === "language-service" &&
-      (!contribution.label.trim() || contribution.serverId !== "typescript" ||
-        !Array.isArray(contribution.languageIds) || contribution.languageIds.length === 0 ||
-        !Array.isArray(contribution.extensions) || contribution.extensions.length === 0 ||
-        !Array.isArray(contribution.rootMarkers) || contribution.rootMarkers.length === 0 ||
-        contribution.languageIds.some((value) => typeof value !== "string" || !value.trim()) ||
-        contribution.extensions.some((value) => typeof value !== "string" || !/^\.[^\\/]+$/.test(value)) ||
-        contribution.rootMarkers.some((value) => typeof value !== "string" || !value.trim()))) {
-      throw new Error(`Invalid language service contribution: ${contribution.id}`);
-    }
+    if (contribution.kind === "language-service") validateLanguageServiceContribution(contribution);
     if (contribution.kind === "execution-target-provider") validateExecutionTargetProvider(contribution);
     if (contribution.kind === "run-configuration-provider") validateRunConfigurationProvider(contribution);
   } catch (error) {

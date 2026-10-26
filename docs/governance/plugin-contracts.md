@@ -28,7 +28,7 @@ Every contract entry records:
 
 | Contract ID | Owner / consumer | Stability | Version axis | Authoritative source and policy |
 | --- | --- | --- | --- | --- |
-| `plugin.package-manifest` | plugin declares; host admits | stable | package manifest schema `1` | `SdkPluginPackageManifest`; ADR-0023; identity parity tests |
+| `plugin.package-manifest` | plugin declares; host admits | stable | package manifest schemas `1`–`3` | `SdkPluginPackageManifest`; ADR-0023; identity parity tests |
 | `plugin.localization` | plugin supplies text; host validates/resolves/renders | stable | Plugin SDK `1.1` additive contract | `SdkPluginLocalization`, `SDK_PLUGIN_LOCALIZATION_LIMITS`; ADR-0023 |
 | `plugin.settings` | plugin declares; host persists/renders | stable | Plugin SDK major `1` | `SdkSettingDescriptor`; host settings adapter and value validation |
 | `plugin.commands` | plugin declares/handles; host discovers/routes | stable-first-party | Plugin SDK major `1` | `SdkPluginCommandContribution`; contribution registry bounds |
@@ -51,10 +51,11 @@ Every contract entry records:
 | `plugin.artifact-resolution` | plugin supplies ecosystem interpretation; host contains/inspects artifacts | experimental-first-party | additive Plugin SDK minor plus artifact protocol `1` | ADR-0031; task/session-bound workspace artifacts, bounded metadata, final APK authority, no arbitrary filesystem access |
 | `plugin.workspace-state` | host stores namespaced bytes; plugin owns schema/migration | proposed-first-party | persistence protocol `1` plus plugin-owned schema | ADR-0030; bounded non-secret preferences only, no repository files or transcripts |
 | `plugin.marketplace-source` | host/user configures repository; host discovers | experimental-public | source schema `1` | ADR-0032; exact public GitHub owner/repository, bounded local metadata, cached manual discovery |
-| `plugin.release-distribution` | plugin repository publishes; host verifies | experimental-public | installable package schema `2` | ADR-0032; stable GitHub Release, one bounded asset, GitHub and local SHA-256, static identity parity |
-| `plugin.package-admission` | package supplies static bytes; host validates | experimental-public | package schema `2` plus SDK/runtime/capability versions | ADR-0032; no execution before source, archive, manifest, integrity, license, compatibility, and permission validation |
+| `plugin.release-distribution` | plugin repository publishes; host verifies | experimental-public | installable package schemas `2`–`3` | ADR-0032; stable GitHub Release, one bounded asset, GitHub and local SHA-256, static identity parity |
+| `plugin.package-admission` | package supplies static bytes; host validates | experimental-public | package schemas `2`–`3` plus SDK/runtime/capability versions | ADR-0032; no execution before source, archive, manifest, integrity, license, compatibility, and permission validation |
 | `plugin.installation-lifecycle` | host owns; Settings requests | experimental-public | installation-index schema `1` | ADR-0032; immutable content-addressed packages, atomic pending/current/known-good/quarantine state, restart recovery |
 | `plugin.external-runtime` | plugin bundle runs; host supervises | experimental-public | plugin-host protocol `1` | ADR-0032; one sidecar process per plugin, no ambient authority, bounded typed capability messages, transactional contributions |
+| `plugin.language-services` | plugin declares language metadata; host owns documents, approval, process and editor UI | experimental-first-party | additive Plugin SDK `1.11` (development); package schema `3`; runtime protocol `1` | ADR-0034; `SdkLanguageServiceContribution`; `languageServices` / `host.language-services.execute`; fixed packaged TypeScript profile, no raw process or workspace edit authority |
 | `host.plugin-restart` | host owns; package lifecycle consumes | experimental-host | restart transaction schema `1` | ADR-0032; cancel/drain, persist pending selection, exact relaunch, activation-attempt checkpoint, loop-safe rollback |
 
 `stable-first-party` means the contract is exercised across the independent Android/Gradle
@@ -127,3 +128,21 @@ The following versions solve different compatibility problems and must not be co
 - Do oldest-supported and current-host fixtures cover additive and rejected forms?
 - Are localization, keyboard/focus, accessibility, theme, performance, memory, diagnostics, and
   rollback evidence recorded?
+
+## Language services (development)
+
+The SDK 1.11 declaration is additive but its new required capability must be rejected by older
+hosts. A package cannot claim compatibility based only on SDK major 1: the host must recognize
+`languageServices` and require `host.language-services.execute` before execution. SDK 1.11 is not
+published by this change. See the [implementation plan](../engineering/2026-10-26-language-services-host-plan.md)
+for implemented stages and remaining gates; declaration/transport tests alone do not establish a
+working editor service.
+
+The first profile accepts exactly the TypeScript/JavaScript language IDs and eight lower-case
+suffixes documented in ADR-0034. Declarations have a nonempty label of at most 120 characters
+without controls, at most four unique language IDs, eight unique suffixes, and eight unique root
+markers. Each marker is one plain filename (1–128 characters, alphanumeric first, then
+alphanumeric/dot/underscore/hyphen). Absolute paths, traversal, nested paths and malformed array
+members fail the entire contribution batch before projection. Metadata is not silently repaired
+or mapped to a different server. Native launch authority independently revalidates the installed
+package and fixed resources; frontend metadata is never execution authorization.

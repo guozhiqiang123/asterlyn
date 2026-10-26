@@ -6,6 +6,7 @@ import type {
   PluginWorkspaceIdentity,
 } from "../application/plugins/index.ts";
 import { adaptSdkContribution } from "../application/plugins/plugin-sdk-adapter.ts";
+import { validateLanguageServiceContribution } from "../application/plugins/language-service-contract.ts";
 import type {
   ExternalPluginContribution,
   InstalledPluginActivation,
@@ -535,18 +536,13 @@ class RemoteContributionProjection {
   }
 
   private async projectLanguageService(payload: RuntimeRecord): Promise<PluginContribution> {
-    const languageIds = Array.isArray(payload.languageIds) ? payload.languageIds.filter((value): value is string => typeof value === "string") : [];
-    const extensions = Array.isArray(payload.extensions) ? payload.extensions.filter((value): value is string => typeof value === "string") : [];
-    const rootMarkers = Array.isArray(payload.rootMarkers) ? payload.rootMarkers.filter((value): value is string => typeof value === "string") : [];
-    return adaptSdkContribution({
+    const contribution = {
+      ...payload,
       kind: "language-service",
       id: this.source.id,
-      label: requiredText(payload.label, "language service label"),
-      serverId: "typescript",
-      languageIds,
-      extensions,
-      rootMarkers,
-    } as unknown as SdkPluginContribution);
+    };
+    validateLanguageServiceContribution(contribution);
+    return adaptSdkContribution(contribution);
   }
 
   private listen(listener: () => void): Disposable {

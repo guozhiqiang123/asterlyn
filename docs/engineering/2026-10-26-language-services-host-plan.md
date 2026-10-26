@@ -69,4 +69,10 @@ evidence. Remote hosting and arbitrary executable/configuration providers requir
   admission capability/permission IDs, registry guards, and refreshed canonical template SDK
   artifact/checksum are implemented and tested in commit `3866ae8`. Runtime execution/session,
   editor integration, and real-server acceptance remain pending H2–H4.
-- H2–H4: pending.
+- H1 primary review: reject unknown server profiles and malformed array members before external
+  projection; bounded unique metadata and path-free root markers are checked in the shared host
+  validator. Registry atomicity and hostile projection fixtures pass (33 focused tests). Governance
+  now records the development language contract and current package schema range.
+- H2–H4: in progress; native command wiring is not accepted until installed-package authority,
+  asynchronous responses and lifecycle cleanup are verified. Editor and actual-server gates remain
+  required.
