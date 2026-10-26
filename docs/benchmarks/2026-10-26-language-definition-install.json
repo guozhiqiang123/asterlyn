@@ -1,0 +1,57 @@
+{
+  "version": "0.1.20",
+  "sourceCodeRevision": "371ff0c238c52c0516af14470dada738bca2e2aa",
+  "buildId": "371ff0c238c52c0516af14470dada738bca2e2aa-clean-1792995771225",
+  "archive": "target/release/bundle/macos/Asterlyn-0.1.20-definition-20261026-macos.app.zip",
+  "archiveBytes": 19973002,
+  "archiveSha256": "99858871d0ab01732c27d1d18b73262876d31b70a8ddd0ec10af51b25e6d57fd",
+  "executableSha256": "bd39d0e8bf8a97e7d42ff7831d36a7d77de34f06d2052a194359814c5f2c0d03",
+  "installedExecutableSha256": "bd39d0e8bf8a97e7d42ff7831d36a7d77de34f06d2052a194359814c5f2c0d03",
+  "strictSignatureVerification": true,
+  "bundleIdentifier": "dev.asterlyn.desktop",
+  "sealedResourcesVersion": 2,
+  "installedRootIdentityPreserved": true,
+  "backupFormat": "verified ZIP",
+  "backupSha256": "0cafcef921994eaa04f12559d8f6270028b641e11542adf6ec81d2e8a143d58c",
+  "launchVia": "icon-bookmark",
+  "firstLaunch": {
+    "pid": 33275,
+    "session": "session-1792995925451-33275-0",
+    "buildId": "371ff0c238c52c0516af14470dada738bca2e2aa-clean-1792995771225",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "reopen": {
+    "pid": 33374,
+    "session": "session-1792995927258-33374-0",
+    "buildId": "371ff0c238c52c0516af14470dada738bca2e2aa-clean-1792995771225",
+    "frontendReady": true,
+    "launchVia": "icon-bookmark"
+  },
+  "nativeProbe": {
+    "nativePid": 33036,
+    "session": "session-1792995880567-33036-0",
+    "buildId": "371ff0c238c52c0516af14470dada738bca2e2aa-clean-1792995771225",
+    "frontendReady": true,
+    "pluginId": "dev.asterlyn.lsp",
+    "pluginVersion": "0.1.0",
+    "nativeContributionCount": 1,
+    "registeredLanguageProviders": 1,
+    "runtimeStatus": "knownGood",
+    "lspErrors": 0,
+    "sourceFilesModified": false
+  },
+  "installedLspActivation": true,
+  "installedLanguageProviders": 1,
+  "installedStartupErrors": [
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    },
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    }
+  ],
+  "manualUiAcceptance": false
+}

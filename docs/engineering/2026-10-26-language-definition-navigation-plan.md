@@ -1,6 +1,7 @@
 # Language definition navigation plan — 2026-10-26
 
-Status: D0–D2 implemented and verified; D3 automated checks pass, native delivery pending.
+Status: D0–D3 implemented and verified, including native local delivery. User manual acceptance
+and Windows/Linux desktop acceptance remain open.
 The initial plan was committed as `8e2547a` before implementation.
 
 The user requests progress toward usable Ctrl + primary mouse button definition navigation, with a
@@ -83,8 +84,14 @@ separate versioned-transaction gate.
   The real TypeScript server resolves an actual `src/app.ts` import to its declaration in
   `text-blame-availability.ts` without writing either file. Nine focused unit tests and all 1317
   script tests pass; typecheck, production build, existing editor rendering, actual package
-  activation, Rust formatting and focused all-target Clippy pass. Native delivery follows these
-  gates; its exact artifact and installed-log identities will be recorded separately.
+  activation, Rust formatting and focused all-target Clippy pass. Preview/release CI now includes
+  the real gesture suite. Implementation is `ebd292c`, actual-gesture/workspace gates are `371ff0c`.
+- D3 native: clean source `371ff0c` was freshly packaged, completely ad-hoc signed, strictly
+  verified and probed against the actual project. Canonical replacement preserved the installed
+  application root, retained a verified ZIP backup, matched executable hashes, and passed both
+  saved-icon launches. Installed logs confirm the healthy LSP contribution and one language
+  provider. Exact artifact, checksums, sessions and remaining startup-data errors are in
+  [the acceptance record](../benchmarks/2026-10-26-language-definition-navigation.md).
 - No SDK, native execution authority, plugin version or package changes were required. The English
   editor catalog was extracted as one coherent unit to preserve existing ownership budgets; no
   file-size ceiling was raised.

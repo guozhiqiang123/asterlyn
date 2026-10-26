@@ -56,8 +56,21 @@ Navigation logs contain only outcomes and target counts, not source, symbols or 
   activation, Rust formatting and all-target strict Clippy for `asterlyn-language-service` pass.
 - Actual TypeScript workspace acceptance passes without disk mutations.
 - Preview and release quality jobs install Chromium/WebKit and run the real pointer suite.
-- Native signed package, canonical replacement and saved-icon reopen: pending; exact identities
-  will be recorded after packaging and installation.
+- Native source `371ff0c` freshly built with whole-bundle ad-hoc signing and strict verification:
+  identifier `dev.asterlyn.desktop`, sealed resources version 2, app version 0.1.20. Native actual
+  project startup and installed logs confirm one healthy LSP contribution and one registered
+  language provider. Canonical installation preserved the application root inode, kept the
+  previous installation as a verified ZIP, matched executable hashes, and passed initial and
+  quit/reopen saved-icon launches. [Exact machine-readable evidence](2026-10-26-language-definition-install.json).
+
+Installed build: `371ff0c238c52c0516af14470dada738bca2e2aa-clean-1792995771225`.
+Archive: [`Asterlyn-0.1.20-definition-20261026-macos.app.zip`](../../target/release/bundle/macos/Asterlyn-0.1.20-definition-20261026-macos.app.zip),
+19,973,002 bytes, SHA-256 `99858871d0ab01732c27d1d18b73262876d31b70a8ddd0ec10af51b25e6d57fd`.
+Installed executable SHA-256: `bd39d0e8bf8a97e7d42ff7831d36a7d77de34f06d2052a194359814c5f2c0d03`.
+
+The final installed session still records two existing `existing_project_directories` invalidPath
+startup-data failures, as did the prior milestone. Frontend readiness/provider registration pass;
+this navigation iteration does not claim to fix that separate recent-project bound issue.
 
 ## Current limits
 
