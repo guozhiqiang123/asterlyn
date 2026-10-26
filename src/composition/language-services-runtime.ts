@@ -8,6 +8,8 @@ export function createLanguageServicesRuntime(registry: PluginContributionRegist
   return createEditorLanguageServicePort((handle: EditorLanguageServiceHandle) => {
     const provider = contribution();
     if (!provider) return null;
-    return { workspaceRoot: "", workspaceGeneration: handle.loadEpoch, uri: `file://${encodeURI(handle.path)}`, languageId: provider.languageIds.includes("typescript") ? "typescript" : provider.languageIds[0], pluginId: provider.pluginId };
+    const languageId = provider.languageIds.includes("typescript") ? "typescript" : provider.languageIds[0];
+    if (!languageId) return null;
+    return { workspaceRoot: "", workspaceGeneration: handle.loadEpoch, uri: `file://${encodeURI(handle.path)}`, languageId, pluginId: provider.pluginId };
   }, native, reportError);
 }
