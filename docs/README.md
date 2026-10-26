@@ -219,3 +219,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-19-plugin-marketplace-admission.md`](benchmarks/2026-10-19-plugin-marketplace-admission.md) — GitHub Release download binding, schema-2 package admission, immutable storage, and pending-runtime evidence.
 - [`benchmarks/2026-10-19-android-plugin-marketplace-release.md`](benchmarks/2026-10-19-android-plugin-marketplace-release.md) — first-party Android plugin GitHub Release workflow, online digest/package inspection, Marketplace MKT4 acceptance, and the explicit pending-runtime boundary.
 - [`benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md`](benchmarks/2026-10-19-public-plugin-marketplace-acceptance.md) — independent Hello and Android GitHub Releases, production discovery/download/admission, pinned inspector/runtime parity, and remaining installed-app MKT8D gates.
+
+- [`benchmarks/2026-10-26-language-services.md`](benchmarks/2026-10-26-language-services.md) — TS/JS host/plugin automated, resource and native-install acceptance evidence.

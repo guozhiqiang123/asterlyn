@@ -1,6 +1,6 @@
 # Host language-service implementation plan
 
-- Date: 2026-10-26. Status: planned; implementation follows this committed plan.
+- Date: 2026-10-26. Status: H0–H3 implemented; H4 automated acceptance passed and native package acceptance in progress.
 - User authorization: host foundations and sibling LSP plugin may be developed in parallel by
   subagents; the primary agent reviews, corrects, verifies and makes staged local commits.
 - Governing contract: [ADR-0034](../architecture/decisions/0034-plugin-language-services.md).
@@ -75,12 +75,27 @@ evidence. Remote hosting and arbitrary executable/configuration providers requir
 - H0: plan and frozen first-provider contract recorded before implementation.
 - H1: additive SDK 1.11.0 language-service metadata, complete TypeScript/native projection,
   admission capability/permission IDs, registry guards, and refreshed canonical template SDK
-  artifact/checksum are implemented and tested in commit `3866ae8`. Runtime execution/session,
-  editor integration, and real-server acceptance remain pending H2–H4.
+  artifact/checksum are implemented and tested in commit `3866ae8`; later primary review and
+  native/editor stages are recorded below.
 - H1 primary review: reject unknown server profiles and malformed array members before external
   projection; bounded unique metadata and path-free root markers are checked in the shared host
   validator. Registry atomicity and hostile projection fixtures pass (33 focused tests). Governance
   now records the development language contract and current package schema range.
-- H2–H4: in progress; native command wiring is not accepted until installed-package authority,
-  asynchronous responses and lifecycle cleanup are verified. Editor and actual-server gates remain
-  required.
+- H2: primary completed the per-session actor, bounded queues and request deadlines, cancellation,
+  owner/native activation binding, consumed/expiring package-and-executable-bound review,
+  standard trusted Node resolution, immutable installed-package revalidation, URI/UTF-16/version
+  guards, revocation, and process-group cleanup in `5fcc641`. The initial subagent wiring was
+  reviewed and substantially replaced before acceptance. Host-internal diagnostic queries are
+  correlated to the exact unsaved document version; unversioned pushes are not restamped.
+- H3: `d8887b6` connects live committed plugin contributions to the real CodeMirror buffer, host
+  approval, diagnostics, plain-text hover, F12 navigation and version-checked completion with undo.
+  Read-only/history/Diff/conflict surfaces do not provide current-document LSP overlays. Snapshot
+  updates are coalesced and flushed before requests; disk CRLF/BOM handling is unchanged.
+- H4 automated: 1307 script tests passed with concurrency 4; 493 Rust tests passed and 6 existing
+  tests remain ignored. The real sibling-server tests were explicitly enabled, including native
+  actor unsaved-error/fix/cleanup and stalled-request cancellation. Typecheck, production build,
+  canonical standalone plugin-template verification, Rust formatting and all-target strict Clippy
+  passed. Native signing, smoke, canonical replacement and icon reopening are the remaining gate.
+- Resource measurements and limitations are recorded in the sibling plugin's
+  `docs/acceptance-2026-10-26.md`; host acceptance is recorded in
+  [the host evidence](../benchmarks/2026-10-26-language-services.md).
