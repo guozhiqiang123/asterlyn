@@ -23,21 +23,7 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_RELEASE_METADATA_BYTES: u64 = 1024 * 1024;
-const BUNDLED_ANDROID_PLUGIN_ID: &str = "dev.asterlyn.android-gradle";
-const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.5.10";
-const BUNDLED_ANDROID_PACKAGE_DIGEST: &str =
-    "sha256:36f4839f49e8723c455561d12bad5972c225c35a043e8527f0cff43a2b3c83af";
-const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
-    "../../resources/plugins/asterlyn-plugin-android-gradle-0.5.10.asterlyn-plugin.tgz"
-);
-const BUNDLED_LSP_PLUGIN_ID: &str = "dev.asterlyn.lsp";
-const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.1.0";
-const BUNDLED_LSP_REPOSITORY: &str = "guozhiqiang123/asterlyn-plugin-lsp";
-const BUNDLED_LSP_PACKAGE_DIGEST: &str =
-    "sha256:2a3cec68eb06fd13ece09f3935e15fda30ef853ee4d240c4c3bf9d1e82cbe6d9";
-const BUNDLED_LSP_PACKAGE: &[u8] = include_bytes!(
-    "../../resources/plugins/asterlyn-plugin-lsp-0.1.0.asterlyn-plugin.tgz"
-);
+use self::bundled::*;
 
 use crate::application::{
     PendingPluginAdmission, PluginMarketplaceCoordinator, PluginProcessQueryManager,
@@ -48,6 +34,8 @@ use super::plugin_marketplace_cleanup::{cleanup_marketplace_storage, remove_mark
 use super::plugin_marketplace_verification::{
     inspect_verified_installed_package, verify_installed_package_archive_path,
 };
+
+mod bundled;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -655,115 +643,14 @@ fn ensure_bundled_android_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
 ) -> Result<PluginInstallationSnapshot, String> {
-    ensure_bundled_package(
-        marketplace_root,
-        bytes,
-        BUNDLED_ANDROID_PLUGIN_ID,
-        BUNDLED_ANDROID_PLUGIN_VERSION,
-        BUILT_IN_ANDROID_REPOSITORY,
-        BUNDLED_ANDROID_PACKAGE_DIGEST,
-        "Android",
-    )
+    bundled::ensure_bundled_android_package(marketplace_root, bytes)
 }
 
 fn ensure_bundled_lsp_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
 ) -> Result<PluginInstallationSnapshot, String> {
-    ensure_bundled_package(
-        marketplace_root,
-        bytes,
-        BUNDLED_LSP_PLUGIN_ID,
-        BUNDLED_LSP_PLUGIN_VERSION,
-        BUNDLED_LSP_REPOSITORY,
-        BUNDLED_LSP_PACKAGE_DIGEST,
-        "LSP",
-    )
-}
-
-fn ensure_bundled_package(
-    marketplace_root: &std::path::Path,
-    bytes: &[u8],
-    expected_plugin_id: &str,
-    expected_version: &str,
-    repository: &str,
-    expected_digest: &str,
-    label: &str,
-) -> Result<PluginInstallationSnapshot, String> {
-    let package_digest = format!("sha256:{:x}", Sha256::digest(bytes));
-    if package_digest != expected_digest {
-        return Err(format!("bundled {label} plugin package does not match the host-pinned digest"));
-    }
-    let context = admission_context(repository, expected_version);
-    let report = inspect_package(bytes, &context).map_err(|error| error.to_string())?;
-    if report.plugin_id != expected_plugin_id || report.plugin_version != expected_version
-    {
-        return Err(format!("bundled {label} plugin identity does not match the host binding"));
-    }
-    validate_external_tool_authority(
-        PluginToolAuthorityIdentity {
-            repository,
-            plugin_id: &report.plugin_id,
-            plugin_version: &report.plugin_version,
-            package_digest: &package_digest,
-        },
-        report.management_manifest.schema_version,
-        &report.management_manifest.host_operations,
-        &report.management_manifest.process_queries,
-        &report.management_manifest.tool_operations,
-    )?;
-
-    let digest_key = package_digest
-        .strip_prefix("sha256:")
-        .expect("computed package digest has a prefix");
-    let package_root = marketplace_root
-        .join("packages")
-        .join(expected_plugin_id)
-        .join(expected_version)
-        .join(digest_key);
-    let installed_is_valid = package_root.exists()
-        && inspect_extracted_package(&package_root, &context)
-            .is_ok_and(|installed| installed.content_digest == report.content_digest);
-    if package_root.exists() && !installed_is_valid {
-        remove_marketplace_entry(&package_root)?;
-    }
-    if !package_root.exists() {
-        fs::create_dir_all(
-            package_root
-                .parent()
-                .ok_or("invalid bundled plugin storage path")?,
-        )
-        .map_err(|error| format!("create bundled plugin storage: {error}"))?;
-        let temporary = package_root.with_extension(format!("bundled-staging-{}", now_ms()));
-        extract_admitted_package(bytes, &context, &temporary).map_err(|error| error.to_string())?;
-        publish_sealed_package_tree(&temporary, &package_root, "bundled plugin package")?;
-    } else {
-        seal_package_tree(&package_root)?;
-    }
-
-    let archive = package_root.with_file_name(format!("{digest_key}.asterlyn-plugin.tgz"));
-    if archive.exists() {
-        let retained =
-            fs::read(&archive).map_err(|error| format!("read bundled plugin archive: {error}"))?;
-        if format!("sha256:{:x}", Sha256::digest(&retained)) != package_digest {
-            remove_marketplace_entry(&archive)?;
-        }
-    }
-    retain_package_archive(&archive, bytes, &package_digest)?;
-
-    PluginInstallationStore::open(marketplace_root.join("installation-state"))
-        .map_err(|error| error.to_string())?
-        .record_bundled(
-            AdmittedPluginIdentity {
-                plugin_id: expected_plugin_id,
-                repository,
-                version: expected_version,
-                package_digest: &package_digest,
-                content_digest: &report.content_digest,
-            },
-            now_ms(),
-        )
-        .map_err(|error| error.to_string())
+    bundled::ensure_bundled_lsp_package(marketplace_root, bytes)
 }
 
 fn review_from(admission: &PendingPluginAdmission) -> PluginPackageAdmissionReview {
@@ -1281,17 +1168,38 @@ mod tests {
     fn bundled_lsp_package_is_admitted_enabled_and_sealed_offline() {
         let directory = tempfile::tempdir().unwrap();
         let snapshot = ensure_bundled_lsp_package(directory.path(), BUNDLED_LSP_PACKAGE).unwrap();
-        let plugin = snapshot.plugins.iter().find(|plugin| plugin.plugin_id == BUNDLED_LSP_PLUGIN_ID).unwrap();
+        let plugin = snapshot
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == BUNDLED_LSP_PLUGIN_ID)
+            .unwrap();
         assert!(plugin.enabled);
         assert!(plugin.bundled_fallback);
-        let version = plugin.versions.iter().find(|version| version.version == BUNDLED_LSP_PLUGIN_VERSION).unwrap();
+        let version = plugin
+            .versions
+            .iter()
+            .find(|version| version.version == BUNDLED_LSP_PLUGIN_VERSION)
+            .unwrap();
         assert_eq!(version.package_digest, BUNDLED_LSP_PACKAGE_DIGEST);
         assert!(version.content_digest.is_some());
-        let root = directory.path().join("packages").join(BUNDLED_LSP_PLUGIN_ID).join(BUNDLED_LSP_PLUGIN_VERSION).join(BUNDLED_LSP_PACKAGE_DIGEST.trim_start_matches("sha256:"));
+        let root = directory
+            .path()
+            .join("packages")
+            .join(BUNDLED_LSP_PLUGIN_ID)
+            .join(BUNDLED_LSP_PLUGIN_VERSION)
+            .join(BUNDLED_LSP_PACKAGE_DIGEST.trim_start_matches("sha256:"));
         assert!(root.join("runtime/plugin.js").is_file());
         assert!(root.join("servers/typescript/server.mjs").is_file());
-        assert!(root.join("servers/typescript/typescript/lib/tsserver.js").is_file());
-        assert_eq!(ensure_bundled_lsp_package(directory.path(), BUNDLED_LSP_PACKAGE).unwrap().generation, snapshot.generation);
+        assert!(
+            root.join("servers/typescript/typescript/lib/tsserver.js")
+                .is_file()
+        );
+        assert_eq!(
+            ensure_bundled_lsp_package(directory.path(), BUNDLED_LSP_PACKAGE)
+                .unwrap()
+                .generation,
+            snapshot.generation
+        );
     }
 
     #[test]
