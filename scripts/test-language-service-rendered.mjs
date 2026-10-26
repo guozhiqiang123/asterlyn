@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 
-const server = await createServer({ root: process.cwd(), server: { host: "127.0.0.1", port: 0, hmr: false }, plugins: [{ name: "language-service-fixture", configureServer(vite) { vite.middlewares.use("/__language_service", (_request, response) => { response.setHeader("Content-Type", "text/html"); response.end(`<!doctype html><html><head><script type="module">import "/src/styles.css";</script></head><body><main id="editor" style="width:900px;height:500px"></main></body></html>`); }); } }] });
+const server = await createServer({ root: process.cwd(), server: { host: "127.0.0.1", port: 0, hmr: false }, plugins: [{ name: "language-service-fixture", resolveId(id) { return id === "/__lsp_test_api.ts" ? id : null; }, load(id) { return id === "/__lsp_test_api.ts" ? `export { undo } from "@codemirror/commands"; export { startCompletion } from "@codemirror/autocomplete";` : null; }, configureServer(vite) { vite.middlewares.use("/__language_service", (_request, response) => { response.setHeader("Content-Type", "text/html"); response.end(`<!doctype html><html><head><script type="module">import "/src/styles.css";</script></head><body><main id="editor" style="width:900px;height:500px"></main></body></html>`); }); } }] });
 await server.listen();
 const address = server.httpServer.address();
 const browser = await chromium.launch();
@@ -10,7 +10,7 @@ try {
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${address.port}/__language_service`, { waitUntil: "domcontentloaded", timeout: 10000 });
   await page.evaluate(async () => {
-    const [{ TextEditor }, { DEFAULT_APP_PREFERENCES }, { EN_US }, { startCompletion }, { undo }] = await Promise.all([import("/src/text-editor.ts"), import("/src/preferences.ts"), import("/src/localization/en-US.ts"), import("/node_modules/@codemirror/autocomplete/dist/index.js"), import("/node_modules/@codemirror/commands/dist/index.js")]);
+    const [{ TextEditor }, { DEFAULT_APP_PREFERENCES }, { EN_US }, { startCompletion, undo }] = await Promise.all([import("/src/text-editor.ts"), import("/src/preferences.ts"), import("/src/localization/en-US.ts"), import("/__lsp_test_api.ts")]);
     const events = [];
     let diagnosticsListener = null;
     const port = {
@@ -37,7 +37,9 @@ try {
   assert.equal(completed.result, "answer", `completion result missing: ${completed.text}`);
   const completionText = await page.evaluate(() => window.languageServiceFixture.editor.activeEntry().view.state.doc.toString());
   assert.match(completionText, /answer/, "completion text edit was applied");
-  await page.evaluate(() => window.languageServiceFixture.diagnosticsListener?.({ handle: { tabId: "tab-a", path: "/repo/main.ts", loadEpoch: 1 }, version: 3, diagnostics: [{ message: "test diagnostic", severity: 1, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } } }] }));
+  const undone = await page.evaluate(() => { const view = window.languageServiceFixture.editor.activeEntry().view; view.focus(); window.languageServiceFixture.undo(view); return view.state.doc.toString(); });
+  assert.doesNotMatch(undone, /answer/, "completion edit is undoable");
+  await page.evaluate(() => window.languageServiceFixture.diagnosticsListener?.({ handle: { tabId: "tab-a", path: "/repo/main.ts", loadEpoch: 1 }, version: 4, diagnostics: [{ message: "test diagnostic", severity: 1, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } } }] }));
   await page.waitForSelector(".cm-lintRange", { timeout: 10000 });
   await page.evaluate(() => window.languageServiceFixture.editor.setReadOnly(true));
   assert.equal(await page.evaluate(() => window.languageServiceFixture.events.at(-1).type), "close", "read-only transition closes the service");
