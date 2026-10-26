@@ -16,6 +16,7 @@ import {
   NOOP_CONTEXT_MENU_PORT,
   type ContextMenuPort,
 } from "../../shared/context-menu/context-menu-model.ts";
+import type { EditorLanguageServicePortFactory } from "../../protocol/editor-language-service.ts";
 
 type TextMount = {
   parent: HTMLElement;
@@ -58,6 +59,7 @@ export class LazyTextEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private readonly contextMenu: ContextMenuPort;
+  private languageServiceFactory: EditorLanguageServicePortFactory | null = null;
   constructor(
     blameRuntime: GitBlameRuntime,
     blameCopy: EditorCopy,
@@ -120,6 +122,7 @@ export class LazyTextEditor {
       if (!mount.parent.isConnected) return;
       mount.parent.removeAttribute("aria-busy");
       editor.setReadOnly(this.readOnly);
+      editor.setLanguageServices(this.languageServiceFactory);
       editor.setPreferences(this.preferences ?? mount.preferences);
       editor.setTheme(this.theme);
       editor.setPhrases(this.phrases);
@@ -211,6 +214,11 @@ export class LazyTextEditor {
     this.implementation?.setReadOnly(readOnly);
   }
 
+  setLanguageServices(factory: EditorLanguageServicePortFactory | null): void {
+    this.languageServiceFactory = factory;
+    this.implementation?.setLanguageServices(factory);
+  }
+
   setPreferences(preferences: AppPreferences): void {
     this.preferences = { ...preferences };
     this.implementation?.setPreferences(preferences);
@@ -283,6 +291,7 @@ export class LazyTextEditor {
           this.blameCopy,
           this.contextMenu,
         );
+        editor.setLanguageServices(this.languageServiceFactory);
         this.implementation = editor;
         return editor;
       });

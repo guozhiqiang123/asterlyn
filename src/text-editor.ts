@@ -7,11 +7,14 @@ import { foldGutter, foldKeymap, indentUnit } from "@codemirror/language";
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import { asterlynSearch } from "./editor-search";
 import { Compartment, EditorState, type Text, type TransactionSpec } from "@codemirror/state";
+import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
 import {
   drawSelection,
   EditorView,
   highlightActiveLine,
   highlightActiveLineGutter,
+  hoverTooltip,
   keymap,
 } from "@codemirror/view";
 import { withEditorFolding } from "./editor-folding";
@@ -54,6 +57,7 @@ import {
   applyEditorPreferences,
   codeMirrorFocusOwnership,
 } from "./features/files-editor/editor-runtime-shared.ts";
+import type { EditorLanguageServiceHandle, EditorLanguageServicePort, EditorLanguageServicePortFactory, EditorLanguageServiceDiagnostic, EditorLanguageServicePosition, EditorLanguageServiceCompletionItem, EditorLanguageServiceLocation } from "./protocol/editor-language-service.ts";
 
 interface CachedTextEditor {
   id: string;
@@ -84,6 +88,11 @@ interface CachedTextEditor {
   changePending: boolean;
   changeFrame: number | null;
   blameController: GitBlamePaneController;
+  languageServices: Compartment;
+  languageServicePort: EditorLanguageServicePort | null;
+  languageServiceHandle: EditorLanguageServiceHandle;
+  languageServiceVersion: number;
+  disposeLanguageDiagnostics: (() => void) | null;
 }
 
 /**
@@ -100,6 +109,7 @@ export class TextEditor {
   private phrasesValue: Readonly<Record<string, string>> = {};
   private synchronizing = false;
   private scrollRestorationGeneration = 0;
+  private languageServiceFactory: EditorLanguageServicePortFactory | null = null;
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -127,6 +137,7 @@ export class TextEditor {
     ) {
       const loadEpochChanged = active.loadEpoch !== loadEpoch;
       active.loadEpoch = loadEpoch;
+      active.languageServiceHandle = { tabId, path, loadEpoch };
       active.onChange = onChange;
       active.changeIndicators.setBaseline(active.view, baselineContent);
       active.changeIndicators.setCopy(active.view, editorChangeIndicatorCopy(this.blameCopy));
@@ -151,6 +162,7 @@ export class TextEditor {
           }
         }
         this.restoreScroll(active.view.scrollDOM, prevScrollTop, prevScrollLeft);
+        this.refreshLanguageService(active);
       }
       this.updateBaseline(active, baselineContent);
       active.view.requestMeasure();
@@ -168,6 +180,7 @@ export class TextEditor {
     }
     if (entry && entry.loadEpoch !== loadEpoch) {
       entry.loadEpoch = loadEpoch;
+      entry.languageServiceHandle = { tabId, path, loadEpoch };
       const decoded = decodeExactText(content);
       entry.exactContent = decoded;
       entry.separatorCounts = countLineSeparators(decoded.separators);
@@ -177,6 +190,7 @@ export class TextEditor {
         const change = computeTextChange(currentText, decoded.text);
         if (change) entry.state = entry.state.update({ changes: change }).state;
       }
+      this.refreshLanguageService(entry);
     }
     if (!entry) {
       entry = this.createEntry(
@@ -323,7 +337,13 @@ export class TextEditor {
         entry.readOnly.reconfigure(EditorState.readOnly.of(readOnly)),
         entry.editable.reconfigure(EditorView.editable.of(!readOnly)),
       ]);
+      this.refreshLanguageService(entry);
     }
+  }
+
+  setLanguageServices(factory: EditorLanguageServicePortFactory | null): void {
+    this.languageServiceFactory = factory;
+    for (const entry of this.entries.values()) this.refreshLanguageService(entry);
   }
 
   setPreferences(preferences: AppPreferences): void {
@@ -426,6 +446,8 @@ export class TextEditor {
     if (entry.changeFrame !== null) window.cancelAnimationFrame(entry.changeFrame);
     entry.languageActivation += 1;
     entry.languageLoader.cancel();
+    entry.disposeLanguageDiagnostics?.();
+    entry.languageServicePort?.close(entry.languageServiceHandle);
     entry.blameController.destroy();
     if (entry.view) {
       const dom = entry.view.dom;
@@ -459,6 +481,8 @@ export class TextEditor {
     const theme = new Compartment();
     const phrases = new Compartment();
     const blame = new Compartment();
+    const languageServices = new Compartment();
+    const languageServiceHandle = { tabId: id, path, loadEpoch };
     const changeIndicators = createEditorChangeIndicators(
       baselineContent,
       editorChangeIndicatorCopy(this.blameCopy),
@@ -496,6 +520,11 @@ export class TextEditor {
       blameController: new GitBlamePaneController(
         this.blameRuntime, this.blameCopy, this.contextMenu, "editor.text.git-blame",
       ),
+      languageServices,
+      languageServicePort: null,
+      languageServiceHandle,
+      languageServiceVersion: 1,
+      disposeLanguageDiagnostics: null,
     };
     this.updateBlameAvailability(entry, blameSource, blameUnavailableReason);
     entry.state = EditorState.create({
@@ -523,6 +552,7 @@ export class TextEditor {
         highlightSelectionMatches(),
         theme.of(asterlynEditorTheme(this.themeValue)),
         phrases.of(EditorState.phrases.of(this.phrasesValue)),
+        languageServices.of([]),
         asterlynSyntaxHighlighting,
         keymap.of([
           ...foldKeymap,
@@ -533,6 +563,10 @@ export class TextEditor {
         EditorView.updateListener.of((update) => {
           entry.state = update.state;
           if (!update.docChanged || this.synchronizing) return;
+          if (entry.languageServicePort && !this.readOnlyValue) {
+            entry.languageServiceVersion += 1;
+            entry.languageServicePort.update(entry.languageServiceHandle, { version: entry.languageServiceVersion, text: update.state.doc.toString() });
+          }
           this.invalidateBlameForEdit(entry);
           const changes: LineSeparatorChange[] = [];
           update.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
@@ -554,7 +588,79 @@ export class TextEditor {
     entry.baselineText = content === baselineContent
       ? entry.state.doc
       : EditorState.create({ doc: decodeExactText(baselineContent).text }).doc;
+    this.refreshLanguageService(entry);
     return entry;
+  }
+
+  private refreshLanguageService(entry: CachedTextEditor): void {
+    entry.disposeLanguageDiagnostics?.();
+    entry.disposeLanguageDiagnostics = null;
+    entry.languageServicePort?.close(entry.languageServiceHandle);
+    const next = this.readOnlyValue ? null : this.languageServiceFactory?.(entry.languageServiceHandle) ?? null;
+    entry.languageServicePort = next;
+    this.dispatchEffects(entry, [entry.languageServices.reconfigure(next ? this.languageServiceExtensions(entry) : [])]);
+    if (!next) return;
+    entry.languageServiceVersion = 1;
+    next.open(entry.languageServiceHandle, { version: 1, text: entry.state.doc.toString() });
+    entry.disposeLanguageDiagnostics = next.subscribeDiagnostics((event) => {
+      if (event.handle.tabId !== entry.id || event.handle.loadEpoch !== entry.loadEpoch || event.version < entry.languageServiceVersion || !entry.view) return;
+      entry.view.dispatch(setDiagnostics(entry.view.state, event.diagnostics.map((diagnostic) => this.toCodeMirrorDiagnostic(entry.view!, diagnostic))));
+    });
+  }
+
+  private toCodeMirrorDiagnostic(view: EditorView, diagnostic: EditorLanguageServiceDiagnostic): Diagnostic {
+    const position = (value: EditorLanguageServicePosition): number => {
+      const line = view.state.doc.line(Math.min(view.state.doc.lines, Math.max(1, value.line + 1)));
+      return Math.min(line.to, line.from + Math.max(0, value.character));
+    };
+    return { from: position(diagnostic.range.start), to: position(diagnostic.range.end), severity: diagnostic.severity === 1 ? "error" : diagnostic.severity === 2 ? "warning" : "info", message: diagnostic.message, source: diagnostic.source };
+  }
+
+  private languageServiceExtensions(entry: CachedTextEditor) {
+    const port = entry.languageServicePort;
+    if (!port) return [];
+    return [
+      lintGutter(),
+      autocompletion({ override: [(context) => this.complete(entry, context)] }),
+      hoverTooltip((view, pos) => this.hover(entry, view, pos)),
+      keymap.of([{ key: "F12", run: (view) => { void this.definition(entry, view); return true; } }]),
+    ];
+  }
+
+  private async hover(entry: CachedTextEditor, view: EditorView, pos: number) {
+    const port = entry.languageServicePort;
+    if (!port || this.readOnlyValue) return null;
+    const version = entry.languageServiceVersion;
+    const line = view.state.doc.lineAt(pos);
+    const response = await port.request<{ contents?: unknown }>(entry.languageServiceHandle, "textDocument/hover", { position: { line: line.number - 1, character: pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
+    if (!response || entry.languageServicePort !== port || entry.languageServiceVersion !== version) return null;
+    const plain = typeof response.contents === "string" ? response.contents : Array.isArray(response.contents) ? response.contents.map((item) => typeof item === "string" ? item : (item as { value?: string }).value ?? "").join("\n") : (response.contents as { value?: string } | undefined)?.value ?? "";
+    if (!plain) return null;
+    return { pos, end: pos, above: true, create: () => { const dom = document.createElement("div"); dom.className = "cm-tooltip-language-service"; dom.textContent = plain; return { dom }; } };
+  }
+
+  private async definition(entry: CachedTextEditor, view: EditorView): Promise<void> {
+    const port = entry.languageServicePort;
+    if (!port || this.readOnlyValue) return;
+    const version = entry.languageServiceVersion;
+    const pos = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(pos);
+    const response = await port.request<EditorLanguageServiceLocation | readonly EditorLanguageServiceLocation[]>(entry.languageServiceHandle, "textDocument/definition", { position: { line: line.number - 1, character: pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
+    if (!response || entry.languageServicePort !== port || entry.languageServiceVersion !== version) return;
+    const location = Array.isArray(response) ? response[0] : response;
+    if (location) port.navigate?.(location);
+  }
+
+  private async complete(entry: CachedTextEditor, context: CompletionContext): Promise<CompletionResult | null> {
+    const port = entry.languageServicePort;
+    if (!port || this.readOnlyValue) return null;
+    const version = entry.languageServiceVersion;
+    const line = context.state.doc.lineAt(context.pos);
+    const response = await port.request<{ items?: readonly EditorLanguageServiceCompletionItem[] }>(entry.languageServiceHandle, "textDocument/completion", { position: { line: line.number - 1, character: context.pos - line.from }, textDocument: { uri: `file://${entry.path}` } }, version);
+    if (!response || entry.languageServicePort !== port || entry.languageServiceVersion !== version) return null;
+    const match = context.matchBefore(/[\w$]*/);
+    const from = match?.from ?? context.pos;
+    return { from, options: (response.items ?? []).filter((item) => item.insertTextFormat !== 2 && !item.textEdit?.range).map((item) => ({ label: item.label, detail: item.detail, type: "text", apply: (view: EditorView, _completion: unknown, _from: number, to: number) => { if (entry.languageServiceVersion !== version || entry.languageServicePort !== port) return; view.dispatch({ changes: { from, to, insert: item.insertText ?? item.label }, userEvent: "input.complete" }); } })) };
   }
 
   private invalidateBlameForEdit(entry: CachedTextEditor): void {

@@ -10,6 +10,7 @@ import {
 import type { EditorRuntimeTabRemap } from "../../editor-path-mutation.ts";
 import type { AppPreferences } from "../../preferences.ts";
 import type { EffectiveTheme } from "../../presentation/presentation-environment.ts";
+import type { EditorLanguageServicePortFactory } from "../../protocol/editor-language-service.ts";
 import { MARKDOWN_PREVIEW_MAX_BYTES } from "./markdown-format.ts";
 import type { ConflictGitBlameSources, DiffGitBlameSources, GitBlameAvailability, GitBlameRuntime } from "./editor-gutter.ts";
 import { LazyDiffEditor, LazyTextEditor } from "./lazy-editor-runtime.ts";
@@ -162,6 +163,10 @@ export class EditorSurface {
 
   setReadOnly(readOnly: boolean): void {
     this.textEditor.setReadOnly(readOnly);
+  }
+
+  setLanguageServices(factory: EditorLanguageServicePortFactory | null): void {
+    this.textEditor.setLanguageServices(factory);
   }
 
   setPreferences(preferences: AppPreferences): void {
