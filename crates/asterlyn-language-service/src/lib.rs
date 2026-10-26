@@ -9,6 +9,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ pub const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_PENDING_REQUESTS: usize = 128;
 pub const TYPESCRIPT_SERVER_ENTRY: &str = "servers/typescript/server.mjs";
 pub const TYPESCRIPT_IMPL_ENTRY: &str = "servers/typescript/typescript/lib/tsserver.js";
+pub const MAX_EVENTS: usize = 256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrameError {
@@ -206,6 +208,13 @@ pub enum SessionError {
     Process(String),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ServerEvent {
+    Message(JsonRpcMessage),
+    Eof,
+    Io(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeScriptServerProfile {
     pub package_root: PathBuf,
@@ -238,7 +247,8 @@ impl TypeScriptServerProfile {
 pub struct LanguageServiceProcess {
     child: Child,
     session: LanguageServiceSession<ChildStdin>,
-    stdout: ChildStdout,
+    events: Receiver<ServerEvent>,
+    buffered: Vec<JsonRpcMessage>,
 }
 
 impl LanguageServiceProcess {
@@ -261,10 +271,16 @@ impl LanguageServiceProcess {
             .stdout
             .take()
             .ok_or_else(|| SessionError::Process("language server stdout unavailable".into()))?;
+        let (sender, events) = sync_channel(MAX_EVENTS);
+        spawn_reader(stdout, sender);
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::spawn(move || drain_stderr(stderr));
+        }
         Ok(Self {
             child,
             session: LanguageServiceSession::new(stdin),
-            stdout,
+            events,
+            buffered: Vec::new(),
         })
     }
 
@@ -283,13 +299,11 @@ impl LanguageServiceProcess {
         self.session.cancel(id)
     }
     pub fn read_message(&mut self) -> Result<Option<JsonRpcMessage>, SessionError> {
-        let Some(body) = read_frame(&mut self.stdout)
-            .map_err(|error| SessionError::Process(format!("read language server: {error:?}")))?
-        else {
-            return Ok(None);
+        let message = match self.next_event(Duration::from_secs(30))? {
+            ServerEvent::Message(message) => message,
+            ServerEvent::Eof => return Ok(None),
+            ServerEvent::Io(error) => return Err(SessionError::Process(error)),
         };
-        let message = serde_json::from_slice(&body)
-            .map_err(|error| SessionError::InvalidMessage(error.to_string()))?;
         let protocol = match &message {
             JsonRpcMessage::Request(value) => &value.jsonrpc,
             JsonRpcMessage::Response(value) => &value.jsonrpc,
@@ -330,6 +344,47 @@ impl LanguageServiceProcess {
         }
         Ok(Some(message))
     }
+    pub fn next_event(&mut self, timeout: Duration) -> Result<ServerEvent, SessionError> {
+        if let Some(message) = self.buffered.pop() {
+            return Ok(ServerEvent::Message(message));
+        }
+        self.events
+            .recv_timeout(timeout)
+            .map_err(|error| match error {
+                std::sync::mpsc::RecvTimeoutError::Timeout => SessionError::InvalidMessage(
+                    "language server response deadline exceeded".into(),
+                ),
+                std::sync::mpsc::RecvTimeoutError::Disconnected => SessionError::Closed,
+            })
+    }
+    pub fn request_wait(
+        &mut self,
+        method: &str,
+        params: Option<Value>,
+        timeout: Duration,
+    ) -> Result<JsonRpcResponse, SessionError> {
+        let id = self.request(method, params)?;
+        let deadline = Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                let _ = self.cancel(id);
+                return Err(SessionError::InvalidMessage(
+                    "language server response deadline exceeded".into(),
+                ));
+            }
+            match self.next_event(remaining)? {
+                ServerEvent::Message(JsonRpcMessage::Response(response))
+                    if response.id == JsonRpcId::Number(id) =>
+                {
+                    return Ok(response);
+                }
+                ServerEvent::Message(message) => self.buffered.insert(0, message),
+                ServerEvent::Eof => return Err(SessionError::Closed),
+                ServerEvent::Io(error) => return Err(SessionError::Process(error)),
+            }
+        }
+    }
     pub fn stop(&mut self) -> Result<(), SessionError> {
         self.session.close();
         let _ = self.child.kill();
@@ -337,6 +392,47 @@ impl LanguageServiceProcess {
             .wait()
             .map_err(|error| SessionError::Process(format!("wait language server: {error}")))?;
         Ok(())
+    }
+}
+
+fn spawn_reader(mut stdout: ChildStdout, sender: SyncSender<ServerEvent>) {
+    std::thread::spawn(move || {
+        loop {
+            match read_frame(&mut stdout) {
+                Ok(Some(body)) => match serde_json::from_slice::<JsonRpcMessage>(&body) {
+                    Ok(message) => {
+                        if sender.send(ServerEvent::Message(message)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = sender
+                            .send(ServerEvent::Io(format!("invalid server JSON-RPC: {error}")));
+                        break;
+                    }
+                },
+                Ok(None) => {
+                    let _ = sender.send(ServerEvent::Eof);
+                    break;
+                }
+                Err(error) => {
+                    let _ =
+                        sender.send(ServerEvent::Io(format!("server framing error: {error:?}")));
+                    break;
+                }
+            }
+        }
+    });
+}
+
+fn drain_stderr<R: Read>(mut stderr: R) {
+    let mut buffer = [0_u8; 4096];
+    let mut total = 0usize;
+    while total < 64 * 1024 {
+        match stderr.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => total += read.min(64 * 1024 - total),
+        }
     }
 }
 
