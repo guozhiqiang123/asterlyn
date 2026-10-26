@@ -65,4 +65,8 @@ evidence. Remote hosting and arbitrary executable/configuration providers requir
 ## Execution record
 
 - H0: plan and frozen first-provider contract recorded before implementation.
-- H1–H4: pending.
+- H1: additive SDK 1.11.0 language-service metadata, complete TypeScript/native projection,
+  admission capability/permission IDs, registry guards, and refreshed canonical template SDK
+  artifact/checksum are implemented and tested in commit `3866ae8`. Runtime execution/session,
+  editor integration, and real-server acceptance remain pending H2–H4.
+- H2–H4: pending.
