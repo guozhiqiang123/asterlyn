@@ -14,6 +14,14 @@ pub(crate) struct LanguageServiceReview {
     pub plugin_id: String,
     pub server_id: &'static str,
 }
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LanguageServiceResultEnvelope {
+    pub session_id: String,
+    pub uri: String,
+    pub version: i64,
+    pub result: serde_json::Value,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -179,17 +187,24 @@ pub(crate) fn request_language_service(
     session_id: String,
     uri: String,
     feature: String,
+    version: i64,
     line: u32,
     character: u32,
     manager: State<'_, LanguageServiceManager>,
-) -> Result<u64, String> {
+) -> Result<LanguageServiceResultEnvelope, String> {
+    if version < 1 || !uri.starts_with("file://") {
+        return Err("invalid language document identity".into());
+    }
     let method = match feature.as_str() {
         "hover" => "textDocument/hover",
         "definition" => "textDocument/definition",
         "completion" => "textDocument/completion",
         _ => return Err("unsupported language-service feature".into()),
     };
-    manager.with(&session_id, |process| process.request(method, Some(serde_json::json!({"textDocument":{"uri":uri},"position":{"line":line,"character":character}}))).map_err(|e| format!("{e:?}")))
+    manager.with(&session_id, |process| {
+        let response = process.request_wait(method, Some(serde_json::json!({"textDocument":{"uri":uri},"position":{"line":line,"character":character}})), std::time::Duration::from_secs(10)).map_err(|e| format!("{e:?}"))?;
+        Ok(LanguageServiceResultEnvelope { session_id, uri, version, result: response.result.or_else(|| response.error.map(|error| serde_json::json!({"error": error.message}))).unwrap_or(serde_json::Value::Null) })
+    })
 }
 
 #[tauri::command]
