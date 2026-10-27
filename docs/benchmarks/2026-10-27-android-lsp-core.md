@@ -64,3 +64,7 @@ Local structured evidence is under `/tmp/asterlyn-android-lsp`. Signed build/ins
 The desktop boundary also maps the new profile-neutral native indexing state to the existing
 informational loading UI (retaining legacy Rust compatibility), so clicking during initial model
 work does not produce an operation-failed toast. Focused state-projection regression passes.
+
+A changed input or selected configuration revokes the previous native model lease before waiting
+for replacement work. Detection uses the bounded 5-second model poll; responses from the old actor
+model generation are rejected while importing/indexing the replacement.

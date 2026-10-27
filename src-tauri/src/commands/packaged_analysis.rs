@@ -359,13 +359,14 @@ pub(super) fn model_access(
                 ),
                 tool_digest: tool_digest.clone(),
             };
-            if refresh {
-                runtime.invalidate(|old| {
-                    old.scope == key.scope
-                        && old.producer.id == key.producer.id
-                        && old.service == key.service
-                });
-            }
+            // Once a new selection/input identity is observed, revoke the old artifact before
+            // waiting for replacement work. Its actor must not keep serving the previous variant.
+            runtime.invalidate(|old| {
+                old.scope == key.scope
+                    && old.producer.id == key.producer.id
+                    && old.service == key.service
+                    && (refresh || old != &key)
+            });
             let grant = ModelGrant::admit(&snapshot.view(), consumer.clone(), key)
                 .map_err(|_| "workspace model authority is unavailable")?;
             let input = json!({"protocolVersion":1,"workspaceRoot":owner.root,"state":state,"tools":admitted_resources["tools"],"components":admitted_resources["components"],"inputDigest":fingerprint});
