@@ -47,3 +47,18 @@ strict native lib clippy passed, using an isolated target/TMPDIR. This establish
 handling only; final plugin and installed-project acceptance remain required.
 
 Reference: [LSP response errors](https://github.com/microsoft/language-server-protocol/blob/gh-pages/_specifications/lsp/3.18/specification.md).
+
+## Packaged language recovery
+
+Android provider 0.6.1 imports all 25 modules and 1,438 compile entries without unresolved main
+artifacts. LSP 0.3.4 adds lazy closed-file Kotlin compilation, complete initial private overlays,
+version/context-checked diagnostic caching, effective KAPT source digests and current Java syntax
+feedback while Kotlin ABI is rebuilding. Generic native handling contains no Android compiler logic.
+
+Bundled LSP archive: 5,078,737 bytes, SHA-256
+`9f8c14cd4bf9f8d581af2dc43e88fe400a543a0aa946dd6bb9398107c306c561`.
+The exact extracted archive passes all 12 mixed fixture checks, including unsaved signatures in both
+language directions, dirty diagnostics, saved-buffer reopening, variant/model replacement, module
+isolation and owned Kotlin crash recovery. Java syntax feedback while Kotlin is invalid took 37 ms.
+Native inspector/helper/desktop-validator/contribution routing also passes. Real-project final
+measurements and canonical installed acceptance are appended after completion.
