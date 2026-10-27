@@ -242,3 +242,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-27-plugin-dependencies-c1.md`](benchmarks/2026-10-27-plugin-dependencies-c1.md) — required dependency transactions, LSP→Android enablement lock and C1 regression evidence.
 
 - [`benchmarks/2026-10-27-plugin-model-kernel.md`](benchmarks/2026-10-27-plugin-model-kernel.md) — C2a bounded job/reference kernel and first real plugin-owned AGP model evidence.
+
+- [`benchmarks/2026-10-27-plugin-cooperation-delivery.md`](benchmarks/2026-10-27-plugin-cooperation-delivery.md) — staged C1/C2a/C3a commits, final signed installation, exact-plugin health checkpoint and remaining Android LSP gates.

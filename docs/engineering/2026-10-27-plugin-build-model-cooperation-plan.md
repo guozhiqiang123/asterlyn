@@ -78,3 +78,5 @@ C2b 再接受监督的附属程序和磁盘制品；C2c 才公开 SDK/包声明�
 
 C3a 已用独立 AGP V2 探针在 boostCleaner 的 :common/cleanx100Debug 取到真实模型（8 个源码目录、1 个 boot classpath、56 个存在的编译依赖、0 未解析），5.1 秒左右；探针和规范化 schema 归 Android 插件。
 探针是开发工具，尚未打入生产包；依赖模块图、生成源码、取消过程整树回收和 C4 后端消费仍未验收。
+
+本轮已完成 C1 的原生交付；C2a 与 C3a 作为可复核基础分步提交。最终包、安装和剩余闸门见 [本轮交付证据](../benchmarks/2026-10-27-plugin-cooperation-delivery.md)。C2b/C2c/C3 完整模型/C4 均未标记完成。
