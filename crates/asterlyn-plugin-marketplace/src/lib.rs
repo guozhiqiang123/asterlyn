@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+mod dependencies;
+pub use asterlyn_plugin_dependencies::PluginDependency;
+pub use dependencies::{dependency_nodes, ensure_enabled_dependencies};
 mod installation_identity;
 mod installation_recording;
 pub use installation_identity::AdmittedPluginIdentity;
@@ -84,6 +87,8 @@ pub struct PluginSourceSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdmittedPluginVersion {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependencies: Vec<PluginDependency>,
     pub version: String,
     pub package_digest: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -105,6 +110,8 @@ pub enum PluginRuntimeStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledPlugin {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_dependencies: Vec<PluginDependency>,
     pub plugin_id: String,
     pub repository: String,
     pub enabled: bool,
@@ -470,123 +477,25 @@ impl PluginInstallationStore {
         }
     }
 
-    pub fn set_plugin_enabled(
-        &self,
-        plugin_id: &str,
-        enabled: bool,
-    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
-        let snapshot = self.snapshot()?;
-        let mut plugins = snapshot.plugins;
-        let plugin = plugins
-            .iter_mut()
-            .find(|plugin| plugin.plugin_id == plugin_id)
-            .ok_or_else(|| MarketplaceError::NotFound(plugin_id.into()))?;
-        if plugin.enabled == enabled {
-            return Ok(PluginInstallationSnapshot {
-                plugins,
-                ..snapshot
-            });
-        }
-        if !enabled {
-            let abandoned = plugin
-                .versions
-                .iter_mut()
-                .filter(|version| version.runtime_status == PluginRuntimeStatus::Active)
-                .map(|version| {
-                    version.runtime_status = PluginRuntimeStatus::PendingRuntime;
-                    version.version.clone()
-                })
-                .collect::<Vec<_>>();
-            plugin.active_version = plugin.known_good_version.clone();
-            if plugin.pending_version.is_none() {
-                plugin.pending_version = abandoned.first().cloned();
-            }
-        } else if plugin.pending_version.is_none() {
-            plugin.pending_version = plugin
-                .active_version
-                .clone()
-                .or_else(|| plugin.known_good_version.clone());
-        }
-        plugin.enabled = enabled;
-        self.write(snapshot.generation + 1, plugins)
-    }
-
-    pub fn select_rollback(
-        &self,
-        plugin_id: &str,
-        version: &str,
-        package_digest: &str,
-    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
-        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
-            if admitted.runtime_status != PluginRuntimeStatus::KnownGood {
-                return Err(MarketplaceError::Conflict(
-                    "rollback requires a known-good plugin version".into(),
-                ));
-            }
-            if plugin.active_version.as_deref() == Some(version) && plugin.pending_version.is_none()
-            {
-                return Ok(false);
-            }
-            plugin.pending_version = Some(version.into());
-            Ok(true)
-        })
-    }
-
-    pub fn repair_quarantined_version(
-        &self,
-        plugin_id: &str,
-        version: &str,
-        package_digest: &str,
-    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
-        self.mutate_exact_version(plugin_id, version, package_digest, |plugin, admitted| {
-            if admitted.runtime_status != PluginRuntimeStatus::Quarantined {
-                return Err(MarketplaceError::Conflict(
-                    "repair requires a quarantined plugin version".into(),
-                ));
-            }
-            if admitted.content_digest.is_none() {
-                return Err(MarketplaceError::Conflict(
-                    "plugin version predates immutable content binding; reinstall it".into(),
-                ));
-            }
-            admitted.runtime_status = if plugin.enabled {
-                PluginRuntimeStatus::PendingRestart
-            } else {
-                PluginRuntimeStatus::PendingRuntime
-            };
-            plugin.pending_version = Some(version.into());
-            Ok(true)
-        })
-    }
-
-    pub fn remove_plugin(
-        &self,
-        plugin_id: &str,
-    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
-        let snapshot = self.snapshot()?;
-        if snapshot
-            .plugins
-            .iter()
-            .any(|plugin| plugin.plugin_id == plugin_id && plugin.bundled_fallback)
-        {
-            return Err(MarketplaceError::Conflict(
-                "host-bundled plugins can be disabled but not uninstalled".into(),
-            ));
-        }
-        let mut plugins = snapshot.plugins;
-        let previous_len = plugins.len();
-        plugins.retain(|plugin| plugin.plugin_id != plugin_id);
-        if plugins.len() == previous_len {
-            return Err(MarketplaceError::NotFound(plugin_id.into()));
-        }
-        self.write(snapshot.generation + 1, plugins)
-    }
-
     fn mutate_exact_version(
         &self,
         plugin_id: &str,
         version: &str,
         package_digest: &str,
+        mutate: impl FnOnce(
+            &mut InstalledPlugin,
+            &mut AdmittedPluginVersion,
+        ) -> Result<bool, MarketplaceError>,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.mutate_exact_version_with_policy(plugin_id, version, package_digest, false, mutate)
+    }
+
+    fn mutate_exact_version_with_policy(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        package_digest: &str,
+        enforce_dependencies: bool,
         mutate: impl FnOnce(
             &mut InstalledPlugin,
             &mut AdmittedPluginVersion,
@@ -613,6 +522,9 @@ impl PluginInstallationStore {
         let changed = mutate(plugin, &mut admitted)?;
         plugin.versions.insert(version_index, admitted);
         if changed {
+            if enforce_dependencies {
+                self.reconcile_dependencies(&mut plugins, plugin_id)?;
+            }
             self.write(snapshot.generation + 1, plugins)
         } else {
             Ok(PluginInstallationSnapshot {

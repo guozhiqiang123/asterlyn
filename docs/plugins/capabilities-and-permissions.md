@@ -1,6 +1,6 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog rooted at Asterlyn `0.1.21`; current SDK `1.12.0`, package schema `3`, and
+Status: experimental public catalog rooted at Asterlyn `0.1.21`; current SDK `1.13.0`, package schema `3`, and
 plugin-host protocol `1`.
 
 Security containment in `0.1.19`: installable packages cannot receive authority from legacy raw
@@ -25,6 +25,7 @@ contributions remain available.
 
 | Capability ID | Plugin-facing use | Required permission(s) | Boundary |
 | --- | --- | --- | --- |
+| `pluginDependencies` | Declare required installed/enabled plugins using stable version bounds | None | Generic lifecycle constraint; does not download packages or grant execution authority |
 | `workspaceCatalog` | Receive bounded workspace evidence for matching and discovery | `host.workspace.catalog.read` | Read-only host snapshot; no path handle or arbitrary file read |
 | `tasks` | Contribute task snapshots, hierarchy, refresh and reviewed run plans | `host.tasks.discover`; `host.tasks.execute` only when executing | Host owns trust, terminal, cancellation, output, artifacts and task state |
 | `taskAuthorization` | Supply localization keys for host-rendered workspace trust and exact-task memory | `host.tasks.execute` for the eventual run | Declarative policy/copy only; it cannot self-approve a task |
@@ -37,7 +38,7 @@ contributions remain available.
 | `languageServices` | Contribute metadata for the host-owned TypeScript language-service profile | `host.language-services.execute` | Fixed packaged server/resources only; no arbitrary executable, argv, environment, or plugin handle |
 | `notifications` | Publish semantic info/success/warning/error by localization key | `host.notifications.publish` | Host owns resolved text, source attribution, timing, accessibility and dismissal |
 
-SDK `1.12.0` retains the legacy `1.10.0` candidate types only so migration tooling can diagnose old source. The
+SDK `1.13.0` retains the legacy `1.10.0` candidate types only so migration tooling can diagnose old source. The
 schema-3 package manifest forbids those fields, no bundled code executes in the WebView, and runtime
 authority is granted only through semantic IDs.
 
@@ -134,3 +135,5 @@ changes presentation metadata only and never drops or enables a task.
 
 Do not catch a capability denial and silently replace it with broader behavior. Surface bounded,
 localized diagnostics and leave unrelated features usable.
+
+SDK 1.13 adds optional static `dependencies` and the `pluginDependencies` capability. Native transactions resolve installed compatible dependencies and protect disable/uninstall/incompatible version changes while consumers remain enabled. Host-bundled required dependencies protect legacy rollback selections. Disabled/missing/quarantined dependencies block execution; execution consent remains separate. These SDK bytes are an unpublished development artifact.

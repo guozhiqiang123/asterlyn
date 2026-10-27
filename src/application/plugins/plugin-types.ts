@@ -208,6 +208,7 @@ export interface PluginActivationReport {
 }
 
 export interface PluginManagementEntry {
+  readonly dependencies?: SdkPluginManifest["dependencies"];
   readonly id: string;
   readonly version: string;
   readonly origin: PluginCatalogOrigin;

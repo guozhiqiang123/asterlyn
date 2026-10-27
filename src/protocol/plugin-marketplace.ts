@@ -1,6 +1,7 @@
 import type { DesktopCommandName } from "./generated-desktop-protocol.ts";
 import { assert, record } from "./desktop-result-validation-primitives.ts";
-import type { SdkPluginManifest } from "../../packages/plugin-sdk/index.ts";
+import { validatePluginDependencies } from "./plugin-dependencies.ts";
+import type { SdkPluginDependency, SdkPluginManifest } from "../../packages/plugin-sdk/index.ts";
 
 export type PluginSourceCatalogStatus = "available" | "noRelease" | "error" | "rateLimited";
 
@@ -37,6 +38,7 @@ export interface PluginSourceSnapshot {
 }
 
 export interface PluginMarketplaceBridge {
+  subscribeInstallations?(listener: () => void): Promise<() => void>;
   listPluginSources(): Promise<PluginSourceSnapshot>;
   upsertPluginSource(repository: string, name: string, description: string): Promise<PluginSourceSnapshot>;
   setPluginSourceEnabled(repository: string, enabled: boolean): Promise<PluginSourceSnapshot>;
@@ -55,8 +57,8 @@ export interface PluginMarketplaceBridge {
 }
 
 export type PluginRuntimeStatus = "pendingRuntime" | "pendingRestart" | "active" | "knownGood" | "quarantined";
-export interface AdmittedPluginVersion { readonly version: string; readonly packageDigest: string; readonly contentDigest?: string | null; readonly admittedAtEpochMs: number; readonly runtimeStatus: PluginRuntimeStatus; }
-export interface InstalledPlugin { readonly pluginId: string; readonly repository: string; readonly enabled: boolean; readonly bundledFallback: boolean; readonly activeVersion: string | null; readonly knownGoodVersion: string | null; readonly pendingVersion: string | null; readonly versions: readonly AdmittedPluginVersion[]; }
+export interface AdmittedPluginVersion { readonly dependencies?: readonly SdkPluginDependency[]; readonly version: string; readonly packageDigest: string; readonly contentDigest?: string | null; readonly admittedAtEpochMs: number; readonly runtimeStatus: PluginRuntimeStatus; }
+export interface InstalledPlugin { readonly requiredDependencies?: readonly SdkPluginDependency[]; readonly pluginId: string; readonly repository: string; readonly enabled: boolean; readonly bundledFallback: boolean; readonly activeVersion: string | null; readonly knownGoodVersion: string | null; readonly pendingVersion: string | null; readonly versions: readonly AdmittedPluginVersion[]; }
 export interface PluginInstallationSnapshot { readonly schemaVersion: 1 | 2; readonly generation: number; readonly plugins: readonly InstalledPlugin[]; readonly recovered: boolean; }
 export interface InstalledPluginManifestEntry { readonly pluginId: string; readonly pluginVersion: string; readonly packageDigest: string; readonly manifest: SdkPluginManifest | null; readonly error: string | null; }
 export interface InstalledPluginManifestSnapshot { readonly schemaVersion: 1; readonly generation: number; readonly manifests: readonly InstalledPluginManifestEntry[]; }
@@ -129,9 +131,11 @@ export function validatePluginInstallationSnapshot(value: unknown, command: Desk
     assert(typeof plugin.repository === "string" && plugin.repository.includes("/"), command, "invalid installed repository");
     assert(typeof plugin.enabled === "boolean" && typeof plugin.bundledFallback === "boolean", command, "invalid installed flags");
     for (const field of ["activeVersion", "knownGoodVersion", "pendingVersion"] as const) assert(plugin[field] === null || typeof plugin[field] === "string", command, `${field} must be a string or null`);
+    validatePluginDependencies(String(plugin.pluginId), plugin.requiredDependencies);
     assert(Array.isArray(plugin.versions) && plugin.versions.length <= 64, command, "invalid admitted version list");
     for (const item of plugin.versions) {
       const version = record(item, command);
+      validatePluginDependencies(String(plugin.pluginId), version.dependencies);
       assert(typeof version.version === "string" && typeof version.packageDigest === "string" && /^sha256:[a-f0-9]{64}$/u.test(version.packageDigest), command, "invalid admitted version");
       assert(version.contentDigest === undefined || version.contentDigest === null || (typeof version.contentDigest === "string" && /^sha256:[a-f0-9]{64}$/u.test(version.contentDigest)), command, "invalid admitted content digest");
       assert(typeof version.admittedAtEpochMs === "number" && Number.isSafeInteger(version.admittedAtEpochMs), command, "invalid admission time");
@@ -231,6 +235,7 @@ function validateManagementManifest(value: unknown, entry: Record<string, unknow
     }
     assert(views.has(tool.defaultView), command, "installed workspace tool default view is missing");
   }
+  validatePluginDependencies(String(manifest.id), manifest.dependencies);
   validateProcessQueries(manifest.processQueries, command);
   validateToolOperations(manifest.toolOperations, command);
   validateHostOperations(manifest.hostOperations, command);

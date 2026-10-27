@@ -56,10 +56,16 @@ fn actual_rust_and_typescript_keep_independent_sessions() {
         let _ = tx.send(event);
     });
     let ts = manager
-        .start(subject.clone(), typescript, Arc::new(|| true), emit.clone())
+        .start(
+            subject.clone(),
+            typescript,
+            0,
+            Arc::new(|| true),
+            emit.clone(),
+        )
         .unwrap();
     let rs = manager
-        .start(subject.clone(), rust_package, Arc::new(|| true), emit)
+        .start(subject.clone(), rust_package, 0, Arc::new(|| true), emit)
         .unwrap();
     assert_eq!(manager.sessions.lock().unwrap().len(), 2);
     let wait = |rx: Receiver<Result<Value, String>>| {

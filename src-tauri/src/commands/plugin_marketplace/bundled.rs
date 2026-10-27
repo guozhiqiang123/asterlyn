@@ -8,12 +8,12 @@ pub(super) const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
     "../../../resources/plugins/asterlyn-plugin-android-gradle-0.5.10.asterlyn-plugin.tgz"
 );
 pub(super) const BUNDLED_LSP_PLUGIN_ID: &str = "dev.asterlyn.lsp";
-pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.2.0";
+pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.2.1";
 pub(super) const BUNDLED_LSP_REPOSITORY: &str = "guozhiqiang123/asterlyn-plugin-lsp";
 pub(super) const BUNDLED_LSP_PACKAGE_DIGEST: &str =
-    "sha256:e98c56cecfb930b0d6327dcaf6180579eb039838b12b2acfc924f69363559915";
+    "sha256:c341c81055601c150556973ea45c0189fb64a92dbbfc9fe7c1ad8f63fbfb8486";
 pub(super) const BUNDLED_LSP_PACKAGE: &[u8] =
-    include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.2.0.asterlyn-plugin.tgz");
+    include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.2.1.asterlyn-plugin.tgz");
 
 pub(super) fn ensure_bundled_android_package(
     marketplace_root: &std::path::Path,
@@ -117,7 +117,7 @@ fn ensure_bundled_package(
     retain_package_archive(&archive, bytes, &package_digest)?;
     PluginInstallationStore::open(marketplace_root.join("installation-state"))
         .map_err(|error| error.to_string())?
-        .record_bundled(
+        .record_bundled_with_dependencies(
             AdmittedPluginIdentity {
                 plugin_id: expected_plugin_id,
                 repository,
@@ -126,6 +126,7 @@ fn ensure_bundled_package(
                 content_digest: &report.content_digest,
             },
             now_ms(),
+            report.management_manifest.dependencies.clone(),
         )
         .map_err(|error| error.to_string())
 }

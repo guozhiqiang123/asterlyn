@@ -4,7 +4,7 @@ This package contains the public declarative types and constants used to author 
 It does not contain host implementation code and does not grant filesystem, process, network,
 credential, WebView, or shell access.
 
-The initial public baseline was SDK `1.8.0`; the current additive contract is SDK `1.12.0`, SDK major `1`. Runtime-installable packages additionally
+The initial public baseline was SDK `1.8.0`; the current additive contract is SDK `1.13.0`, SDK major `1`. Runtime-installable packages additionally
 use package schema `3` and plugin-host protocol `1`; those are independent compatibility axes.
 
 SDK `1.12.0` adds the host-owned `rust-analyzer` profile alongside the TypeScript contribution introduced in SDK `1.11.0`. Rust requires host 0.1.21 or later. This canonical SDK artifact is development-only until a compatible host Release publishes it. SDK `1.10.0` replaces runtime-installable package-authored executable/argument declarations with
@@ -13,13 +13,13 @@ output limits. Legacy schema-2 declarations remain types only for bundled and mi
 
 ## Use
 
-Download `asterlyn-plugin-sdk-1.12.0.tgz` from an Asterlyn GitHub Release, retain its SHA-256, place it
+Download `asterlyn-plugin-sdk-1.13.0.tgz` from an Asterlyn GitHub Release, retain its SHA-256, place it
 under the plugin repository's `vendor/` directory, and pin it exactly:
 
 ```json
 {
   "dependencies": {
-    "@asterlyn/plugin-sdk": "file:vendor/asterlyn-plugin-sdk-1.12.0.tgz"
+    "@asterlyn/plugin-sdk": "file:vendor/asterlyn-plugin-sdk-1.13.0.tgz"
   }
 }
 ```
@@ -79,3 +79,5 @@ guide](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/develop
 and [diagnostics and migration
 guide](https://github.com/guozhiqiang123/asterlyn/blob/main/docs/plugins/diagnostics-and-migration.md)
 for packaging, Release, authority, compatibility, diagnostics, and lifecycle rules.
+
+SDK `1.13.0` adds optional static `dependencies` (`id`, stable numeric `minimum`, optional `maximumExclusive`) with at most 16 required plugins. A runtime package declaring dependencies also requires `pluginDependencies`; this carries lifecycle constraints, not process authority. Enablement atomically enables compatible installed dependencies, without downloading packages or granting execution permission. Enabled consumers lock dependency disable/removal/incompatible selection. Host-bundled dependency requirements also protect legacy rollback selections. This remains an unpublished development artifact.

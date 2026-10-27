@@ -262,3 +262,25 @@ test("quarantined plugin versions expose an exact package repair action", () => 
   assert.match(html, />Repair<\/button>/u);
   assert.doesNotMatch(html, /data-installed-plugin-rollback/u);
 });
+
+
+test("required plugins stay visibly locked while enabled consumers are inactive or quarantined", () => {
+  const version = { version: "0.5.10", packageDigest: `sha256:${"a".repeat(64)}`, admittedAtEpochMs: 1, runtimeStatus: "knownGood" };
+  const android = { pluginId: "dev.asterlyn.android-gradle", repository: "asterlyn/android", enabled: true, bundledFallback: false,
+    activeVersion: version.version, knownGoodVersion: version.version, pendingVersion: null, versions: [version] };
+  const lsp = { ...android, pluginId: "dev.asterlyn.lsp", repository: "asterlyn/lsp", activeVersion: null, knownGoodVersion: null,
+    requiredDependencies: [{ id: android.pluginId, minimum: "0.5.10", maximumExclusive: "1.0.0" }],
+    versions: [{ ...version, runtimeStatus: "quarantined" }] };
+  const state = { tab: "installed", loading: false, error: null, snapshot: null,
+    installations: { schemaVersion: 2, generation: 2, recovered: false, plugins: [android, lsp] } };
+  const render = () => renderPluginManagementSection({ schemaVersion: 1, entries: [entry] }, copy, false, state);
+  const locked = render();
+  assert.match(locked, /data-installed-plugin-enabled="dev.asterlyn.android-gradle"[^>]*disabled[^>]*aria-describedby="plugin-dependency-dev.asterlyn.android-gradle"/u);
+  assert.match(locked, /role="status">Required by dev.asterlyn.lsp/u);
+  assert.match(locked, /data-installed-plugin-uninstall="dev.asterlyn.android-gradle" disabled/u);
+  lsp.enabled = false;
+  const unlocked = render();
+  assert.doesNotMatch(unlocked, /data-installed-plugin-enabled="dev.asterlyn.android-gradle"[^>]*disabled/u);
+  assert.doesNotMatch(unlocked, /data-installed-plugin-uninstall="dev.asterlyn.android-gradle" disabled/u);
+  assert.equal(android.enabled, true);
+});

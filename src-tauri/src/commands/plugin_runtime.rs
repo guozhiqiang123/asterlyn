@@ -322,6 +322,8 @@ pub(crate) async fn invoke_installed_plugin_callback(
     payload: JsonValue,
     diagnostic_trace_id: Option<String>,
     window: WebviewWindow,
+    app: tauri::AppHandle,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
     supervisor: State<'_, PluginHostSupervisor>,
     diagnostics: State<'_, DiagnosticsLog>,
 ) -> Result<JsonValue, String> {
@@ -339,6 +341,11 @@ pub(crate) async fn invoke_installed_plugin_callback(
         }),
     );
     let result = async {
+        marketplace.run(|| {
+            installation_store(&app)?
+                .ensure_dependencies_available(&plugin_id)
+                .map_err(|error| error.to_string())
+        })?;
         let owner = window.label().to_owned();
         let supervisor = supervisor.inner().clone();
         let runtime_plugin_id = plugin_id.clone();
@@ -488,6 +495,8 @@ pub(crate) fn select_installed_plugin(
     let content_digest = version.content_digest.clone().ok_or_else(|| {
         "installed plugin predates immutable content binding; reinstall it".to_owned()
     })?;
+    asterlyn_plugin_marketplace::ensure_enabled_dependencies(&snapshot.plugins, plugin_id)
+        .map_err(|error| error.to_string())?;
     Ok(InstalledPluginSelection {
         repository: plugin.repository.clone(),
         version: version.version.clone(),
@@ -536,6 +545,7 @@ mod tests {
             generation: 1,
             recovered: false,
             plugins: vec![InstalledPlugin {
+                required_dependencies: Vec::new(),
                 plugin_id: "dev.asterlyn.fixture".to_owned(),
                 repository: "asterlyn/fixture".to_owned(),
                 enabled,
@@ -544,6 +554,7 @@ mod tests {
                 known_good_version: None,
                 pending_version: Some("1.0.0".to_owned()),
                 versions: vec![AdmittedPluginVersion {
+                    dependencies: Vec::new(),
                     version: "1.0.0".to_owned(),
                     package_digest: format!("sha256:{}", "a".repeat(64)),
                     content_digest: Some(format!("sha256:{}", "b".repeat(64))),

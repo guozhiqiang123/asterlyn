@@ -54,7 +54,7 @@ export interface PluginTasksRuntimeOptions {
   readonly processQueryBridge?: PluginProcessQueryBridge;
   readonly toolOperationBridge?: PluginToolOperationBridge;
   readonly installedPluginRuntimeBridge?: InstalledPluginRuntimeBridge;
-  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests">;
+  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests" | "subscribeInstallations">;
   readonly availabilityChanged?: (available: boolean) => void;
   readonly identityChanged?: () => void;
 }

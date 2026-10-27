@@ -18,6 +18,7 @@ import {
   SDK_PLUGIN_EXECUTION_TARGET_LIMITS,
   SDK_PLUGIN_RUN_CONFIGURATION_LIMITS,
 } from "../../../packages/plugin-sdk/index.ts";
+import { validatePluginDependencies } from "../../protocol/plugin-dependencies.ts";
 import { validateAndFreezePluginLocalization } from "./plugin-localization.ts";
 import type {
   BundledPluginManifest,
@@ -45,6 +46,7 @@ export function adaptPluginWorkspaceIdentity(identity: SdkWorkspaceIdentity): Pl
 
 export function adaptPluginManifest(manifest: SdkPluginManifest): BundledPluginManifest {
   assertCompatiblePluginSdk(manifest);
+  validatePluginDependencies(manifest.id, manifest.dependencies);
   const localization = validateAndFreezePluginLocalization(manifest);
   return {
     id: manifest.id,
@@ -53,6 +55,7 @@ export function adaptPluginManifest(manifest: SdkPluginManifest): BundledPluginM
     descriptionKey: manifest.descriptionKey,
     localization,
     settings: manifest.settings.map(adaptSetting),
+    ...(manifest.dependencies === undefined ? {} : { dependencies: Object.freeze(manifest.dependencies.map((dependency) => Object.freeze({ ...dependency }))) }),
     ...(manifest.taskAuthorization === undefined
       ? {}
       : { taskAuthorization: adaptTaskAuthorization(manifest.taskAuthorization) }),

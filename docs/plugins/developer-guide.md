@@ -2,7 +2,7 @@
 
 - Status: experimental public baseline
 - Host baseline: Asterlyn `0.1.21`
-- Plugin SDK: `1.12.0` (SDK major `1`)
+- Plugin SDK: `1.13.0` (SDK major `1`)
 - Package schema: `3`
 - Plugin-host protocol: `1`
 
@@ -164,3 +164,5 @@ behavior, and accurately declaring every requested authority.
 The authoritative static package rules are in the
 [Release package contract](../engineering/plugin-release-package-contract.md). Contract lifecycle
 and stability are tracked in the [plugin contract registry](../governance/plugin-contracts.md).
+
+SDK 1.13 adds optional static `dependencies` and the `pluginDependencies` capability. Native transactions resolve installed compatible dependencies and protect disable/uninstall/incompatible version changes while consumers remain enabled. Host-bundled required dependencies protect legacy rollback selections. Disabled/missing/quarantined dependencies block execution; execution consent remains separate. These SDK bytes are an unpublished development artifact.

@@ -1,7 +1,7 @@
 use super::installation_identity::{validate_content_digest, validate_installation_identity};
 use super::{
     AdmittedPluginIdentity, AdmittedPluginVersion, InstalledPlugin, MarketplaceError,
-    PluginInstallationSnapshot, PluginInstallationStore, PluginRuntimeStatus,
+    PluginDependency, PluginInstallationSnapshot, PluginInstallationStore, PluginRuntimeStatus,
 };
 
 impl PluginInstallationStore {
@@ -11,7 +11,13 @@ impl PluginInstallationStore {
         admitted_at_epoch_ms: u64,
         bundled_fallback: bool,
     ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
-        self.record_admitted_with_defaults(identity, admitted_at_epoch_ms, bundled_fallback, false)
+        self.record_admitted_with_defaults(
+            identity,
+            admitted_at_epoch_ms,
+            bundled_fallback,
+            false,
+            Vec::new(),
+        )
     }
 
     /// Records a host-shipped package without overriding an existing user's enabled choice.
@@ -21,15 +27,33 @@ impl PluginInstallationStore {
         identity: AdmittedPluginIdentity<'_>,
         admitted_at_epoch_ms: u64,
     ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
-        self.record_admitted_with_defaults(identity, admitted_at_epoch_ms, true, true)
+        self.record_admitted_with_defaults(identity, admitted_at_epoch_ms, true, true, Vec::new())
     }
 
+    pub fn record_admitted_with_dependencies(
+        &self,
+        identity: AdmittedPluginIdentity<'_>,
+        at: u64,
+        bundled: bool,
+        dependencies: Vec<PluginDependency>,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.record_admitted_with_defaults(identity, at, bundled, false, dependencies)
+    }
+    pub fn record_bundled_with_dependencies(
+        &self,
+        identity: AdmittedPluginIdentity<'_>,
+        at: u64,
+        dependencies: Vec<PluginDependency>,
+    ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
+        self.record_admitted_with_defaults(identity, at, true, true, dependencies)
+    }
     fn record_admitted_with_defaults(
         &self,
         identity: AdmittedPluginIdentity<'_>,
         admitted_at_epoch_ms: u64,
         bundled_fallback: bool,
         enabled_on_first_install: bool,
+        dependencies: Vec<PluginDependency>,
     ) -> Result<PluginInstallationSnapshot, MarketplaceError> {
         let AdmittedPluginIdentity {
             plugin_id,
@@ -40,6 +64,8 @@ impl PluginInstallationStore {
         } = identity;
         validate_installation_identity(plugin_id, repository, version, package_digest)?;
         validate_content_digest(content_digest)?;
+        asterlyn_plugin_dependencies::validate_declarations(plugin_id, &dependencies)
+            .map_err(|e| MarketplaceError::Conflict(e.to_string()))?;
         let snapshot = self.snapshot()?;
         if let Some(plugin) = snapshot
             .plugins
@@ -59,6 +85,11 @@ impl PluginInstallationStore {
                 if existing.package_digest != package_digest {
                     return Err(MarketplaceError::Conflict(
                         "plugin version was republished with different bytes".into(),
+                    ));
+                }
+                if existing.dependencies != dependencies {
+                    return Err(MarketplaceError::Conflict(
+                        "plugin dependency receipt does not match its admitted package".into(),
                     ));
                 }
                 if existing.content_digest.as_deref() == Some(content_digest) {
@@ -117,6 +148,7 @@ impl PluginInstallationStore {
             plugin
         } else {
             plugins.push(InstalledPlugin {
+                required_dependencies: Vec::new(),
                 plugin_id: plugin_id.into(),
                 repository: repository.into(),
                 enabled: enabled_on_first_install,
@@ -131,7 +163,11 @@ impl PluginInstallationStore {
         if bundled_fallback {
             plugin.bundled_fallback = true;
         }
+        if enabled_on_first_install {
+            plugin.required_dependencies = dependencies.clone();
+        }
         plugin.versions.push(AdmittedPluginVersion {
+            dependencies,
             version: version.into(),
             package_digest: package_digest.into(),
             content_digest: Some(content_digest.into()),
@@ -142,6 +178,7 @@ impl PluginInstallationStore {
             .versions
             .sort_by(|left, right| left.version.cmp(&right.version));
         plugin.pending_version = Some(version.into());
+        self.reconcile_dependencies(&mut plugins, plugin_id)?;
         self.write(snapshot.generation + 1, plugins)
     }
 }

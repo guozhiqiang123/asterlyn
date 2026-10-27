@@ -427,6 +427,7 @@ mod tests {
             generation: 2,
             recovered: false,
             plugins: vec![InstalledPlugin {
+                required_dependencies: Vec::new(),
                 plugin_id: "dev.asterlyn.example".into(),
                 repository: "asterlyn/example".into(),
                 enabled: true,
@@ -435,6 +436,7 @@ mod tests {
                 known_good_version: Some("1.0.0".into()),
                 pending_version: None,
                 versions: vec![AdmittedPluginVersion {
+                    dependencies: Vec::new(),
                     version: "1.0.0".into(),
                     package_digest: format!("sha256:{digest}"),
                     content_digest: Some(format!("sha256:{}", "b".repeat(64))),

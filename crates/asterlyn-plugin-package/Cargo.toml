@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+asterlyn-plugin-dependencies = { path = "../asterlyn-plugin-dependencies" }
 flate2.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -20,6 +20,8 @@ export const EN_US_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
     "android.adb.launch": "Mutation · launch one validated Android component on one selected device through host-approved adb · trusted workspace required · bounded time and output",
   } as Record<string, string>)[id] ?? "Unknown host operation; installation is blocked by package admission.", license: "License", pendingRuntimeNote: "The admitted package is retained under its verified Release digest and remains disabled. Enable it explicitly, then restart Asterlyn to revalidate it and run the isolated-runtime health check.",
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required to apply plugin changes", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
+  requiredPlugins: "Required plugins (compatible installed plugins will also be enabled)",
+  requiredByPlugins: (names: string) => `Required by ${names}. Disable these plugins first.`,
   enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", repairPlugin: "Repair", repairPluginTitle: "Reverify this package and prepare another isolated activation attempt", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin settings, trust decisions, and caches will be retained for a later reinstall.",
 };
 
@@ -43,5 +45,7 @@ export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
     "android.adb.launch": "变更 · 通过宿主批准的 adb 在一个已选择设备启动一个已校验组件 · 需要受信任工作区 · 时间与输出受限",
   } as Record<string, string>)[id] ?? "未知宿主操作；安装包准入会拦截该操作。", license: "许可证", pendingRuntimeNote: "准入后的安装包会按已验证的 Release 摘要保留，并保持禁用。请明确启用后再重启 Asterlyn，系统会重新校验并进入隔离运行时健康检查。",
   admittedPackage: "已准入安装包", pendingRuntime: "等待隔离运行时", pendingRestart: "需要重启以应用插件变更", restartToApply: "重启 Asterlyn", restarting: "正在重启…",
+  requiredPlugins: "依赖插件（已安装且兼容的依赖将一并启用）",
+  requiredByPlugins: (names: string) => `正在被 ${names} 依赖，请先关闭这些插件。`,
   enableInstalledPlugin: "启用已安装插件", enableReviewTitle: "启用前审查此安装包的确切权限", confirmEnablePlugin: "重启后启用", knownGood: "已验证可用", quarantined: "已隔离", rollback: "回滚", repairPlugin: "修复", repairPluginTitle: "重新校验此安装包，并准备再次进行隔离激活", uninstallPlugin: "卸载", confirmUninstallPlugin: "确定卸载此插件安装包吗？", uninstallKeepsData: "插件设置、信任记录和缓存会保留，重新安装后可继续使用。",
 };

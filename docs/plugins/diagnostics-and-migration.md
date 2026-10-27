@@ -1,6 +1,6 @@
 # Plugin diagnostics and migration
 
-Status: experimental public policy rooted at Asterlyn `0.1.21`; current Plugin SDK `1.12.0`.
+Status: experimental public policy rooted at Asterlyn `0.1.21`; current Plugin SDK `1.13.0`.
 
 ## Identify the failing phase
 
@@ -52,7 +52,7 @@ The following versions are independent:
 6. Host compatibility range controls which Asterlyn releases may admit the package.
 7. Plugin-owned persisted-data schemas control settings/workspace-state migration.
 
-Do not infer one axis from another. A plugin can use current SDK `1.12.0` (or the historical `1.10.0`), SDK major `1`, package schema `3`,
+Do not infer one axis from another. A plugin can use current SDK `1.13.0` (or the historical `1.10.0`), SDK major `1`, package schema `3`,
 and runtime protocol `1` while independently increasing its own version.
 
 ## Classify a contract change
@@ -114,3 +114,5 @@ package check. Confirm the exact asset was not replaced, the GitHub digest match
 the inspector host version is inside the manifest range, and every requested runtime operation has
 both its capability and permission. Then reproduce with retained state disabled or a clean reinstall
 to distinguish code defects from plugin-owned migration defects.
+
+SDK 1.13 adds optional static `dependencies` and the `pluginDependencies` capability. Native transactions resolve installed compatible dependencies and protect disable/uninstall/incompatible version changes while consumers remain enabled. Host-bundled required dependencies protect legacy rollback selections. Disabled/missing/quarantined dependencies block execution; execution consent remains separate. These SDK bytes are an unpublished development artifact.

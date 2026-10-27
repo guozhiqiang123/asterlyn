@@ -1,3 +1,4 @@
+import { installedPluginDependents } from "../../protocol/plugin-dependencies.ts";
 import type {
   PluginManagementEntry,
   PluginManagementSnapshot,
@@ -72,6 +73,8 @@ export interface PluginManagementCopy {
   readonly restarting: string;
   readonly enableInstalledPlugin: string;
   readonly enableReviewTitle: string;
+  readonly requiredPlugins?: string;
+  readonly requiredByPlugins?: (names: string) => string;
   readonly confirmEnablePlugin: string;
   readonly knownGood: string;
   readonly quarantined: string;
@@ -165,6 +168,10 @@ function renderAdmittedPackages(
     const selected = pending ?? plugin.activeVersion;
     const version = selected ? plugin.versions.find((candidate) => candidate.version === selected) : null;
     const busy = state.busyPlugin === plugin.pluginId;
+    const requiredBy = installedPluginDependents(state.installations?.plugins ?? [], plugin.pluginId);
+    const dependencyNames = requiredBy.map((id) => { const entry = management.entries.find((entry) => entry.id === id); return entry ? pluginMessage(entry, copy, entry.nameKey) : id; }).join(", ");
+    const dependencyReason = requiredBy.length ? (copy.requiredByPlugins?.(dependencyNames) ?? `Required by ${dependencyNames}. Disable these plugins first.`) : null;
+    const dependencyHint = dependencyReason ? `<p id="plugin-dependency-${escapeAttribute(plugin.pluginId)}" role="status">${escapeHtml(dependencyReason)}</p>` : "";
     const status = version?.runtimeStatus === "pendingRuntime"
       ? copy.pendingRuntime
       : version?.runtimeStatus === "pendingRestart"
@@ -180,7 +187,7 @@ function renderAdmittedPackages(
       return `<li><span><code>${escapeHtml(candidate.version)}</code><small>${escapeHtml(versionStatus(candidate.runtimeStatus, copy))}</small></span>${rollback}${repair}</li>`;
     }).join("");
     const uninstallReview = !plugin.bundledFallback && state.confirmUninstallPlugin === plugin.pluginId
-      ? `<div class="plugin-installed-uninstall-review" role="alert"><div><strong>${escapeHtml(copy.confirmUninstallPlugin)}</strong><span>${escapeHtml(copy.uninstallKeepsData)}</span></div><button class="secondary-button" type="button" data-installed-plugin-uninstall-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-installed-plugin-uninstall-confirm="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`
+      ? `<div class="plugin-installed-uninstall-review" role="alert"><div><strong>${escapeHtml(copy.confirmUninstallPlugin)}</strong><span>${escapeHtml(copy.uninstallKeepsData)}</span></div><button class="secondary-button" type="button" data-installed-plugin-uninstall-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-installed-plugin-uninstall-confirm="${escapeAttribute(plugin.pluginId)}" ${busy || dependencyReason ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`
       : "";
     const name = entry ? pluginMessage(entry, copy, entry.nameKey) : plugin.pluginId;
     const description = entry ? pluginMessage(entry, copy, entry.descriptionKey) : plugin.repository;
@@ -195,8 +202,8 @@ function renderAdmittedPackages(
       : "";
     const uninstall = plugin.bundledFallback
       ? ""
-      : `<div class="plugin-installed-actions"><button class="danger-button" type="button" data-installed-plugin-uninstall="${escapeAttribute(plugin.pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`;
-    return `<article class="plugin-management-card plugin-installed-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}" data-plugin-id="${escapeAttribute(plugin.pluginId)}" tabindex="-1"><div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3>${identity}</div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableInstalledPlugin)}</span>${renderToggle(`<input data-installed-plugin-enabled="${escapeAttribute(plugin.pluginId)}" type="checkbox" role="switch" ${plugin.enabled ? "checked" : ""} ${busy ? "disabled" : ""} aria-label="${escapeAttribute(copy.enableInstalledPlugin)}" />`)}</div></div><div class="plugin-management-meta"><span>${escapeHtml(copy.admittedPackage)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(selected ?? "—")}</code></span><span>${escapeHtml(status)}</span></div>${enableReview}${operational}<ul class="plugin-installed-versions">${versions}</ul>${uninstall}${uninstallReview}</article>`;
+      : `<div class="plugin-installed-actions"><button class="danger-button" type="button" data-installed-plugin-uninstall="${escapeAttribute(plugin.pluginId)}" ${busy || dependencyReason ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`;
+    return `<article class="plugin-management-card plugin-installed-card" data-installed-plugin-id="${escapeAttribute(plugin.pluginId)}" data-plugin-id="${escapeAttribute(plugin.pluginId)}" tabindex="-1"><div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3>${identity}</div><div class="plugin-management-enabled"><span>${escapeHtml(copy.enableInstalledPlugin)}</span>${renderToggle(`<input data-installed-plugin-enabled="${escapeAttribute(plugin.pluginId)}" type="checkbox" role="switch" ${plugin.enabled ? "checked" : ""} ${busy || (plugin.enabled && dependencyReason) ? "disabled" : ""} ${dependencyReason ? `aria-describedby="plugin-dependency-${escapeAttribute(plugin.pluginId)}" title="${escapeAttribute(dependencyReason)}"` : ""} aria-label="${escapeAttribute(copy.enableInstalledPlugin)}" />`)}</div></div><div class="plugin-management-meta"><span>${escapeHtml(copy.admittedPackage)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(selected ?? "—")}</code></span><span>${escapeHtml(status)}</span></div>${dependencyHint}${enableReview}${operational}<ul class="plugin-installed-versions">${versions}</ul>${uninstall}${uninstallReview}</article>`;
   }).join("") ?? "";
 }
 
@@ -208,11 +215,13 @@ function renderEnableReview(
   copy: PluginManagementCopy,
   busy: boolean,
 ): string {
+  const dependencies = entry?.dependencies ?? [];
+  const dependencyReview = dependencies.length ? `<span>${escapeHtml(copy.requiredPlugins ?? "Required plugins")}</span><ul>${dependencies.map((dependency) => `<li><code>${escapeHtml(dependency.id)}</code></li>`).join("")}</ul>` : "";
   const operations = entry?.hostOperations ?? [];
   const authority = operations.length === 0
     ? "—"
     : `<ul>${operations.map((operation) => `<li><code>${escapeHtml(operation)}</code><span>${escapeHtml(copy.hostOperationSummary(operation))}</span></li>`).join("")}</ul>`;
-  return `<div class="plugin-installed-uninstall-review plugin-installed-enable-review" role="alertdialog" aria-labelledby="plugin-enable-review-title"><div><strong id="plugin-enable-review-title">${escapeHtml(copy.enableReviewTitle)}</strong><span>${escapeHtml(copy.version)}: <code>${escapeHtml(version ?? "—")}</code></span><span><code>${escapeHtml(digest ?? "—")}</code></span><span>${escapeHtml(copy.hostOperations)}</span>${authority}<span>${escapeHtml(copy.pendingRuntimeNote)}</span></div><button class="secondary-button" type="button" data-installed-plugin-enable-cancel>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="button" data-installed-plugin-enable-confirm="${escapeAttribute(pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.confirmEnablePlugin)}</button></div>`;
+  return `<div class="plugin-installed-uninstall-review plugin-installed-enable-review" role="alertdialog" aria-labelledby="plugin-enable-review-title"><div><strong id="plugin-enable-review-title">${escapeHtml(copy.enableReviewTitle)}</strong><span>${escapeHtml(copy.version)}: <code>${escapeHtml(version ?? "—")}</code></span><span><code>${escapeHtml(digest ?? "—")}</code></span><span>${escapeHtml(copy.hostOperations)}</span>${authority}${dependencyReview}<span>${escapeHtml(copy.pendingRuntimeNote)}</span></div><button class="secondary-button" type="button" data-installed-plugin-enable-cancel>${escapeHtml(copy.cancel)}</button><button class="primary-button" type="button" data-installed-plugin-enable-confirm="${escapeAttribute(pluginId)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.confirmEnablePlugin)}</button></div>`;
 }
 
 function versionStatus(status: string | undefined, copy: PluginManagementCopy): string {

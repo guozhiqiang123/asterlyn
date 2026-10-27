@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.12.0" as const;
+export const PLUGIN_SDK_VERSION = "1.13.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -232,7 +232,17 @@ export interface SdkPluginLocalization {
   readonly locales: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
+export const SDK_PLUGIN_DEPENDENCY_LIMITS = Object.freeze({ maxDependencies: 16, maxPlugins: 64, maxIdLength: 160 });
+
+/** Required installed/enabled plugin; stable numeric version bounds, no implicit download. */
+export interface SdkPluginDependency {
+  readonly id: string;
+  readonly minimum: string;
+  readonly maximumExclusive?: string;
+}
+
 export interface SdkPluginManifest {
+  readonly dependencies?: readonly SdkPluginDependency[];
   readonly sdkMajor: typeof PLUGIN_SDK_MAJOR;
   readonly id: string;
   readonly version: string;

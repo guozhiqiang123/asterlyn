@@ -1,7 +1,9 @@
 import type { InstalledPluginManifestSnapshot, PluginInstallationSnapshot, PluginMarketplaceBridge, PluginPackageAdmissionReview, PluginSourceSnapshot } from "../../protocol/plugin-marketplace.ts";
+import { listen } from "@tauri-apps/api/event";
 import { invokeDesktopCommand as invoke } from "./desktop-command-adapter.ts";
 
 export const tauriPluginMarketplaceBridge: PluginMarketplaceBridge = {
+  subscribeInstallations: (listener) => listen("asterlyn://plugin-installations-changed", listener),
   listPluginSources: () => invoke<PluginSourceSnapshot>("list_plugin_sources"),
   upsertPluginSource: (repository, name, description) => invoke<PluginSourceSnapshot>("upsert_plugin_source", {
     repository, name, description,

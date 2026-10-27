@@ -56,6 +56,7 @@ struct Review {
     subject: LanguageSubject,
     package: LanguagePackage,
     expires: Instant,
+    authority: u64,
 }
 struct Session {
     subject: LanguageSubject,
@@ -68,6 +69,7 @@ pub(crate) struct LanguageServiceManager {
     sessions: Mutex<HashMap<String, Session>>,
     reviews: Mutex<HashMap<String, Review>>,
     sequence: AtomicU64,
+    authority: Arc<AtomicU64>,
     starting: Mutex<HashSet<String>>,
     closing: Arc<AtomicBool>,
 }
@@ -164,6 +166,7 @@ impl LanguageServiceManager {
                 subject,
                 package,
                 expires: Instant::now() + Duration::from_secs(60),
+                authority: self.authority.load(Ordering::SeqCst),
             },
         );
         Ok(id)
@@ -173,7 +176,7 @@ impl LanguageServiceManager {
         id: &str,
         subject: &LanguageSubject,
         package: &LanguagePackage,
-    ) -> Result<(), String> {
+    ) -> Result<u64, String> {
         let mut reviews = self
             .reviews
             .lock()
@@ -184,19 +187,22 @@ impl LanguageServiceManager {
         if review.subject != *subject
             || review.package != *package
             || review.expires <= Instant::now()
+            || review.authority != self.authority.load(Ordering::SeqCst)
         {
             return Err(
                 "language execution review no longer matches the workspace, package or executable"
                     .into(),
             );
         }
+        let authority = review.authority;
         reviews.remove(id);
-        Ok(())
+        Ok(authority)
     }
     pub(crate) fn start(
         &self,
         subject: LanguageSubject,
         package: LanguagePackage,
+        authority: u64,
         allowed: Arc<dyn Fn() -> bool + Send + Sync>,
         emit: Arc<dyn Fn(LanguageServiceEvent) + Send + Sync>,
     ) -> Result<String, String> {
@@ -242,8 +248,12 @@ impl LanguageServiceManager {
             owner: startup_key,
         };
         let closing = self.closing.clone();
-        let allowed: Arc<dyn Fn() -> bool + Send + Sync> =
-            Arc::new(move || !closing.load(Ordering::SeqCst) && allowed());
+        let current_authority = self.authority.clone();
+        let allowed: Arc<dyn Fn() -> bool + Send + Sync> = Arc::new(move || {
+            !closing.load(Ordering::SeqCst)
+                && current_authority.load(Ordering::SeqCst) == authority
+                && allowed()
+        });
         if !allowed() {
             return Err("language service authority was revoked".into());
         }
@@ -284,18 +294,24 @@ impl LanguageServiceManager {
             self.sequence.fetch_add(1, Ordering::Relaxed)
         );
         let (control, receiver) = mpsc::sync_channel(16);
-        self.sessions
+        let mut sessions = self
+            .sessions
             .lock()
-            .map_err(|_| "language session lock unavailable")?
-            .insert(
-                id.clone(),
-                Session {
-                    subject: subject.clone(),
-                    control,
-                    pid,
-                    profile,
-                },
-            );
+            .map_err(|_| "language session lock unavailable")?;
+        // Serialize admission with revocation: a startup may never reinsert itself after disable.
+        if !allowed() {
+            return Err("language service authority was revoked during startup".into());
+        }
+        sessions.insert(
+            id.clone(),
+            Session {
+                subject: subject.clone(),
+                control,
+                pid,
+                profile,
+            },
+        );
+        drop(sessions);
         let actor_id = id.clone();
         std::thread::spawn(move || actor(actor_id, subject, process, receiver, allowed, emit));
         Ok(id)
@@ -443,6 +459,18 @@ impl LanguageServiceManager {
     pub(crate) fn finished(&self, id: &str) {
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.remove(id);
+        }
+    }
+    pub(crate) fn stop_sessions(&self) {
+        self.authority.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut sessions) = self.sessions.lock() {
+            for (_, session) in sessions.drain() {
+                let _ = session.control.try_send(ActorCommand::Stop);
+                terminate_process_tree(session.pid);
+            }
+        }
+        if let Ok(mut reviews) = self.reviews.lock() {
+            reviews.clear();
         }
     }
     pub(crate) fn cancel_all(&self) {
@@ -989,8 +1017,26 @@ mod tests {
                 )
                 .is_err()
         );
-        manager.consume(&id, &subject, &package).unwrap();
+        let authority = manager.consume(&id, &subject, &package).unwrap();
         assert!(manager.consume(&id, &subject, &package).is_err());
+        manager.stop_sessions();
+        let error = manager
+            .start(
+                subject.clone(),
+                package.clone(),
+                authority,
+                Arc::new(|| true),
+                Arc::new(|_| {}),
+            )
+            .unwrap_err();
+        assert!(error.contains("authority was revoked"));
+        assert!(manager.sessions.lock().unwrap().is_empty());
+        assert!(!manager.closing.load(Ordering::SeqCst));
+        let renewed = manager.prepare(subject.clone(), package.clone()).unwrap();
+        assert_ne!(
+            manager.consume(&renewed, &subject, &package).unwrap(),
+            authority
+        );
     }
     #[test]
     fn actor_cancellation_bypasses_a_stalled_request_and_rejects_foreign_owners() {
@@ -1024,7 +1070,13 @@ mod tests {
             rust: None,
         };
         let id = manager
-            .start(owner.clone(), identity, Arc::new(|| true), Arc::new(|_| {}))
+            .start(
+                owner.clone(),
+                identity,
+                0,
+                Arc::new(|| true),
+                Arc::new(|_| {}),
+            )
             .unwrap();
         manager
             .open(
@@ -1133,6 +1185,7 @@ mod tests {
             .start(
                 subject.clone(),
                 package,
+                0,
                 Arc::new(move || allowed_alive.load(Ordering::SeqCst)),
                 Arc::new(move |event| {
                     let _ = tx.send(event);

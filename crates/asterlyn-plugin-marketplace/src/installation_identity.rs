@@ -76,6 +76,11 @@ pub(super) fn validate_installations(
     }
     let mut ids = std::collections::BTreeSet::new();
     for plugin in &value.plugins {
+        asterlyn_plugin_dependencies::validate_declarations(
+            &plugin.plugin_id,
+            &plugin.required_dependencies,
+        )
+        .map_err(|e| MarketplaceError::Corrupt(e.to_string()))?;
         if !ids.insert(plugin.plugin_id.as_str()) || plugin.versions.len() > 64 {
             return Err(MarketplaceError::Corrupt(
                 "duplicate or oversized installed plugin entry".into(),
@@ -84,6 +89,11 @@ pub(super) fn validate_installations(
         let mut versions = std::collections::BTreeSet::new();
         let mut active_attempts = 0;
         for version in &plugin.versions {
+            asterlyn_plugin_dependencies::validate_declarations(
+                &plugin.plugin_id,
+                &version.dependencies,
+            )
+            .map_err(|e| MarketplaceError::Corrupt(e.to_string()))?;
             if !versions.insert(version.version.as_str()) {
                 return Err(MarketplaceError::Corrupt(
                     "duplicate installed plugin version".into(),

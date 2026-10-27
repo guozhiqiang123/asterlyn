@@ -15,7 +15,7 @@ use asterlyn_plugin_package::{
 use asterlyn_plugin_runtime::PluginHostSupervisor;
 use asterlyn_plugin_runtime_protocol::ShutdownReason;
 use sha2::{Digest, Sha256};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -36,6 +36,10 @@ use super::plugin_marketplace_verification::{
 };
 
 mod bundled;
+pub(crate) const INSTALLATIONS_CHANGED: &str = "asterlyn://plugin-installations-changed";
+fn publish_installations(app: &tauri::AppHandle, snapshot: &PluginInstallationSnapshot) {
+    let _ = app.emit(INSTALLATIONS_CHANGED, snapshot.generation);
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -277,6 +281,9 @@ pub(crate) fn confirm_plugin_install(
     let admission = marketplace.take_admission(&review_token)?;
     let result = marketplace.run(|| commit_admission(&app, &admission));
     let _ = fs::remove_file(&admission.staging_path);
+    if let Ok(snapshot) = &result {
+        publish_installations(&app, snapshot);
+    }
     result
 }
 
@@ -311,14 +318,20 @@ pub(crate) fn set_installed_plugin_enabled(
     supervisor: State<'_, PluginHostSupervisor>,
 ) -> Result<PluginInstallationSnapshot, String> {
     marketplace.run(|| {
+        let snapshot = installation_store(&app)?
+            .set_plugin_enabled(&plugin_id, enabled)
+            .map_err(|error| error.to_string())?;
         if !enabled {
             tasks.cancel_plugin(&plugin_id);
             process_queries.cancel_plugin(&plugin_id);
             supervisor.stop_plugin_all(&plugin_id, ShutdownReason::Disabled);
+            if plugin_id == "dev.asterlyn.lsp" {
+                app.state::<crate::application::LanguageServiceManager>()
+                    .stop_sessions();
+            }
         }
-        installation_store(&app)?
-            .set_plugin_enabled(&plugin_id, enabled)
-            .map_err(|error| error.to_string())
+        publish_installations(&app, &snapshot);
+        Ok(snapshot)
     })
 }
 
@@ -331,9 +344,11 @@ pub(crate) fn select_installed_plugin_rollback(
     marketplace: State<'_, PluginMarketplaceCoordinator>,
 ) -> Result<PluginInstallationSnapshot, String> {
     marketplace.run(|| {
-        installation_store(&app)?
+        let snapshot = installation_store(&app)?
             .select_rollback(&plugin_id, &version, &package_digest)
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        publish_installations(&app, &snapshot);
+        Ok(snapshot)
     })
 }
 
@@ -372,9 +387,11 @@ pub(crate) fn repair_installed_plugin_version(
             &package_digest,
             candidate.content_digest.as_deref(),
         )?;
-        installation
+        let snapshot = installation
             .repair_quarantined_version(&plugin_id, &version, &package_digest)
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        publish_installations(&app, &snapshot);
+        Ok(snapshot)
     })
 }
 
@@ -389,6 +406,9 @@ pub(crate) fn uninstall_installed_plugin(
 ) -> Result<PluginInstallationSnapshot, String> {
     marketplace.run(|| {
         let installation = installation_store(&app)?;
+        installation
+            .ensure_can_remove(&plugin_id)
+            .map_err(|error| error.to_string())?;
         let snapshot = installation.snapshot().map_err(|error| error.to_string())?;
         let plugin = snapshot
             .plugins
@@ -414,6 +434,7 @@ pub(crate) fn uninstall_installed_plugin(
                 if tombstone.exists() {
                     let _ = remove_marketplace_entry(&tombstone);
                 }
+                publish_installations(&app, &snapshot);
                 Ok(snapshot)
             }
             Err(error) => {
@@ -617,7 +638,7 @@ fn commit_admission(
     )?;
     retain_package_archive(&archive, &bytes, &admission.digest)?;
     installation_store(app)?
-        .record_admitted(
+        .record_admitted_with_dependencies(
             AdmittedPluginIdentity {
                 plugin_id: &admission.report.plugin_id,
                 repository: &admission.repository,
@@ -627,6 +648,7 @@ fn commit_admission(
             },
             now_ms(),
             source.built_in,
+            admission.report.management_manifest.dependencies.clone(),
         )
         .map_err(|error| error.to_string())
 }
@@ -1167,6 +1189,7 @@ mod tests {
     #[test]
     fn bundled_lsp_package_is_admitted_enabled_and_sealed_offline() {
         let directory = tempfile::tempdir().unwrap();
+        ensure_bundled_android_package(directory.path(), BUNDLED_ANDROID_PACKAGE).unwrap();
         let snapshot = ensure_bundled_lsp_package(directory.path(), BUNDLED_LSP_PACKAGE).unwrap();
         let plugin = snapshot
             .plugins

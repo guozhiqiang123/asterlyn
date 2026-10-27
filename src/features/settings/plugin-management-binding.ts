@@ -37,6 +37,8 @@ export class PluginManagementBinding {
   private loaded = false;
   private pendingFocus: PluginSettingsFocusTarget | null = null;
   private readonly release: () => void;
+  private releaseInstallations: (() => void) | null = null;
+  private disposed = false;
   private tab: PluginMarketplaceViewState["tab"] = "installed";
   private marketplaceSnapshot: PluginSourceSnapshot | null = null;
   private marketplaceLoading = false;
@@ -62,6 +64,14 @@ export class PluginManagementBinding {
     this.release = host.subscribePluginManagement(() => {
       if (this.options.visible()) this.options.render();
     });
+    void marketplace.subscribeInstallations?.(() => {
+      void marketplace.listPluginInstallations().then((snapshot) => {
+        if (this.disposed || (this.installations && snapshot.generation < this.installations.generation)) return;
+        this.installations = snapshot;
+        if (this.options.visible()) this.options.render();
+      }).catch(options.reportError);
+    }).then((release) => { if (this.disposed) release(); else this.releaseInstallations = release; }).catch(options.reportError);
+
   }
 
   enter(target?: PluginSettingsFocusTarget): void {
@@ -153,7 +163,7 @@ export class PluginManagementBinding {
     this.focusPendingTarget();
   }
 
-  dispose(): void { this.release(); }
+  dispose(): void { this.disposed = true; this.release(); this.releaseInstallations?.(); }
 
   private ensureCatalog(): void {
     if (!this.loaded && !this.loading) {

@@ -126,6 +126,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asterlyn-plugin-dependencies"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "asterlyn-plugin-host"
 version = "0.1.0"
 dependencies = [
@@ -144,6 +152,7 @@ dependencies = [
 name = "asterlyn-plugin-marketplace"
 version = "0.1.0"
 dependencies = [
+ "asterlyn-plugin-dependencies",
  "serde",
  "serde_json",
  "tempfile",
@@ -153,6 +162,7 @@ dependencies = [
 name = "asterlyn-plugin-package"
 version = "0.1.0"
 dependencies = [
+ "asterlyn-plugin-dependencies",
  "flate2",
  "serde",
  "serde_json",

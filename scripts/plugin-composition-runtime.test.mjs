@@ -445,3 +445,40 @@ function externalBridge(activation) {
     subscribeTerminations: async () => () => undefined,
   };
 }
+
+
+test("native installation changes reconcile other windows without reactivating healthy peers", async () => {
+  let changed;
+  let released = false;
+  let enabled = true;
+  let activations = 0;
+  const errors = [];
+  const providers = [];
+  const activation = { pluginId: "fixture", pluginVersion: "1.0.0", packageDigest: `sha256:${"a".repeat(64)}`,
+    sessionId: "external-session", contributions: [{kind: "taskProvider", id: "tasks", payload: {label: "External"}, callbacks: {snapshot: "snapshot"}}] };
+  const bridge = externalBridge(activation);
+  bridge.activate = async () => { activations += 1; return activation; };
+  const store = marketplace("fixture");
+  store.subscribeInstallations = async (listener) => { changed = listener; return () => { released = true; }; };
+  store.listPluginInstallations = async () => { const snapshot = installation("fixture"); snapshot.plugins[0].enabled = enabled; return snapshot; };
+  const runtime = new PluginCompositionRuntime({ registerCommand: () => () => {}, replaceProviders: (_identity, value) => { providers.push(value); },
+    reportDiagnostic: () => {}, reportError: (error) => errors.push(error), installedPluginRuntimeBridge: bridge, pluginMarketplaceBridge: store });
+  await runtime.activateWorkspace(identity);
+  await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
+  assert.equal(activations, 1);
+  changed();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(activations, 1, "unrelated global change preserves a healthy isolated runtime");
+  enabled = false;
+  changed();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runtime.contributionRegistry.get("fixture.tasks"), null);
+  assert.deepEqual(providers.at(-1), []);
+  enabled = true;
+  changed();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(activations, 2);
+  assert.equal(errors.length, 0);
+  runtime.dispose();
+  assert.equal(released, true);
+});

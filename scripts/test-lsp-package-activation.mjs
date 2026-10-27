@@ -13,24 +13,24 @@ import { createLanguageServicesRuntime } from "../src/composition/language-servi
 // This intentionally traverses the desktop validator used by the installed app, not just the
 // helper's activationReady message or a direct import of the plugin descriptor.
 const root = fileURLToPath(new URL("../", import.meta.url));
-const archive = join(root, "src-tauri/resources/plugins/asterlyn-plugin-lsp-0.2.0.asterlyn-plugin.tgz");
+const archive = join(root, "src-tauri/resources/plugins/asterlyn-plugin-lsp-0.2.1.asterlyn-plugin.tgz");
 const bytes = await readFile(archive), digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const helper = resolve(process.env.ASTERLYN_PLUGIN_HOST ?? join(root, `target/debug/asterlyn-plugin-host${process.platform === "win32" ? ".exe" : ""}`));
 if (!process.env.ASTERLYN_PLUGIN_HOST) {
   const built = spawnSync("cargo", ["build", "--quiet", "--locked", "-p", "asterlyn-plugin-host", "--bin", "asterlyn-plugin-host"], { cwd: root, encoding: "utf8" });
   assert.equal(built.status, 0, built.stderr);
 }
-const inspected = spawnSync("cargo", ["run", "--quiet", "--locked", "-p", "asterlyn-plugin-package", "--bin", "asterlyn-plugin-inspect", "--", archive, "guozhiqiang123/asterlyn-plugin-lsp", "0.2.0", "0.1.21"], { cwd: root, encoding: "utf8" });
+const inspected = spawnSync("cargo", ["run", "--quiet", "--locked", "-p", "asterlyn-plugin-package", "--bin", "asterlyn-plugin-inspect", "--", archive, "guozhiqiang123/asterlyn-plugin-lsp", "0.2.1", "0.1.21"], { cwd: root, encoding: "utf8" });
 assert.equal(inspected.status, 0, inspected.stderr);
 const inspector = join(root, `target/debug/asterlyn-plugin-inspect${process.platform === "win32" ? ".exe" : ""}`);
 const legacy = spawnSync(inspector, [join(root, "src-tauri/resources/plugins/asterlyn-plugin-lsp-0.1.0.asterlyn-plugin.tgz"), "guozhiqiang123/asterlyn-plugin-lsp", "0.1.0", "0.1.21"], { encoding: "utf8" });
 assert.equal(legacy.status, 0, "new host must continue accepting the previous TypeScript-only package");
-const incompatible = spawnSync(inspector, [archive, "guozhiqiang123/asterlyn-plugin-lsp", "0.2.0", "0.1.20"], { encoding: "utf8" });
+const incompatible = spawnSync(inspector, [archive, "guozhiqiang123/asterlyn-plugin-lsp", "0.2.1", "0.1.20"], { encoding: "utf8" });
 assert.notEqual(incompatible.status, 0, "Rust package must be rejected by an older host's compatibility gate");
 const extracted = await mkdtemp(join(tmpdir(), "asterlyn-lsp-projected-"));
 const unpacked = spawnSync("tar", ["-xzf", archive, "-C", extracted], { encoding: "utf8" });
 assert.equal(unpacked.status, 0, unpacked.stderr);
-const child = spawn(helper, ["--plugin-root", extracted, "--plugin-id", "dev.asterlyn.lsp", "--plugin-version", "0.2.0", "--package-digest", digest, "--runtime-entry", "runtime/plugin.js"], { stdio: ["pipe", "pipe", "pipe"] });
+const child = spawn(helper, ["--plugin-root", extracted, "--plugin-id", "dev.asterlyn.lsp", "--plugin-version", "0.2.1", "--package-digest", digest, "--runtime-entry", "runtime/plugin.js"], { stdio: ["pipe", "pipe", "pipe"] });
 child.stdin.on("error", () => {});
 let stderr = ""; child.stderr.on("data", (data) => { stderr = (stderr + data).slice(-4096); });
 const exited = new Promise((resolve) => child.once("exit", (code) => resolve(code)));
@@ -52,9 +52,9 @@ try {
   send(1, "helloAck", { sessionId: "lsp-native-projection", capabilities: [], permissions: ["host.language-services.execute"] });
   send(2, "activate", { sessionId: "lsp-native-projection", workspaceId: "fixture", workspaceGeneration: 1, workspaceRoot: root.replace(/\/$/u, ""), evidence: {}, locale: "en-US", theme: "dark" });
   const ready = await frame(); assert.equal(ready.message.type, "activationReady", JSON.stringify(ready.message));
-  const activation = { pluginId: "dev.asterlyn.lsp", pluginVersion: "0.2.0", packageDigest: digest, sessionId: "lsp-native-projection", contributions: ready.message.data.contributions };
+  const activation = { pluginId: "dev.asterlyn.lsp", pluginVersion: "0.2.1", packageDigest: digest, sessionId: "lsp-native-projection", contributions: ready.message.data.contributions };
   const registry = new PluginContributionRegistry();
-  const installation = { schemaVersion: 2, generation: 1, recovered: false, plugins: [{ pluginId: activation.pluginId, repository: "guozhiqiang123/asterlyn-plugin-lsp", enabled: true, bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.2.0", versions: [{ version: "0.2.0", packageDigest: digest, contentDigest: JSON.parse(inspected.stdout).contentDigest, admittedAtEpochMs: 1, runtimeStatus: "pendingRuntime" }] }] };
+  const installation = { schemaVersion: 2, generation: 1, recovered: false, plugins: [{ pluginId: activation.pluginId, repository: "guozhiqiang123/asterlyn-plugin-lsp", enabled: true, bundledFallback: true, activeVersion: null, knownGoodVersion: null, pendingVersion: "0.2.1", versions: [{ version: "0.2.1", packageDigest: digest, contentDigest: JSON.parse(inspected.stdout).contentDigest, admittedAtEpochMs: 1, runtimeStatus: "pendingRuntime" }] }] };
   external = new ExternalPluginRuntime({ registry, locale: () => "en-US", reportError: (error) => { throw error; }, marketplace: { listPluginInstallations: async () => installation }, healthCheckpointMs: 60000,
     bridge: { activate: async () => validateDesktopResult("activate_installed_plugin_runtime", activation), invoke: async () => { throw Error("metadata has no callback"); }, confirmHealthy: async () => installation, failActivation: async () => { throw Error("valid package must not be quarantined"); }, abandonActivation: async () => installation, deactivate: async () => {}, diagnostics: async () => ({ stderr: "", stderrTruncated: false, protocolDiagnostics: [] }), subscribe: async () => () => {}, subscribeNotifications: async () => () => {}, subscribeTerminations: async () => () => {} } });
   const workspace = { root: root.replace(/\/$/u, ""), generation: 1 };
@@ -62,7 +62,7 @@ try {
   assert.equal(registry.list().filter((entry) => entry.kind === "language-service").length, 2);
   let binding; const reviewed = [];
   languages = createLanguageServicesRuntime({ registry, workspace: () => workspace, document: (handle) => ({ workspacePath: handle.path, loadEpoch: 1, readOnly: false }), bind: (factory) => { binding = factory; }, navigate: () => {}, reportError: (error) => { throw error; },
-    native: { subscribe: () => () => {}, prepare: async (_root, _plugin, serverId) => { reviewed.push(serverId); return { reviewId: "fixture", pluginId: activation.pluginId, serverId, pluginVersion: "0.2.0", packageDigest: digest, resourceDigest: "fixture", executableIdentity: "fixture", expiresAt: Date.now() + 60000 }; }, confirm: async () => false } });
+    native: { subscribe: () => () => {}, prepare: async (_root, _plugin, serverId) => { reviewed.push(serverId); return { reviewId: "fixture", pluginId: activation.pluginId, serverId, pluginVersion: "0.2.1", packageDigest: digest, resourceDigest: "fixture", executableIdentity: "fixture", expiresAt: Date.now() + 60000 }; }, confirm: async () => false } });
   languages.refresh();
   for (const path of ["src/app.ts", "src-tauri/src/application/language_service.rs"]) {
     const handle = { tabId: path, path, loadEpoch: 1 }; const port = binding(handle); assert.ok(port);

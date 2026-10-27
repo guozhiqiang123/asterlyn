@@ -71,7 +71,7 @@ export class PluginManagementRuntime {
     const entries: PluginManagementEntry[] = this.plugins.map((plugin) => Object.freeze({
       id: plugin.id,
       version: plugin.version,
-      origin: plugin.origin,
+      ...(plugin.manifest.dependencies === undefined ? {} : { dependencies: plugin.manifest.dependencies }),      origin: plugin.origin,
       nameKey: plugin.manifest.nameKey,
       descriptionKey: plugin.manifest.descriptionKey,
       localization: plugin.manifest.localization,

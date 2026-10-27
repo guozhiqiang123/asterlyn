@@ -61,7 +61,7 @@ export interface PluginCompositionRuntimeOptions {
   readonly processQueryBridge?: PluginProcessQueryBridge;
   readonly workspaceStateStorage?: PluginWorkspaceStateStorage;
   readonly installedPluginRuntimeBridge?: InstalledPluginRuntimeBridge;
-  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests">;
+  readonly pluginMarketplaceBridge?: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests" | "subscribeInstallations">;
   readonly installedPluginHealthCheckpointMs?: number;
   readonly locale?: () => string;
   readonly mutationBlocked?: () => boolean;
@@ -73,7 +73,7 @@ export class PluginCompositionRuntime {
   private readonly contributions: PluginContributionRuntime;
   private readonly external: ExternalPluginRuntime | null;
   private readonly loadPlugins: () => Promise<readonly BundledPlugin[]>;
-  private readonly marketplace: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests"> | null;
+  private readonly marketplace: Pick<PluginMarketplaceBridge, "listPluginInstallations" | "listInstalledPluginManifests" | "subscribeInstallations"> | null;
   private readonly reportError: (error: unknown) => void;
   private catalogManifests = new Map<string, PluginCatalogEntry>();
   readonly preferences: PluginPreferenceStore;
@@ -86,6 +86,7 @@ export class PluginCompositionRuntime {
   private preferenceTransition: Promise<void> = Promise.resolve();
   private readonly releasePreferences: () => void;
   private disposed = false;
+  private releaseInstallations: (() => void) | null = null;
 
   constructor(options: PluginCompositionRuntimeOptions) {
     this.reportError = options.reportError;
@@ -178,6 +179,14 @@ export class PluginCompositionRuntime {
         .catch(options.reportError);
     });
     this.loadPlugins = options.loadPlugins ?? (async () => []);
+    void this.marketplace?.subscribeInstallations?.(() => {
+      if (this.disposed) return;
+      this.preferenceTransition = this.preferenceTransition.then(async () => {
+        await this.loadManagementCatalog();
+        await this.reactivateCurrent(true);
+      }).catch(options.reportError);
+    }).then((release) => { if (this.disposed) release(); else this.releaseInstallations = release; }).catch(options.reportError);
+
   }
 
   pluginSettingsTargets(): PluginSettingsTargetResolution {
@@ -262,6 +271,7 @@ export class PluginCompositionRuntime {
   }
 
   setPluginEnabled(pluginId: string, enabled: boolean): boolean {
+    if (this.catalogManifests.get(pluginId)?.origin === "installed") return false;
     return this.preferences.setEnabled(pluginId, enabled);
   }
 
@@ -296,6 +306,7 @@ export class PluginCompositionRuntime {
     this.evidence = null;
     this.evidenceKey = null;
     this.releasePreferences();
+    this.releaseInstallations?.();
     this.management.dispose();
     this.preferences.dispose();
     this.contributions.dispose();
@@ -312,11 +323,11 @@ export class PluginCompositionRuntime {
     return this.pluginsPromise;
   }
 
-  private reactivateCurrent(): Promise<void> {
-    return this.serializeLifecycle(() => this.reactivateCurrentSerialized());
+  private reactivateCurrent(preserveExternal = false): Promise<void> {
+    return this.serializeLifecycle(() => this.reactivateCurrentSerialized(preserveExternal));
   }
 
-  private async reactivateCurrentSerialized(): Promise<void> {
+  private async reactivateCurrentSerialized(preserveExternal = false): Promise<void> {
     const identity = this.identity;
     const evidence = this.evidence;
     if (!identity || !evidence || this.disposed) return;
@@ -327,7 +338,7 @@ export class PluginCompositionRuntime {
     this.preferences.setManifests(catalog.map((plugin) => plugin.manifest), false);
     this.management.setCatalog(catalog);
     const matched = matchingPluginIds(identity, evidence, plugins);
-    const report = await this.activatePlugins(identity, evidence, plugins);
+    const report = await this.activatePlugins(identity, evidence, plugins, preserveExternal);
     if (this.matches(identity) && !this.disposed) {
       this.evidenceKey = pluginEvidenceKey(identity, evidence, plugins);
       this.management.setMatched(Object.freeze([...new Set([...matched, ...report.activated])]));
@@ -370,7 +381,7 @@ export class PluginCompositionRuntime {
         externalActivated = await this.external.activate(
           identity,
           evidence,
-          (pluginId) => this.preferences.isEnabled(pluginId),
+          () => true, // Native installation enablement is authoritative for installed packages.
           preserveExternal,
         );
       } catch (error) {

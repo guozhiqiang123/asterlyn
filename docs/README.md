@@ -238,3 +238,5 @@ The documents in this directory are the current source of truth. A decision that
 
 - [`architecture/decisions/0035-plugin-dependencies-and-build-models.md`](architecture/decisions/0035-plugin-dependencies-and-build-models.md) — generic required-plugin lifecycle and plugin-owned Android/LSP model cooperation.
 - [`engineering/2026-10-27-plugin-build-model-cooperation-plan.md`](engineering/2026-10-27-plugin-build-model-cooperation-plan.md) — documentation-first stages, LSP→Android enablement lock, bounded model services and actual-language gates.
+
+- [`benchmarks/2026-10-27-plugin-dependencies-c1.md`](benchmarks/2026-10-27-plugin-dependencies-c1.md) — required dependency transactions, LSP→Android enablement lock and C1 regression evidence.

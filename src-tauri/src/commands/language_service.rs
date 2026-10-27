@@ -275,7 +275,7 @@ pub(crate) async fn start_language_service(
     let owner = subject(&active, &window, &workspace_root)?;
     tauri::async_runtime::spawn_blocking(move || {
         let package = installed_package(&app, &owner.root, &server_id)?;
-        app.state::<LanguageServiceManager>()
+        let authority = app.state::<LanguageServiceManager>()
             .consume(&review_id, &owner, &package)?;
         let permitted_app = app.clone();
         let permitted_owner = owner.clone();
@@ -312,7 +312,7 @@ pub(crate) async fn start_language_service(
         );
         let session = app
             .state::<LanguageServiceManager>()
-            .start(owner, package, allowed, emit)?;
+            .start(owner, package, authority, allowed, emit)?;
         app.state::<DiagnosticsLog>().info(
             "language.service",
             "session.started",
