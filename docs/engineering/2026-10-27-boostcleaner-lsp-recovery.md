@@ -95,3 +95,27 @@ a new provider. On boostCleaner both exact packages passed activation and their 
 One concurrent Rust build/import probe exceeded the development harness's original five-minute
 budget; its failure is retained. A separate complete run is measured without that competing build.
 The bounded ten-minute acceptance budget is not a product startup SLA.
+
+## Additional compatibility gate: Kotlin 2.3 metadata
+
+The 0.3.5 full 25-module run passes actual-source Java→Java, Kotlin→Java and Java→Kotlin definition,
+hover/completion and exact-line unsaved diagnostics. Java baseline is clean; Kotlin has ten baseline
+diagnostics. A direct module-closure probe (without KAPT) identifies a separate blocker: the real
+project selects kotlin-stdlib 2.3.21 / metadata 2.3.0, while fwcd's compiler 2.1.0 accepts at most
+2.2.0 metadata. Java getLong/setLong mapping works, but coerceAtLeast/minutes do not resolve. This
+is not accepted as normal Kotlin support merely because application-defined navigation passes.
+
+Follow-up sequence before closing real-project acceptance:
+
+1. Build the pinned MIT fwcd source against published, version-matched Kotlin 2.3.21 compiler/runtime
+   artifacts in an independent directory. Preserve lazy compilation, URI encoding and exact-version
+   diagnostic guards; record every source/artifact digest, licenses and deterministic build steps.
+2. Keep the compiler/server behind the plugin's on-demand verified analysis-component boundary.
+   Do not add Kotlin/Gradle algorithms or runtime dependencies to the lightweight desktop host,
+   source tools from an IDE, change business dependencies, or disable metadata/TLS validation.
+3. Freeze a new local component/plugin identity. Test baseline diagnostics and standard-library
+   definition/hover/completion as well as Java interoperability and all existing dirty-buffer,
+   module-isolation and recovery gates. Unknown newer language formats must remain explicit.
+4. Repeat complete packaged 25-module and installed boostCleaner acceptance, then update receipts,
+   sign/install canonically and commit the implementation/evidence in steps. Current 0.3.5 package
+   evidence is intermediate; screen lock currently prevents further native input verification.
