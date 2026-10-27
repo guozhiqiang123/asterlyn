@@ -76,6 +76,7 @@ dependencies = [
  "asterlyn-git",
  "asterlyn-language-service",
  "asterlyn-plugin-analysis",
+ "asterlyn-plugin-dependencies",
  "asterlyn-plugin-marketplace",
  "asterlyn-plugin-models",
  "asterlyn-plugin-package",

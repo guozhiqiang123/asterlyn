@@ -367,8 +367,15 @@ pub(super) fn model_access(
                     && old.service == key.service
                     && (refresh || old != &key)
             });
-            let grant = ModelGrant::admit(&snapshot.view(), consumer.clone(), key)
-                .map_err(|_| "workspace model authority is unavailable")?;
+            let grant =
+                ModelGrant::admit(&snapshot.view(), consumer.clone(), key).map_err(|error| {
+                    match error {
+                        asterlyn_plugin_models::ModelError::InvalidIdentity => {
+                            "workspace model identity is invalid"
+                        }
+                        _ => "workspace model authority is unavailable",
+                    }
+                })?;
             let input = json!({"protocolVersion":1,"workspaceRoot":owner.root,"state":state,"tools":admitted_resources["tools"],"components":admitted_resources["components"],"inputDigest":fingerprint});
             let mut environment = BTreeMap::new();
             for name in ["HOME", "USERPROFILE", "TMPDIR", "TEMP", "SystemRoot"] {
@@ -462,7 +469,9 @@ pub(super) fn model_access(
             })
         })();
         if let Err(error) = &result {
-            let code = if error.contains("selection") {
+            let code = if error.contains("identity") {
+                "identity-invalid"
+            } else if error.contains("selection") {
                 "selection-unavailable"
             } else if error.contains("authority") || error.contains("workspace ended") {
                 "authority-revoked"

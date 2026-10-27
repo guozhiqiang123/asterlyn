@@ -82,3 +82,16 @@ Three native tests use the actual previous/current archives: partial-pending upg
 activation/health promotion and idempotent restart; disabled choices preserved; incompatible enabled
 third-party consumer rejects the entire write. All pass. Final native library: 170 pass / 3 ignored;
 marketplace: 23 unit + 1 version-compatibility + 4 persistence tests pass; strict clippy passes.
+
+## Native model identity regression
+
+The resumed desktop probe reached frontend/package health, but actual Android requests failed before
+worker launch. The task-cache fingerprint is bare SHA-256 hex, whereas the model grant requires
+algorithm-qualified `sha256:` identities. The native input adapter now qualifies its fingerprint;
+the model kernel remains strict. A regression feeds the real filesystem fingerprint through
+`ModelGrant::admit`, and also verifies that the old bare representation is rejected. Model logs
+distinguish `identity-invalid` from revoked authority without recording source, selection or paths.
+Direct adapter/actor probes with a simulated model reply do not establish native model admission;
+delivery must additionally observe actual `worker.progress` and `model.acquired` events.
+
+After the correction: native library 171 pass / 3 ignored; strict native clippy passes.

@@ -75,15 +75,87 @@ pub(super) fn fingerprint(root: &Path, globs: &[String]) -> Result<String, Strin
         root,
         &paths.into_iter().collect::<Vec<_>>(),
     );
-    result.digest.ok_or_else(|| {
-        result
-            .reason
-            .unwrap_or_else(|| "model inputs unavailable".into())
-    })
+    // Task-cache fingerprints are bare hex; model identities use algorithm-qualified digests.
+    // Adapt at this boundary rather than weakening the model kernel's identity checks.
+    result
+        .digest
+        .map(|hex| format!("sha256:{hex}"))
+        .ok_or_else(|| {
+            result
+                .reason
+                .unwrap_or_else(|| "model inputs unavailable".into())
+        })
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    use asterlyn_plugin_dependencies::{DependencyNode, PluginDependency};
+    use asterlyn_plugin_models::{
+        ModelAuthority, ModelError, ModelGrant, ModelKey, PackageIdentity, ProvidedService, Scope,
+        content_digest,
+    };
+
+    #[test]
+    fn real_input_fingerprint_passes_the_native_model_grant() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("build.gradle"), "plugins {}\n").unwrap();
+        let fingerprint = fingerprint(root.path(), &["*.gradle".into()]).unwrap();
+        let scope = Scope {
+            owner: "main".into(),
+            workspace_digest: content_digest(root.path().to_string_lossy().as_bytes()),
+            activation: 1,
+        };
+        let packages = ["producer", "consumer"].map(|id| PackageIdentity {
+            id: id.into(),
+            version: "1.0.0".into(),
+            archive_digest: content_digest(id.as_bytes()),
+            content_digest: content_digest(b"contents"),
+        });
+        let nodes = packages.each_ref().map(|package| DependencyNode {
+            id: package.id.clone(),
+            versions: vec![package.version.clone()],
+            enabled: true,
+            available: true,
+            dependencies: if package.id == "consumer" {
+                vec![PluginDependency {
+                    id: "producer".into(),
+                    minimum: "1.0.0".into(),
+                    maximum_exclusive: None,
+                }]
+            } else {
+                vec![]
+            },
+        });
+        let services = [ProvidedService {
+            producer: packages[0].clone(),
+            id: "build-model".into(),
+            schema: 1,
+        }];
+        let authority = ModelAuthority {
+            nodes: &nodes,
+            packages: &packages,
+            scope: &scope,
+            services: &services,
+        };
+        let key = ModelKey {
+            scope: scope.clone(),
+            producer: packages[0].clone(),
+            service: services[0].id.clone(),
+            schema: 1,
+            build_root_digest: scope.workspace_digest.clone(),
+            input_digest: fingerprint.clone(),
+            selection_digest: content_digest(b"selected"),
+            tool_digest: content_digest(b"tool"),
+        };
+        ModelGrant::admit(&authority, packages[1].clone(), key.clone()).unwrap();
+        // Prove the kernel still rejects the former unqualified representation.
+        let mut bare_key = key;
+        bare_key.input_digest = fingerprint.strip_prefix("sha256:").unwrap().into();
+        assert!(matches!(
+            ModelGrant::admit(&authority, packages[1].clone(), bare_key),
+            Err(ModelError::InvalidIdentity)
+        ));
+    }
     #[test]
     fn content_and_new_inputs_invalidate_without_scanning_outputs() {
         let root = tempfile::tempdir().unwrap();

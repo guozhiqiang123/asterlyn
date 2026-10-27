@@ -40,6 +40,7 @@ tauri-plugin-dialog = "2"
 url = "=2.5.8"
 
 [dev-dependencies]
+asterlyn-plugin-dependencies = { path = "../crates/asterlyn-plugin-dependencies" }
 tempfile.workspace = true
 
 [target.'cfg(windows)'.dependencies]
