@@ -135,3 +135,8 @@ Both plugins remain enabled/active/known-good. No tag, push or remote release wa
 Local receipts: `/tmp/asterlyn-android-lsp/native-model-desktop-acceptance.json`,
 `native-model-desktop-processes.json`, `final-plugin-startup.json`, `final-signed-artifact.json`,
 `final-signed-archive.json`, `final-installation.json` and `delivery-status.json` in that directory.
+
+
+Later real boostCleaner dependency/TLS recovery and large-project evidence is recorded separately
+in [the recovery record](../engineering/2026-10-27-boostcleaner-lsp-recovery.md). The package hashes
+and fixture measurements above remain historical 0.3.0 evidence.

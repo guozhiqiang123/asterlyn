@@ -62,3 +62,36 @@ language directions, dirty diagnostics, saved-buffer reopening, variant/model re
 isolation and owned Kotlin crash recovery. Java syntax feedback while Kotlin is invalid took 37 ms.
 Native inspector/helper/desktop-validator/contribution routing also passes. Real-project final
 measurements and canonical installed acceptance are appended after completion.
+
+## Real-project findings and final candidate
+
+The complete 0.3.4 adapter run reached readiness in 252.128 s and passed three actual-source
+definition/hover/completion groups: Java→Java common storage, Kotlin→Java common storage and
+Java→Kotlin app configuration. The stricter baseline-then-edit diagnostic-position check rejected
+its Java syntax result. The real common-module reproduction isolated incremental JDT parser state: a
+new syntax error on line 21 was returned on the original class at line 5.
+
+LSP 0.3.5 parses current captured text with a fresh JDT ASTParser only for partial syntax reports,
+using project compiler options without binding resolution. Full semantic diagnostics retain their
+existing path. The exact bridge rebuild is 8,274 bytes, SHA-256
+`efbc2e3cd3bc835a08e17f6ce5410b9d46374e1ab220b303d5d87932781c67d0`.
+The reproduced common-module case now has zero baseline errors and five injected errors at the
+correct line, returned in 13 ms; business sources remain unchanged.
+
+Final bundled LSP 0.3.5: 5,079,800 bytes, SHA-256
+`8a5a04a17d391197e69fd8012a29fc7979fcaada6f0a27ed6b79342fbdb50d8c`.
+Final acceptance below uses this archive, not a source-only backend or the previous candidate.
+
+The canonical 0.3.4 intermediate installation preserved app-root inode 203606126 and passed two
+icon-bookmark launches with frontend_ready. In that installed boostCleaner session, task discovery
+returned 13,676 tasks in 16.313 s and the native model worker exported 25 modules in 24.441 s. Actual
+Ctrl-clicks from AdsRuntimeState.kt/getLong and RecommendConfig.java/getInt both opened the real
+common SharedPref.java. This is navigation evidence for the preceding candidate; the final Java
+syntax correction requires its own installed identity and startup receipt.
+
+Health probes must open a matching Android project: a metadata-only activation with zero Android
+contributions is abandoned rather than promoted. This is intentionally not a health checkpoint for
+a new provider. On boostCleaner both exact packages passed activation and their native checkpoints.
+One concurrent Rust build/import probe exceeded the development harness's original five-minute
+budget; its failure is retained. A separate complete run is measured without that competing build.
+The bounded ten-minute acceptance budget is not a product startup SLA.
