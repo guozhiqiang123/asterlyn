@@ -137,8 +137,8 @@ pub(super) fn actor(
                                 .is_some_and(|doc| doc.version == request.version);
                             let result = if !valid || request.model_generation != model_generation {
                                 Err("language result is stale".into())
-                            } else if response.error.is_some() {
-                                Err("language server rejected the request".into())
+                            } else if let Some(error) = response.error {
+                                Err(response_failure(error.code).into())
                             } else {
                                 {
                                     let value = response.result.unwrap_or(Value::Null);
@@ -620,4 +620,33 @@ pub(super) fn actor(
         version: None,
         diagnostics: None,
     });
+}
+
+fn response_failure(code: i64) -> &'static str {
+    // LSP ContentModified means that the server's analysis snapshot changed. The caller may retry
+    // against the current context; it is the same informational state as initial project indexing.
+    if code == -32801 {
+        "Language services are loading this project. Try navigation again shortly."
+    } else {
+        "language server rejected the request"
+    }
+}
+
+#[cfg(test)]
+mod response_tests {
+    use super::response_failure;
+
+    #[test]
+    fn changed_analysis_is_retryable_but_other_server_errors_remain_failures() {
+        assert_eq!(
+            response_failure(-32801),
+            "Language services are loading this project. Try navigation again shortly."
+        );
+        for code in [-32603, -32601, -32000] {
+            assert_eq!(
+                response_failure(code),
+                "language server rejected the request"
+            );
+        }
+    }
 }

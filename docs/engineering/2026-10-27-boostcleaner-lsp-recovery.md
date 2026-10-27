@@ -34,3 +34,16 @@ References: [AGP injected properties](https://android.googlesource.com/platform/
 [Gradle network configuration](https://docs.gradle.org/current/userguide/networking.html).
 
 Evidence directory: `/tmp/asterlyn-android-lsp/boost-recovery-20261027`.
+
+## Generic native response handling
+
+LSP ContentModified (`-32801`) means that the source context is no longer current. The native
+actor maps only this response code to the existing informational loading/retry message. Existing
+document-version/model-generation rejection still runs first; unrelated server errors remain
+failures. Android compiler/Gradle decisions stay in the plugins.
+
+Validation: focused response-code isolation test; all 172 native lib tests passed (3 ignored);
+strict native lib clippy passed, using an isolated target/TMPDIR. This establishes host response
+handling only; final plugin and installed-project acceptance remain required.
+
+Reference: [LSP response errors](https://github.com/microsoft/language-server-protocol/blob/gh-pages/_specifications/lsp/3.18/specification.md).
