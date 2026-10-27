@@ -177,3 +177,37 @@ still available. Standard-library declarations are read-only compiled previews.
 Existing keyboard/readonly accessibility remains unchanged. Groovy/build scripts,
 full cross-language references and a large-project soak guarantee remain outside
 this Kotlin/Java recovery milestone.
+
+## Exact package and canonical installation receipts
+
+The final 0.3.6 archive completes the unchanged 25-module boostCleaner run in
+273.958 s (ready 266.917 s), with all five definition/hover/completion groups and
+both diagnostic checks passing. Baseline errors: Java 0 / Kotlin 0. Injected
+errors cover the exact new line, returned in 13 / 390 ms. Kotlin standard-library
+coerceAtLeast/minutes resolve to integrity-covered compiled declaration previews.
+Peak owned RSS 1,547,936 KiB; shutdown 2.341 s; all source hashes remain unchanged.
+Evidence: `real-036-pull.json`, with the complete mixed fixture in
+`mixed-036-pull.json` under the case directory.
+
+Fresh host build `9fbe2c45a0e71bc66632815aa7a52c708f1e0fb8` / app 0.1.22
+is whole-bundle ad-hoc signed, strict/deep verified, has the expected bundle ID
+and a sealed resource record. Executable SHA-256:
+`a593a3843f4849cdd6147bf33c19e3d75c8c990c83b17f724e09065f77a0a4fc`.
+CRC-verified ZIP: 25,214,355 bytes, SHA-256
+`d37ce6cafabe88a2561426256a3ae340c37a6df12c299a1386c984a826b04694`.
+The matching boostCleaner startup passes both exact plugin native health checkpoints.
+
+Canonical installer receipt `installed-036.json` preserves app-root inode
+203606126/device 16777234, verifies the installed executable matches the accepted
+bundle, and stores the previous app as a verified ZIP only. Both icon-bookmark
+launches record frontend readiness (PIDs 66308 / 66413). The reopened installed
+session also passes the exact Android 0.6.1 and LSP 0.3.6 health predicate in
+`installed-036-health.json`; no quarantine or inactive-plugin result is accepted.
+Two unrelated stale recent-directory invalidPath errors remain visible in the
+startup record and are not represented as language failures or zero-error logs.
+
+macOS remains locked. The rendered-native smoke probe reports WINDOW_MISSING,
+so interactive native navigation and visible-shell acceptance remain pending
+unlock; neither is claimed from frontend readiness alone. The user has been
+asked to unlock, while all independent build/package/install/log gates above
+are complete. No remote push/tag/Release or business-project change occurred.
