@@ -119,3 +119,61 @@ Follow-up sequence before closing real-project acceptance:
 4. Repeat complete packaged 25-module and installed boostCleaner acceptance, then update receipts,
    sign/install canonically and commit the implementation/evidence in steps. Current 0.3.5 package
    evidence is intermediate; screen lock currently prevents further native input verification.
+
+## Kotlin metadata recovery and diagnostic stability gate
+
+A maintained source fork now uses Kotlin 2.3.21 without disabling metadata checks.
+The complete compiler component includes its mediated annotations dependency; the
+initial incomplete proof was rejected by an actual KAPT run, then independently
+rebuilt with all eight runtime inputs. No business dependency or TLS setting changes.
+
+The development 0.3.6 package completes the unchanged real 25-module project in
+239.901 s. All five definition/hover/completion groups pass: Java→Java, Kotlin→Java,
+Java→Kotlin, coerceAtLeast and minutes. Standard-library results are explicitly
+compiled declaration previews with content-addressed identity, not invented source
+bodies. Java/Kotlin baselines both have zero errors. Unsaved injected diagnostics
+cover their exact new line (Java 14 ms, Kotlin 414 ms); source hashes remain unchanged.
+Peak process-tree RSS was 1,689,632 KiB, shutdown 2.514 s.
+
+The same package still fails a mixed fixture intermittently: waiting for debounced
+push diagnostics can time out after 20 s despite current semantic answers. Before
+installation, replace that wait with a version/digest-checked internal Kotlin pull
+request, invalidate unchanged callers when dependency text changes, release closed
+Kotlin ownership and keep private versions monotonic across reopen. Extend the
+fixture to cover dependency-only diagnostics and closing/discarding errors. Final
+component/package identities and installed acceptance remain pending these gates.
+
+## Final pull-diagnostic candidate
+
+The maintained fork uses a semantic source epoch and per-file compiled epochs.
+Dependency edits expire binding contexts lazily while preserving unchanged parsed
+PSI. Initial source registration does not repeatedly clear the source collection.
+The private diagnostic RPC validates open snapshot version/SHA-256 and dependency
+epoch before and after compilation. The adapter protects the owning LRU session,
+rejects changed workspace revisions and releases closed-file diagnostic ownership.
+No new public protocol shape or Android implementation is added to the host.
+
+The exact LSP 0.3.6 archive is 4,649,258 bytes, SHA-256
+`03596cc16c0063daca7d87f3b2509f6b1816ae7025ec73db515c803a27dbcada`.
+It pins separately verified Kotlin language component 2.3.21.2 (90,232,335 bytes,
+SHA-256 `dca2069025626c15dc97c4a83601dbbd8ecd18a90bb5854f45d9617a13c55ef0`)
+and complete compiler/KAPT 2.3.21 component (61,104,615 bytes, SHA-256
+`28f04ffa1a30c2961cb8c71bf655e046ba39ca6d375d2fe81b99e73c842ae1bb`).
+Each language component source rebuild is independent and byte-identical.
+
+All 14 packaged mixed-language checks pass: ready 8.071 s, complete 40.928 s,
+peak owned RSS 1,656,080 KiB, shutdown 906 ms, warm paired definitions p50 6 ms /
+p95 9 ms. The native inspector/helper/desktop-validator/contribution chain passes.
+Host typecheck, production frontend build, all 1,348 script tests and 15 focused
+marketplace native tests pass (one live-network test is intentionally ignored).
+The ownership gate initially rejected the existing 1,514-line marketplace command
+module. Its unchanged test module now resides in `plugin_marketplace/tests.rs`;
+module identity/assertions are preserved and no ownership ceiling is weakened.
+
+Final unchanged boostCleaner and canonical installed receipts follow after completion.
+Cold full model preparation remains a minutes-long operation; Java type-dependent
+queries retry while Kotlin ABI regeneration is pending, with syntax diagnostics
+still available. Standard-library declarations are read-only compiled previews.
+Existing keyboard/readonly accessibility remains unchanged. Groovy/build scripts,
+full cross-language references and a large-project soak guarantee remain outside
+this Kotlin/Java recovery milestone.
