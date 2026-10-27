@@ -1,11 +1,11 @@
 use super::*;
 
 pub(super) const BUNDLED_ANDROID_PLUGIN_ID: &str = "dev.asterlyn.android-gradle";
-pub(super) const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.6.0";
+pub(super) const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.6.1";
 pub(super) const BUNDLED_ANDROID_PACKAGE_DIGEST: &str =
-    "sha256:23b3a596f4b412260c88bb8fc4169427c649b8108dab43470831181949547f1c";
+    "sha256:69a831aa265713e90e2ab2f2a860b6b19dc0057d57fcf23a839e95deb9318339";
 pub(super) const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
-    "../../../resources/plugins/asterlyn-plugin-android-gradle-0.6.0.asterlyn-plugin.tgz"
+    "../../../resources/plugins/asterlyn-plugin-android-gradle-0.6.1.asterlyn-plugin.tgz"
 );
 pub(super) const BUNDLED_LSP_PLUGIN_ID: &str = "dev.asterlyn.lsp";
 pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.3.0";
