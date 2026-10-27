@@ -35,3 +35,10 @@ C1 完成启用关系和执行门禁，不代表 C2–C4 的 Android 模型提�
 不能把“2 个提供者”当成新版本已经通过健康检查。新增 `scripts/verify-plugin-startup.mjs` 同时要求本次进程的精确包激活日志和原生安装索引的同包 knownGood 状态，回归覆盖提前注册、错误摘要、隔离及缺失就绪日志。
 旧应用退出后，通过原生包准入库重新验证固定摘要的保留归档、解包内容及安装收据，再调用安装存储的 repair API 恢复该版本；没有直接编辑 JSON 或伪造 healthy 标记。
 修正探针实际运行后，0.2.1 成为 active/knownGood，依赖最低约束保留；正常退出后不再误隔离。最终签名/安装证据另见本轮交付记录。
+
+## 最终投影核对
+
+安装开关和执行门禁已使用原生启用状态；进一步统一了管理卡片的状态投影，避免旧的窗口偏好把原生已启用的插件显示为 Disabled。
+设置/跨窗口回归同时核对原生关闭后的管理状态，不只核对开关 HTML 或贡献是否移除。相关 35 项回归通过。
+
+Uninstall uses the same language-session revocation as disable, after dependency and bundled-package guards. Native library regression: 163 passed, 3 existing ignored tests (8.49 s).

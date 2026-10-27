@@ -421,6 +421,10 @@ pub(crate) fn uninstall_installed_plugin(
         tasks.cancel_plugin(&plugin_id);
         process_queries.cancel_plugin(&plugin_id);
         supervisor.stop_plugin_all(&plugin_id, ShutdownReason::Disabled);
+        if plugin_id == "dev.asterlyn.lsp" {
+            app.state::<crate::application::LanguageServiceManager>()
+                .stop_sessions();
+        }
 
         let packages = marketplace_root(&app)?.join("packages");
         let plugin_root = packages.join(&plugin_id);

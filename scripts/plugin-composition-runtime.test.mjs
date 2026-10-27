@@ -459,6 +459,8 @@ test("native installation changes reconcile other windows without reactivating h
   const bridge = externalBridge(activation);
   bridge.activate = async () => { activations += 1; return activation; };
   const store = marketplace("fixture");
+  const manifest = { sdkMajor: 1, ...fixturePlugin("fixture", () => {}).manifest };
+  store.listInstalledPluginManifests = async () => ({schemaVersion: 1, generation: 1, manifests: [{pluginId: "fixture", pluginVersion: "1.0.0", packageDigest: activation.packageDigest, manifest, error: null}]});
   store.subscribeInstallations = async (listener) => { changed = listener; return () => { released = true; }; };
   store.listPluginInstallations = async () => { const snapshot = installation("fixture"); snapshot.plugins[0].enabled = enabled; return snapshot; };
   const runtime = new PluginCompositionRuntime({ registerCommand: () => () => {}, replaceProviders: (_identity, value) => { providers.push(value); },
@@ -466,6 +468,7 @@ test("native installation changes reconcile other windows without reactivating h
   await runtime.activateWorkspace(identity);
   await runtime.updateWorkspaceEvidence(identity, evidence(["settings.gradle"]));
   assert.equal(activations, 1);
+  assert.equal(runtime.managementSnapshot.entries[0].enabled, true);
   changed();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(activations, 1, "unrelated global change preserves a healthy isolated runtime");
@@ -474,6 +477,7 @@ test("native installation changes reconcile other windows without reactivating h
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(runtime.contributionRegistry.get("fixture.tasks"), null);
   assert.deepEqual(providers.at(-1), []);
+  assert.equal(runtime.managementSnapshot.entries[0].enabled, false, "installed management status uses native enablement rather than local preferences");
   enabled = true;
   changed();
   await new Promise((resolve) => setImmediate(resolve));

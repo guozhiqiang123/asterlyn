@@ -14,6 +14,7 @@ export class PluginManagementRuntime {
   private readonly preferences: PluginPreferenceStore;
   private readonly listeners = new Set<Listener>();
   private plugins: readonly PluginCatalogEntry[] = [];
+  private installedEnabled: ReadonlyMap<string, boolean> = new Map();
   private matched = new Set<string>();
   private active = new Set<string>();
   private diagnostics = new Map<string, readonly PluginDiagnostic[]>();
@@ -36,6 +37,11 @@ export class PluginManagementRuntime {
 
   setCatalog(plugins: readonly PluginCatalogEntry[]): void {
     this.plugins = [...plugins];
+    this.publish();
+  }
+
+  setInstalledEnabled(values: ReadonlyMap<string, boolean>): void {
+    this.installedEnabled = new Map(values);
     this.publish();
   }
 
@@ -71,12 +77,13 @@ export class PluginManagementRuntime {
     const entries: PluginManagementEntry[] = this.plugins.map((plugin) => Object.freeze({
       id: plugin.id,
       version: plugin.version,
-      ...(plugin.manifest.dependencies === undefined ? {} : { dependencies: plugin.manifest.dependencies }),      origin: plugin.origin,
+      ...(plugin.manifest.dependencies === undefined ? {} : { dependencies: plugin.manifest.dependencies }),
+      origin: plugin.origin,
       nameKey: plugin.manifest.nameKey,
       descriptionKey: plugin.manifest.descriptionKey,
       localization: plugin.manifest.localization,
       ...(plugin.manifest.workspaceTool === undefined ? {} : { workspaceTool: plugin.manifest.workspaceTool }),
-      enabled: preferences.enabled[plugin.id] ?? true,
+      enabled: plugin.origin === "installed" ? (this.installedEnabled.get(plugin.id) ?? false) : (preferences.enabled[plugin.id] ?? true),
       matched: this.matched.has(plugin.id) || (plugin.origin === "installed" && this.active.has(plugin.id)),
       active: this.active.has(plugin.id),
       settingDescriptors: plugin.manifest.settings,

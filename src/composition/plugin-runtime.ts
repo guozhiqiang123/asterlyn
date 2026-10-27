@@ -409,7 +409,11 @@ export class PluginCompositionRuntime {
     }]));
     if (this.marketplace) {
       try {
-        const snapshot = await this.marketplace.listInstalledPluginManifests();
+        const [snapshot, installations] = await Promise.all([
+          this.marketplace.listInstalledPluginManifests(),
+          this.marketplace.listPluginInstallations(),
+        ]);
+        this.management.setInstalledEnabled(new Map(installations.plugins.map((plugin) => [plugin.pluginId, plugin.enabled])));
         for (const entry of snapshot.manifests) {
           if (!entry.manifest) {
             this.reportError(new Error(entry.error ?? `Installed plugin manifest is unavailable: ${entry.pluginId}`));
