@@ -410,6 +410,101 @@ mod tests {
         assert_eq!(store.required_by(ANDROID).unwrap(), vec![LSP]);
         assert!(store.set_plugin_enabled(ANDROID, false).is_err());
     }
+
+    #[test]
+    fn bundled_startup_batch_replaces_stale_active_set_atomically() {
+        let directory = tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        record(&store, ANDROID, "5.10.0", vec![], false).unwrap();
+        record(&store, LSP, "2.1.0", vec![], false).unwrap();
+        store.set_plugin_enabled(ANDROID, true).unwrap();
+        store.set_plugin_enabled(LSP, true).unwrap();
+        store.recover_interrupted_activations().unwrap();
+        let digest = format!("sha256:{}", "a".repeat(64));
+        store.begin_activation(ANDROID, "5.10.0", &digest).unwrap();
+        store.promote_healthy(ANDROID, "5.10.0", &digest).unwrap();
+        store.begin_activation(LSP, "2.1.0", &digest).unwrap();
+        store.promote_healthy(LSP, "2.1.0", &digest).unwrap();
+        let android_digest = format!("sha256:{}", "c".repeat(64));
+        let lsp_digest = format!("sha256:{}", "d".repeat(64));
+        let snapshot = store
+            .record_bundled_startup_batch(
+                vec![
+                    (
+                        AdmittedPluginIdentity {
+                            plugin_id: ANDROID,
+                            repository: "example/plugins",
+                            version: "6.0.0",
+                            package_digest: &android_digest,
+                            content_digest: &android_digest,
+                        },
+                        vec![PluginDependency {
+                            id: LSP.into(),
+                            minimum: "3.0.0".into(),
+                            maximum_exclusive: None,
+                        }],
+                    ),
+                    (
+                        AdmittedPluginIdentity {
+                            plugin_id: LSP,
+                            repository: "example/plugins",
+                            version: "3.0.0",
+                            package_digest: &lsp_digest,
+                            content_digest: &lsp_digest,
+                        },
+                        vec![],
+                    ),
+                ],
+                2,
+            )
+            .unwrap();
+        assert!(
+            snapshot
+                .plugins
+                .iter()
+                .all(|plugin| plugin.active_version.is_none())
+        );
+        assert!(
+            snapshot
+                .plugins
+                .iter()
+                .all(|plugin| plugin.pending_version.is_some())
+        );
+        store.ensure_dependencies_available(ANDROID).unwrap();
+        let generation = snapshot.generation;
+        let repeated = store
+            .record_bundled_startup_batch(
+                vec![
+                    (
+                        AdmittedPluginIdentity {
+                            plugin_id: ANDROID,
+                            repository: "example/plugins",
+                            version: "6.0.0",
+                            package_digest: &android_digest,
+                            content_digest: &android_digest,
+                        },
+                        vec![PluginDependency {
+                            id: LSP.into(),
+                            minimum: "3.0.0".into(),
+                            maximum_exclusive: None,
+                        }],
+                    ),
+                    (
+                        AdmittedPluginIdentity {
+                            plugin_id: LSP,
+                            repository: "example/plugins",
+                            version: "3.0.0",
+                            package_digest: &lsp_digest,
+                            content_digest: &lsp_digest,
+                        },
+                        vec![],
+                    ),
+                ],
+                3,
+            )
+            .unwrap();
+        assert_eq!(repeated.generation, generation);
+    }
     #[test]
     fn unavailable_provider_blocks_consumers_but_does_not_unlock_enabled_dependency_edges() {
         let directory = tempdir().unwrap();

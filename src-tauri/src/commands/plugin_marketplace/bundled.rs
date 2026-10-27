@@ -15,6 +15,7 @@ pub(super) const BUNDLED_LSP_PACKAGE_DIGEST: &str =
 pub(super) const BUNDLED_LSP_PACKAGE: &[u8] =
     include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.3.0.asterlyn-plugin.tgz");
 
+#[cfg(test)]
 pub(super) fn ensure_bundled_android_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
@@ -27,9 +28,11 @@ pub(super) fn ensure_bundled_android_package(
         BUILT_IN_ANDROID_REPOSITORY,
         BUNDLED_ANDROID_PACKAGE_DIGEST,
         "Android",
+        true,
     )
 }
 
+#[cfg(test)]
 pub(super) fn ensure_bundled_lsp_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
@@ -42,9 +45,76 @@ pub(super) fn ensure_bundled_lsp_package(
         BUNDLED_LSP_REPOSITORY,
         BUNDLED_LSP_PACKAGE_DIGEST,
         "LSP",
+        true,
     )
 }
 
+pub(super) fn ensure_bundled_packages(
+    marketplace_root: &std::path::Path,
+    android_bytes: &[u8],
+    lsp_bytes: &[u8],
+) -> Result<PluginInstallationSnapshot, String> {
+    ensure_bundled_package(
+        marketplace_root,
+        android_bytes,
+        BUNDLED_ANDROID_PLUGIN_ID,
+        BUNDLED_ANDROID_PLUGIN_VERSION,
+        BUILT_IN_ANDROID_REPOSITORY,
+        BUNDLED_ANDROID_PACKAGE_DIGEST,
+        "Android",
+        false,
+    )?;
+    ensure_bundled_package(
+        marketplace_root,
+        lsp_bytes,
+        BUNDLED_LSP_PLUGIN_ID,
+        BUNDLED_LSP_PLUGIN_VERSION,
+        BUNDLED_LSP_REPOSITORY,
+        BUNDLED_LSP_PACKAGE_DIGEST,
+        "LSP",
+        false,
+    )?;
+    let android = inspect_package(
+        android_bytes,
+        &admission_context(BUILT_IN_ANDROID_REPOSITORY, BUNDLED_ANDROID_PLUGIN_VERSION),
+    )
+    .map_err(|e| e.to_string())?;
+    let lsp = inspect_package(
+        lsp_bytes,
+        &admission_context(BUNDLED_LSP_REPOSITORY, BUNDLED_LSP_PLUGIN_VERSION),
+    )
+    .map_err(|e| e.to_string())?;
+    PluginInstallationStore::open(marketplace_root.join("installation-state"))
+        .map_err(|e| e.to_string())?
+        .record_bundled_startup_batch(
+            vec![
+                (
+                    AdmittedPluginIdentity {
+                        plugin_id: BUNDLED_ANDROID_PLUGIN_ID,
+                        repository: BUILT_IN_ANDROID_REPOSITORY,
+                        version: BUNDLED_ANDROID_PLUGIN_VERSION,
+                        package_digest: BUNDLED_ANDROID_PACKAGE_DIGEST,
+                        content_digest: &android.content_digest,
+                    },
+                    android.management_manifest.dependencies.clone(),
+                ),
+                (
+                    AdmittedPluginIdentity {
+                        plugin_id: BUNDLED_LSP_PLUGIN_ID,
+                        repository: BUNDLED_LSP_REPOSITORY,
+                        version: BUNDLED_LSP_PLUGIN_VERSION,
+                        package_digest: BUNDLED_LSP_PACKAGE_DIGEST,
+                        content_digest: &lsp.content_digest,
+                    },
+                    lsp.management_manifest.dependencies.clone(),
+                ),
+            ],
+            now_ms(),
+        )
+        .map_err(|e| e.to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn ensure_bundled_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
@@ -53,6 +123,7 @@ fn ensure_bundled_package(
     repository: &str,
     expected_digest: &str,
     label: &str,
+    record: bool,
 ) -> Result<PluginInstallationSnapshot, String> {
     let package_digest = format!("sha256:{:x}", Sha256::digest(bytes));
     if package_digest != expected_digest {
@@ -115,6 +186,12 @@ fn ensure_bundled_package(
         }
     }
     retain_package_archive(&archive, bytes, &package_digest)?;
+    if !record {
+        return PluginInstallationStore::open(marketplace_root.join("installation-state"))
+            .map_err(|error| error.to_string())?
+            .snapshot()
+            .map_err(|error| error.to_string());
+    }
     PluginInstallationStore::open(marketplace_root.join("installation-state"))
         .map_err(|error| error.to_string())?
         .record_bundled_with_dependencies(

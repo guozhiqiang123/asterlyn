@@ -18,3 +18,16 @@ Gradle 导入和 Android 模型业务集中在宿主的描述，保留其进程�
 
 启用 Android 插件本身不启动模型工作；打开相应语言文档并需要语义时才按需请求。运行配置选择作为分析意图，
 AGP 模型确认实际变体关系。Java/Kotlin 的后端模型消费、分发及混合未保存内容各自验收，不由依赖启用推定成功。
+
+## Startup bundle-set admission
+
+A host update may raise a bundled consumer's minimum producer version. Admit the verified complete
+bundle set in one startup-only installation transaction, before creating any runtime. Discard stale
+previous-process active selection pointers only when a different pending startup candidate exists;
+retain known-good rollback receipts and require the normal runtime health checkpoints. The actual
+persisted graph must pass the same dependency validator used by runtime operations; an alternate
+permissive candidate graph is insufficient. Do not reset already-admitted user rollback choices,
+automatically repair quarantined packages, or enable packages the user disabled. Repeating an
+unchanged healthy/pending bundle is idempotent. Failed batch admission leaves the installation
+snapshot unchanged. If the existing graph is valid, the host opens with it and logs a deferred
+upgrade instead of aborting the application setup hook.

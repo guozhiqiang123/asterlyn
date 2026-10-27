@@ -661,10 +661,33 @@ pub(crate) fn ensure_bundled_plugins(
     app: &tauri::AppHandle,
 ) -> Result<PluginInstallationSnapshot, String> {
     let root = marketplace_root(app)?;
-    ensure_bundled_android_package(&root, BUNDLED_ANDROID_PACKAGE)?;
-    ensure_bundled_lsp_package(&root, BUNDLED_LSP_PACKAGE)
+    match bundled::ensure_bundled_packages(&root, BUNDLED_ANDROID_PACKAGE, BUNDLED_LSP_PACKAGE) {
+        Ok(snapshot) => Ok(snapshot),
+        Err(error) => {
+            let snapshot = PluginInstallationStore::open(root.join("installation-state"))
+                .map_err(|error| error.to_string())?
+                .snapshot()
+                .map_err(|error| error.to_string())?;
+            for plugin in snapshot.plugins.iter().filter(|plugin| plugin.enabled) {
+                asterlyn_plugin_marketplace::ensure_enabled_dependencies(
+                    &snapshot.plugins,
+                    &plugin.plugin_id,
+                )
+                .map_err(|error| error.to_string())?;
+            }
+            app.state::<crate::application::DiagnosticsLog>().record(
+                "warn",
+                "plugins",
+                "bundle.upgrade.deferred",
+                None,
+                serde_json::json!({"reason":error.chars().take(512).collect::<String>()}),
+            );
+            Ok(snapshot)
+        }
+    }
 }
 
+#[cfg(test)]
 fn ensure_bundled_android_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
@@ -672,6 +695,7 @@ fn ensure_bundled_android_package(
     bundled::ensure_bundled_android_package(marketplace_root, bytes)
 }
 
+#[cfg(test)]
 fn ensure_bundled_lsp_package(
     marketplace_root: &std::path::Path,
     bytes: &[u8],
@@ -1484,3 +1508,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "plugin_marketplace/startup_upgrade_tests.rs"]
+mod startup_upgrade_tests;

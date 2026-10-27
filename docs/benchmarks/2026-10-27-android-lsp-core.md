@@ -23,7 +23,7 @@ development artifact, not a published SDK Release.
   diagnostics and document responsiveness while model work is pending. Existing native TS/Rust
   independent-session test passes in 14.48 s. Actual isolated helper→desktop validator→registry→
   TS/Rust/Android editor bindings and distinct execution reviews pass.
-- Native library 167 pass / 3 explicitly ignored opt-in tests; host scripts 1,347 pass; strict native
+- Native library 170 pass / 3 explicitly ignored opt-in tests; host scripts 1,348 pass; strict native
   clippy and frontend production build pass. Android tests 69 pass, LSP tests 6 pass. Native package
   inspector accepts both exact final artifacts and rejects incompatible older hosts.
 
@@ -68,3 +68,17 @@ work does not produce an operation-failed toast. Focused state-projection regres
 A changed input or selected configuration revokes the previous native model lease before waiting
 for replacement work. Detection uses the bounded 5-second model poll; responses from the old actor
 model generation are rejected while importing/indexing the replacement.
+
+## Existing-installation upgrade regression
+
+The first signed startup probe rejected delivery: separate admission of Android 0.6.0 and LSP
+0.3.0 collided with the previous process's active 0.5.10/0.2.1 pointers. The installation was not
+replaced. Bundled startup now admits the complete verified set atomically, clears only superseded
+startup selections, preserves known-good/user-disabled/rollback state, and keeps normal runtime
+dependency validation strict. A conflict retains the old valid configuration and logs
+`bundle.upgrade.deferred`; it cannot abort basic application startup.
+
+Three native tests use the actual previous/current archives: partial-pending upgrade through normal
+activation/health promotion and idempotent restart; disabled choices preserved; incompatible enabled
+third-party consumer rejects the entire write. All pass. Final native library: 170 pass / 3 ignored;
+marketplace: 23 unit + 1 version-compatibility + 4 persistence tests pass; strict clippy passes.
