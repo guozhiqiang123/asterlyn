@@ -159,6 +159,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asterlyn-plugin-models"
+version = "0.1.0"
+dependencies = [
+ "asterlyn-plugin-dependencies",
+ "sha2",
+]
+
+[[package]]
 name = "asterlyn-plugin-package"
 version = "0.1.0"
 dependencies = [

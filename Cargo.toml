@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/asterlyn-plugin-dependencies", "crates/asterlyn-desktop", "crates/asterlyn-git", "crates/asterlyn-plugin-host", "crates/asterlyn-plugin-marketplace", "crates/asterlyn-plugin-package", "crates/asterlyn-plugin-runtime", "crates/asterlyn-plugin-runtime-protocol", "crates/asterlyn-language-service", "crates/asterlyn-terminal", "crates/asterlyn-workspace", "crates/asterlyn-task", "src-tauri"]
+members = ["crates/asterlyn-plugin-models", "crates/asterlyn-plugin-dependencies", "crates/asterlyn-desktop", "crates/asterlyn-git", "crates/asterlyn-plugin-host", "crates/asterlyn-plugin-marketplace", "crates/asterlyn-plugin-package", "crates/asterlyn-plugin-runtime", "crates/asterlyn-plugin-runtime-protocol", "crates/asterlyn-language-service", "crates/asterlyn-terminal", "crates/asterlyn-workspace", "crates/asterlyn-task", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
