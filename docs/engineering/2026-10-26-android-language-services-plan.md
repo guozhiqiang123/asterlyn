@@ -159,3 +159,7 @@ UI 分清缺工具、等待授权、同步中、索引中、可用、部分可�
 A0 已完成独立发行下载核验、JDT/JDK 启动、boostCleaner 测试 worktree 导入/实际定义/dirty 诊断与 Kotlin 候选启动探针。结果与原规划回合的只读调查分开，见 [A0 证据](../benchmarks/2026-10-26-android-jvm-a0.md)。当前结论为上线闸门未通过，不把 Java/Kotlin/Groovy 注册成可用 provider。先交付可重复失败探针和不依赖后端选择的有界传输基础；A2 模型与 Kotlin 后端问题仍需解决。
 
 A1a 已实现 reader/初始化缓冲的固定槽状态合并、严格普通事件容量和非阻塞终止投递；现有 TS/Rust 实际 transport / actor 回归通过。见 [A1a 记录](../benchmarks/2026-10-26-jvm-transport-foundation.md)。A1 的 JVM/JDK 绑定、客户端请求与启动取消仍未完成。
+
+## 10. 职责修订（2026-10-27）
+
+后续实施以 [插件模型协作计划](2026-10-27-plugin-build-model-cooperation-plan.md) 和 ADR-0035 为准：Android 插件拥有 AGP/变体/依赖模型，LSP 插件拥有后端适配，宿主只补通用运行基础。用户确认 LSP 整体启用时 Android 插件不可关闭，先交付通用强依赖门禁。此前 A0/A1a 证据仍有效，不表示 Android LSP 已可用。

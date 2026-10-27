@@ -136,3 +136,7 @@ import jobs, read-only dependency sources and profile-specific client requests p
 Android compatibility. SDK/native/helper/desktop/editor admission must change together; merely
 recognizing `.kt` or `.java` is insufficient. Keep Android task/run ownership separate from the
 language data path and preserve the existing TS/Rust behavior while those gates are developed.
+
+## Plugin-owned Android model amendment
+
+[ADR-0035](0035-plugin-dependencies-and-build-models.md) assigns Android/AGP model extraction to the Android plugin and backend/model adapters to the LSP plugin. The host retains generic execution, lifecycle, model-reference and editor boundaries. LSP has a required Android plugin enablement dependency, independent of document language or runtime activation.
