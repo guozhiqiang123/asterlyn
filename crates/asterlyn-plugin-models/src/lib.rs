@@ -205,6 +205,11 @@ pub struct ModelLease {
     job: u64,
     consumer: PackageIdentity,
 }
+impl ModelLease {
+    pub fn generation(&self) -> u64 {
+        self.job
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArtifactRef {
@@ -335,7 +340,7 @@ impl ModelBroker {
         if job.key != grant.key {
             return Err(ModelError::Stale);
         }
-        if job.deadline <= now {
+        if job.status == JobStatus::Running && job.deadline <= now {
             return Err(ModelError::Expired);
         }
         Ok(job)
@@ -465,13 +470,53 @@ impl ModelBroker {
         let ids: Vec<_> = self
             .jobs
             .iter()
-            .filter(|(_, job)| job.deadline <= now)
+            .filter(|(_, job)| !matches!(job.status, JobStatus::Ready(_)) && job.deadline <= now)
             .map(|(id, _)| *id)
             .collect();
         for id in &ids {
             self.remove(*id);
         }
         ids
+    }
+    /// Background work belongs to all current leases, not the first waiting consumer.
+    pub fn has_authorized_leases(
+        &self,
+        authority: &ModelAuthority<'_>,
+        ticket: &WorkTicket,
+    ) -> bool {
+        !ticket.is_cancelled()
+            && self.leases.values().any(|lease| {
+                lease.job == ticket.id
+                    && ModelGrant {
+                        consumer: lease.consumer.clone(),
+                        key: ticket.key.clone(),
+                    }
+                    .check(authority)
+                    .is_ok()
+            })
+    }
+    pub fn publish_for_leases(
+        &mut self,
+        authority: &ModelAuthority<'_>,
+        ticket: &WorkTicket,
+        digest: String,
+        bytes: u64,
+        now: Instant,
+    ) -> Result<ArtifactRef, ModelError> {
+        let grant = self
+            .leases
+            .values()
+            .filter(|lease| lease.job == ticket.id)
+            .map(|lease| ModelGrant {
+                consumer: lease.consumer.clone(),
+                key: ticket.key.clone(),
+            })
+            .find(|grant| grant.check(authority).is_ok())
+            .ok_or(ModelError::Unavailable)?;
+        self.publish(&grant, authority, ticket, digest, bytes, now)
+    }
+    pub fn lease_is_current(&self, lease: &ModelLease) -> bool {
+        self.leases.get(&lease.id) == Some(lease) && self.jobs.contains_key(&lease.job)
     }
     pub fn retained_jobs(&self) -> usize {
         self.jobs.len()

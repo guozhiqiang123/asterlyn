@@ -345,6 +345,45 @@ impl PluginHostSupervisor {
         result
     }
 
+    /// Reads a statically bound producer snapshot in the exact current window/package/workspace.
+    /// Long analysis work runs after this bounded callback has returned.
+    pub fn snapshot_contribution(
+        &self,
+        owner: &str,
+        expected: &PluginRuntimeIdentity,
+        workspace_root: &str,
+        contribution_id: &str,
+    ) -> Result<JsonValue, PluginRuntimeError> {
+        let session = self.session(owner, &expected.plugin_id)?;
+        if session.workspace_root != workspace_root
+            || session.identity.plugin_version != expected.plugin_version
+            || session.identity.package_digest != expected.package_digest
+        {
+            return Err(PluginRuntimeError::InvalidConfiguration(
+                "model state source no longer matches its workspace/package".into(),
+            ));
+        }
+        let contribution = session
+            .contributions
+            .iter()
+            .find(|entry| entry.id == contribution_id)
+            .ok_or_else(|| {
+                PluginRuntimeError::InvalidConfiguration(
+                    "model state contribution is not active".into(),
+                )
+            })?;
+        let handle = contribution.callbacks.get("snapshot").ok_or_else(|| {
+            PluginRuntimeError::InvalidConfiguration("model state snapshot is unavailable".into())
+        })?;
+        self.invoke(
+            owner,
+            &expected.plugin_id,
+            handle,
+            "snapshot",
+            serde_json::json!({"arguments":[]}),
+        )
+    }
+
     pub fn diagnostics(
         &self,
         owner: &str,

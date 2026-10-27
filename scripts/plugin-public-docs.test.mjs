@@ -17,12 +17,12 @@ test("public capability catalog contains every native admitted capability and pe
   assert.deepEqual(capabilities, [
     "executionTargets", "notifications", "processQueries", "runConfigurations",
     "taskAuthorization", "taskCache", "tasks", "toolOperations", "workspaceCatalog",
-    "workspaceState", "languageServices", "pluginDependencies",
+    "workspaceState", "languageServices", "pluginDependencies", "workspaceModels", "packagedLanguageServices",
   ]);
   assert.deepEqual(permissions, [
     "host.execution-targets.read", "host.notifications.publish", "host.process.query",
     "host.tasks.cache", "host.tasks.discover", "host.tasks.execute", "host.tool.execute",
-    "host.workspace.catalog.read", "host.workspace.state", "host.language-services.execute",
+    "host.workspace.catalog.read", "host.workspace.state", "host.language-services.execute", "host.workspace-models.execute",
   ]);
   for (const id of [...capabilities, ...permissions]) {
     assert.equal(capabilityGuide.includes(`\`${id}\``), true, `missing documented ID: ${id}`);
@@ -37,7 +37,7 @@ test("public guides pin independent version axes and immutable Release workflow"
       `public guide does not reference current host version ${hostVersion}`,
     );
   }
-  assert.match(developerGuide, /Plugin SDK: `1\.13\.0`/);
+  assert.match(developerGuide, /Plugin SDK: `1\.14\.0`/);
   assert.match(developerGuide, /Package schema: `3`/);
   assert.match(developerGuide, /Plugin-host protocol: `1`/);
   assert.match(developerGuide, /never .*replace Release bytes/is);

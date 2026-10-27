@@ -373,3 +373,32 @@ fn disabling_the_first_consumer_does_not_cancel_a_remaining_consumers_work() {
         Ok(())
     );
 }
+
+#[test]
+fn a_ready_leased_model_does_not_expire_at_the_execution_deadline() {
+    let f = Fixture::new();
+    let grant = f.grant(1);
+    let mut broker = ModelBroker::default();
+    let now = Instant::now();
+    let request = broker.request(&grant, &f.authority(), now).unwrap();
+    let ticket = request.work.unwrap();
+    let reference = broker
+        .publish(
+            &grant,
+            &f.authority(),
+            &ticket,
+            content_digest(b"model"),
+            5,
+            now,
+        )
+        .unwrap();
+    let later = now + MAX_JOB_DURATION + Duration::from_secs(1);
+    assert!(broker.expire(later).is_empty());
+    assert_eq!(
+        broker.resolve(&grant, &f.authority(), &request.lease, &reference, later),
+        Ok(())
+    );
+    let same = broker.request(&grant, &f.authority(), later).unwrap();
+    assert!(same.work.is_none());
+    assert_eq!(same.status, JobStatus::Ready(reference));
+}

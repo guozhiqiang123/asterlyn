@@ -258,6 +258,9 @@ impl TypeScriptServerProfile {
     }
 }
 
+mod packaged_profile;
+pub use packaged_profile::PackagedServerProfile;
+
 pub struct LanguageServiceProcess {
     child: Child,
     session: LanguageServiceSession<QueuedWriter>,
@@ -581,22 +584,7 @@ impl Write for QueuedWriter {
     }
 }
 
-pub fn terminate_process_tree(pid: u32) {
-    #[cfg(unix)]
-    unsafe {
-        libc::kill(-(pid as i32), libc::SIGKILL);
-    }
-    #[cfg(windows)]
-    {
-        if let Some(root) = std::env::var_os("SystemRoot") {
-            let _ = Command::new(PathBuf::from(root).join("System32/taskkill.exe"))
-                .args(["/F", "/T", "/PID", &pid.to_string()])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn();
-        }
-    }
-}
+pub use asterlyn_process::terminate_process_tree;
 
 fn decode_message(body: &[u8]) -> Result<JsonRpcMessage, String> {
     let value: Value =

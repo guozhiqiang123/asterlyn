@@ -75,7 +75,9 @@ dependencies = [
  "asterlyn-desktop",
  "asterlyn-git",
  "asterlyn-language-service",
+ "asterlyn-plugin-analysis",
  "asterlyn-plugin-marketplace",
+ "asterlyn-plugin-models",
  "asterlyn-plugin-package",
  "asterlyn-plugin-runtime",
  "asterlyn-plugin-runtime-protocol",
@@ -84,6 +86,7 @@ dependencies = [
  "asterlyn-workspace",
  "base64 0.22.1",
  "clipboard-rs",
+ "glob",
  "libc",
  "notify",
  "serde",
@@ -120,9 +123,25 @@ dependencies = [
 name = "asterlyn-language-service"
 version = "0.1.0"
 dependencies = [
+ "asterlyn-process",
  "libc",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "asterlyn-plugin-analysis"
+version = "0.1.0"
+dependencies = [
+ "asterlyn-plugin-dependencies",
+ "asterlyn-plugin-models",
+ "asterlyn-plugin-package",
+ "asterlyn-process",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]
@@ -198,6 +217,13 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "asterlyn-process"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

@@ -2,7 +2,7 @@
 
 - Status: experimental public baseline
 - Host baseline: Asterlyn `0.1.21`
-- Plugin SDK: `1.13.0` (SDK major `1`)
+- Plugin SDK: `1.14.0` (SDK major `1`)
 - Package schema: `3`
 - Plugin-host protocol: `1`
 

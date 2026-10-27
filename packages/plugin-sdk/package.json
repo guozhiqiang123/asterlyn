@@ -1,6 +1,6 @@
 {
   "name": "@asterlyn/plugin-sdk",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Types and declarative contracts for Asterlyn plugins",
   "license": "MIT",
   "repository": {

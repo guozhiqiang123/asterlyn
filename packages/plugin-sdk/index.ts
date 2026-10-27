@@ -3,7 +3,7 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.13.0" as const;
+export const PLUGIN_SDK_VERSION = "1.14.0" as const;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -241,8 +241,28 @@ export interface SdkPluginDependency {
   readonly maximumExclusive?: string;
 }
 
+/** Fixed integrity-covered Node program. Runtime executables/argv are always host-owned. */
+export interface SdkAnalysisProgram {
+  readonly entry: string;
+  readonly tools: readonly { readonly id: string; readonly kind: "java"; readonly minimumMajor: number; readonly maximumMajorExclusive?: number }[];
+  readonly components: readonly { readonly id: string; readonly version: string; readonly archiveDigest: string; readonly contentDigest: string }[];
+}
+export interface SdkModelConsumer { readonly pluginId: string; readonly serviceId: string; readonly schema: number; }
+export interface SdkModelProvider {
+  readonly id: string; readonly schema: number; readonly program: SdkAnalysisProgram;
+  readonly inputGlobs: readonly string[]; readonly stateKeys: readonly string[];
+  readonly stateBindings?: readonly { readonly key: string; readonly contributionId: string; readonly pointer: string }[];
+}
+export interface SdkPackagedLanguageServer {
+  readonly id: string; readonly program: SdkAnalysisProgram;
+  readonly selectors: readonly { readonly languageId: string; readonly extensions: readonly string[] }[];
+  readonly model?: SdkModelConsumer;
+}
+
 export interface SdkPluginManifest {
   readonly dependencies?: readonly SdkPluginDependency[];
+  readonly modelProviders?: readonly SdkModelProvider[];
+  readonly languageServers?: readonly SdkPackagedLanguageServer[];
   readonly sdkMajor: typeof PLUGIN_SDK_MAJOR;
   readonly id: string;
   readonly version: string;
@@ -570,7 +590,7 @@ export interface SdkLanguageServiceContribution {
   readonly kind: "language-service";
   readonly id: string;
   readonly label: string;
-  readonly serverId: "typescript" | "rust-analyzer";
+  readonly serverId: string;
   readonly languageIds: readonly string[];
   readonly extensions: readonly string[];
   readonly rootMarkers: readonly string[];

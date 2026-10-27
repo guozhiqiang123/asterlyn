@@ -16,6 +16,9 @@ tauri-build = { version = "2.6.3", features = [] }
 [dependencies]
 asterlyn-desktop = { path = "../crates/asterlyn-desktop" }
 asterlyn-git = { path = "../crates/asterlyn-git" }
+asterlyn-plugin-analysis = { path = "../crates/asterlyn-plugin-analysis" }
+asterlyn-plugin-models = { path = "../crates/asterlyn-plugin-models" }
+glob.workspace = true
 asterlyn-language-service = { path = "../crates/asterlyn-language-service" }
 asterlyn-plugin-marketplace = { path = "../crates/asterlyn-plugin-marketplace" }
 asterlyn-plugin-package = { path = "../crates/asterlyn-plugin-package" }

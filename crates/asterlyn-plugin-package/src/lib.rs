@@ -1,3 +1,8 @@
+mod analysis_programs;
+pub use analysis_programs::{
+    AnalysisComponent, AnalysisProgram, AnalysisTool, AnalysisToolKind, LanguageSelector,
+    ModelConsumer, ModelProvider, ModelStateBinding, PackagedLanguageServer,
+};
 mod language_authority;
 pub use asterlyn_plugin_dependencies::PluginDependency;
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,6 +43,8 @@ pub const SUPPORTED_CAPABILITIES: &[&str] = &[
     "workspaceState",
     "languageServices",
     "pluginDependencies",
+    "workspaceModels",
+    "packagedLanguageServices",
 ];
 pub const SUPPORTED_PERMISSIONS: &[&str] = &[
     "host.execution-targets.read",
@@ -50,6 +57,7 @@ pub const SUPPORTED_PERMISSIONS: &[&str] = &[
     "host.workspace.catalog.read",
     "host.workspace.state",
     "host.language-services.execute",
+    "host.workspace-models.execute",
 ];
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 const MANIFEST_PATH: &str = "manifest.json";
@@ -98,6 +106,10 @@ pub struct AdmittedPluginManifest {
     pub settings: Vec<PluginSetting>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<PluginDependency>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub model_providers: Vec<ModelProvider>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub language_servers: Vec<PackagedLanguageServer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_authorization: Option<TaskAuthorization>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -188,6 +200,10 @@ struct PackageManifest {
     settings: Vec<PluginSetting>,
     #[serde(default)]
     dependencies: Vec<PluginDependency>,
+    #[serde(default)]
+    model_providers: Vec<ModelProvider>,
+    #[serde(default)]
+    language_servers: Vec<PackagedLanguageServer>,
     #[serde(default)]
     task_authorization: Option<TaskAuthorization>,
     #[serde(default)]
@@ -401,6 +417,8 @@ fn report_from(
         localization: manifest.localization,
         settings: manifest.settings,
         dependencies: manifest.dependencies,
+        model_providers: manifest.model_providers,
+        language_servers: manifest.language_servers,
         task_authorization: manifest.task_authorization,
         workspace_tool: manifest.workspace_tool,
         host_operations: manifest.host_operations,
@@ -739,6 +757,14 @@ fn validate_manifest(
         "host.process.query",
     )?;
     language_authority::validate(&manifest.capabilities, &manifest.permissions)?;
+    analysis_programs::validate(
+        &manifest.capabilities,
+        &manifest.permissions,
+        &manifest.dependencies,
+        &manifest.model_providers,
+        &manifest.language_servers,
+        |entry| files.contains_key(entry),
+    )?;
     require_host_operation_authority(manifest)?;
     require_declared_authority(
         !manifest.tool_operations.is_empty(),

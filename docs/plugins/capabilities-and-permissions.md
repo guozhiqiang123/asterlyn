@@ -137,3 +137,7 @@ Do not catch a capability denial and silently replace it with broader behavior. 
 localized diagnostics and leave unrelated features usable.
 
 SDK 1.13 adds optional static `dependencies` and the `pluginDependencies` capability. Native transactions resolve installed compatible dependencies and protect disable/uninstall/incompatible version changes while consumers remain enabled. Host-bundled required dependencies protect legacy rollback selections. Disabled/missing/quarantined dependencies block execution; execution consent remains separate. These SDK bytes are an unpublished development artifact.
+
+## Packaged analysis (development SDK 1.14.0)
+
+`workspaceModels` requires `host.workspace-models.execute`; `packagedLanguageServices` additionally requires `languageServices` and `host.language-services.execute`. Verified static `modelProviders`/`languageServers` declarations bind resource entries, Java version ranges and separately installed immutable components. A language consumer must declare its model producer as a required plugin. Programs receive bounded native inputs after project-session review, with no runtime-supplied executable or argv. Async model requests return sealed file references, not model payloads through isolated callbacks. Native leases cancel work on revocation or workspace closure. Activation never downloads components.

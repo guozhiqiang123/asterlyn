@@ -49,3 +49,15 @@ separately; no text-search fallback or extension-only enablement is acceptable.
 Progress and failures use the structured diagnostics timeline with package/workspace/input hashes,
 stages, counts and elapsed time. No source, full classpath/model, credential or environment dump
 is logged. Startup registration is still distinct from native health acceptance.
+
+The model handoff is an asynchronous server-to-host JSON-RPC request, `asterlyn/workspaceModel`, available only to a packaged language server with a statically admitted consumer declaration. It has no caller-supplied producer, executable, arguments or path. The actor keeps handling documents, cancellation and indexing status while native work runs; it replies with a verified artifact reference and retains its lease for the server session. This avoids blocking either the isolated descriptor callback or language-service startup on Gradle. Repeated requests recompute current input/selection identity; backend adapters keep overlays in memory while replacing their private import view.
+
+## Read-only dependency sources
+
+A definition/reference response may carry a bounded `readonlySource` (`text`, relative display `path`,
+`languageId`) under a content-addressed `asterlyn-source://<sha256>/<name>` URI. Native code verifies
+that the digest matches the text, validates UTF-16 target ranges, and enforces per-source/aggregate
+limits before returning it. The editor renders this as a dedicated read-only preview with no disk
+save, workspace-file identity, Git actions or execution authority. There is no arbitrary URI-to-file
+read endpoint. A plugin adapter can obtain this content only through its reviewed backend; the
+response is untrusted text, never HTML. Session/workspace/version checks still apply to navigation.
