@@ -244,3 +244,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-27-plugin-model-kernel.md`](benchmarks/2026-10-27-plugin-model-kernel.md) — C2a bounded job/reference kernel and first real plugin-owned AGP model evidence.
 
 - [`benchmarks/2026-10-27-plugin-cooperation-delivery.md`](benchmarks/2026-10-27-plugin-cooperation-delivery.md) — staged C1/C2a/C3a commits, final signed installation, exact-plugin health checkpoint and remaining Android LSP gates.
+
+- [`architecture/decisions/0036-packaged-analysis-programs.md`](architecture/decisions/0036-packaged-analysis-programs.md) — fixed-entry plugin programs, scoped model artifacts and lightweight generic host supervision.
