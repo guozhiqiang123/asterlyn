@@ -5,6 +5,7 @@ mod git_operations;
 mod git_recovery;
 mod language_rust;
 mod language_service;
+pub(crate) mod packaged_analysis;
 mod plugin_cache;
 mod plugin_marketplace;
 mod plugin_marketplace_cleanup;

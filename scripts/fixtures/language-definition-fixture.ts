@@ -20,13 +20,15 @@ const editor = new TextEditor({ load: async () => null as any, openCommit() {}, 
 const range = (line: number, from: number, to: number) => ({ start: { line, character: from }, end: { line, character: to } });
 const definition = () => ({ targetUri: workspaceFileUri("/repo", files[1]!.workspacePath), targetRange: range(0, 0, 0), targetSelectionRange: range(1, 17, 23) });
 const second = () => ({ uri: workspaceFileUri("/repo", files[2]!.workspacePath), range: range(0, 13, 19) });
+const readonlyTarget = () => ({uri: `asterlyn-source://${"a".repeat(64)}/SDK.java`, range: range(0, 13, 19), readonlySource: {text: "public class Target {}\n", path: "SDK.java", languageId: "java"}});
 function mount(index: number, epoch = index === 0 ? state.epoch : 1) {
   state.active = files[index]; editor.setReadOnly(false);
   editor.mount(document.querySelector("#editor")!, files[index]!.workspacePath, epoch, contents[index]!, contents[index]!, files[index]!.path, DEFAULT_APP_PREFERENCES, null, "untracked", () => {});
 }
 const navigate = createLanguageDefinitionNavigator({ workspace: () => ({ root: "/repo", generation: 1 }), files: () => files,
   open: async (_root, file) => { mount(files.findIndex((entry) => entry.workspacePath === file.workspacePath)); },
-  activeUri: () => workspaceFileUri("/repo", state.active.workspacePath), content: () => editor.content(), select: (from, to) => editor.selectRange(from, to),
+  openSource: async (_root, location) => {state.active = {workspacePath: "SDK.java", uri: location.uri}; editor.setReadOnly(true); const source = location.readonlySource!; editor.mount(document.querySelector("#editor")!, location.uri, 1, source.text, source.text, source.path, DEFAULT_APP_PREFERENCES, null, "untracked", () => {});},
+  activeUri: () => state.active.uri ?? workspaceFileUri("/repo", state.active.workspacePath), content: () => editor.content(), select: (from, to) => editor.selectRange(from, to),
   copy: () => EN_US.editor.languageService, status: (message, kind) => state.statuses.push({ message, kind }), diagnostic: (outcome) => state.outcomes.push(outcome),
 });
 const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: () => () => {},
@@ -46,6 +48,7 @@ const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: ()
     if (state.mode === "deferred") return new Promise((resolve) => state.pending.push(resolve));
     if (state.mode === "empty") return Promise.resolve(null);
     if (state.mode === "outside") return Promise.resolve({ uri: "file:///outside/secret.ts", range: range(0, 0, 3) });
+    if (state.mode === "readonly") return Promise.resolve(readonlyTarget());
     if (state.mode === "multiple") return Promise.resolve([definition(), second()]);
     if (state.mode === "same") return Promise.resolve({ uri: workspaceFileUri("/repo", files[0]!.workspacePath), range: range(0, 9, 15) });
     if (["self", "deferredReferences", "oneReference", "noReferences"].includes(state.mode)) return Promise.resolve({ uri: workspaceFileUri("/repo", files[0]!.workspacePath), range: range(2, 15, 21) });

@@ -9,7 +9,7 @@ mod plugin_marketplace;
 mod plugin_process_query;
 mod plugin_runtime;
 pub(crate) mod plugin_task_cache;
-mod plugin_workspace_state;
+pub(crate) mod plugin_workspace_state;
 mod search_session;
 mod task;
 mod task_artifacts;

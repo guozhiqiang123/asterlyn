@@ -19,7 +19,8 @@ export interface EditorLanguageServiceDiagnostic {
 }
 
 export interface EditorLanguageServicePosition { readonly line: number; readonly character: number; }
-export interface EditorLanguageServiceLocation { readonly uri: string; readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition } }
+export interface EditorReadonlyLanguageSource { readonly text:string; readonly path:string; readonly languageId:string; }
+export interface EditorLanguageServiceLocation { readonly readonlySource?:EditorReadonlyLanguageSource; readonly uri: string; readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition } }
 export interface EditorLanguageServiceCompletionItem { readonly label: string; readonly detail?: string; readonly kind?: number; readonly insertText?: string; readonly textEdit?: { readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition }; readonly newText: string }; readonly insertReplaceEdit?: unknown; readonly additionalTextEdits?: readonly unknown[]; readonly command?: unknown; readonly insertTextFormat?: number; }
 
 export interface EditorDefinitionEvent { readonly kind?: "definition" | "references"; readonly outcome: "requested" | "discarded" | "invalid" | "empty" | "selected" | "choices"; readonly targetCount: number; }

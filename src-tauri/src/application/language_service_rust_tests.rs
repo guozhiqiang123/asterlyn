@@ -31,6 +31,7 @@ fn actual_rust_and_typescript_keep_independent_sessions() {
             .into(),
         node_digest: "fixture".into(),
         rust: None,
+        packaged: None,
     };
     let rust_package = LanguagePackage {
         node: rust.analyzer.clone(),

@@ -14,7 +14,7 @@ export function assertLanguageServiceReview(value: unknown, command: DesktopComm
   const item = record(value, command);
   assert(boundedString(item.reviewId, MAX_ID), command, "reviewId must be a bounded string");
   assert(item.pluginId === "dev.asterlyn.lsp", command, "pluginId is not admitted");
-  assert(item.serverId === "typescript" || item.serverId === "rust-analyzer", command, "serverId is not admitted");
+  assert(typeof item.serverId === "string" && /^[a-z][a-z0-9.-]{0,127}$/u.test(item.serverId), command, "serverId is not admitted");
   assert(boundedString(item.pluginVersion, MAX_ID), command, "pluginVersion must be a bounded string");
   assert(boundedString(item.packageDigest, MAX_DIGEST), command, "packageDigest must be a bounded string");
   assert(boundedString(item.resourceDigest, MAX_DIGEST), command, "resourceDigest must be a bounded string");

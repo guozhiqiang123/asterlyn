@@ -7,6 +7,7 @@ export interface DefinitionNavigationPorts {
   workspace(): { root: string; generation: number } | null;
   files(): readonly ProjectFile[];
   open(root: string, file: ProjectFile): Promise<void>;
+  openSource?(root:string,location:EditorLanguageServiceLocation):Promise<void>;
   activeUri(): string | null;
   content(): string | null;
   select(from: number, to: number): boolean;
@@ -22,8 +23,8 @@ export function createLanguageDefinitionNavigator(ports: DefinitionNavigationPor
     const workspace = ports.workspace(); if (!workspace || !location) return;
     const key = definitionFileKey(location.uri);
     const file = ports.files().find((item) => definitionFileKey(workspaceFileUri(workspace.root, item.workspacePath)) === key);
-    if (!file) { ports.status(ports.copy().targetUnavailable, "warning"); ports.diagnostic?.("outside-catalog"); return; }
-    await ports.open(workspace.root, file);
+    if (!file && !location.readonlySource) { ports.status(ports.copy().targetUnavailable, "warning"); ports.diagnostic?.("outside-catalog"); return; }
+    if(location.readonlySource){if(!ports.openSource)return;await ports.openSource(workspace.root,location);}else if(file)await ports.open(workspace.root,file);
     const current = ports.workspace();
     if (token !== sequence || current?.root !== workspace.root || current.generation !== workspace.generation || definitionFileKey(ports.activeUri()) !== key) { ports.diagnostic?.("stale"); return; }
     const content = ports.content(); if (content === null) return;

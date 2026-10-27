@@ -25,3 +25,25 @@ profile. Native editor, mixed-language and installed-package gates remain in pro
 
 Evidence logs are `/tmp/asterlyn-android-lsp/kernel-stage-tests.log`,
 `kernel-stage-clippy.log` and `sdk-contract-tests.log`.
+
+## Native actor and read-only source checkpoint
+
+The native command layer now binds a packaged profile to the exact producer, tools/components and
+window-owned contribution selection. Model work runs outside the language actor; live authority and
+model generations are rechecked while the actor continues processing document messages. Package and
+tool integrity is revalidated at actual worker launch, not by repeatedly hashing complete components
+on the 250 ms authority tick or 5 s model poll. Shutdown signals all owned groups and bounds force
+cleanup; a ready model handle also rechecks producer authority without requiring a new request.
+
+- Host script suite: 1,347 pass; native library: 167 pass, 3 explicitly ignored opt-in gates.
+- Native clippy with warnings denied passes. Frontend production build passes.
+- A real packaged Java adapter, real AGP two-module Android model and production native actor prove
+  nonblocking startup/open during delayed model work, cross-module definition and version-2 unsaved
+  diagnostics. A separate SDK-source run passes in 6.01 s including startup and shutdown: JDT SDK
+  content crosses the native content-hash/range validator and remains a data-only source preview.
+- Native per-source/aggregate limits are 512 KiB / 2 MiB, with SHA-256 content addressing and UTF-16
+  range validation. The preview has no disk-save or project-file identity. Rendered keyboard and
+  full mixed-language package/installation acceptance are recorded with the later delivery gate.
+
+Logs: `final-host-scripts.log`, `final-native-tests.log`, `final-native-clippy.log`,
+`native-java-actor-test.log`, `native-sdk-source-test.log` under the same temporary evidence root.

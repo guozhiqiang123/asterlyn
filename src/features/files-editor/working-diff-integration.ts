@@ -102,7 +102,7 @@ export function activeProjectWorkspacePath(
   document: EditorDocument,
   files: readonly ProjectFile[],
 ): string | null {
-  if (document.kind === "welcome" || document.repositoryRoot !== workspaceRoot) return null;
+  if (document.kind === "welcome" || document.kind === "language-source" || document.repositoryRoot !== workspaceRoot) return null;
   if (document.kind === "project-file" || document.kind === "project-image") return document.workspacePath;
   if (document.kind === "working-diff") {
     return diffProjectFile(files, document)?.workspacePath ?? document.selection.path;

@@ -300,6 +300,7 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .manage(LanguageServiceManager::default())
+        .manage(commands::packaged_analysis::AnalysisManager::default())
         .setup(|app| {
             let diagnostics = app
                 .path()
@@ -550,6 +551,8 @@ pub fn run() {
                 serde_json::json!({}),
             );
             app.state::<LanguageServiceManager>().cancel_all();
+            app.state::<commands::packaged_analysis::AnalysisManager>()
+                .cancel_all();
             app.state::<TaskManager>().cancel_all();
             app.state::<PluginProcessQueryManager>().cancel_all();
             let _ = abandon_plugin_activations(app);

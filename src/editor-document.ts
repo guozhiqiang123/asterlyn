@@ -49,6 +49,7 @@ export interface ConflictResolutionDocument {
 export type EditorDocument =
   | { kind: "welcome" }
   | ProjectFileDocument
+  | { kind: "language-source"; workspaceRoot:string; uri:string; path:string; content:string; languageId:string; }
   | ProjectImageDocument
   | HistoricalFileDocument
   | HistoricalFileComparisonDocument
@@ -80,6 +81,8 @@ export function editorDocumentKey(document: EditorDocument): string {
       return "welcome";
     case "project-file":
       return `file\0${document.repositoryRoot}\0${document.repositoryId}\0${document.path}`;
+    case "language-source":
+      return `language-source\0${document.workspaceRoot}\0${document.uri}`;
     case "project-image":
       return `image\0${document.repositoryRoot}\0${document.repositoryId}\0${document.path}`;
     case "historical-file":

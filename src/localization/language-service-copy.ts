@@ -1,10 +1,12 @@
 export interface LanguageServiceCopy {
+  readOnlySource:string;
   indexing: string; requestFailed: string;
   pointerHint: string; findingDefinition: string; chooseDefinition: string; definitionsLimited: string;
   noDefinition: string; invalidDefinition: string; targetUnavailable: string; invalidTargetRange: string; definitionOpened: string;
   findingReferences: string; chooseReference: string; noReferences: string; filterLocations: string; noMatchingLocations: string; limitedLocations: string;
 }
 export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  readOnlySource:"Dependency source (read-only)",
   indexing: "Language services are indexing this project. Try again shortly.", requestFailed: "The language service request failed. Check the service status or logs.",
   pointerHint: "Ctrl-click to go to definition or usages (Command-click also works on macOS)",
   findingDefinition: "Finding definition…", chooseDefinition: "Choose a definition", definitionsLimited: "Choose a definition (first 16)",
@@ -17,6 +19,7 @@ export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
   filterLocations: "Filter by file or path", noMatchingLocations: "No matching locations.", limitedLocations: "Showing the first {count} locations",
 };
 export const ZH_CN_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  readOnlySource:"依赖源码（只读）",
   indexing: "语言服务正在加载和索引项目，请稍后再试。", requestFailed: "语言服务请求失败，请检查服务状态或日志。",
   pointerHint: "Ctrl＋单击跳转到定义或引用（macOS 也支持 ⌘＋单击）",
   findingDefinition: "正在查找定义…", chooseDefinition: "选择要跳转的定义", definitionsLimited: "选择要跳转的定义（前 16 项）",

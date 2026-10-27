@@ -8,8 +8,17 @@ pub(super) enum DiagnosticProfile {
     TypeScript,
     RustPull,
     RustPush,
+    StandardPull,
+    StandardPush,
 }
 impl DiagnosticProfile {
+    pub fn standard(pull: bool) -> Self {
+        if pull {
+            Self::StandardPull
+        } else {
+            Self::StandardPush
+        }
+    }
     pub fn new(rust: bool, pull: bool) -> Self {
         if !rust {
             Self::TypeScript
@@ -22,8 +31,8 @@ impl DiagnosticProfile {
     pub fn query_count(self) -> usize {
         match self {
             Self::TypeScript => 2,
-            Self::RustPull => 1,
-            Self::RustPush => 0,
+            Self::RustPull | Self::StandardPull => 1,
+            Self::RustPush | Self::StandardPush => 0,
         }
     }
     pub fn body_key(self) -> &'static str {
@@ -35,7 +44,11 @@ impl DiagnosticProfile {
     pub fn item(self, text: &str, value: &Value) -> Option<Value> {
         match self {
             Self::TypeScript => diagnostic_item(text, value),
-            _ => rust_diagnostic_item(text, value),
+            Self::RustPull | Self::RustPush => rust_diagnostic_item(text, value),
+            _ => rust_diagnostic_item(text, value).map(|mut item| {
+                item["source"] = json!("language-server");
+                item
+            }),
         }
     }
     pub fn push_items(self, text: &str, items: &[Value]) -> Vec<Value> {
@@ -43,7 +56,7 @@ impl DiagnosticProfile {
             Self::TypeScript => items.to_vec(),
             _ => items
                 .iter()
-                .filter_map(|value| rust_diagnostic_item(text, value))
+                .filter_map(|value| self.item(text, value))
                 .collect(),
         }
     }
@@ -51,7 +64,8 @@ impl DiagnosticProfile {
         match self {
             Self::TypeScript=>["semanticDiagnosticsSync", "syntacticDiagnosticsSync"].iter().map(|command| ("workspace/executeCommand",json!({"command":"typescript.tsserverRequest","arguments":[command,{"file":file,"includeLinePosition":true},{"isAsync":false,"expectsResult":true}]}))).collect(),
             Self::RustPull=>vec![("textDocument/diagnostic",json!({"textDocument":{"uri":uri},"identifier":"rust-analyzer"}))],
-            Self::RustPush=>vec![],
+            Self::RustPush|Self::StandardPush=>vec![],
+            Self::StandardPull=>vec![("textDocument/diagnostic",json!({"textDocument":{"uri":uri}}))],
         }
     }
 }

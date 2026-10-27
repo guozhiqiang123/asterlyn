@@ -541,7 +541,7 @@ test("quarantines an activation whose projected contribution violates the host c
 });
 
 for (const payload of [
-  { serverId: "untrusted-server" },
+  { serverId: "untrusted/server" },
   { languageIds: ["typescript", 17] },
   { extensions: [".ts", null] },
   { rootMarkers: ["package.json", "../escape"] },

@@ -61,7 +61,7 @@ test("language profile declarations are bounded, unique and contain no path auth
   assert.equal(registry.get("dev.asterlyn.lsp.typescript-javascript")?.serverId, "typescript");
   release.dispose();
   const mutations = [
-    { serverId: "arbitrary-executable" }, { label: null }, { label: "x".repeat(121) },
+    { serverId: "../arbitrary-executable" }, { label: null }, { label: "x".repeat(121) },
     { label: "bad\nlabel" }, { languageIds: ["typescript", 1] },
     { languageIds: ["typescript", "typescript"] }, { languageIds: ["kotlin"] },
     { extensions: [".TS"] }, { extensions: [".ts", ".ts"] }, { extensions: ["../ts"] },
@@ -370,8 +370,15 @@ test("Rust profile accepts only Rust languages and suffixes alongside TypeScript
   const rust = { kind: "language-service", id: "rust", label: "Rust", serverId: "rust-analyzer", languageIds: ["rust"], extensions: [".rs"], rootMarkers: ["Cargo.toml"] };
   const release = registry.registerExternalBatch(owner, [languageService(), rust]);
   assert.equal(registry.list().length, 2); release.dispose();
-  for (const patch of [{ languageIds: ["typescript"] }, { extensions: [".ts"] }, { rootMarkers: ["../Cargo.toml"] }, { serverId: "rustup" }]) {
+  for (const patch of [{ languageIds: ["typescript"] }, { extensions: [".ts"] }, { rootMarkers: ["../Cargo.toml"] }, { serverId: "/rustup" }]) {
     assert.throws(() => registry.registerExternalBatch(owner, [languageService(), { ...rust, ...patch }]));
     assert.equal(registry.list().length, 0);
   }
 });
+
+ test("packaged language profile metadata admits bounded IDs without executable authority",()=>{
+ const registry=new PluginContributionRegistry(),owner={id:"dev.asterlyn.lsp",version:"0.3.0"};
+ const declaration={kind:"language-service",id:"android",label:"Android",serverId:"android-jvm",languageIds:["java","kotlin"],extensions:[".java",".kt",".kts"],rootMarkers:["settings.gradle","settings.gradle.kts"]};
+ const release=registry.registerExternalBatch(owner,[declaration]);assert.equal(registry.list().length,1);release.dispose();
+ for(const patch of [{serverId:"java -jar evil.jar"},{extensions:[".java/evil"]},{languageIds:["kotlin!package"]}])assert.throws(()=>registry.registerExternalBatch(owner,[{...declaration,...patch}]));
+ });

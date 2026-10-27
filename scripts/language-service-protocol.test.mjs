@@ -13,14 +13,19 @@ test("accepts complete language-service review and result envelope", () => {
   assert.deepEqual(validateDesktopResult("request_language_service", envelope), envelope);
 });
 
-test("rejects unknown review identity and malformed bounds", () => {
+test("rejects malformed review identity and bounds", () => {
   for (const value of [
     { ...review, pluginId: "other.plugin" },
-    { ...review, serverId: "other" },
+    { ...review, serverId: "invalid/server" },
     { ...review, reviewId: "" },
     { ...review, expiresAt: 0 },
     { ...review, executableIdentity: "node\u0000" },
   ]) assert.throws(() => validateDesktopResult("prepare_language_service", value));
+});
+
+test("accepts generic packaged server identifiers after native admission", () => {
+  const packaged = {...review, serverId: "android-jvm"};
+  assert.deepEqual(validateDesktopResult("prepare_language_service", packaged), packaged);
 });
 
 test("rejects result envelopes with invalid identity, version, or missing result", () => {

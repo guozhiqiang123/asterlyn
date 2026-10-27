@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -313,4 +313,162 @@ fn runtime_overrides_and_tampered_sealed_files_are_rejected() {
     permissions.set_readonly(true);
     std::fs::set_permissions(result.artifact.path(), permissions).unwrap();
     assert!(result.artifact.verify().is_err());
+}
+
+#[test]
+fn shutdown_signals_the_owned_process_and_releases_the_job() {
+    let f = Fixture::new(
+        "import fs from 'node:fs';process.on('SIGTERM',()=>{fs.writeFileSync('cancel-marker','stopped');process.exit(0)});process.stderr.write(JSON.stringify({stage:'running'})+'\\n');setInterval(()=>{},1000)",
+    );
+    let runtime = Arc::new(AnalysisRuntime::new(f.directory.path()).unwrap());
+    let current = runtime.clone();
+    let grant = f.grant.clone();
+    let program = f.program();
+    let authority = f.authority();
+    let (tx, ready) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        current.acquire(
+            grant,
+            program,
+            authority,
+            Arc::new(|| true),
+            Arc::new(move |_| {
+                let _ = tx.send(());
+            }),
+        )
+    });
+    ready.recv_timeout(Duration::from_secs(3)).unwrap();
+    let began = Instant::now();
+    runtime.cancel_all();
+    assert!(worker.join().unwrap().is_err());
+    assert!(began.elapsed() < Duration::from_secs(2));
+    assert_eq!(
+        std::fs::read_to_string(f.workspace.path().join("cancel-marker")).unwrap(),
+        "stopped"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn shutdown_force_kills_a_process_that_ignores_sigterm() {
+    let f = Fixture::new(
+        "import fs from 'node:fs';fs.writeFileSync('pid',String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000)",
+    );
+    let runtime = Arc::new(AnalysisRuntime::new(f.directory.path()).unwrap());
+    let current = runtime.clone();
+    let grant = f.grant.clone();
+    let program = f.program();
+    let authority = f.authority();
+    let worker = std::thread::spawn(move || {
+        current.acquire(
+            grant,
+            program,
+            authority,
+            Arc::new(|| true),
+            Arc::new(|_| {}),
+        )
+    });
+    let pid_path = f.workspace.path().join("pid");
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !pid_path.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let pid: i32 = loop {
+        if let Ok(value) = std::fs::read_to_string(&pid_path)
+            && let Ok(pid) = value.trim().parse()
+        {
+            break pid;
+        }
+        assert!(Instant::now() < deadline, "model PID was not written");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    runtime.cancel_all();
+    assert!(worker.join().unwrap().is_err());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline {
+        let alive = unsafe { libc::kill(pid, 0) == 0 };
+        if !alive {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("SIGTERM-ignoring model process remained alive: {pid}");
+}
+
+#[test]
+fn launch_guard_runs_only_when_a_new_worker_is_spawned() {
+    let f = Fixture::new("process.stdout.write('{}')");
+    let runtime = AnalysisRuntime::new(f.directory.path()).unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let guard = {
+        let calls = calls.clone();
+        Arc::new(move || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+    };
+    let first = runtime
+        .acquire(
+            f.grant.clone(),
+            f.program().with_launch_guard(guard.clone()),
+            f.authority(),
+            Arc::new(|| true),
+            Arc::new(|_| {}),
+        )
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let second = runtime
+        .acquire(
+            f.grant.clone(),
+            f.program().with_launch_guard(guard),
+            f.authority(),
+            Arc::new(|| true),
+            Arc::new(|_| {}),
+        )
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    drop(second);
+    drop(first);
+}
+
+#[test]
+fn launch_guard_failure_prevents_child_spawn() {
+    let f = Fixture::new("process.stdout.write('{}')");
+    let runtime = AnalysisRuntime::new(f.directory.path()).unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let guard = {
+        let calls = calls.clone();
+        Arc::new(move || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Err("guard rejected launch".into())
+        })
+    };
+    let result = runtime.acquire(
+        f.grant.clone(),
+        f.program().with_launch_guard(guard),
+        f.authority(),
+        Arc::new(|| true),
+        Arc::new(|_| {}),
+    );
+    assert!(result.is_err());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_ready_handle_rechecks_producer_authority_without_a_new_model_request() {
+    let f = Fixture::new("process.stdout.write('{}')");
+    let runtime = AnalysisRuntime::new(f.directory.path()).unwrap();
+    let handle = runtime
+        .acquire(
+            f.grant.clone(),
+            f.program(),
+            f.authority(),
+            Arc::new(|| true),
+            Arc::new(|_| {}),
+        )
+        .unwrap();
+    assert!(handle.is_current());
+    f.snapshot.lock().unwrap().nodes[0].enabled = false;
+    assert!(!handle.is_current());
 }

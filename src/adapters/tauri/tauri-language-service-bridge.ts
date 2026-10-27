@@ -7,7 +7,7 @@ const record = (value: unknown): Record<string, unknown> => { if (!value || type
 const text = (value: unknown, max = 16384): value is string => typeof value === "string" && value.length > 0 && value.length <= max;
 export function validateLanguageReview(value: unknown): LanguageServiceReview {
   const item = record(value);
-  if (!text(item.reviewId, 128) || item.pluginId !== "dev.asterlyn.lsp" || !["typescript", "rust-analyzer"].includes(String(item.serverId)) || !text(item.pluginVersion, 128) || !text(item.packageDigest, 128) || !text(item.resourceDigest, 128) || !text(item.executableIdentity) || !Number.isSafeInteger(item.expiresAt)) throw new Error("Invalid language execution review");
+  if (!text(item.reviewId, 128) || item.pluginId !== "dev.asterlyn.lsp" || !(typeof item.serverId === "string" && /^[a-z][a-z0-9.-]{0,127}$/u.test(item.serverId)) || !text(item.pluginVersion, 128) || !text(item.packageDigest, 128) || !text(item.resourceDigest, 128) || !text(item.executableIdentity) || !Number.isSafeInteger(item.expiresAt)) throw new Error("Invalid language execution review");
   return item as unknown as LanguageServiceReview;
 }
 function eventValue(value: unknown): LanguageServiceEvent | null {

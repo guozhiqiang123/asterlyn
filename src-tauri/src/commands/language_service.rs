@@ -28,7 +28,7 @@ const EVENT: &str = "asterlyn://language-service-event";
 pub(crate) struct LanguageServiceReview {
     pub review_id: String,
     pub plugin_id: String,
-    pub server_id: &'static str,
+    pub server_id: String,
     pub plugin_version: String,
     pub package_digest: String,
     pub resource_digest: String,
@@ -74,6 +74,11 @@ fn installed_package(
     workspace: &Path,
     server_id: &str,
 ) -> Result<LanguagePackage, String> {
+    if !["typescript", "rust-analyzer"].contains(&server_id) {
+        let node = trusted_node(workspace)?;
+        let digest = hash_file(&node)?;
+        return super::packaged_analysis::installed(app, workspace, server_id, node, digest);
+    }
     let snapshot = installation_store(app)?
         .snapshot()
         .map_err(|_| "plugin installation state unavailable")?;
@@ -129,6 +134,7 @@ fn installed_package(
         node,
         node_digest,
         rust,
+        packaged: None,
     })
 }
 pub(super) fn hash_file(path: &Path) -> Result<String, String> {
@@ -235,7 +241,7 @@ pub(crate) async fn prepare_language_service(
         return Err("unsupported language provider".into());
     }
     let server_id = server_id.unwrap_or_else(|| "typescript".into());
-    if !["typescript", "rust-analyzer"].contains(&server_id.as_str()) {
+    if server_id.is_empty() || server_id.len() > 128 {
         return Err("unsupported language profile".into());
     }
     let owner = subject(&active, &window, &workspace_root)?;
@@ -247,7 +253,7 @@ pub(crate) async fn prepare_language_service(
         Ok(LanguageServiceReview {
             review_id,
             plugin_id,
-            server_id: package.server_id(),
+            server_id: package.server_id().into(),
             plugin_version: package.version,
             package_digest: package.digest,
             resource_digest: package.content_digest,
@@ -281,6 +287,7 @@ pub(crate) async fn start_language_service(
         let permitted_owner = owner.clone();
         let digest = package.digest.clone();
         let version = package.version.clone();
+        let model_binding=package.packaged.as_ref().and_then(|profile|profile.initialization_options.pointer("/analysis/model")).cloned();
         let allowed = Arc::new(move || {
             let active = permitted_app.state::<ActiveWorkspaces>();
             active.activation_token(&permitted_owner.owner).ok() == Some(permitted_owner.activation)
@@ -297,7 +304,10 @@ pub(crate) async fn start_language_service(
                     .and_then(|store| store.snapshot().ok())
                     .and_then(|snap| select_installed_plugin(&snap, PLUGIN_ID).ok())
                     .is_some_and(|selected| {
-                        selected.version == version && selected.package_digest == digest
+                        selected.version == version && selected.package_digest == digest && model_binding.as_ref().is_none_or(|binding| {
+                            let Some(producer)=binding["producer"].as_str() else{return false};
+                            installation_store(&permitted_app).ok().and_then(|store|store.snapshot().ok()).and_then(|snapshot|select_installed_plugin(&snapshot,producer).ok()).is_some_and(|selected|Some(selected.package_digest.as_str())==binding["packageDigest"].as_str()&&Some(selected.version.as_str())==binding["version"].as_str())
+                        })
                     })
         });
         let event_app = app.clone();
@@ -305,14 +315,15 @@ pub(crate) async fn start_language_service(
         let emit = Arc::new(
             move |event: crate::application::language_service::LanguageServiceEvent| {
                 if event.kind == "terminated" { event_app.state::<LanguageServiceManager>().finished(&event.session_id); }
-            event_app.state::<DiagnosticsLog>().info("language.service", match event.kind { "terminated"=>"session.terminated", "indexing"=>"workspace.indexing", "ready"=>"workspace.ready", "degraded"=>"workspace.degraded", _=>"diagnostics.completed" }, None,
-                serde_json::json!({"sessionId":event.session_id,"version":event.version,"diagnosticCount":event.diagnostics.as_ref().and_then(Value::as_array).map(Vec::len),"documentHash":event.uri.as_ref().map(|uri|event_app.state::<DiagnosticsLog>().hash_identifier(uri))}));
+            event_app.state::<DiagnosticsLog>().info("language.service", match event.kind { "terminated"=>"session.terminated", "indexing"=>"workspace.indexing", "ready"=>"workspace.ready", "degraded"=>"workspace.degraded", "backend-log"=>"backend.failed", _=>"diagnostics.completed" }, None,
+                serde_json::json!({"sessionId":event.session_id,"code":event.code,"version":event.version,"diagnosticCount":event.diagnostics.as_ref().and_then(Value::as_array).map(Vec::len),"documentHash":event.uri.as_ref().map(|uri|event_app.state::<DiagnosticsLog>().hash_identifier(uri))}));
             let _ = event_app.emit_to(&label, EVENT, event);
             },
         );
+        let models=super::packaged_analysis::model_access(&app,&owner,&package)?;
         let session = app
             .state::<LanguageServiceManager>()
-            .start(owner, package, authority, allowed, emit)?;
+            .start_with_models(owner, package, authority, allowed, emit, models)?;
         app.state::<DiagnosticsLog>().info(
             "language.service",
             "session.started",

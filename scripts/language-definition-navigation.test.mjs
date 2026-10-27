@@ -88,3 +88,11 @@ test("a changed target range produces feedback without clamping or selecting a d
   await createLanguageDefinitionNavigator(ports)(location(undefined, range(0, 2, 4)));
   assert.equal(state.selections.length, 0); assert.deepEqual(state.outcomes, ["invalid-range"]); assert.equal(state.statuses.length, 1);
 });
+
+test("dependency source content opens only through the dedicated readonly preview port",async()=>{
+ const {state,ports}=fixture();const uri=`asterlyn-source://${"a".repeat(64)}/Api.java`,text="class Api {}";
+ const target={uri,range:range(0,6,9),readonlySource:{text,path:"Api.java",languageId:"java"}};
+ let preview=0;ports.openSource=async(root,location)=>{assert.equal(root,"/repo");preview++;state.active=location.uri;state.content=location.readonlySource.text;};
+ await createLanguageDefinitionNavigator(ports)(target);assert.equal(preview,1);assert.equal(state.opens.length,0);assert.deepEqual(state.selections,[{from:6,to:9}]);
+ for(const mutation of [{uri:"file:///outside/Api.java"},{readonlySource:{...target.readonlySource,path:"../Api.java"}},{readonlySource:{...target.readonlySource,text:"a".repeat(512*1024+1)}}])assert.equal(normalizeDefinitionTargets({...target,...mutation}).locations.length,0);
+});

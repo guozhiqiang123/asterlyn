@@ -1,10 +1,15 @@
 //! Window/workspace-bound language actors. No manager lock is held while performing server I/O.
+#[path = "language_service_actor.rs"]
+mod actor_runtime;
+use actor_runtime::actor;
 #[path = "language_service_diagnostics.rs"]
 mod diagnostics;
+#[path = "language_service_sources.rs"]
+mod sources;
 use asterlyn_language_service::{
     DocumentIdentity, DocumentState, JsonRpcId, JsonRpcMessage, LanguageServiceProcess,
-    RustServerProfile, ServerEvent, TextChange, TextPosition, TypeScriptServerProfile,
-    terminate_process_tree, utf16_offset,
+    PackagedServerProfile, RustServerProfile, ServerEvent, TextChange, TextPosition,
+    TypeScriptServerProfile, terminate_process_tree, utf16_offset,
 };
 use diagnostics::DiagnosticProfile;
 #[cfg(test)]
@@ -42,9 +47,13 @@ pub(crate) struct LanguagePackage {
     pub node: PathBuf,
     pub node_digest: String,
     pub rust: Option<RustServerProfile>,
+    pub packaged: Option<PackagedServerProfile>,
 }
 impl LanguagePackage {
-    pub fn server_id(&self) -> &'static str {
+    pub fn server_id(&self) -> &str {
+        if let Some(profile) = &self.packaged {
+            return &profile.id;
+        }
         if self.rust.is_some() {
             "rust-analyzer"
         } else {
@@ -62,7 +71,7 @@ struct Session {
     subject: LanguageSubject,
     control: SyncSender<ActorCommand>,
     pid: u32,
-    profile: &'static str,
+    profile: String,
 }
 #[derive(Default)]
 pub(crate) struct LanguageServiceManager {
@@ -79,6 +88,8 @@ pub(crate) struct LanguageServiceEvent {
     pub session_id: String,
     pub kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<i64>,
@@ -93,6 +104,21 @@ pub(crate) struct LanguageServiceResult {
     pub version: i64,
     pub result: Value,
 }
+pub(crate) trait ModelResource: Send {
+    fn is_current(&self) -> bool;
+    fn generation(&self) -> u64;
+}
+pub(crate) struct ModelReply {
+    pub value: Value,
+    pub resource: Box<dyn ModelResource>,
+}
+pub(crate) type ModelAccess =
+    Arc<dyn Fn(Arc<AtomicBool>, bool) -> Result<ModelReply, String> + Send + Sync>;
+pub(super) struct ActorServices {
+    selectors: Option<Vec<(String, Vec<String>)>>,
+    model_access: Option<ModelAccess>,
+}
+
 pub(crate) type ActorReply = mpsc::Sender<Result<Value, String>>;
 enum ActorCommand {
     Open {
@@ -138,6 +164,7 @@ struct Pending {
     uri: String,
     version: i64,
     deadline: Instant,
+    model_generation: u64,
     reply: ActorReply,
 }
 
@@ -198,6 +225,7 @@ impl LanguageServiceManager {
         reviews.remove(id);
         Ok(authority)
     }
+    #[cfg(test)]
     pub(crate) fn start(
         &self,
         subject: LanguageSubject,
@@ -205,6 +233,17 @@ impl LanguageServiceManager {
         authority: u64,
         allowed: Arc<dyn Fn() -> bool + Send + Sync>,
         emit: Arc<dyn Fn(LanguageServiceEvent) + Send + Sync>,
+    ) -> Result<String, String> {
+        self.start_with_models(subject, package, authority, allowed, emit, None)
+    }
+    pub(crate) fn start_with_models(
+        &self,
+        subject: LanguageSubject,
+        package: LanguagePackage,
+        authority: u64,
+        allowed: Arc<dyn Fn() -> bool + Send + Sync>,
+        emit: Arc<dyn Fn(LanguageServiceEvent) + Send + Sync>,
+        model_access: Option<ModelAccess>,
     ) -> Result<String, String> {
         let mut starting = self
             .starting
@@ -257,7 +296,7 @@ impl LanguageServiceManager {
         if !allowed() {
             return Err("language service authority was revoked".into());
         }
-        let profile = package.server_id();
+        let profile = package.server_id().to_owned();
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.retain(|_, session| {
                 if session.subject.owner == subject.owner && session.profile == profile {
@@ -272,12 +311,30 @@ impl LanguageServiceManager {
                 return Err("language service session limit reached".into());
             }
         }
-        let mut process = match package.rust.as_ref() {
-            Some(rust) => LanguageServiceProcess::start_rust(rust),
-            None => LanguageServiceProcess::start(&TypeScriptServerProfile {
-                package_root: package.root,
-                node: package.node,
-            }),
+        let selectors = package
+            .packaged
+            .as_ref()
+            .map(|profile| profile.selectors.clone());
+        let mut cache = None;
+        let mut process = if let Some(mut profile) = package.packaged {
+            std::fs::create_dir_all(&profile.cache_parent)
+                .map_err(|_| "language cache unavailable")?;
+            let directory = tempfile::Builder::new()
+                .prefix("session-")
+                .tempdir_in(&profile.cache_parent)
+                .map_err(|_| "language cache unavailable")?;
+            profile.initialization_options["analysis"]["stateDirectory"] = json!(directory.path());
+            let process = LanguageServiceProcess::start_packaged(&profile);
+            cache = Some(directory);
+            process
+        } else {
+            match package.rust.as_ref() {
+                Some(rust) => LanguageServiceProcess::start_rust(rust),
+                None => LanguageServiceProcess::start(&TypeScriptServerProfile {
+                    package_root: package.root,
+                    node: package.node,
+                }),
+            }
         }
         .map_err(safe_error)?;
         let pid = process.pid();
@@ -313,7 +370,21 @@ impl LanguageServiceManager {
         );
         drop(sessions);
         let actor_id = id.clone();
-        std::thread::spawn(move || actor(actor_id, subject, process, receiver, allowed, emit));
+        std::thread::spawn(move || {
+            let _cache = cache;
+            actor(
+                actor_id,
+                subject,
+                process,
+                receiver,
+                allowed,
+                emit,
+                ActorServices {
+                    selectors,
+                    model_access,
+                },
+            );
+        });
         Ok(id)
     }
     fn send(
@@ -527,438 +598,6 @@ fn document_language(path: &Path) -> Option<&'static str> {
         _ => None,
     }
 }
-fn actor(
-    id: String,
-    subject: LanguageSubject,
-    mut process: LanguageServiceProcess,
-    receiver: Receiver<ActorCommand>,
-    allowed: Arc<dyn Fn() -> bool + Send + Sync>,
-    emit: Arc<dyn Fn(LanguageServiceEvent) + Send + Sync>,
-) {
-    let rust = process.profile_id() == "rust-analyzer";
-    let pull = rust && process.supports_diagnostic_pull();
-    let diagnostics = DiagnosticProfile::new(rust, pull);
-    let request_timeout = if rust {
-        Duration::from_secs(30)
-    } else {
-        REQUEST_TIMEOUT
-    };
-    let mut rust_ready = !rust;
-    let mut documents = HashMap::<String, DocumentState>::new();
-    let mut pending = BTreeMap::<u64, Pending>::new();
-    let mut diagnostic_pending = HashMap::<u64, (String, i64, Instant)>::new();
-    let mut diagnostic_jobs = HashMap::<String, DiagnosticJob>::new();
-    let mut authority_check = Instant::now();
-    'session: loop {
-        if authority_check.elapsed() >= Duration::from_millis(250) {
-            if !allowed() {
-                break;
-            }
-            authority_check = Instant::now();
-        }
-        for _ in 0..32 {
-            match process.poll_event() {
-                Ok(Some(ServerEvent::Message(JsonRpcMessage::Response(response)))) => {
-                    process.accept_response(&response);
-                    if let JsonRpcId::Number(number) = response.id {
-                        if let Some((uri, version, _)) = diagnostic_pending.remove(&number)
-                            && let (Some(doc), Some(job)) =
-                                (documents.get(&uri), diagnostic_jobs.get_mut(&uri))
-                            && doc.version == version
-                            && job.version == version
-                        {
-                            if response.error.is_none() {
-                                if let Some(body) = response
-                                    .result
-                                    .as_ref()
-                                    .and_then(|v| v.get(diagnostics.body_key()))
-                                    .and_then(Value::as_array)
-                                {
-                                    for diagnostic in
-                                        body.iter().take(512 - job.items.len().min(512))
-                                    {
-                                        if let Some(item) = diagnostics.item(&doc.text, diagnostic)
-                                        {
-                                            job.items.push(item);
-                                        }
-                                    }
-                                } else {
-                                    job.failed = true
-                                }
-                            } else {
-                                job.failed = true
-                            }
-                            job.remaining = job.remaining.saturating_sub(1);
-                            if job.remaining == 0 && !job.failed {
-                                emit(LanguageServiceEvent {
-                                    session_id: id.clone(),
-                                    kind: "diagnostics",
-                                    uri: Some(uri.clone()),
-                                    version: Some(version),
-                                    diagnostics: Some(Value::Array(std::mem::take(&mut job.items))),
-                                });
-                            }
-                        }
-                        if let Some(request) = pending.remove(&number) {
-                            let valid = documents
-                                .get(&request.uri)
-                                .is_some_and(|doc| doc.version == request.version);
-                            let result = if !valid {
-                                Err("language result is stale".into())
-                            } else if response.error.is_some() {
-                                Err("language server rejected the request".into())
-                            } else {
-                                Ok(response.result.unwrap_or(Value::Null))
-                            };
-                            let _ = request.reply.send(result);
-                        }
-                    }
-                }
-                Ok(Some(ServerEvent::Message(JsonRpcMessage::Request(request)))) => {
-                    if process.reject_request(&request).is_err() {
-                        break 'session;
-                    }
-                }
-                Ok(Some(ServerEvent::Message(JsonRpcMessage::Notification(notification)))) => {
-                    if rust
-                        && notification.method == "experimental/serverStatus"
-                        && let Some(params) = notification.params.as_ref()
-                        && let (Some(health), Some(quiescent)) = (
-                            params.get("health").and_then(Value::as_str),
-                            params.get("quiescent").and_then(Value::as_bool),
-                        )
-                        && ["ok", "warning", "error"].contains(&health)
-                    {
-                        rust_ready = quiescent && health != "error";
-                        emit(LanguageServiceEvent {
-                            session_id: id.clone(),
-                            kind: if health == "error" {
-                                "degraded"
-                            } else if rust_ready {
-                                "ready"
-                            } else {
-                                "indexing"
-                            },
-                            uri: None,
-                            version: None,
-                            diagnostics: None,
-                        });
-                    }
-                    if notification.method == "textDocument/publishDiagnostics"
-                        && let Some(params) = notification.params
-                        && let (Some(uri), Some(version), Some(items)) = (
-                            params.get("uri").and_then(Value::as_str),
-                            params.get("version").and_then(Value::as_i64),
-                            params.get("diagnostics").and_then(Value::as_array),
-                        )
-                        && documents.get(uri).is_some_and(|doc| doc.version == version)
-                        && items.len() <= 512
-                    {
-                        emit(LanguageServiceEvent {
-                            session_id: id.clone(),
-                            kind: "diagnostics",
-                            uri: Some(uri.into()),
-                            version: Some(version),
-                            diagnostics: Some(Value::Array(
-                                diagnostics.push_items(&documents[uri].text, items),
-                            )),
-                        });
-                    }
-                }
-                Ok(Some(ServerEvent::Eof | ServerEvent::Io(_))) | Err(_) => break 'session,
-                Ok(None) => break,
-            }
-        }
-        let expired = pending
-            .iter()
-            .filter(|(_, p)| p.deadline <= Instant::now())
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-        for number in expired {
-            if let Some(p) = pending.remove(&number) {
-                let _ = process.cancel(number);
-                let _ = p.reply.send(Err("language request timed out".into()));
-            }
-        }
-        let expired_diagnostics = diagnostic_pending
-            .iter()
-            .filter(|(_, (_, _, deadline))| *deadline <= Instant::now())
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-        for number in expired_diagnostics {
-            if let Some((uri, version, _)) = diagnostic_pending.remove(&number) {
-                let _ = process.cancel(number);
-                if let Some(job) = diagnostic_jobs.get_mut(&uri)
-                    && job.version == version
-                {
-                    job.remaining = job.remaining.saturating_sub(1);
-                    job.failed = true;
-                }
-            }
-        }
-        let due = diagnostic_jobs
-            .iter()
-            .filter(|(_, job)| job.remaining == 0 && job.due <= Instant::now())
-            .map(|(uri, job)| (uri.clone(), job.version))
-            .collect::<Vec<_>>();
-        for (uri, version) in due {
-            if diagnostics.query_count() == 0 {
-                continue;
-            }
-            if !documents
-                .get(&uri)
-                .is_some_and(|doc| doc.version == version)
-            {
-                continue;
-            }
-            if pending.len() + diagnostic_pending.len() >= MAX_REQUESTS {
-                continue;
-            }
-            let Ok(file) = document_path(&subject.root, &uri) else {
-                continue;
-            };
-            if let Some(job) = diagnostic_jobs.get_mut(&uri) {
-                job.due = Instant::now() + Duration::from_secs(86400);
-                job.remaining = diagnostics.query_count();
-                job.failed = false;
-                job.items.clear();
-            }
-            for (method, params) in diagnostics.requests(&uri, &file) {
-                match process.request(method, Some(params)) {
-                    Ok(number) => {
-                        diagnostic_pending.insert(
-                            number,
-                            (uri.clone(), version, Instant::now() + request_timeout),
-                        );
-                    }
-                    Err(_) => break 'session,
-                }
-            }
-        }
-
-        let command = match receiver.recv_timeout(Duration::from_millis(10)) {
-            Ok(c) => c,
-            Err(mpsc::RecvTimeoutError::Timeout) => continue,
-            Err(_) => break,
-        };
-        match command {
-            ActorCommand::Stop => break,
-            ActorCommand::Open {
-                uri,
-                language,
-                version,
-                text,
-                reply,
-            } => {
-                let result = (|| {
-                    let path = document_path(&subject.root, &uri)?;
-                    if document_language(&path) != Some(language.as_str())
-                        || (language == "rust") != rust
-                        || version != 1
-                        || text.len() > MAX_DOCUMENT_BYTES
-                        || documents.len() >= MAX_DOCUMENTS
-                        || documents.contains_key(&uri)
-                    {
-                        return Err("invalid or duplicate language document".into());
-                    }
-                    process.notify("textDocument/didOpen",Some(json!({"textDocument":{"uri":uri,"languageId":language,"version":version,"text":text}}))).map_err(safe_error)?;
-                    diagnostic_jobs.insert(
-                        uri.clone(),
-                        DiagnosticJob {
-                            version,
-                            due: Instant::now() + Duration::from_millis(250),
-                            remaining: 0,
-                            items: Vec::new(),
-                            failed: false,
-                        },
-                    );
-                    documents.insert(
-                        uri.clone(),
-                        DocumentState::new(
-                            DocumentIdentity {
-                                window_id: subject.owner.clone(),
-                                worktree_root: subject.root.to_string_lossy().into(),
-                                generation: subject.activation,
-                                uri,
-                            },
-                            text,
-                        ),
-                    );
-                    Ok(Value::Null)
-                })();
-                let _ = reply.send(result);
-            }
-            ActorCommand::Change {
-                uri,
-                version,
-                changes,
-                reply,
-            } => {
-                let result = (|| {
-                    let doc = documents
-                        .get_mut(&uri)
-                        .ok_or("language document is not open")?;
-                    if version <= doc.version
-                        || changes.is_empty()
-                        || changes.len() > 128
-                        || changes.iter().map(|c| c.text.len()).sum::<usize>() > MAX_DOCUMENT_BYTES
-                    {
-                        return Err("invalid language document update".into());
-                    }
-                    let mut next = doc.clone();
-                    next.apply(&changes).map_err(safe_error)?;
-                    next.version = version;
-                    if next.text.len() > MAX_DOCUMENT_BYTES {
-                        return Err("language document exceeds bound".into());
-                    }
-                    process.notify("textDocument/didChange",Some(json!({"textDocument":{"uri":uri,"version":version},"contentChanges":[{"text":next.text}]}))).map_err(safe_error)?;
-                    *doc = next;
-                    diagnostic_jobs.insert(
-                        uri.clone(),
-                        DiagnosticJob {
-                            version,
-                            due: Instant::now() + Duration::from_millis(250),
-                            remaining: 0,
-                            items: Vec::new(),
-                            failed: false,
-                        },
-                    );
-                    let old_diagnostics = diagnostic_pending
-                        .iter()
-                        .filter(|(_, v)| v.0 == uri)
-                        .map(|(id, _)| *id)
-                        .collect::<Vec<_>>();
-                    for number in old_diagnostics {
-                        diagnostic_pending.remove(&number);
-                        let _ = process.cancel(number);
-                    }
-                    let obsolete = pending
-                        .iter()
-                        .filter(|(_, p)| p.uri == uri)
-                        .map(|(id, _)| *id)
-                        .collect::<Vec<_>>();
-                    for number in obsolete {
-                        if let Some(p) = pending.remove(&number) {
-                            let _ = process.cancel(number);
-                            let _ = p.reply.send(Err("language result is stale".into()));
-                        }
-                    }
-                    Ok(Value::Null)
-                })();
-                let _ = reply.send(result);
-            }
-            ActorCommand::Close { uri, reply } => {
-                documents.remove(&uri);
-                diagnostic_jobs.remove(&uri);
-                let old_diagnostics = diagnostic_pending
-                    .iter()
-                    .filter(|(_, v)| v.0 == uri)
-                    .map(|(id, _)| *id)
-                    .collect::<Vec<_>>();
-                for number in old_diagnostics {
-                    diagnostic_pending.remove(&number);
-                    let _ = process.cancel(number);
-                }
-                let obsolete = pending
-                    .iter()
-                    .filter(|(_, p)| p.uri == uri)
-                    .map(|(id, _)| *id)
-                    .collect::<Vec<_>>();
-                for number in obsolete {
-                    if let Some(p) = pending.remove(&number) {
-                        let _ = process.cancel(number);
-                        let _ = p.reply.send(Err("language document closed".into()));
-                    }
-                }
-                let result = process
-                    .notify(
-                        "textDocument/didClose",
-                        Some(json!({"textDocument":{"uri":uri}})),
-                    )
-                    .map(|_| Value::Null)
-                    .map_err(safe_error);
-                let _ = reply.send(result);
-            }
-            ActorCommand::Request {
-                uri,
-                version,
-                request_id,
-                feature,
-                position,
-                reply,
-            } => {
-                let result = (|| {
-                    let doc = documents.get(&uri).ok_or("language document is not open")?;
-                    if rust && !rust_ready {
-                        return Err("Rust language services are loading this project. Try navigation again shortly.".into());
-                    }
-                    if doc.version != version
-                        || request_id.is_empty()
-                        || request_id.len() > 128
-                        || pending.len() + diagnostic_pending.len() >= MAX_REQUESTS
-                        || pending.values().any(|p| p.external == request_id)
-                    {
-                        return Err("stale or invalid language request".into());
-                    }
-                    utf16_offset(&doc.text, &position).map_err(safe_error)?;
-                    let method = match feature.as_str() {
-                        "hover" => "textDocument/hover",
-                        "definition" => "textDocument/definition",
-                        "completion" => "textDocument/completion",
-                        "references" => "textDocument/references",
-                        _ => return Err("unsupported language feature".into()),
-                    };
-                    let mut params = json!({"textDocument":{"uri":uri},"position":{"line":position.line,"character":position.character}});
-                    if feature == "references" {
-                        params["context"] = json!({"includeDeclaration":false});
-                    }
-                    process.request(method, Some(params)).map_err(safe_error)
-                })();
-                match result {
-                    Ok(number) => {
-                        pending.insert(
-                            number,
-                            Pending {
-                                external: request_id,
-                                uri,
-                                version,
-                                deadline: Instant::now() + request_timeout,
-                                reply,
-                            },
-                        );
-                    }
-                    Err(error) => {
-                        let _ = reply.send(Err(error));
-                    }
-                }
-            }
-            ActorCommand::Cancel { request_id, reply } => {
-                let number = pending
-                    .iter()
-                    .find(|(_, p)| p.external == request_id)
-                    .map(|(id, _)| *id);
-                if let Some(number) = number
-                    && let Some(p) = pending.remove(&number)
-                {
-                    let _ = process.cancel(number);
-                    let _ = p.reply.send(Err("language request cancelled".into()));
-                }
-                let _ = reply.send(Ok(Value::Bool(number.is_some())));
-            }
-        }
-    }
-    for (_, p) in pending {
-        let _ = p.reply.send(Err("language service has ended".into()));
-    }
-    let _ = process.stop();
-    emit(LanguageServiceEvent {
-        session_id: id,
-        kind: "terminated",
-        uri: None,
-        version: None,
-        diagnostics: None,
-    });
-}
 
 #[cfg(test)]
 mod tests {
@@ -979,6 +618,7 @@ mod tests {
             node: "/node".into(),
             node_digest: "n".into(),
             rust: None,
+            packaged: None,
         };
         let id = manager.prepare(subject.clone(), package.clone()).unwrap();
         assert!(
@@ -1068,6 +708,7 @@ mod tests {
             node: PathBuf::from(node),
             node_digest: "test".into(),
             rust: None,
+            packaged: None,
         };
         let id = manager
             .start(
@@ -1176,6 +817,7 @@ mod tests {
             node: PathBuf::from(node),
             node_digest: "fixture".into(),
             rust: None,
+            packaged: None,
         };
         let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let allowed_alive = alive.clone();
@@ -1372,3 +1014,7 @@ mod tests {
 #[cfg(test)]
 #[path = "language_service_rust_tests.rs"]
 mod rust_tests;
+
+#[cfg(test)]
+#[path = "language_service_packaged_tests.rs"]
+mod packaged_tests;

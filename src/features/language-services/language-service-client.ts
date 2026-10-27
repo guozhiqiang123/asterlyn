@@ -3,7 +3,7 @@ import type { EditorDefinitionEvent, EditorLanguageServiceDiagnostic, EditorLang
 export interface LanguageDocumentIdentity {
   readonly workspaceRoot: string; readonly workspaceGeneration: number; readonly uri: string;
   readonly languageId: string; readonly pluginId: string; readonly providerVersion?: string;
-  readonly serverId?: "typescript" | "rust-analyzer";
+  readonly serverId?: string;
 }
 export type { NativeLanguageServiceBridge, LanguageServiceEvent } from "../../protocol/language-service.ts";
 import type { NativeLanguageServiceBridge, LanguageServiceEvent, LanguageServiceApprovalEvent } from "../../protocol/language-service.ts";

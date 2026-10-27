@@ -21,7 +21,7 @@ export interface LanguageServicesRuntimeOptions {
   readonly approvalDiagnostic?: (event: import("../protocol/language-service.ts").LanguageServiceApprovalEvent) => void;
   readonly diagnostic?: (fields: { providerCount: number; workspaceGeneration: number | null }) => void;
 }
-const LANGUAGES: Readonly<Record<string, string>> = { rs: "rust", ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
+const LANGUAGES: Readonly<Record<string, string>> = { java:"java", kt:"kotlin", kts:"kotlin", groovy:"groovy", gradle:"groovy", rs: "rust", ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
 export function workspaceFileUri(root: string, path: string): string | null {
   if (path.startsWith("/") || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === "..")) return null;
   const normalized = root.replace(/\\/gu, "/").replace(/\/$/u, "");
@@ -55,6 +55,15 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   return { refresh, revoke: (pluginId: string) => { factory.revoke(pluginId); }, dispose: () => { release(); options.bind(null); factory.dispose(); } };
 }
 export function languageExecutionConfirmation(review: Parameters<NativeLanguageServiceBridge["confirm"]>[0], chinese: boolean): ApplicationConfirmationRequest {
+  if (!["typescript", "rust-analyzer"].includes(review.serverId)) return chinese ? {
+    title: "启用项目语言服务？",
+    message: `语言插件将通过依赖插件读取当前项目模型，并运行已校验的本机语言工具。Gradle 会执行项目配置；语言工具会读取源码和当前未保存的编辑内容，具有当前用户的系统权限。首次分析可能需要较长时间，进度和失败原因可在日志中查看。\n\n执行程序：${review.executableIdentity}\n插件与工具校验：${review.resourceDigest}\n\n当前窗口的项目会话内记住此选择。更换插件或工具后重新确认。`,
+    confirmLabel: "启用语言服务", cancelLabel: "暂不启用",
+  } : {
+    title: "Enable project language services?",
+    message: `The language plugin will read this project's model through its declared dependency plugin and run verified local language tools. Gradle executes project configuration. Tools can read source files and unsaved edits with your account's system permissions. Initial analysis can take time; progress and failures are recorded in the application log.\n\nExecutable: ${review.executableIdentity}\nPlugin and tool identity: ${review.resourceDigest}\n\nRemember this choice for the current window's project session. Changed plugins or tools require confirmation again.`,
+    confirmLabel: "Enable language services", cancelLabel: "Not now",
+  };
   if (review.serverId === "rust-analyzer") return chinese ? {
     title: "启用 Rust 语言服务？",
     message: `插件 ${review.pluginId} ${review.pluginVersion} 将运行本机 Rust 1.98.1 的 rust-analyzer，并通过 Cargo 读取当前项目模型。该进程具有当前用户的系统权限；项目和用户的 Cargo 配置也会影响执行。\n\n首版使用离线模式，关闭构建脚本、过程宏和保存时 Cargo check；宏生成代码的分析可能不完整。不会自动安装依赖或工具。\n\n执行程序：${review.executableIdentity}\n插件校验：${review.packageDigest}\n\n当前窗口的项目会话内单独记住 Rust 的选择。重启、切换项目或工具身份变化后重新确认。`,

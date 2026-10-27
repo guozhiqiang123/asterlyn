@@ -5,6 +5,7 @@ export function definitionFileKey(value: unknown): string | null {
   if (typeof value !== "string" || value.length > 16384 || /[\u0000-\u001f\u007f]/u.test(value) || value.trim() !== value) return null;
   try {
     const url = new URL(value);
+    if(url.protocol==="asterlyn-source:" && /^[a-f0-9]{64}$/u.test(url.hostname) && !url.search && !url.hash && !url.username && !url.password && !url.port)return url.href;
     if (url.protocol !== "file:" || url.search || url.hash || (url.host && url.host !== "localhost")) return null;
     const path = decodeURIComponent(url.pathname);
     if (path.includes("\u0000") || path.includes("\\")) return null;
@@ -26,10 +27,14 @@ export function normalizeDefinitionTargets(value: unknown, kind: "definition" | 
     const range = "targetUri" in item ? item.targetSelectionRange ?? item.targetRange : item.range;
     const start = point(range?.start), end = point(range?.end), file = definitionFileKey(uri);
     if (!file || !start || !end || end.line < start.line || (end.line === start.line && end.character < start.character)) { invalid = true; continue; }
+    const virtual=String(uri).startsWith("asterlyn-source:");
+    const source=item.readonlySource;
+    if(virtual && (!source || typeof source.text!=="string" || new TextEncoder().encode(source.text).length>512*1024 || typeof source.path!=="string" || !source.path || source.path.length>256 || /[\u0000-\u001f\u007f\\:]/u.test(source.path) || source.path.split("/").some((part:string)=>!part||part==="."||part==="..") || typeof source.languageId!=="string" || !/^[a-z][a-z0-9-]{0,63}$/u.test(source.languageId))){invalid=true;continue;}
+    if(!virtual && source!==undefined){invalid=true;continue;}
     const key = JSON.stringify([file, start.line, start.character, end.line, end.character]);
     if (seen.has(key)) continue; seen.add(key);
     if (locations.length === maxTargets) { limited = true; continue; }
-    locations.push({ uri: new URL(uri).href, range: { start, end } });
+    locations.push({ uri: new URL(uri).href, range: { start, end }, ...(virtual?{readonlySource:{text:source.text,path:source.path,languageId:source.languageId}}:{}) });
   }
   return { locations, limited, invalid };
 }

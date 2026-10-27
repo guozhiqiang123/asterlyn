@@ -5,14 +5,14 @@ use asterlyn_plugin_models::{
 use asterlyn_process::{configure_process_group, signal_process_tree, terminate_process_tree};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
@@ -33,6 +33,7 @@ pub struct AdmittedProgram {
     cwd: PathBuf,
     environment: BTreeMap<OsString, OsString>,
     input: Vec<u8>,
+    launch_guard: Option<Arc<dyn Fn() -> Result<(), String> + Send + Sync>>,
 }
 impl AdmittedProgram {
     pub fn new(
@@ -102,7 +103,15 @@ impl AdmittedProgram {
             cwd,
             environment,
             input,
+            launch_guard: None,
         })
+    }
+    pub fn with_launch_guard(
+        mut self,
+        guard: Arc<dyn Fn() -> Result<(), String> + Send + Sync>,
+    ) -> Self {
+        self.launch_guard = Some(guard);
+        self
     }
 }
 
@@ -113,9 +122,13 @@ pub(super) fn run(
     allowed: Allowed,
     progress: ProgressSink,
     budget: Arc<AtomicU64>,
+    processes: Arc<Mutex<BTreeSet<u32>>>,
 ) -> Result<SealedArtifact, String> {
     if ticket.is_cancelled() || !allowed() {
         return Err("analysis authority was revoked".into());
+    }
+    if let Some(guard) = &program.launch_guard {
+        guard()?;
     }
     let file = tempfile::NamedTempFile::new_in(cache).map_err(|_| "cannot stage model artifact")?;
     let mut command = Command::new(&program.node);
@@ -132,13 +145,21 @@ pub(super) fn run(
         .spawn()
         .map_err(|_| "cannot start analysis program")?;
     let pid = child.id();
-    struct Guard(u32);
+    struct Guard(u32, Arc<Mutex<BTreeSet<u32>>>);
     impl Drop for Guard {
         fn drop(&mut self) {
             terminate_process_tree(self.0);
+            if let Ok(mut pids) = self.1.lock() {
+                pids.remove(&self.0);
+            }
         }
     }
-    let _guard = Guard(pid);
+    let _guard = Guard(pid, processes.clone());
+    processes
+        .lock()
+        .map_err(|_| "analysis process registry unavailable")?
+        .insert(pid);
+
     let mut stdin = child.stdin.take().ok_or("analysis input unavailable")?;
     std::thread::spawn(move || {
         let _ = stdin.write_all(&program.input);

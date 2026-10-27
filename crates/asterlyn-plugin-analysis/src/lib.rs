@@ -4,7 +4,7 @@ mod worker;
 use asterlyn_plugin_dependencies::DependencyNode;
 use asterlyn_plugin_models::*;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::{Arc, Condvar, Mutex, Weak},
     time::{Duration, Instant},
@@ -66,6 +66,7 @@ struct Inner {
     state: Mutex<State>,
     directory: tempfile::TempDir,
     budget: Arc<std::sync::atomic::AtomicU64>,
+    processes: Arc<Mutex<BTreeSet<u32>>>,
 }
 
 pub struct AnalysisRuntime {
@@ -75,6 +76,8 @@ pub struct ModelHandle {
     pub reference: ArtifactRef,
     pub artifact: Arc<SealedArtifact>,
     _lease: LeaseGuard,
+    authority: AuthorityReader,
+    grant: ModelGrant,
 }
 struct LeaseGuard {
     lease: ModelLease,
@@ -82,11 +85,22 @@ struct LeaseGuard {
 }
 impl ModelHandle {
     pub fn is_current(&self) -> bool {
+        let Ok(snapshot) = (self.authority)() else {
+            return false;
+        };
         self._lease.inner.upgrade().is_some_and(|inner| {
-            inner
-                .state
-                .lock()
-                .is_ok_and(|state| state.broker.lease_is_current(&self._lease.lease))
+            inner.state.lock().is_ok_and(|state| {
+                state
+                    .broker
+                    .resolve(
+                        &self.grant,
+                        &snapshot.view(),
+                        &self._lease.lease,
+                        &self.reference,
+                        Instant::now(),
+                    )
+                    .is_ok()
+            })
         })
     }
 }
@@ -119,6 +133,7 @@ impl AnalysisRuntime {
                 }),
                 directory,
                 budget: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+                processes: Arc::new(Mutex::new(BTreeSet::new())),
             }),
         })
     }
@@ -158,6 +173,7 @@ impl AnalysisRuntime {
             let result_job = job.clone();
             let cache = self.inner.directory.path().to_path_buf();
             let budget = self.inner.budget.clone();
+            let processes = self.inner.processes.clone();
             let current = authority.clone();
             let permitted_authority = authority.clone();
             let permitted_inner = weak.clone();
@@ -185,6 +201,7 @@ impl AnalysisRuntime {
                         permitted.clone(),
                         progress,
                         budget,
+                        processes,
                     )
                     .and_then(|artifact| {
                         if !permitted() {
@@ -290,6 +307,8 @@ impl AnalysisRuntime {
             reference,
             artifact,
             _lease: lease,
+            authority,
+            grant,
         })
     }
     pub fn invalidate(&self, predicate: impl Fn(&ModelKey) -> bool) {
@@ -301,6 +320,37 @@ impl AnalysisRuntime {
     }
     pub fn cancel_all(&self) {
         self.invalidate(|_| true);
+        // Exit must signal children synchronously; a detached Rust worker may not run another tick
+        // after the application exits. The reviewed program then owns its bounded cleanup grace.
+        let processes = self
+            .inner
+            .processes
+            .lock()
+            .map(|pids| pids.iter().copied().collect::<Vec<_>>())
+            .unwrap_or_default();
+        for &pid in &processes {
+            // Shutdown must not rely on a detached worker getting another scheduler
+            // tick after the host begins exiting.  Give cooperative children the
+            // termination signal, then synchronously force the owned process group;
+            // this is deliberately bounded and never invokes a global daemon stop.
+            asterlyn_process::signal_process_tree(pid, false);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let remaining = self
+            .inner
+            .processes
+            .lock()
+            .map(|pids| {
+                processes
+                    .iter()
+                    .copied()
+                    .filter(|pid| pids.contains(pid))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for pid in remaining {
+            asterlyn_process::terminate_process_tree(pid);
+        }
     }
     pub fn cache_directory(&self) -> PathBuf {
         self.inner.directory.path().to_path_buf()

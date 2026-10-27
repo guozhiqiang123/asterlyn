@@ -74,6 +74,8 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
     ? copy.preview
     : preview?.kind === "conflict-resolution"
       ? copy.conflict
+    : preview?.kind === "language-source"
+      ? copy.languageService.readOnlySource
     : preview?.kind === "historical-file"
       ? copy.historical
       : preview?.kind === "historical-file-comparison"
@@ -81,7 +83,7 @@ export function renderEditorTabs(model: EditorTabsViewModel): string {
       : copy.diff;
   const previewTab = preview && !pinnedKeys.has(editorDocumentKey(preview))
     ? `<div class="editor-tab preview ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" role="tab" aria-selected="${model.session.active.kind === "preview"}">
-        <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "project-image" || preview.kind === "historical-file" || preview.kind === "conflict-resolution" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-label">${escapeHtml(basename(previewPath ?? previewLabel))}</span><small>${previewLabel}</small></button>
+        <button class="editor-tab-target" type="button" data-editor-preview><span class="editor-tab-file-icon">${preview.kind === "language-source" || preview.kind === "project-image" || preview.kind === "historical-file" || preview.kind === "conflict-resolution" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-label">${escapeHtml(basename(previewPath ?? previewLabel))}</span><small>${previewLabel}</small></button>
         <button class="editor-tab-close" type="button" data-close-editor-preview aria-label="${escapeAttribute(copy.closePreview(previewLabel))}" title="${escapeAttribute(copy.close)}">${icon("close", 12)}</button>
       </div>`
     : "";
@@ -111,13 +113,15 @@ export function renderEditorTabMenu(model: EditorTabMenuViewModel): string {
       ? copy.imagePreview
       : preview?.kind === "conflict-resolution"
         ? copy.conflict
-      : preview?.kind === "historical-file"
+      : preview?.kind === "language-source"
+      ? copy.languageService.readOnlySource
+    : preview?.kind === "historical-file"
         ? copy.historicalPreview
         : preview?.kind === "historical-file-comparison"
           ? copy.historicalComparison
       : copy.diffPreview;
   const previewItem = preview && !pinnedKeys.has(editorDocumentKey(preview))
-    ? `<button class="editor-tab-menu-item ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? previewLabel)}"><span class="editor-tab-menu-glyph">${preview.kind === "project-image" || preview.kind === "historical-file" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? previewLabel))}</strong><small>${previewLabel}</small></span>${model.session.active.kind === "preview" ? icon("check", 14) : ""}</button>`
+    ? `<button class="editor-tab-menu-item ${previewStatusClass(preview, model.statusClass)} ${model.session.active.kind === "preview" ? "active" : ""}" type="button" role="menuitem" data-editor-menu-preview title="${escapeAttribute(previewPath ?? previewLabel)}"><span class="editor-tab-menu-glyph">${preview.kind === "language-source" || preview.kind === "project-image" || preview.kind === "historical-file" ? fileTypeIcon(preview.path) : icon("changes", 14)}</span><span class="editor-tab-menu-copy"><strong>${escapeHtml(basename(previewPath ?? previewLabel))}</strong><small>${previewLabel}</small></span>${model.session.active.kind === "preview" ? icon("check", 14) : ""}</button>`
     : "";
   return `${textItems}${pinnedItems}${previewItem}`;
 }
