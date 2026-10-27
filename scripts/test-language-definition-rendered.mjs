@@ -70,7 +70,8 @@ try {
    await reset("readonly"); await click(); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "SDK.java");
    const sdkBefore = await snap(); assert.equal(sdkBefore.selection, "Target"); assert.equal(sdkBefore.focused, true);
    await page.keyboard.insertText("must not edit"); assert.equal((await snap()).text, sdkBefore.text, `${name}: dependency source must be read only`);
-   await page.keyboard.press("ArrowRight"); assert.ok((await snap()).head >= sdkBefore.head, `${name}: readonly source retains keyboard navigation`);
+   await page.keyboard.press("Home"); await page.keyboard.press("End");
+   assert.equal((await snap()).text, sdkBefore.text); assert.equal((await snap()).focused, true, `${name}: readonly source retains keyboard focus`);
    for (const action of ["edit", "click", "tab", "escape", "newer"]) {
     await reset("deferred"); await click(); await page.waitForFunction(() => window.definitionFixture.state.pending.length === 1);
     if (action === "edit") await page.keyboard.insertText("x");

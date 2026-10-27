@@ -1,6 +1,6 @@
 # Android / JVM 语言服务兼容计划
 
-- 日期：2026-10-26；状态：**实施已获授权；A0 探针已执行，上线闸门未通过；A1 通用前置分步推进**。
+- 日期：2026-10-26；状态：**Java/Kotlin 核心已实现并通过真实 Android 夹具、包和原生链路验收；Groovy/DSL、资源及大型项目补验另列后续**。
 - 基线：宿主 `d9dfffd`，已安装代码 `96c73fe` / Asterlyn 0.1.21；SDK 1.12.0；LSP 插件 0.2.0 / `2237b3d`。
 - 目标：为真实 Android Gradle 项目提供 Kotlin、Java、Groovy 和构建脚本的语义服务，复用既有编辑、导航、日志和插件边界。
 - 原规划回合未执行工具/Gradle；后续用户已授权实施。当前执行与失败闸门见 [A0 记录](../benchmarks/2026-10-26-android-jvm-a0.md)。未通过真实语义闸门的 profile 不进入 SDK/插件；不发布远端。
@@ -163,3 +163,9 @@ A1a 已实现 reader/初始化缓冲的固定槽状态合并、严格普通事�
 ## 10. 职责修订（2026-10-27）
 
 后续实施以 [插件模型协作计划](2026-10-27-plugin-build-model-cooperation-plan.md) 和 ADR-0035 为准：Android 插件拥有 AGP/变体/依赖模型，LSP 插件拥有后端适配，宿主只补通用运行基础。用户确认 LSP 整体启用时 Android 插件不可关闭，先交付通用强依赖门禁。此前 A0/A1a 证据仍有效，不表示 Android LSP 已可用。
+
+## 2026-10-27 当前交付
+
+当前能力以 [Android LSP 核心验收](../benchmarks/2026-10-27-android-lsp-core.md) 为准。
+以上 A0/原规划文字保留为历史；Java/Kotlin 双向未保存跳转、模块闭包隔离、版本诊断、SDK 只读来源和后端恢复均已通过。
+宿主保持通用，语言/AGP 算法在独立插件；Groovy/DSL/资源、跨模块完整引用聚合和大型项目 soak 仍单列。

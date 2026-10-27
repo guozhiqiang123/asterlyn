@@ -1,19 +1,19 @@
 use super::*;
 
 pub(super) const BUNDLED_ANDROID_PLUGIN_ID: &str = "dev.asterlyn.android-gradle";
-pub(super) const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.5.10";
+pub(super) const BUNDLED_ANDROID_PLUGIN_VERSION: &str = "0.6.0";
 pub(super) const BUNDLED_ANDROID_PACKAGE_DIGEST: &str =
-    "sha256:36f4839f49e8723c455561d12bad5972c225c35a043e8527f0cff43a2b3c83af";
+    "sha256:23b3a596f4b412260c88bb8fc4169427c649b8108dab43470831181949547f1c";
 pub(super) const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
-    "../../../resources/plugins/asterlyn-plugin-android-gradle-0.5.10.asterlyn-plugin.tgz"
+    "../../../resources/plugins/asterlyn-plugin-android-gradle-0.6.0.asterlyn-plugin.tgz"
 );
 pub(super) const BUNDLED_LSP_PLUGIN_ID: &str = "dev.asterlyn.lsp";
-pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.2.1";
+pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.3.0";
 pub(super) const BUNDLED_LSP_REPOSITORY: &str = "guozhiqiang123/asterlyn-plugin-lsp";
 pub(super) const BUNDLED_LSP_PACKAGE_DIGEST: &str =
-    "sha256:c341c81055601c150556973ea45c0189fb64a92dbbfc9fe7c1ad8f63fbfb8486";
+    "sha256:fb68e35395f1d8c16b271b819d40a4701c6ecdfc2969e6b09b23dc10d34e14e2";
 pub(super) const BUNDLED_LSP_PACKAGE: &[u8] =
-    include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.2.1.asterlyn-plugin.tgz");
+    include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.3.0.asterlyn-plugin.tgz");
 
 pub(super) fn ensure_bundled_android_package(
     marketplace_root: &std::path::Path,

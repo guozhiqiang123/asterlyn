@@ -12,10 +12,10 @@ test("bundled Android plugin artifact matches the host-pinned isolated identity"
   const manifest = await readBundledAndroidManifest();
   const hostSource = await readFile(new URL("../src-tauri/src/commands/plugin_marketplace/bundled.rs", import.meta.url), "utf8");
   const digest = createHash("sha256").update(artifact).digest("hex");
-  assert.equal(digest, "36f4839f49e8723c455561d12bad5972c225c35a043e8527f0cff43a2b3c83af");
+  assert.equal(digest, "23b3a596f4b412260c88bb8fc4169427c649b8108dab43470831181949547f1c");
   assert.match(hostSource, new RegExp(`sha256:${digest}`, "u"));
   assert.equal(manifest.id, "dev.asterlyn.android-gradle");
-  assert.equal(manifest.version, "0.5.10");
+  assert.equal(manifest.version, "0.6.0");
   assert.equal(manifest.schemaVersion, 3);
   assert.equal(manifest.sdkMajor, 1);
   assert.deepEqual(manifest.hostOperations.map(({ id }) => id), [

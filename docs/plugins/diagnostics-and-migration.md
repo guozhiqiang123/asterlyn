@@ -1,6 +1,6 @@
 # Plugin diagnostics and migration
 
-Status: experimental public policy rooted at Asterlyn `0.1.21`; current Plugin SDK `1.13.0`.
+Status: experimental public policy rooted at Asterlyn `0.1.22`; current Plugin SDK `1.13.0`.
 
 ## Identify the failing phase
 
