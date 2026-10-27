@@ -439,4 +439,30 @@ mod tests {
             .unwrap();
         store.set_plugin_enabled(ANDROID, false).unwrap();
     }
+
+    #[test]
+    fn external_provider_uninstall_requires_consumers_to_disable_first() {
+        let directory = tempdir().unwrap();
+        let store = PluginInstallationStore::open(directory.path()).unwrap();
+        record(&store, ANDROID, "1.1.0", vec![], false).unwrap();
+        record(&store, LSP, "1.0.0", vec![requirement()], false).unwrap();
+        store.set_plugin_enabled(LSP, true).unwrap();
+        let before = store.snapshot().unwrap();
+        assert!(
+            store
+                .remove_plugin(ANDROID)
+                .unwrap_err()
+                .to_string()
+                .contains(LSP)
+        );
+        assert_eq!(store.snapshot().unwrap(), before);
+        store.set_plugin_enabled(LSP, false).unwrap();
+        let removed = store.remove_plugin(ANDROID).unwrap();
+        assert!(
+            !removed
+                .plugins
+                .iter()
+                .any(|plugin| plugin.plugin_id == ANDROID)
+        );
+    }
 }

@@ -171,6 +171,23 @@ application bundle. The strict verification must pass, and inspection must repor
 - a sealed-resources record rather than `Sealed Resources=none`;
 - the expected application version from `Info.plist`.
 
+For a newly bundled plugin version, startup acceptance must wait for the exact installed package's
+native health checkpoint, not only `application.frontend_ready` or provider registration. Registration
+happens before the delayed checkpoint. Terminating the smoke process at registration can leave an
+interrupted activation that is correctly quarantined on the next launch. Use the log/state probe with
+an actual source workspace and an array of `{ "id", "version", "digest" }` expected identities:
+
+```bash
+node scripts/verify-plugin-startup.mjs \
+  target/release/bundle/macos/Asterlyn.app/Contents/MacOS/asterlyn \
+  /path/to/actual/source/workspace /tmp/expected-plugins.json /tmp/plugin-startup-evidence.json
+```
+
+Stop the old installed app gracefully before the probe when it shares the normal installation index.
+If a probe was stopped before the checkpoint, use the verified native repair path for that exact
+package; never edit installation JSON to mark a package healthy. Re-run the checkpoint probe and
+preserve evidence of the original interrupted attempt and repair.
+
 Archive only after those checks. A DMG created before the final bundle signature is stale because it
 contains the pre-signing `.app`; do not install or publish it. A workflow that needs a DMG must make
 Tauri perform ad-hoc signing before DMG construction and must mount the finished image and run the
