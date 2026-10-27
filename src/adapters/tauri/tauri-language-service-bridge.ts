@@ -1,4 +1,4 @@
-import { LanguageServiceIndexingError } from "../../protocol/editor-language-service.ts";
+import { languageServiceFailure } from "./language-service-failure.ts";
 import { invokeDesktopCommandUnvalidated as invoke } from "./desktop-command-adapter.ts";
 import type { LanguageServiceReview, LanguageServiceResultEnvelope } from "../../protocol/language-service.ts";
 import type { NativeLanguageServiceBridge, LanguageServiceEvent } from "../../protocol/language-service.ts";
@@ -34,7 +34,7 @@ export function createTauriLanguageServiceBridge(confirm: NativeLanguageServiceB
     change: (workspaceRoot, sessionId, uri, version, changes) => invoke("change_language_document", { workspaceRoot, sessionId, uri, version, changes: [...changes] }).then(() => undefined),
     close: (workspaceRoot, sessionId, uri) => invoke("close_language_document", { workspaceRoot, sessionId, uri }).then(() => undefined),
     request: async (workspaceRoot, sessionId, uri, version, requestId, feature, line, character) => {
-      const value = record(await invoke("request_language_service", { workspaceRoot, sessionId, uri, version, requestId, feature, line, character }).catch((error: unknown) => { if (error === "Rust language services are loading this project. Try navigation again shortly.") throw new LanguageServiceIndexingError(); throw error; }));
+      const value = record(await invoke("request_language_service", { workspaceRoot, sessionId, uri, version, requestId, feature, line, character }).catch((error: unknown) => {throw languageServiceFailure(error);}));
       if (value.sessionId !== sessionId || value.uri !== uri || value.version !== version || !("result" in value) || JSON.stringify(value).length > 4 * 1024 * 1024) throw new Error("Invalid language response identity or size");
       return value as unknown as LanguageServiceResultEnvelope;
     },

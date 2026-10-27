@@ -60,3 +60,7 @@ with a different hash is substituted for the same Maven coordinate/version.
 Detailed plugin receipts/source/license provenance: [LSP acceptance](../../../asterlyn-plugin-lsp/docs/android-acceptance-2026-10-27.md),
 [Android model acceptance](../../../asterlyn-plugin-android-gradle/docs/android-model-fixture-evidence.md).
 Local structured evidence is under `/tmp/asterlyn-android-lsp`. Signed build/install receipts follow below.
+
+The desktop boundary also maps the new profile-neutral native indexing state to the existing
+informational loading UI (retaining legacy Rust compatibility), so clicking during initial model
+work does not produce an operation-failed toast. Focused state-projection regression passes.
