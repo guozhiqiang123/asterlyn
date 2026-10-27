@@ -92,3 +92,9 @@ C3a 已用独立 AGP V2 探针在 boostCleaner 的 :common/cleanx100Debug 取到
 C2 随包程序、原生模型租约、SDK 1.14 与异步 actor 交付；C3 真实所选变体 AGP 模块图由 Android 0.6.0 提供；
 C4 LSP 0.3.0 的 Java/Kotlin 核心通过真实混合 Android 夹具、未保存方法、模块隔离、SDK 来源和崩溃恢复测试。
 C5 按规范执行签名、ZIP、覆盖安装与图标重开；完整证据和剩余能力边界见 [核心验收](../benchmarks/2026-10-27-android-lsp-core.md)。
+
+C5 已完成：0.1.22 签名包通过真实原生模型交接和 Kotlin/Java 双向跳转，规范安装至
+`/Applications/Asterlyn.app`，图标启动及退出重开均有 frontend-ready 日志，精确插件版本均为 known-good。
+核心可验收；Groovy/DSL/资源及大型业务工程完整矩阵继续单列，不以夹具成功替代这些闸门。
+新建/删除 Android 工程标记后的隔离插件贡献更新仍需重开项目；后续用通用、选择性的激活身份失效契约解决，
+单独给隔离包添加 SDK `evidenceKey` 不会影响当前 installed runtime 的会话复用。

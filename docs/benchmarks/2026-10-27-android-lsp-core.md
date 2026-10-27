@@ -51,6 +51,12 @@ dependency source previews allow selection/copy, without saving or continued sem
 Kotlin language features follow the reviewed fwcd compiler. Windows/Linux runtime acceptance and
 large-project CPU/retained-memory soak tests are not claimed.
 
+Creating/removing Android project markers while a folder is already open requires reopening that
+project. Isolated activations currently preserve their existing contribution set on catalog changes;
+an SDK descriptor `evidenceKey` alone does not reach that installed-plugin lifecycle. A follow-up
+must add a generic, bounded activation-identity contract and selectively recreate only the affected
+idle activation; restarting all plugins or adding Android-specific host detection is not acceptable.
+
 The user's Gradle dependency cache was cleared during validation; old boostCleaner model paths were
 invalidated. Earlier real model/Java probes are historical only. Dependency recovery hit repository/
 proxy failures; the final independent real Android fixture uses stable caches. Missing dependencies
@@ -95,3 +101,37 @@ Direct adapter/actor probes with a simulated model reply do not establish native
 delivery must additionally observe actual `worker.progress` and `model.acquired` events.
 
 After the correction: native library 171 pass / 3 ignored; strict native clippy passes.
+
+## Signed desktop and installed acceptance
+
+Accepted source is `7ae487017dd70dc81661bf6a3ca317ee9d6ac23e` (clean build, host 0.1.22).
+The complete macOS bundle was ad-hoc signed with hardened runtime, and strict/deep signature,
+bundle identifier and sealed resources checks passed. Executable SHA-256 is
+`04b1705c96a6cd6e0c644d11a51413bad94b3d3b97b9befe6477e570e5bb4c75`.
+The verified signed ZIP is 25,643,469 bytes, SHA-256
+`c5432d1e6b07c421f1c8722362abb87074ea111642a134c10ca70ff406639d1a`.
+
+The actual signed desktop was also exercised against the real AGP 8.12.2/Kotlin 2.2, two-module,
+two-flavor Android fixture. Its native input fingerprint, dependency/package authority, supervised
+model worker, model artifact lease and Java/Kotlin backend ran together (no simulated ModelAccess).
+Structured events confirm compile → model → serialize → `model.acquired` (2,197 bytes, generation 1,
+8,633 ms), followed by `workspace.ready` about 16.5 seconds after session start. F12 on
+`MainActivity.kt`'s `JavaBridge.label` opened the actual Java declaration; F12 on Java's
+`LibraryValue.answer` opened its Kotlin declaration. Destinations were checked through accessibility;
+stage/readiness conclusions come from native logs. No source buffers were edited. An isolated HOME
+reused the owned retained fixture dependency cache and the reviewed installed package/component
+store, avoiding dependence on the user's recently cleared Gradle cache. All seven observed owned
+desktop/helper/server processes ended after normal menu Quit. The 226,096 KiB process-tree RSS
+reading is an idle sample, not a peak or large-project budget.
+
+Normal-HOME startup then verified exact Android 0.6.0 and LSP 0.3.0 activation plus native known-good
+checkpoints. The existing `existing_project_directories` validation errors are outside this language
+acceptance; zero application-wide errors is not claimed. The canonical installer replaced only
+`/Applications/Asterlyn.app/Contents`, preserving root inode `203606126`, retained a verified ZIP
+backup, and matched the installed executable to the accepted signed bundle. Icon-bookmark launch
+(PID 48430) and normal Quit/reopen (PID 48536) both recorded frontend readiness for that same build.
+Both plugins remain enabled/active/known-good. No tag, push or remote release was performed.
+
+Local receipts: `/tmp/asterlyn-android-lsp/native-model-desktop-acceptance.json`,
+`native-model-desktop-processes.json`, `final-plugin-startup.json`, `final-signed-artifact.json`,
+`final-signed-archive.json`, `final-installation.json` and `delivery-status.json` in that directory.
