@@ -246,3 +246,13 @@ policy is relaxed. The first Repair attempt with the incompatible active fallbac
 is rejected; temporarily disabling the dependent LSP permits the exact Android
 0.6.1 package revalidation. LSP will be re-enabled only after the provider's
 normal pending-version startup checkpoint. No installation JSON is edited.
+
+The native loading response was also swallowed by the frontend session client:
+`request_language_service` logged loading while definition lookup displayed an
+empty-result warning. The client now preserves typed indexing errors only for
+the exact current document/session/version. Existing definition gesture handling
+shows informational indexing text; stale errors still disappear and hover /
+completion keep their graceful caller handling. Current-error recovery without
+re-consent and stale-error rejection are covered; all 1,350 script tests and
+typecheck pass. Business source hashes remain unchanged. A user-authorized
+temporary unsaved test edit was discarded before further package replacement.

@@ -60,3 +60,12 @@ The user's manual acceptance and cross-restart remember feature remain explicitl
   strictly verified, actual-project probed and installed through the canonical installer. Installed
   hashes match, app root identity is preserved, backup is a verified ZIP, and both saved-icon
   launches record frontend readiness. [Acceptance/artifact evidence](../benchmarks/2026-10-26-language-approval-session.md).
+
+## Loading-error propagation correction
+
+The language-service client preserves the typed `LanguageServiceIndexingError` from the native
+bridge while the same document, session, and editor version remain current. This lets definition/reference navigation show a native
+loading response as information instead of claiming that no definition exists. Hover and
+completion retain their caller-side graceful handling. Errors arriving after an edit, close, session replacement, or workspace transition remain
+dropped as stale. Focused client coverage also verifies that a later successful request recovers
+without another consent prompt or a poisoned session.

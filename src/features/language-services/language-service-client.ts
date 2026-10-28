@@ -1,4 +1,5 @@
 import type { EditorDefinitionEvent, EditorLanguageServiceDiagnostic, EditorLanguageServiceHandle, EditorLanguageServiceLocation, EditorLanguageServicePort, EditorLanguageServicePortFactory, EditorLanguageServiceSnapshot } from "../../protocol/editor-language-service.ts";
+import { LanguageServiceIndexingError } from "../../protocol/editor-language-service.ts";
 
 export interface LanguageDocumentIdentity {
   readonly workspaceRoot: string; readonly workspaceGeneration: number; readonly uri: string;
@@ -181,7 +182,14 @@ class Session {
     try {
       const envelope = await this.native.request(this.info.workspaceRoot, session, doc.info.uri, version, id, feature, Number(pos.line), Number(pos.character));
       return this.current(doc) && this.sessionId === session && doc.latest.version === version && envelope.sessionId === session && envelope.uri === doc.info.uri && envelope.version === version ? envelope.result : null;
-    } catch { return null; } finally { doc.requests.delete(id); }
+    } catch (error) {
+      // Preserve a host loading state only for this exact live document/session/version.
+      if (error instanceof LanguageServiceIndexingError
+        && this.current(doc)
+        && this.sessionId === session
+        && doc.latest.version === version) throw error;
+      return null;
+    } finally { doc.requests.delete(id); }
   }
   event(event: LanguageServiceEvent): void {
     if (event.sessionId !== this.sessionId) return;

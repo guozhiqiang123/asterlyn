@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createEditorLanguageServicePort } from "../src/features/language-services/language-service-client.ts";
+import { LanguageServiceIndexingError } from "../src/protocol/editor-language-service.ts";
 
 const handleA = { tabId: "tab-a", path: "file:///repo/a.ts", loadEpoch: 1 };
 const handleB = { tabId: "tab-b", path: "file:///repo/b.ts", loadEpoch: 1 };
@@ -11,19 +12,38 @@ const wait = () => new Promise((resolve) => setTimeout(resolve, 25));
 function fakeNative({ approved = true, requestResult = { ok: true } } = {}) {
   const calls = []; const events = new Set(); let sequence = 0; let deferredRequest = null; let deferredPrepare = null;
   const native = {
-    calls, events,
+    calls, events, requestError: null,
     prepare: async (...args) => { calls.push(["prepare", ...args]); if (deferredPrepare) return deferredPrepare.promise; return review(`review-${++sequence}`); },
     confirm: async (...args) => { calls.push(["confirm", ...args]); return approved; },
     start: async (...args) => { calls.push(["start", ...args]); native.lastSession = `session-${++sequence}`; return native.lastSession; },
     open: async (...args) => calls.push(["open", ...args]), change: async (...args) => calls.push(["change", ...args]), close: async (...args) => calls.push(["close", ...args]),
-    request: async (...args) => { calls.push(["request", ...args]); if (deferredRequest) return deferredRequest.promise; return { sessionId: args[1], uri: args[2], version: args[3], result: requestResult }; },
+    request: async (...args) => { calls.push(["request", ...args]); if (deferredRequest) return deferredRequest.promise; if (native.requestError) { const error = native.requestError; native.requestError = null; throw error; } return { sessionId: args[1], uri: args[2], version: args[3], result: requestResult }; },
     cancel: async (...args) => calls.push(["cancel", ...args]), stop: async (...args) => calls.push(["stop", ...args]),
     subscribe: (listener) => { events.add(listener); return () => events.delete(listener); },
   };
-  native.deferRequest = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); deferredRequest = { promise, resolve }; return deferredRequest; };
+  native.deferRequest = () => { let resolve; let reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail; }); deferredRequest = { promise, resolve, reject }; return deferredRequest; };
   native.deferPrepare = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); deferredPrepare = { promise, resolve }; return deferredPrepare; };
   return native;
 }
+
+test("keeps a current indexing error visible and recovers without re-consent", async () => {
+  const native = fakeNative(); const errors = []; const factory = createEditorLanguageServicePort((handle) => identityFor(handle), native, (error) => errors.push(error)); const port = factory(handleA);
+  port.open(handleA, { version: 1, text: "value" }); await wait();
+  native.requestError = new LanguageServiceIndexingError();
+  await assert.rejects(port.request(handleA, "textDocument/definition", { position: { line: 0, character: 1 } }, 1), LanguageServiceIndexingError);
+  assert.equal(native.calls.filter((call) => call[0] === "confirm").length, 1);
+  assert.deepEqual(await port.request(handleA, "textDocument/definition", { position: { line: 0, character: 1 } }, 1), { ok: true });
+  assert.equal(native.calls.filter((call) => call[0] === "confirm").length, 1);
+  assert.deepEqual(errors, []); factory.dispose();
+});
+
+test("drops an indexing error that becomes stale after an edit", async () => {
+  const native = fakeNative(); const errors = []; const factory = createEditorLanguageServicePort((handle) => identityFor(handle), native, (error) => errors.push(error)); const port = factory(handleA);
+  port.open(handleA, { version: 1, text: "value" }); await wait();
+  const deferred = native.deferRequest(); const pending = port.request(handleA, "textDocument/definition", { position: { line: 0, character: 1 } }, 1); await wait();
+  port.update(handleA, { version: 2, text: "value!" }); await wait(); deferred.reject(new LanguageServiceIndexingError());
+  assert.equal(await pending, null); assert.deepEqual(errors, []); factory.dispose();
+});
 
 test("flushes unsaved snapshots before hover and drops stale versions", async () => {
   const native = fakeNative(); const factory = createEditorLanguageServicePort((handle) => identityFor(handle), native, (error) => { throw error; }); const port = factory(handleA);
