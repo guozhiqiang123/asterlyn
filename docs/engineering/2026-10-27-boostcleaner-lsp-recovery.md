@@ -256,3 +256,66 @@ completion keep their graceful caller handling. Current-error recovery without
 re-consent and stale-error rejection are covered; all 1,350 script tests and
 typecheck pass. Business source hashes remain unchanged. A user-authorized
 temporary unsaved test edit was discarded before further package replacement.
+
+## Final installed native acceptance — 2026-10-28
+
+The recovery milestone is accepted on the canonical installed app 0.1.22, code
+revision `ccca8c7989c768234cf04c99774022dffbee286a`. Android Gradle 0.6.1 and LSP
+0.3.6 are enabled, active and known-good with no pending replacement. Their exact
+package digests remain those recorded above. The final host includes the two
+follow-up fixes in `5dcdd3d` (original helper exit observation) and `ccca8c7`
+(current-document indexing feedback). All 1,350 frontend script tests, typecheck,
+12 supervisor integration tests, runtime unit tests and strict runtime clippy pass.
+
+The final executable SHA-256 is
+`1c014eb5830bbde8abb377ba65d48f4e94ce6a676d3816890e38ed7da48ee316`.
+Whole-bundle strict/deep signature verification passes. The CRC-verified ZIP is
+25,213,333 bytes, SHA-256
+`60efb2ab724b0333da69c5cc33e5873086928c466bece6811b380775234d7403`.
+The repository installer preserves `/Applications/Asterlyn.app` root inode
+203606126/device 16777234 and keeps the prior app as a ZIP. Both icon-bookmark
+launches record frontend readiness; the final reopened process is PID 34639.
+The same signed bundle passes the rendered native shell smoke with a 30-second
+observation budget, run serially before final installation. Earlier failed
+six-second/locked smoke receipts remain retained, not overwritten as successes.
+
+Final native session: `session-1793157545192-34639-0`, language session
+`language-session-34639-1`. The 25-module model is acquired in 19,500 ms
+(sequence 86). `workspace.ready` at sequence 104 follows language session start
+by 313,143 ms. A navigation attempt while indexing visibly shows
+“Language services are indexing this project. Try again shortly.” Once ready,
+actual Ctrl+left-click gestures, verified by both selected saved destination tabs
+and native lookup events, succeed in both directions:
+
+- Kotlin `AdsRuntimeState.kt` → the three-argument `SharedPref.getLong` declaration
+  in `common/src/main/java/com/swiftcleaner/lib/storage/SharedPref.java`.
+  Request/selected sequences: 128/129.
+- Java `AppUtils.java:297`, `GlobalConfigNew.INSTANCE.getInstallAttribution()` →
+  `common/src/main/java/com/swiftcleaner/lib/storage/GlobalConfigNew.kt`.
+  Request/selected sequences: 132/133.
+
+F12 also opens the Kotlin→Java definition. Syntax/semantic diagnostic events
+continue after navigation; the original Kotlin file has zero diagnostics.
+Existing Java deprecation warnings are not represented as zero diagnostics for
+the entire project. All four tracked business-source hashes are unchanged and
+the boostCleaner worktree is clean. The user-authorized temporary unsaved edit
+has been discarded; no business dependencies or global TLS settings were changed.
+
+Through sequence 136 the final native session contains no plugin unexpected
+exit, quarantine, protocol-limit, timeout or resource-limit event. The existing
+two stale recent-directory `invalidPath` failures and expected indexing responses
+are retained. Local evidence is under
+`/tmp/asterlyn-android-lsp/boost-native-20261028/`: `final-installation.json`,
+`final-plugin-health.json`, `final-rendered.log`, `accepted-native-session.json`,
+`final-native-events.json`, `final-ui-checks.json` and `source-hashes-after.json`.
+These local receipts supplement the exact-package mixed/real-project checks above;
+they are not uploaded or committed as raw logs.
+
+The optional final standard-library preview UI check was stopped when macOS
+locked again after both required gestures. Its definition/hover/completion and
+readonly compiled-preview checks passed against this exact packaged backend;
+no additional native UI preview pass is claimed. Initial preparation still takes
+minutes and observed large-project owned memory is about 1.5 GiB in the packaged
+probe. The earlier multi-window helper EOF remains unexplained; this milestone
+adds evidence for any recurrence, not a proven fix for that original exit or a
+multi-window soak guarantee. No remote push, tag or Release was performed.
