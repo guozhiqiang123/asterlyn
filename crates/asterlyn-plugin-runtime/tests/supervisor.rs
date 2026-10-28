@@ -303,6 +303,11 @@ fn invoke_crash_evicts_only_the_faulty_helper_and_keeps_the_peer_usable() {
         termination.reason,
         PluginSessionTerminationReason::UnexpectedExit
     );
+    assert!(
+        termination.detail.contains("exit status: 23"),
+        "EOF termination must preserve the fixture's original exit status: {}",
+        termination.detail
+    );
     assert_eq!(supervisor.active_count(), 1);
     let peer_result = supervisor
         .invoke(

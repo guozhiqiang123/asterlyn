@@ -211,3 +211,38 @@ so interactive native navigation and visible-shell acceptance remain pending
 unlock; neither is claimed from frontend readiness alone. The user has been
 asked to unlock, while all independent build/package/install/log gates above
 are complete. No remote push/tag/Release or business-project change occurred.
+
+## Unlocked native follow-up — 2026-10-28
+
+The accepted installed executable still matches its frozen SHA. Native boostCleaner
+model import succeeds for all 25 modules in 18.627 s. The installed language session
+reaches workspace.ready after 296.607 s and publishes zero baseline diagnostics.
+A separate existing Android project window then reports an unexpected helper pipe
+EOF, followed by intended same-version peer containment. Android 0.6.1 is quarantined
+and rolls back to 0.5.10, which cannot satisfy LSP 0.3.6's dependency. Earlier native
+lookups returning empty after this incident are not accepted as successful navigation.
+
+No macOS crash report, stderr, protocol diagnostic or resource-limit event identifies
+the original helper exit. The reader EOF path can win the process watcher race and
+force cleanup before recording Child::try_wait. A minimal supervisor correction
+now probes the original exit status for at most about 50 ms before cleanup. It
+records an original code/signal, still-running observation or unavailable status,
+never relabelling the host's force-stop as the original crash cause. The session-ID
+guard, peer containment, resource policy and timeouts are unchanged. A real fixture
+exiting 23 must retain that original status while its peer stays usable.
+
+The native rendered smoke gate also fails SHELL_MARKER_MISSING with the desktop
+unlocked; it is retained as a failed harness observation, not reported as a pass.
+Do not run more app processes against the active installation during the following
+controlled single-project recovery. Restore the exact provider with the normal UI
+Repair flow, wait for its native checkpoint, then re-enable the dependent LSP.
+Final single-project navigation and installation evidence follows after completion.
+
+The exit-observation correction passes all 12 real supervisor integration tests
+and the runtime unit tests, plus strict all-target runtime clippy. The fixture's
+EOF retains original exit 23; expected replacement, idle exits, multi-window
+identity containment and complete process-group shutdown remain covered. No
+policy is relaxed. The first Repair attempt with the incompatible active fallback
+is rejected; temporarily disabling the dependent LSP permits the exact Android
+0.6.1 package revalidation. LSP will be re-enabled only after the provider's
+normal pending-version startup checkpoint. No installation JSON is edited.

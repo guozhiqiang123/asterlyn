@@ -143,6 +143,13 @@ returned subscription events have been published to the window; failed publicati
 An operation scope dropped before completion records `failed` with `outcome: abandoned`, rather
 than claiming a particular timeout or cancellation reason.
 
+When an isolated plugin helper closes its protocol pipe unexpectedly, the host makes a bounded,
+non-destructive exit-status probe before terminating the process tree. The termination detail
+records the original child exit code or signal when available, or explicitly says that the child
+was still running/unavailable at observation time. A cleanup-generated force-stop status must not
+be presented as the helper's original crash cause; the existing containment, timeout, and resource
+limits remain unchanged.
+
 Every record carries a build ID (revision, dirty/clean status and build stamp). `application.starting`
 also includes package version and OS/architecture. `application.native_ready` means native window
 creation succeeded; `application.frontend_ready` means frontend startup completed. During exit,

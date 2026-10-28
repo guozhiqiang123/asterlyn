@@ -560,6 +560,16 @@ impl SupervisorInner {
             });
         let was_current = self.remove_if_current(session);
         session.stopping.store(true, Ordering::Release);
+        let mut detail = detail.into();
+        // A reader-side EOF can race the process watcher.  Probe the child
+        // before force_stop() so the termination record retains the helper's
+        // actual exit status instead of reporting the host's cleanup signal.
+        if was_current
+            && matches!(reason, PluginSessionTerminationReason::UnexpectedExit)
+            && detail.contains("plugin helper closed its protocol pipe")
+        {
+            detail.push_str(&session.original_exit_status_detail());
+        }
         session.force_stop();
         if !was_current {
             return;
@@ -982,6 +992,39 @@ impl ManagedSession {
             return;
         }
         terminate_process_tree(self.pid, &self.child);
+    }
+
+    fn original_exit_status_detail(&self) -> String {
+        const PROBE_ATTEMPTS: usize = 10;
+        const PROBE_DELAY: Duration = Duration::from_millis(5);
+
+        for attempt in 0..PROBE_ATTEMPTS {
+            let observation = match self.child.lock() {
+                Ok(mut child) => child.as_mut().map(Child::try_wait),
+                Err(_) => {
+                    return "; original child exit status unavailable (child lock poisoned)"
+                        .to_owned();
+                }
+            };
+            match observation {
+                Some(Ok(Some(status))) => {
+                    return format!("; original child exit status: {status}");
+                }
+                Some(Err(error)) => {
+                    return format!("; original child exit status unavailable ({error})");
+                }
+                None => {
+                    return "; original child exit status unavailable (child handle already released)".to_owned();
+                }
+                Some(Ok(None)) if attempt + 1 < PROBE_ATTEMPTS => {
+                    thread::sleep(PROBE_DELAY);
+                }
+                Some(Ok(None)) => {
+                    return "; original child exit status: still running at EOF (host cleanup follows)".to_owned();
+                }
+            }
+        }
+        unreachable!("the bounded child-status probe always returns");
     }
 }
 
