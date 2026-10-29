@@ -593,3 +593,18 @@ installation. Acceptance requires the native multiple-reference picker, selected
 source opening and class-use-to-definition route with logs and unchanged business
 hashes. The plugin's Android acceptance document contains the staged plan;
 local evidence is under `boost-class-nav-20261029` in the existing case root.
+
+The LSP 0.3.7 candidate passes all 12 plugin tests, typecheck, deterministic
+packaging and native inspection. Its 4,649,739-byte archive SHA-256 is
+`ec3e7899064ca67055dcc71370850026cf46110ca919b29d55fda199963db129`.
+The real Kotlin probe retains all 32 valid workspace locations exactly, and
+`ProcessStateMonitor.kt:37` resolves to `SplashActivity.kt:60`. The host pins
+these exact bytes and removes the superseded production archive. No host
+navigation behavior or compiler component changes. Final installed native
+class-picker and reverse-definition acceptance are still required.
+
+Host typecheck, all 1,350 script tests, production frontend build and the exact
+LSP package's isolated activation/projection/review checks pass. Focused native
+marketplace admission, sealing and startup-upgrade tests pass 11 tests; one
+unrelated live-network test remains intentionally ignored. No Git-domain code
+changes. The package correction itself is LSP commit `5e530ec`.
