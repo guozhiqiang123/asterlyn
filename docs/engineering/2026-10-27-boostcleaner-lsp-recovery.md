@@ -573,3 +573,23 @@ native events, resource samples, `refresh-stability.json` and
 `ui-and-log-acceptance.json`. Intermediate
 installation/watch receipts are explicitly named as intermediate. No raw local
 logs are committed or uploaded, and no remote push, tag or Release is performed.
+
+## Reopened class-reference incident — 2026-10-29 plan
+
+The user next reports `SplashActivity` class-declaration navigation. Native
+definition-to-references requests reach the language adapter, which fails them.
+The identical admitted backend's direct probe returns 32 workspace references
+plus a compiler scratch `file:///dummy.kt` reference. Resolving that non-existent
+location aborts the entire canonicalization batch. The method-only checks above
+did not cover this case; their successful receipts do not close this incident.
+
+The plugin owns the correction: filter reference results through its existing
+imported source-view ownership map before emitting project URIs. Keep semantic
+results, current document/model guards and separate dependency-definition
+admission. No Kotlin parser, symbol-name fallback or dummy-path special case
+belongs in the generic host. Add negative ownership and real-class regression
+checks, then pin verified LSP 0.3.7 and deliver a freshly signed canonical local
+installation. Acceptance requires the native multiple-reference picker, selected
+source opening and class-use-to-definition route with logs and unchanged business
+hashes. The plugin's Android acceptance document contains the staged plan;
+local evidence is under `boost-class-nav-20261029` in the existing case root.
