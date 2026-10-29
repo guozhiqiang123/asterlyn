@@ -150,6 +150,12 @@ was still running/unavailable at observation time. A cleanup-generated force-sto
 be presented as the helper's original crash cause; the existing containment, timeout, and resource
 limits remain unchanged.
 
+The 2026-10-29 boostCleaner recurrence records an original `SIGXCPU`, identifying
+the old cumulative lifetime CPU limit. CPU supervision now uses a rolling window;
+its `resourceLimit` termination detail names the CPU allowance and window, distinct
+from resident-memory excess. The original-signal receipt remains retained. See
+[the incident and recovery evidence](2026-10-27-boostcleaner-lsp-recovery.md).
+
 Every record carries a build ID (revision, dirty/clean status and build stamp). `application.starting`
 also includes package version and OS/architecture. `application.native_ready` means native window
 creation succeeded; `application.frontend_ready` means frontend startup completed. During exit,

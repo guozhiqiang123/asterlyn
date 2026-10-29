@@ -100,6 +100,17 @@ child process with:
   and
 - transactional contribution publication after manifest, handshake, and activation succeed.
 
+CPU supervision uses a rolling 60 CPU-second budget over the latest 60 seconds of
+monotonic wall time, sampled at most four times per second with bounded history.
+It must not impose a cumulative lifetime CPU expiry on a long-lived helper.
+Inherited OS limits are preserved. macOS counters use the Mach timebase; Linux
+uses process user/system ticks; Windows uses process kernel/user times. Memory,
+request deadlines, process-tree ownership and fail-closed sampling remain
+independent. Excess is reported as `resourceLimit` with the applicable window in
+the termination detail. This replaces the earlier host-imposed Unix RLIMIT_CPU
+and Windows per-process job lifetime allowance; see the
+[boostCleaner incident and acceptance](../../engineering/2026-10-27-boostcleaner-lsp-recovery.md).
+
 The package runtime entry is a self-contained bundle targeting the published plugin-host runtime.
 Callbacks in the build-time SDK are represented across the process boundary by opaque handles and
 typed messages, not serialized executable closures. Existing host capabilities remain authoritative:

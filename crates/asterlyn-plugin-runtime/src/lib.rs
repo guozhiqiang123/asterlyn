@@ -16,6 +16,7 @@ use asterlyn_plugin_runtime_protocol::{
 };
 use serde_json::Value as JsonValue;
 
+mod cpu_budget;
 mod resource_policy;
 mod termination;
 
@@ -1133,13 +1134,14 @@ fn spawn_process_watcher(
     thread::Builder::new()
         .name(format!("plugin-watch-{}", session.session_id))
         .spawn(move || {
+            let mut resources = resource_policy::ResourceMonitor::new();
             loop {
                 if session.stopping.load(Ordering::Acquire)
                     || session.process_cleaned.load(Ordering::Acquire)
                 {
                     return;
                 }
-                match resource_policy::limit_violation(session.pid) {
+                match resources.limit_violation(session.pid) {
                     Ok(Some(detail)) => {
                         if let Some(supervisor) = supervisor.upgrade() {
                             supervisor.terminate_current(

@@ -319,3 +319,48 @@ minutes and observed large-project owned memory is about 1.5 GiB in the packaged
 probe. The earlier multi-window helper EOF remains unexplained; this milestone
 adds evidence for any recurrence, not a proven fix for that original exit or a
 multi-window soak guarantee. No remote push, tag or Release was performed.
+
+## Reopened incident and correction plan — 2026-10-29
+
+The next user report is reproducible from the retained native log without UI
+inference. The installed executable still matches `ccca8c7`; the newer host HEAD
+only adds documentation. In that same session, event 146 records the original
+Android 0.6.1 helper exit as signal 24 (`SIGXCPU`). Event 147 terminates the
+language session, and event 199 rejects LSP reactivation after automatic fallback
+to Android 0.5.10. The prior acceptance ended at event 136 and therefore did not
+establish continued session health. This later receipt reopens that milestone.
+
+The host incorrectly applies a 60-second *lifetime cumulative* CPU allowance to
+long-lived plugin helpers (Unix RLIMIT_CPU, Windows per-process job time). Even
+small legitimate work eventually exhausts it. The correction stays generic:
+
+1. Replace the host-imposed lifetime CPU limit with a bounded rolling 60-second
+   CPU budget over 60 seconds of monotonic wall time. Read actual process
+   user+system CPU on macOS/Linux/Windows; retain memory, request/startup/output,
+   process ownership and fail-closed sampling policies. No plugin-specific escape
+   hatch, arbitrary lifetime extension or removal of resource supervision.
+2. Cover long sessions crossing 60 cumulative CPU seconds, sustained excess,
+   window expiry, counter anomalies and bounded sampler storage. Verify real
+   process counters and inherited CPU limits plus existing cleanup/peer tests.
+3. Build/sign/verify a fresh native package, restore the exact quarantined provider
+   through normal verified Repair, install canonically, and recheck real-project
+   navigation with exact package health and sustained-session evidence. Preserve
+   the SIGXCPU incident and the earlier limited acceptance instead of relabelling
+   either as an unexplained plugin defect or a successful soak.
+
+The implementation passes 8 unit tests, 13 supervisor integrations, all 1,350
+frontend script tests, typecheck, production frontend build and strict all-target
+runtime clippy. Linux x86_64 and Windows GNU x86_64 all-target runtime checks pass;
+those are compilation checks, not native-platform execution acceptance.
+
+Two explicitly invoked real-process soak checks exercise actual kernel counters:
+65,024 ms of cumulative CPU over 143,791 ms wall time remains active and accepts
+a post-soak invocation; a four-thread idle runaway is stopped as `resourceLimit`
+after 15,531 ms. The first runaway candidate failed because raw macOS CPU counters
+were mislabelled as nanoseconds. That failed receipt is retained; the corrected
+Mach-timebase conversion is independently checked against POSIX `getrusage`.
+The units follow Apple's [task accounting](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/task.c)
+and [rusage projection](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/bsd_kern.c).
+No compiler flags, project dependencies or TLS settings change. Local evidence
+and canonical installation/navigation receipts follow under
+`/tmp/asterlyn-android-lsp/boost-cpu-window-20261029/`.

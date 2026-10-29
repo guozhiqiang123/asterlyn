@@ -16,6 +16,9 @@ use asterlyn_plugin_runtime_protocol::{
 };
 use serde_json::json;
 
+#[cfg(unix)]
+mod cpu;
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -110,6 +113,8 @@ fn run() -> Result<(), String> {
         .get("malformedFrameOnInvoke")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
+    #[cfg(unix)]
+    cpu::start(&activate.evidence, PathBuf::from(&plugin_root).as_path());
     let stderr_flood_on_invoke = activate
         .evidence
         .get("stderrFloodOnInvokeBytes")
@@ -137,6 +142,26 @@ fn run() -> Result<(), String> {
         let envelope = receive(&mut reader)?;
         match envelope.message {
             PluginHostMessage::Invoke(request) => {
+                #[cfg(unix)]
+                if request.operation == "resource-policy" {
+                    let mut limit = libc::rlimit {
+                        rlim_cur: 0,
+                        rlim_max: 0,
+                    };
+                    // SAFETY: initialized local buffer of the required kernel layout.
+                    if unsafe { libc::getrlimit(libc::RLIMIT_CPU, &mut limit) } != 0 {
+                        return Err("read CPU policy".to_owned());
+                    }
+                    send(
+                        &mut writer,
+                        &mut sequence,
+                        PluginHostMessage::InvocationResult(OperationResult {
+                            request_id: request.request_id,
+                            payload: json!({"cpuSoft": limit.rlim_cur.to_string(), "cpuHard": limit.rlim_max.to_string()}),
+                        }),
+                    )?;
+                    continue;
+                }
                 if stderr_flood_on_invoke > 0 {
                     let mut stderr = io::stderr().lock();
                     let chunk = [b'x'; 8 * 1024];

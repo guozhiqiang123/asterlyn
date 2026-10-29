@@ -8,6 +8,9 @@ use asterlyn_plugin_runtime_protocol::{HostTheme, ShutdownReason};
 use serde_json::json;
 use tempfile::TempDir;
 
+#[cfg(unix)]
+mod cpu_soak;
+
 fn fixture_path() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_asterlyn-plugin-runtime-fixture"))
 }
@@ -31,6 +34,39 @@ fn activation(root: &Path) -> PluginActivation {
         locale: "en-US".to_owned(),
         theme: HostTheme::Dark,
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn long_lived_helper_inherits_cpu_policy_without_a_sixty_second_expiry() {
+    let fixture = fixture_path().canonicalize().expect("fixture path");
+    let supervisor =
+        PluginHostSupervisor::from_verified_helper(&fixture, fixture.parent().unwrap()).unwrap();
+    let plugin = TempDir::new().unwrap();
+    fs::create_dir(plugin.path().join("runtime")).unwrap();
+    fs::write(plugin.path().join("runtime/plugin.js"), b"fixture").unwrap();
+    let mut inherited = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: initialized local buffer of the required kernel layout.
+    assert_eq!(
+        unsafe { libc::getrlimit(libc::RLIMIT_CPU, &mut inherited) },
+        0
+    );
+    supervisor.activate(activation(plugin.path())).unwrap();
+    let policy = supervisor
+        .invoke(
+            "window-main",
+            "dev.asterlyn.fixture",
+            "callback-1",
+            "resource-policy",
+            json!({}),
+        )
+        .unwrap();
+    assert_eq!(policy["cpuSoft"], inherited.rlim_cur.to_string());
+    assert_eq!(policy["cpuHard"], inherited.rlim_max.to_string());
+    supervisor.cancel_owner("window-main", ShutdownReason::WindowClosed);
 }
 
 #[test]
