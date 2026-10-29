@@ -43,7 +43,7 @@ test("references retain more than sixteen choices with an explicit bounded trunc
   assert.equal(result.locations.length, 512); assert.equal(result.limited, true);
   assert.equal(normalizeDefinitionTargets(raw.slice(0, 80), "references").locations.length, 80);
 });
-test("only the current symbol's own definition triggers the usages fallback", () => {
+test("recognizes the current declaration by its exact symbol range for usages fallback", () => {
   const value = location("file:///repo/a%20b.ts", range(2, 4, 10));
   assert.equal(isCurrentSymbolDefinition(value, "file:///repo/a b.ts", range(2, 4, 10)), true);
   for (const symbol of [range(1, 4, 10), range(2, 3, 10), range(2, 4, 9), null]) assert.equal(isCurrentSymbolDefinition(value, value.uri, symbol), false);

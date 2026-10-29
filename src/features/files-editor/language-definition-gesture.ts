@@ -116,14 +116,17 @@ class DefinitionGesture {
     let response = await request(); if (failed()) return;
     if (!this.current(token, version)) { trace("discarded"); return; }
     let result = normalizeDefinitionTargets(response, kind);
-    if (kind === "definition" && !result.limited && result.locations.length === 1 && isCurrentSymbolDefinition(result.locations[0]!, uri, symbol)) {
+    const missingDefinition = kind === "definition" && !result.locations.length && !result.invalid && !result.limited;
+    // Servers can return no definition when the pointer is already on its declaration.
+    // Ask the semantic service for usages before reporting an unresolved symbol.
+    if (kind === "definition" && !result.invalid && !result.limited && (missingDefinition || (result.locations.length === 1 && isCurrentSymbolDefinition(result.locations[0]!, uri, symbol)))) {
       kind = "references"; response = await request(); if (failed()) return;
       if (!this.current(token, version)) { trace("discarded"); return; }
       result = normalizeDefinitionTargets(response, kind);
     }
     if (!result.locations.length) {
       trace(result.invalid ? "invalid" : "empty");
-      ui?.status(result.invalid ? ui.copy().invalidDefinition : kind === "references" ? ui.copy().noReferences : ui.copy().noDefinition, "warning"); return;
+      ui?.status(result.invalid ? ui.copy().invalidDefinition : missingDefinition ? ui.copy().noDefinition : kind === "references" ? ui.copy().noReferences : ui.copy().noDefinition, "warning"); return;
     }
     const navigate = (location: (typeof result.locations)[number]) => {
       if (!this.current(token, version)) return;

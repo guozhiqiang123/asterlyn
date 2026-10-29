@@ -429,3 +429,27 @@ Final local receipts include `installation.json`, `signature.json`, `archive.jso
 the 2026-10-29 case directory. No raw local logs are committed or uploaded.
 The install keeps the canonical app-root identity and verified ZIP backup;
 no remote push, tag or Release is performed.
+
+## Command-click on a Kotlin declaration — 2026-10-29
+
+The user's exact failing position is the `initialize` declaration in
+`app/src/ads/java/com/swiftcleaner/app/ads/AppAds.kt:26`. A direct probe of the
+admitted Kotlin 2.3 backend and real AGP model returns an empty definition list
+at this declaration, but a valid references request returns
+`app/src/main/java/com/swiftcleaner/app/CleanApplication.kt:69`. The function-body
+call `AppAdsRuntime.initialize` independently resolves to AppAdsRuntime.kt:43.
+Thus the declaration navigation gap is separate from modifier recognition and
+from the earlier runtime expiry. Probe receipts are retained under
+`/tmp/asterlyn-android-lsp/boost-command-nav-20261029/`.
+
+The host currently asks for references only when a definition exactly points back
+to the clicked symbol. Some language servers return no definition for their own
+declaration instead. Extend the generic, bounded navigation flow: after a valid,
+untruncated empty definition result, try semantic references. One caller opens
+directly; multiple callers use the existing picker. Invalid results and indexing
+failures must not start this fallback. If neither lookup finds a target, preserve
+the original no-definition message. Existing version/session/tab guards still
+discard stale responses. No language parser or Kotlin-specific resolver is added
+to the host. Rendered Chromium/WebKit checks cover Control and native macOS Meta,
+single/multiple/absent references, malformed output, loading and stale responses;
+final exact-position native Command-click acceptance follows after packaging.

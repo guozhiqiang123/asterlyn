@@ -39,14 +39,16 @@ const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: ()
     state.requests.push({ method, params, version });
     if (state.mode === "indexing") return Promise.reject(new LanguageServiceIndexingError());
     if (method === "textDocument/references") {
-      if (state.mode === "deferredReferences") return new Promise((resolve) => state.pending.push(resolve));
-      if (state.mode === "noReferences") return Promise.resolve([]);
-      if (state.mode === "oneReference") return Promise.resolve([second()]);
+      if (["deferredReferences", "deferredEmptyDefinitionReferences"].includes(state.mode)) return new Promise((resolve) => state.pending.push(resolve));
+      if (["noReferences", "empty", "emptyDefinitionNoReferences"].includes(state.mode)) return Promise.resolve([]);
+      if (["oneReference", "emptyDefinitionOneReference"].includes(state.mode)) return Promise.resolve([second()]);
       if (state.mode === "manyReferences") return Promise.resolve(Array.from({ length: 600 }, (_, line) => ({ ...second(), range: range(line, 13, 19) })));
       return Promise.resolve([definition(), second()]);
     }
     if (state.mode === "deferred") return new Promise((resolve) => state.pending.push(resolve));
-    if (state.mode === "empty") return Promise.resolve(null);
+    if (["empty", "emptyDefinitionReferences", "emptyDefinitionNoReferences", "deferredEmptyDefinitionReferences"].includes(state.mode)) return Promise.resolve(null);
+    if (state.mode === "emptyDefinitionOneReference") return Promise.resolve([]);
+    if (state.mode === "invalidDefinition") return Promise.resolve({uri: workspaceFileUri("/repo", "source.ts"), range: range(0, -1, 3)});
     if (state.mode === "outside") return Promise.resolve({ uri: "file:///outside/secret.ts", range: range(0, 0, 3) });
     if (state.mode === "readonly") return Promise.resolve(readonlyTarget());
     if (state.mode === "multiple") return Promise.resolve([definition(), second()]);

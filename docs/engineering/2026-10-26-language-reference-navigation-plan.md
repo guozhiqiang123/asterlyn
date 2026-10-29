@@ -18,6 +18,11 @@ from a use to its single definition ambiguous.
   convenience behavior. A broad containing function/body range is insufficient evidence. Shift+F12
   explicitly queries references from any supported source location; Alt+F7 (Option+F7 on macOS)
   provides the Android Studio Find Usages alias.
+- A valid, untruncated empty definition result also permits a references query: Kotlin can
+  return no definition at the declaration name itself. Semantic references determine whether
+  there are any callers; the host does not guess declaration syntax. If both requests are empty,
+  retain the no-definition feedback. Invalid definition output and indexing/request errors do
+  not trigger this fallback.
 - One reference from declaration navigation opens directly. Multiple references require choosing;
   explicit Shift+F12 always opens the reference list, including a singleton.
 - Use a bounded searchable location picker for definitions/references: file name, line/column and
@@ -70,3 +75,16 @@ Peek, Android Studio's full Find Usages tool window, or its complete keymap.
   native probe and canonical installation confirm provider registration, unchanged app root,
   executable digest equality and both saved-icon launches. Backups are verified ZIPs only.
   [Exact acceptance and package evidence](../benchmarks/2026-10-26-language-reference-navigation.md).
+
+The 2026-10-29 boostCleaner `AppAds.initialize` report exposed the valid-empty case above.
+The exact installed Kotlin backend returns no definition at AppAds.kt:26 but a valid caller
+at CleanApplication.kt:69; the body call resolves normally to AppAdsRuntime.kt:43. The host
+fallback is generic and keeps the same native reference authority and result bounds.
+Chromium/WebKit rendered Control/Meta cases cover one/multiple/no references, malformed results,
+indexing, and stale fallback responses. All 1,350 scripts, typecheck and production frontend build
+pass. A 20-cycle Chromium navigation/menu sample retains 155,432 JS heap bytes; this is a local
+sample, not a leak-free or cross-platform memory guarantee. Picker keyboard access and direct
+single-result focus remain covered. The first harness run used an incorrect expected copy string;
+its failed receipt is retained alongside the corrected pass. Exact native Command-click and signed
+local installation receipts are recorded in
+[the real-project recovery record](2026-10-27-boostcleaner-lsp-recovery.md).

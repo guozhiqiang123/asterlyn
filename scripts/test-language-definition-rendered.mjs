@@ -46,6 +46,20 @@ try {
    await page.keyboard.press("Enter"); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "other.ts"); assert.equal((await snap()).selection, "target");
    await reset("self"); await click(); await page.getByRole("option").filter({ hasText: "other.ts" }).click(); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "other.ts");
    await reset("oneReference"); await click(); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "other.ts"); assert.equal(await page.locator('.language-location-picker').count(), 0);
+   for (const modifier of ["Control", ...(await page.evaluate(() => /Mac/u.test(navigator.platform)) ? ["Meta"] : [])]) {
+    await reset("emptyDefinitionOneReference"); await click(modifier);
+    await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "other.ts");
+    assert.deepEqual((await snap()).requests.map(request => request.method), ["textDocument/definition", "textDocument/references"], `${name}: ${modifier}-click on a Kotlin-style declaration with no definition must find its caller`);
+    assert.equal((await snap()).selection, "target"); assert.equal(await page.locator('.language-location-picker').count(), 0);
+    await reset("emptyDefinitionReferences"); await click(modifier); await page.waitForSelector('.language-location-picker');
+    assert.equal(await page.getByRole("option").count(), 2); assert.match(await page.locator('.language-location-picker').innerText(), /Choose a reference/u);
+    await page.keyboard.press("Escape");
+   }
+   await reset("emptyDefinitionNoReferences"); await click();
+   await page.waitForFunction(() => window.definitionFixture.state.statuses.some(status => status.message === "No definition was returned. Check that language services are enabled."));
+   assert.equal((await snap()).active, "source.ts"); assert.equal((await snap()).requests.length, 2);
+   await reset("invalidDefinition"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some(status => status.kind === "warning"));
+   assert.equal((await snap()).requests.length, 1, `${name}: malformed definition results must not trigger reference fallback`);
    await reset("oneReference"); await page.locator(".cm-content").click(); await page.keyboard.press("Shift+F12"); await page.waitForSelector('.language-location-picker'); assert.equal(await page.getByRole("option").count(), 1); assert.equal((await snap()).requests[0].method, "textDocument/references"); await page.keyboard.press("Escape");
    await reset("oneReference"); await page.locator(".cm-content").click(); await page.keyboard.press("Alt+F7"); await page.waitForSelector('.language-location-picker'); assert.equal((await snap()).requests[0].method, "textDocument/references"); await page.keyboard.press("Escape");
    await reset("noReferences"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message === "No references were found.")); assert.equal((await snap()).active, "source.ts");
@@ -53,8 +67,8 @@ try {
    const pickerBounds = await page.locator('.language-location-picker').boundingBox(), viewport = page.viewportSize(); assert.ok(pickerBounds.x >= 0 && pickerBounds.y >= 0 && pickerBounds.x + pickerBounds.width <= viewport.width && pickerBounds.y + pickerBounds.height <= viewport.height, `${name}: picker must fit in the viewport`);
    await page.keyboard.press("End"); assert.equal(await page.getByRole("option").last().getAttribute("aria-selected"), "true");
    await page.getByRole("combobox").fill("not-a-file"); assert.equal(await page.getByRole("option").count(), 0); await page.keyboard.press("Enter"); assert.equal((await snap()).active, "source.ts");
-   for (const action of ["edit", "tab", "newer", "destroy"]) {
-    await reset("deferredReferences"); await click(); await page.waitForFunction(() => window.definitionFixture.state.pending.length === 1);
+   for (const mode of ["deferredReferences", "deferredEmptyDefinitionReferences"]) for (const action of ["edit", "tab", "newer", "destroy"]) {
+    await reset(mode); await click(); await page.waitForFunction(() => window.definitionFixture.state.pending.length === 1);
     if (action === "edit") await page.keyboard.insertText("x");
     else if (action === "tab") await page.evaluate(() => window.definitionFixture.otherTab());
     else if (action === "newer") { await page.evaluate(() => { window.definitionFixture.state.mode = "same"; }); await click(); await page.waitForFunction(() => window.definitionFixture.snapshot().selection === "target"); }
@@ -64,6 +78,7 @@ try {
    await reset("indexing"); await click();
    await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message.includes("indexing")));
    assert.equal((await snap()).statuses.at(-1).kind, "information");
+   assert.equal((await snap()).requests.length, 1, "indexing errors must not trigger reference fallback");
    assert.equal((await snap()).outcomes.some((event) => event.outcome === "empty"), false, "indexing is not an empty definition result");
    await reset("empty"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.kind === "warning")); assert.equal((await snap()).active, "source.ts");
    await reset("outside"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message.includes("catalog"))); assert.equal((await snap()).active, "source.ts");
