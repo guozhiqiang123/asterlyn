@@ -500,3 +500,61 @@ marketplace migration/admission checks pass 14 tests (one unrelated live-network
 test remains intentionally ignored). The correction retains selection only during
 healthy refresh loading. Failed discovery disables retained tasks and remains
 fail-closed; its labels are never treated as runnable evidence.
+
+### Final installed Command-click receipt
+
+The accepted host code revision is
+`8bad30ce95e5f64a6124849420b306647ad02a39` (application 0.1.22), bundled with
+Android 0.6.2 and unchanged LSP 0.3.6. The whole bundle passes strict/deep signing
+verification, exact-package native health and rendered-shell smoke. Its
+CRC-verified archive is
+`target/release/bundle/macos/Asterlyn-0.1.22-8bad30c-macos.app.zip`,
+25,214,955 bytes, SHA-256
+`2b78abf4b6833d1672146c8cd217da98b7389c238676675e0251d4b852865db8`.
+The installed executable matches SHA-256
+`20becd57536a7d4333032c253123b03c57541208d19fcb3d418889f783c44cdb`.
+Canonical replacement preserves inode 203606126/device 16777234 and uses a
+verified ZIP backup. Both stored-icon launches confirm frontend readiness;
+the reopened installed session is `session-1793243813250-61853-0` (PID 61853).
+
+The Android version change invalidates the previous version-bound task cache.
+Ordinary Refresh Gradle tasks restores 13,676 tasks (event 114); no application
+build or business-source edit is used. The selected model imports all 25 modules
+in 23,624 ms (event 128). Language preparation reaches `workspace.ready` at
+event 131, 293,107 ms after the model attempt begins (event 125).
+
+Actual native **Command+left-click** succeeds at both exact positions:
+
+- `AppAds.kt:26`, declaration `initialize`: requests a definition, then semantic
+  references, selects its sole caller and opens the saved `CleanApplication.kt`
+  target (events 135/136/138/139). The admitted backend's independent probe
+  identifies that caller as line 69.
+- `AppAds.kt:27`, call `AppAdsRuntime.initialize`: selects the definition and
+  opens saved `AppAdsRuntime.kt:43` (events 143/144/145); the highlighted
+  declaration line is also visually confirmed.
+
+The receipts combine actual modifier input, selected saved destination tabs,
+semantic backend ranges and native navigation events. They do not substitute
+an F12 or Ctrl-only check for Command-click. AppAds publishes zero diagnostics;
+the other opened files have existing diagnostics, so this is not a claim of
+zero diagnostics across the project. All three sampled business-source hashes
+remain unchanged and boostCleaner is Git-clean. Both installed plugins remain
+enabled, active and known-good with no pending replacement.
+
+The 63 preparation samples peak at 1,400,224 KiB aggregate descendant RSS;
+isolated plugin helpers together peak at 44,624 KiB. These are sampled RSS,
+including shared pages, rather than private memory or a long-running soak.
+The 20-cycle rendered navigation fixture retains 155,432 additional JavaScript
+heap bytes in this local Chromium sample; it is not a general leak guarantee.
+Rendered Control/Meta and keyboard navigation checks retain existing accessible
+status/picker behavior. Cold preparation remains about five minutes, and the
+initial generic `android-indexing` response is retained as a feedback limitation.
+
+macOS locked after both required gestures. The additional native test refreshing
+tasks after readiness is pending unlock; no refresh-stability acceptance is
+claimed by the two successful gestures alone. Evidence is retained locally in
+`/tmp/asterlyn-android-lsp/boost-command-nav-20261029/`, including the final
+installation, package health, signature/archive, rendered-shell, source hashes,
+native events, resource samples and `ui-and-log-acceptance.json`. Intermediate
+installation/watch receipts are explicitly named as intermediate. No raw local
+logs are committed or uploaded, and no remote push, tag or Release is performed.
