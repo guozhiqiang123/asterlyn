@@ -364,3 +364,68 @@ and [rusage projection](https://github.com/apple-oss-distributions/xnu/blob/main
 No compiler flags, project dependencies or TLS settings change. Local evidence
 and canonical installation/navigation receipts follow under
 `/tmp/asterlyn-android-lsp/boost-cpu-window-20261029/`.
+
+### Installed recovery follow-up
+
+Fresh host code revision `555898c6b9d5e59ae221f93223106047350c8120` is signed,
+strict/deep verified and installed canonically. Executable SHA-256:
+`cb8c5b82c2be79c078a9c338e95544b3862f23c4d2579f924d708cf8fc013f83`.
+Its CRC-verified ZIP is 25,214,724 bytes, SHA-256
+`ad873fd16528e33d0161f05b3b9695b2b1e53db8a2f618e247246028cd467d83`.
+Exact Android 0.6.1/LSP 0.3.6 native health, rendered-shell smoke and both stored
+icon launches pass. Installation preserves root inode 203606126/device 16777234;
+the reopened installed process is PID 43231, session
+`session-1793240123275-43231-0`.
+
+The isolated provider was restored through the ordinary verified Repair path:
+temporarily disable its consumer, verify Android 0.6.1, restart through its native
+health checkpoint, then re-enable the same LSP 0.3.6 package and replace the host.
+Installation JSON was never edited. A second recovery prerequisite is visible
+in this native session: the old fallback had written a cache rejected by 0.6.1
+(`cache-corrupt`, zero tasks, event 23). Without a selected current run configuration,
+the model worker rejects the startup request and reports backend failure. This
+does not count as successful language initialization. Ordinary task refresh
+recovers 13,676 tasks and stores the exact-version cache (events 113/120).
+The same language session can retry model acquisition without another consent:
+all 25 modules import in 22,187 ms (event 130, generation 9), followed by language
+model preparation. No application build, device deployment or business-source
+edit is used to restore the task cache. Final native gesture receipts follow
+after readiness.
+
+Native acceptance now completes on that installed build. After task-cache
+recovery, preparation reaches `workspace.ready` at event 137, 319,610 ms after
+the successful model attempt starts (event 127). The actual model selection is
+`:app` / `cleanx100Debug`. The old persisted preferred ID names an Adsremoved
+configuration absent from the current task list, so the plugin's existing
+selection rule uses the first currently valid configuration. No preference or
+business file was manually rewritten to force this result.
+
+Actual Ctrl+left-click from the user's `AdLibExtention.kt:14` opens both:
+
+- `AppAds` → `app/src/ads/java/com/swiftcleaner/app/ads/AppAds.kt:23`, the object
+  definition (native request/selected/opened events 145/146/147).
+- `showNative` → the same file at line 78, the
+  `fun showNative(owner: LifecycleOwner, sceneId: String, container: ViewGroup): Job`
+  declaration (events 161/162/163).
+
+Selected saved destination tabs corroborate the log outcomes. The original
+source publishes zero diagnostics. Android 0.6.1 and LSP 0.3.6 remain enabled,
+active and known-good with no pending replacement; the final installed session
+has no plugin termination or activation-failure event through event 193.
+All four sampled source hashes are unchanged and boostCleaner is Git-clean.
+
+The 55 preparation samples peak at 1,292,160 KiB aggregate descendant RSS;
+the two isolated plugin helpers together peak at 29,344 KiB. This is sampled
+RSS (including shared pages), not private memory, a cross-platform benchmark or
+a long-project soak guarantee. The real 65-second CPU fixture separately covers
+the original lifetime-expiry regression. Cold language preparation still takes
+about five minutes; an invalid task cache requires the ordinary Gradle refresh.
+The generic model-error feedback before that refresh remains less specific than
+the task panel's cache warning. It is retained as a known diagnostic limitation.
+
+Final local receipts include `installation.json`, `signature.json`, `archive.json`,
+`plugin-health.json`, `rendered.log`, `native-events.json`,
+`ui-and-log-acceptance.json`, `native-resource-samples.json`, and source hashes in
+the 2026-10-29 case directory. No raw local logs are committed or uploaded.
+The install keeps the canonical app-root identity and verified ZIP backup;
+no remote push, tag or Release is performed.
