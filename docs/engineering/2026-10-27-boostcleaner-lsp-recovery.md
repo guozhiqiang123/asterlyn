@@ -550,11 +550,26 @@ Rendered Control/Meta and keyboard navigation checks retain existing accessible
 status/picker behavior. Cold preparation remains about five minutes, and the
 initial generic `android-indexing` response is retained as a feedback limitation.
 
-macOS locked after both required gestures. The additional native test refreshing
-tasks after readiness is pending unlock; no refresh-stability acceptance is
-claimed by the two successful gestures alone. Evidence is retained locally in
+macOS locked after both required gestures; the user then unlocked it and the
+additional refresh-stability acceptance completed in the same installed session.
+Refresh is requested at event 159. Loading retains 13,676 tasks (event 166) and
+the configuration snapshot (event 167, 1,102 bytes); the former faulty empty
+selection snapshot was 71 bytes. The completed scan restores ready tasks and
+configurations at events 202/204. Across the 113,814-ms observation through event
+212, model acquisition and workspace readiness each remain at one occurrence,
+with no new language-state event, model import, reindex, plugin termination or
+quarantine. This covers an unchanged-input refresh, not reuse after an actual
+variant/build-input change or a failed scan.
+
+After this refresh, actual Command+left-click repeats both successful routes:
+the declaration opens saved `CleanApplication.kt:69` (events 206/207/208/209,
+highlighted caller visually confirmed), and the body call opens saved
+`AppAdsRuntime.kt:43` (events 210/211/212). The three business-source hashes still
+match and boostCleaner remains Git-clean. No additional application build,
+device deployment or source edit is used for this acceptance. Evidence is retained locally in
 `/tmp/asterlyn-android-lsp/boost-command-nav-20261029/`, including the final
 installation, package health, signature/archive, rendered-shell, source hashes,
-native events, resource samples and `ui-and-log-acceptance.json`. Intermediate
+native events, resource samples, `refresh-stability.json` and
+`ui-and-log-acceptance.json`. Intermediate
 installation/watch receipts are explicitly named as intermediate. No raw local
 logs are committed or uploaded, and no remote push, tag or Release is performed.
