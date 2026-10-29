@@ -453,3 +453,50 @@ discard stale responses. No language parser or Kotlin-specific resolver is added
 to the host. Rendered Chromium/WebKit checks cover Control and native macOS Meta,
 single/multiple/absent references, malformed output, loading and stale responses;
 final exact-position native Command-click acceptance follows after packaging.
+
+The focused fix is host revision `3b6a5b7ccdb9c59781ffdcab80f33966ad623deb`.
+Typecheck, all 1,350 script tests, production frontend build and rendered
+Chromium/WebKit Control/Meta tests pass. The rendered suite includes direct
+single-reference navigation, multi-reference selection, a genuinely missing
+definition, malformed server output and cancellation during the extra lookup.
+The exact Kotlin adapter used by the direct real-project probe matches the
+installed 0.3.6 adapter byte for byte; its admitted compiler component is unchanged.
+
+The new signed/strictly verified host executable SHA-256 is
+`888feed6ace4f9aec1ffa07cc563240bb2da3dfe98dd5ac5a17f130efb71359a`.
+The CRC-verified 25,214,944-byte ZIP has SHA-256
+`92d9f1825402cfbd74279431e69cfdb85a9ed9adfe097b2e0062c30b8ac1640e`.
+The exact plugin native health and 30-second rendered shell smoke pass before
+canonical installation. Both stored-icon launches succeed with frontend readiness;
+the reopened installed session is `session-1793242268819-54609-0` (PID 54609).
+Root inode/device and ZIP-only recovery remain preserved. The exact-version task
+cache restores 13,676 tasks directly without a new task scan. The model imports
+25 modules in 17,058 ms before cold language preparation.
+
+Native follow-up exposed a second independent trigger: while task discovery
+refreshes, Android's run-configuration snapshot returned null selection despite
+retaining 13,676 known task entries. The adapter's next model poll revoked the
+otherwise valid model, rejected the null request, and prepared all modules again
+after refresh. This is not evidence that the Command modifier was lost. The
+intermediate `3b6a5b7` installation alone is therefore not final acceptance.
+
+Android 0.6.2 preserves the retained runnable configuration identity/metadata during
+loading, with incomplete descriptors and the original loading status. Run execution
+and quick actions still require a ready projection; failed/unavailable discovery
+or no retained runnable tasks produces null selection.
+An authoritative completed variant change still changes the selection and
+revokes the model. Native input/authority checks are unchanged. All 70 Android
+tests, typecheck/build and native package inspection are required for the final package.
+The host pins this exact package and removes its superseded production archive;
+the explicit old-version migration fixture remains. Final native acceptance also
+refreshes tasks after readiness and checks that unchanged selection does not
+trigger a second model import.
+
+The final Android 0.6.2 candidate passes all 70 tests, typecheck/build and native
+inspection: 4,787,501 bytes, SHA-256
+`1f04f3da4fd8c58b5a14a94a354614a190791aea212f63b3aa50cf30afffe2c7`.
+The host's exact bundled artifact tests and all 1,350 scripts pass again; focused
+marketplace migration/admission checks pass 14 tests (one unrelated live-network
+test remains intentionally ignored). The correction retains selection only during
+healthy refresh loading. Failed discovery disables retained tasks and remains
+fail-closed; its labels are never treated as runnable evidence.
