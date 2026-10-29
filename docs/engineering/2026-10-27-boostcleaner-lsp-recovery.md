@@ -608,3 +608,61 @@ LSP package's isolated activation/projection/review checks pass. Focused native
 marketplace admission, sealing and startup-upgrade tests pass 11 tests; one
 unrelated live-network test remains intentionally ignored. No Git-domain code
 changes. The package correction itself is LSP commit `5e530ec`.
+
+### Installed class-reference acceptance
+
+Host code revision `2b5192ffe4cb0767b8480532ace5a2fc56394f71` is freshly built,
+whole-bundle ad-hoc signed and strict/deep verified. Its executable SHA-256 is
+`14c0cf77163455f69f5ffe591fcb3fbea3fd4172ba0fff192fc4f2ce4bfc2509`.
+Exact Android 0.6.2 / LSP 0.3.7 startup health checkpoints and rendered-shell
+smoke pass before canonical installation. Both stored-icon launches report
+frontend readiness; the reopened installed process is PID 9501, session
+`session-1793254785418-9501-0`. App-root inode 203606126/device 16777234 is
+preserved, with verified ZIP-only backup and no stale icon-entry removal needed.
+
+The accepted archive is
+`target/release/bundle/macos/Asterlyn-0.1.22-2b5192f-macos.app.zip`,
+25,215,069 bytes, SHA-256
+`e788fbd3b68ba03a77ff8f8b482e048a008fa6fd877ddb2545fc7fd11b69a67c`;
+its complete archive CRC passes. Initial local signature-receipt parsing assumed
+`Sealed Resources=` whereas codesign emits `Sealed Resources version=`. Signing
+and verification themselves exited successfully; the corrected parser receipt
+retains that first assertion failure and the accepted strict result.
+
+The installed session imports 25 modules in 22,498 ms (event 88) and reaches
+`workspace.ready` at event 91, 304,727 ms after the model attempt starts. Actual
+Command+left-click at `SplashActivity.kt:60` requests a definition then references
+(95/96) and presents 32 semantic locations (98), without the scratch location.
+The accessible picker exposes `Choose a reference (32)`, a labelled filter and a
+selected result. Filtering by `ProcessStateMonitor` and pressing Return opens the
+saved source at `ProcessStateMonitor.kt:37` (99/100), with the exact line visibly
+selected. Command+left-click on that class use returns to saved
+`SplashActivity.kt:60` (104/105/106), again with the declaration visibly selected.
+This closes both declaration-to-usages selection and use-to-definition paths;
+no F12/Ctrl-only substitute is used for these Command gestures.
+
+Through event 106, no post-readiness backend failure, plugin termination,
+quarantine or protocol/resource-limit event occurs. The expected initial
+`android-indexing` response and stale recent-directory failures are retained,
+not described as zero session errors. `SplashActivity` still has 28 existing
+diagnostics, including unresolved generated binding symbols; this class-reference
+fix does not repair generated Android bindings or claim all diagnostics are gone.
+The three sampled business-source hashes are unchanged and boostCleaner is
+Git-clean. Both exact installed plugins remain enabled, active and known-good
+with no pending replacement. The directly probed Kotlin adapter bytes match the
+checksum-covered backend in this package; the compiler component is unchanged.
+
+The 65 preparation samples peak at 1,805,456 KiB aggregate descendant RSS;
+isolated plugin helpers together peak at 33,168 KiB. This is a local sampled RSS
+observation, including shared pages, not private memory or a long-session leak
+guarantee. The native reference request records 2,656 ms; the standalone semantic
+probe records 1,129 ms for references and 4 ms for the reverse class definition.
+Cold preparation remains about five minutes. Kotlin's upstream reference search
+does not include a complete Java-usage graph, and generic error feedback for
+other adapter failures remains a known limitation.
+
+Evidence is retained locally in `boost-class-nav-20261029`: before/after semantic
+and native results, package/backend identity, runtime identity, tests, signature,
+archive, plugin health, installation, source hashes, resource samples and
+`ui-and-log-acceptance.json`. No raw local logs are committed or uploaded.
+There is no remote push, tag or Release for this fix.
