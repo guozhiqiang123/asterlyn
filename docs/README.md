@@ -47,6 +47,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0034-plugin-language-services.md`](architecture/decisions/0034-plugin-language-services.md) — language-provider plugins, real document versions, supervised LSP sessions and execution authority.
 
 - [`engineering/2026-10-30-language-service-lifecycle-plan.md`](engineering/2026-10-30-language-service-lifecycle-plan.md) — persistent project approval, automatic startup, truthful indexing progress and opt-in language tracing.
+- [`engineering/2026-10-30-android-lsp-incremental-plan.md`](engineering/2026-10-30-android-lsp-incremental-plan.md) — Android LSP persistent cache, incremental modules, bounded scheduling and cross-module queries.
 
 ## Plugin development
 
