@@ -463,10 +463,10 @@ pub(super) fn model_access(
                 .hash_identifier(owner.root.to_string_lossy().as_bytes());
             let window = owner.owner.clone();
             let progress = Arc::new(move |progress: asterlyn_plugin_analysis::Progress| {
-                if progress.stage == "error" {
-                    if let Ok(mut code) = worker_error.lock() {
-                        *code = progress.error_code.clone();
-                    }
+                if progress.stage == "error"
+                    && let Ok(mut code) = worker_error.lock()
+                {
+                    *code = progress.error_code.clone();
                 }
                 let mut fields = json!({"window":window,"workspaceHash":workspace_hash,"serviceId":service,"stage":progress.stage,"count":progress.count,"durationMs":progress.duration_ms,"code":progress.error_code,"causeClass":progress.cause_class});
                 if progress_app

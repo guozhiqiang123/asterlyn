@@ -21,10 +21,10 @@ pub(super) fn directory(parent: &Path, identity: &str) -> Result<PathBuf, String
                     use std::os::unix::fs::DirBuilderExt;
                     builder.mode(0o700);
                 }
-                if let Err(error) = builder.create(path) {
-                    if error.kind() != std::io::ErrorKind::AlreadyExists {
-                        return Err("language cache directory unavailable".into());
-                    }
+                if let Err(error) = builder.create(path)
+                    && error.kind() != std::io::ErrorKind::AlreadyExists
+                {
+                    return Err("language cache directory unavailable".into());
                 }
                 let meta = fs::symlink_metadata(path)
                     .map_err(|_| "language cache directory unavailable")?;

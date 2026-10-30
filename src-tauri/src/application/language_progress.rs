@@ -24,24 +24,23 @@ pub(super) fn progress(value: &Value) -> Option<Value> {
         return None;
     }
     for key in ["completed", "total"] {
-        if let Some(value) = item.get(key) {
-            if value
+        if let Some(value) = item.get(key)
+            && value
                 .as_u64()
                 .is_none_or(|n| n > 1_000_000 || (key == "total" && n == 0))
-            {
-                return None;
-            }
-        }
-    }
-    if let (Some(a), Some(b)) = (item.get("completed"), item.get("total")) {
-        if a.as_u64()? > b.as_u64()? {
+        {
             return None;
         }
     }
-    if let Some(unit) = item.get("unit") {
-        if !["modules", "files", "items"].contains(&unit.as_str()?) {
-            return None;
-        }
+    if let (Some(a), Some(b)) = (item.get("completed"), item.get("total"))
+        && a.as_u64()? > b.as_u64()?
+    {
+        return None;
+    }
+    if let Some(unit) = item.get("unit")
+        && !["modules", "files", "items"].contains(&unit.as_str()?)
+    {
+        return None;
     }
     Some(item.clone())
 }

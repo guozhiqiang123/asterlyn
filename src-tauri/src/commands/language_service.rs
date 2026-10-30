@@ -274,6 +274,8 @@ pub(crate) async fn prepare_language_service(
     .await
     .map_err(|_| "language review task failed")?
 }
+// Tauri injects three handles beside the five frozen frontend arguments.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) async fn start_language_service(
     workspace_root: String,

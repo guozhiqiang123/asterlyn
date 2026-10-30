@@ -432,6 +432,30 @@ fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
     }
 }
 
+// Counts pending and sealed files together; stale references still retaining a file keep its charge.
+pub(super) struct Reservation {
+    budget: Arc<AtomicU64>,
+    bytes: u64,
+}
+impl Reservation {
+    fn add(&mut self, bytes: u64) -> Result<(), String> {
+        self.budget
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                current
+                    .checked_add(bytes)
+                    .filter(|next| *next <= MAX_RETAINED_BYTES)
+            })
+            .map_err(|_| "model artifact cache exceeds its aggregate bound")?;
+        self.bytes += bytes;
+        Ok(())
+    }
+}
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        self.budget.fetch_sub(self.bytes, Ordering::SeqCst);
+    }
+}
+
 #[cfg(test)]
 mod progress_tests {
     use super::*;
@@ -466,29 +490,5 @@ mod progress_tests {
                 && last.source_line.is_none()
                 && last.error_code.is_none()
         );
-    }
-}
-
-// Counts pending and sealed files together; stale references still retaining a file keep its charge.
-pub(super) struct Reservation {
-    budget: Arc<AtomicU64>,
-    bytes: u64,
-}
-impl Reservation {
-    fn add(&mut self, bytes: u64) -> Result<(), String> {
-        self.budget
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
-                current
-                    .checked_add(bytes)
-                    .filter(|next| *next <= MAX_RETAINED_BYTES)
-            })
-            .map_err(|_| "model artifact cache exceeds its aggregate bound")?;
-        self.bytes += bytes;
-        Ok(())
-    }
-}
-impl Drop for Reservation {
-    fn drop(&mut self) {
-        self.budget.fetch_sub(self.bytes, Ordering::SeqCst);
     }
 }

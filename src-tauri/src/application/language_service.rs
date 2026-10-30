@@ -348,10 +348,10 @@ impl LanguageServiceManager {
             profile.initialization_options["analysis"]["stateDirectory"] = json!(directory.path());
             // Mutable backend/overlay state stays private to this session. Only immutable,
             // verified plugin artifacts may be shared through the persistent namespace.
-            if let Some(identity) = persistent_identity {
-                if let Ok(path) = persistent_cache::directory(&profile.cache_parent, &identity) {
-                    profile.initialization_options["analysis"]["cacheDirectory"] = json!(path);
-                }
+            if let Some(identity) = persistent_identity
+                && let Ok(path) = persistent_cache::directory(&profile.cache_parent, &identity)
+            {
+                profile.initialization_options["analysis"]["cacheDirectory"] = json!(path);
             }
             profile.initialization_options["analysis"]["debugTrace"] = json!(self.debug_enabled());
             let process = LanguageServiceProcess::start_packaged(&profile);
