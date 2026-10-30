@@ -29,3 +29,7 @@
 }
 .language-location-results > button[aria-selected="true"] { background: var(--accent-soft); }
 .language-location-results small { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.language-location-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:0 0 auto;min-width:0;}
+.language-location-header>strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.language-location-open-window{flex:0 0 auto;font-size:var(--ui-font-size,13px);padding:5px 10px;}

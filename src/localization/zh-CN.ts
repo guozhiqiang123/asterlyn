@@ -1,3 +1,4 @@
+import {ZH_OPEN_IN_WINDOW} from "./result-window-copy.ts";
 import { ZH_CN_LANGUAGE_SERVICE_COPY } from "./language-service-copy.ts";
 import type { LocaleCatalog } from "./catalog.ts"; import { KEYBINDING_ZH_CN } from "./keybinding-zh-CN.ts";
 import { ZH_CN_BRANCH_MUTATION_COPY } from "./branch-mutation-copy.ts"; import { ZH_CN_TAG_MUTATION_COPY } from "./tag-mutation-copy.ts"; import { ZH_CN_WORKTREE_CREATION_COPY } from "./worktree-creation-copy.ts";
@@ -129,9 +130,9 @@ export const ZH_CN = {
     filterIgnoredFiles: "过滤 Git 忽略的文件",
     navigate: "导航", open: "打开",
     resultCount: (mode, count) => mode === "workspace" ? `${count} 处匹配` : `${count} 项匹配`,
-    openInFindWindow: "在查找窗口中打开", findWindow: "查找", hideFindWindow: "隐藏查找窗口",
+    openInWindow: ZH_OPEN_IN_WINDOW, findWindow: "查找", hideFindWindow: "隐藏查找窗口",
     findResultsAria: "查找结果", noFindResults: "没有已保存的查找结果",
-    noFindResultsDetail: "请先执行文件或文本搜索，再将结果打开到查找窗口。",
+    noFindResultsDetail: "将文件搜索、文本搜索或语言服务结果打开到此窗口。",
     workspaceSearchOptions: "工作区搜索选项", include: "包含", includeAria: "要包含的文件，以逗号分隔的完整路径 glob",
     exclude: "排除", excludeAria: "要排除的文件，以逗号分隔的完整路径 glob", context: "上下文", contextLines: "上下文行数",
     replace: "替换", replacementText: "替换文本", previewReplace: "预览替换",

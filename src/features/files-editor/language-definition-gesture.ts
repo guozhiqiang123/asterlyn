@@ -143,6 +143,7 @@ class DefinitionGesture {
     ui.status(title, "information");
     const caret = this.view.coordsAtPos(pos);
     this.picker.open(this.document, anchor ?? { x: caret?.left ?? 0, y: caret?.bottom ?? 0 }, result.locations, {
+      openInWindow:this.context.port.openInWindow?(selected)=>{if(this.current(token,version))this.context.port.openInWindow?.({selectedIndex:selected?result.locations.indexOf(selected):0,kind,query:word?this.view.state.doc.sliceString(word.from,word.to).slice(0,256):"",locations:result.locations,limited:result.limited},version);}:undefined,
       title, limited: result.limited, copy: ui.copy(), current: () => this.current(token, version), select: navigate,
       dismissed: () => { this.choosing = false; }, restoreFocus: () => { if (this.context.active()) this.view.focus(); },
     });

@@ -1,3 +1,5 @@
+import {workspaceFileUri} from "../application/language-services/workspace-file-uri.ts";
+export {workspaceFileUri} from "../application/language-services/workspace-file-uri.ts";
 import type { PluginContributionRegistry } from "../application/plugins/index.ts";
 import { createEditorLanguageServicePort, type NativeLanguageServiceBridge } from "../features/language-services/language-service-client.ts";
 import type { EditorLanguageServiceHandle, EditorLanguageServiceLocation, EditorLanguageServicePortFactory } from "../protocol/editor-language-service.ts";
@@ -25,19 +27,13 @@ export interface LanguageServicesRuntimeOptions {
   readonly document: (handle: EditorLanguageServiceHandle) => { workspacePath: string; readOnly: boolean; loadEpoch: number } | null;
   readonly bind: (factory: EditorLanguageServicePortFactory | null) => void;
   readonly reportError: (error: unknown) => void;
+  readonly openInWindow?: (results:import("../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void;
   readonly navigate: (location: EditorLanguageServiceLocation) => void;
   readonly definitionDiagnostic?: (event: import("../protocol/editor-language-service.ts").EditorDefinitionEvent) => void;
   readonly approvalDiagnostic?: (event: import("../protocol/language-service.ts").LanguageServiceApprovalEvent) => void;
   readonly diagnostic?: (fields: { providerCount: number; workspaceGeneration: number | null }) => void;
 }
 const LANGUAGES: Readonly<Record<string, string>> = { java:"java", kt:"kotlin", kts:"kotlin", groovy:"groovy", gradle:"groovy", rs: "rust", ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
-export function workspaceFileUri(root: string, path: string): string | null {
-  if (path.startsWith("/") || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === "..")) return null;
-  const normalized = root.replace(/\\/gu, "/").replace(/\/$/u, "");
-  const parts = normalized.split("/").map((part, index) => index === 0 && /^[A-Za-z]:$/u.test(part) ? part : encodeURIComponent(part)).join("/");
-  if (!normalized.startsWith("/") && !/^[A-Za-z]:\//u.test(normalized)) return null;
-  return `file://${normalized.startsWith("/") ? "" : "/"}${parts}/${path.split("/").map(encodeURIComponent).join("/")}`;
-}
 export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOptions) {
   let disposed=false,epoch=0,suspended:string|null=null,key="";
   const projectKey=()=>JSON.stringify(options.workspace());
@@ -60,7 +56,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     if (providers.length !== 1 || !languageId) return null;
     const provider = providers[0]!; if (provider.kind !== "language-service") return null; const uri = workspaceFileUri(workspace.root, document.workspacePath);
     return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion, serverId: provider.serverId } : null;
-  }, options.native, options.reportError, options.navigate, event=>{if(debugTracing)options.definitionDiagnostic?.(event);}, options.approvalDiagnostic,publish);
+  }, options.native, options.reportError, options.navigate, event=>{if(debugTracing)options.definitionDiagnostic?.(event);}, options.approvalDiagnostic,publish,options.openInWindow);
   const view=options.host&&options.copy?new LanguageServiceStatusView(options.host,options.copy,{
     retry:()=>{void retry().catch(options.reportError);},forget:()=>{void forget();},debug:enabled=>{void setDebug(enabled);},error:options.reportError,
   }):null;

@@ -29,7 +29,7 @@ const sessionKey = (i: LanguageConsentScope) => JSON.stringify([i.workspaceRoot,
 const validSnapshot = (s: EditorLanguageServiceSnapshot) => Number.isSafeInteger(s.version) && s.version > 0 && s.text.length <= MAX_TEXT_BYTES && new TextEncoder().encode(s.text).length <= MAX_TEXT_BYTES;
 
 /** Owns current overlays, ordered synchronization and result identity independently of editor UI. */
-export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, definitionTrace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void): LanguageServiceFactory {
+export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, definitionTrace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void, openInWindow?: (results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void): LanguageServiceFactory {
   const sessions = new Map<string, Session>();
   const refreshProfiles=new Set<string>();
   const consents = new Map<string, Consent>();
@@ -57,7 +57,7 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
       }
       const created = new Session(info, native, resolve, reportError, consent, () => {
         if (sessions.get(key) === created) { sessions.delete(key); created.dispose(); }
-      }, navigate, definitionTrace, approvalTrace, lifecycle,refreshProfiles.delete(key));
+      }, navigate, definitionTrace, approvalTrace, lifecycle,refreshProfiles.delete(key),openInWindow);
       session = created; sessions.set(key, session);
     }
     return session;
@@ -112,8 +112,9 @@ class Session {
   private readonly trace: ((event: EditorDefinitionEvent) => void) | undefined;
   private readonly approvalTrace: ((event: LanguageServiceApprovalEvent) => void) | undefined;
   private readonly lifecycle: ((state:LanguageServiceStatus)=>void) | undefined;
+  private readonly openInWindow:((results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void)|undefined;
   private readonly refreshModel:boolean;
-  constructor(info: LanguageConsentScope, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, consent: Consent, idle: () => void, navigate?: (location: EditorLanguageServiceLocation) => void, trace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void, refreshModel=false) { this.refreshModel=refreshModel;this.lifecycle=lifecycle; this.idle = idle; this.consent = consent; this.approvalTrace = approvalTrace; this.trace = trace; this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
+  constructor(info: LanguageConsentScope, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, consent: Consent, idle: () => void, navigate?: (location: EditorLanguageServiceLocation) => void, trace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void, refreshModel=false,openInWindow?: (results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void) { this.openInWindow=openInWindow;this.refreshModel=refreshModel;this.lifecycle=lifecycle; this.idle = idle; this.consent = consent; this.approvalTrace = approvalTrace; this.trace = trace; this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
   get scope():LanguageConsentScope{return this.info;}
   private live():boolean{return !this.dead && (this.warmed || [...this.docs.values()].some(doc=>this.current(doc)));}
   private status(state:LanguageServiceStatus["state"],code?:string,progress?:LanguageServiceProgress):void {
@@ -144,6 +145,9 @@ class Session {
       },
       close: () => this.close(doc),
       request: <T>(_handle: EditorLanguageServiceHandle, method: string, params: unknown, version: number) => this.request(doc, method, params, version) as Promise<T | null>,
+      ...(this.openInWindow?{openInWindow:(results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationResults,version:number)=>{
+        if(this.current(doc)&&doc.latest.version===version)this.openInWindow?.({...results,workspaceRoot:this.info.workspaceRoot,workspaceGeneration:this.info.workspaceGeneration});
+      }}:{}),
       navigate: (location) => { if (this.current(doc)) {this.operation(doc,"navigate","selected",{targetUri:location.uri});this.navigate?.(location);} },
       subscribeDiagnostics: (listener) => { doc.listeners.add(listener); return () => doc.listeners.delete(listener); },
     };

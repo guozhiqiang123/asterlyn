@@ -103,7 +103,7 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
     </div>
     <footer class="command-surface-footer">
       <span id="command-surface-result-count" title="${escapeAttribute(copy.hints[mode])}">${escapeHtml(commandSurfaceResultLabel(model))}</span>
-      <span class="command-surface-footer-actions"><span data-local-shortcut-help><kbd>↑↓</kbd> ${escapeHtml(copy.navigate)} <kbd>Enter</kbd> ${escapeHtml(copy.open)} <kbd>Esc</kbd> ${escapeHtml(copy.close)}</span>${mode !== "commands" ? `<button class="secondary-button command-surface-find-button" id="command-surface-open-find" type="button" ${commandSurfaceCanOpenFind(model) ? "" : "disabled"}>${escapeHtml(copy.openInFindWindow)}</button>` : ""}</span>
+      <span class="command-surface-footer-actions"><span data-local-shortcut-help><kbd>↑↓</kbd> ${escapeHtml(copy.navigate)} <kbd>Enter</kbd> ${escapeHtml(copy.open)} <kbd>Esc</kbd> ${escapeHtml(copy.close)}</span>${mode !== "commands" ? `<button class="secondary-button command-surface-find-button" id="command-surface-open-find" type="button" ${commandSurfaceCanOpenFind(model) ? "" : "disabled"}>${escapeHtml(copy.openInWindow)}</button>` : ""}</span>
     </footer>
   </section>`;
 }
@@ -365,6 +365,7 @@ function renderWorkspaceSearchResult(
 export function renderWorkspaceSearchMatchContent(
   match: WorkspaceTextSearchMatch,
   copy: NavigationCopy,
+  locationLabel?:string,
 ): string {
   const before = match.preview.slice(0, match.previewFromUtf16);
   const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
@@ -372,7 +373,7 @@ export function renderWorkspaceSearchMatchContent(
   const highlighted = found.length > 0
     ? `<mark class="command-result-match">${escapeHtml(found)}</mark>`
     : `<mark class="command-result-match zero-width" aria-label="${escapeAttribute(copy.zeroWidthMatch)}" title="${escapeAttribute(copy.zeroWidthMatch)}">│</mark>`;
-  const location = `${basename(match.workspacePath)}:${match.line}`;
+  const location = locationLabel??`${basename(match.workspacePath)}:${match.line}`;
   const fullLocation = `${match.workspacePath}:${match.line}`;
   return `<span class="search-result-location" title="${escapeAttribute(fullLocation)}">${escapeHtml(location)}</span>
     <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>`;

@@ -19,7 +19,7 @@ export interface NavigationCopy {
   filterIgnoredFiles: string;
   navigate: string;
   open: string;
-  resultCount(mode: "files" | "recent" | "workspace" | "commands", count: number): string; openInFindWindow: string; findWindow: string; hideFindWindow: string; findResultsAria: string; noFindResults: string; noFindResultsDetail: string;
+  resultCount(mode: "files" | "recent" | "workspace" | "commands", count: number): string; openInWindow: string; findWindow: string; hideFindWindow: string; findResultsAria: string; noFindResults: string; noFindResultsDetail: string;
   workspaceSearchOptions: string;
   include: string;
   includeAria: string;

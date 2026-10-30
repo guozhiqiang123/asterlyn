@@ -629,3 +629,13 @@
     display: none;
   }
 }
+
+.find-group-row.file{grid-template-columns:12px 17px minmax(0,1fr) auto;}
+.find-group-row.file .find-file-name{font-weight:600;}
+.find-group-row small{color:var(--text-muted);font-size:11px;min-width:20px;text-align:right;}
+.find-match-row{display:grid;grid-template-columns:70px minmax(0,1fr);align-items:center;gap:8px;width:100%;min-height:29px;padding:4px 8px 4px calc(8px + var(--tree-depth,0)*var(--compact-file-tree-indent));border:0;border-radius:3px;background:transparent;color:var(--text);text-align:left;cursor:pointer;}
+.find-match-row .search-result-location{font-variant-numeric:tabular-nums;min-width:0;}
+.find-match-row code{overflow:hidden;text-overflow:ellipsis;white-space:pre;font-family:ui-monospace,monospace;font-size:var(--ui-font-size,13px);}
+.find-match-row:hover,.find-match-row:focus-visible{background:var(--compact-file-tree-hover);outline:0;}
+.find-match-row.selected{background:var(--selection-bg);color:var(--selection-text);}
+.find-result-tree.flat .find-match-row{grid-template-columns:minmax(100px,180px) minmax(0,1fr);}

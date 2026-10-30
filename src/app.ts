@@ -1,4 +1,4 @@
-import { createLanguageDefinitionNavigator } from "./composition/language-definition-navigation.ts";
+import { createFindLanguageResultsPorts, createLanguageDefinitionNavigator } from "./composition/language-definition-navigation.ts";
 import { createEditorNavigationRuntime, applyEditorSearchNavigation } from "./composition/editor-navigation-runtime.ts";
 import type { EditorNavigationHistory } from "./features/files-editor/editor-navigation-history.ts";
 import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
@@ -684,6 +684,7 @@ export class AsterlynApp {
       document: (handle) => { const tab = textTab(this.editorState.session, handle.tabId); return tab?.status === "ready" && tab.document.repositoryRoot === this.windowSession.workspace.state.root ? { workspacePath: tab.document.workspacePath, readOnly: tab.document.readOnly === true || this.state.loading, loadEpoch: tab.loadEpoch } : null; },
       bind: (factory) => this.editorSurface.setLanguageServices(factory), reportError: (error) => this.showError(error),
       navigate: (location) => { void definitionNavigator(location).catch((error) => this.showError(error)); },
+      openInWindow:publication=>this.findResultsRuntime.openLocations(publication),
       definitionDiagnostic: (event) => diagnostics.report("info", "language.definition.lookup", `kind=${event.kind ?? "definition"};outcome=${event.outcome};targets=${event.targetCount}`),
       approvalDiagnostic: (event) => diagnostics.report("info", "language.approval", `outcome=${event.outcome};reason=${event.reason ?? "none"}`),
     }) : null;
@@ -693,6 +694,7 @@ export class AsterlynApp {
       copy: () => this.localization.catalog,
       source: () => ({ mode: this.filesEditorRuntime.commands.state.mode, repositoryRoot: this.windowSession.workspace.state.root, query: this.filesEditorRuntime.commands.state.query, files: this.commandSurfaceFiles, searchRepositoryRoot: this.filesEditorRuntime.search.state.search.request?.repositoryRoot ?? null, report: this.filesEditorRuntime.search.state.search.report, searchCurrent: this.workspaceSearchHasCurrentResults() }),
       activeRepositoryRoot: () => this.windowSession.workspace.state.root,
+      ...createFindLanguageResultsPorts({workspace:languageWorkspace,files:()=>this.filesState.files,buffers:()=>this.editorState.session.textTabs,capture:()=>this.captureMountedTextEditor(),navigate:definitionNavigator,read:(root,file)=>bridge.readTextFile(root,file.repositoryId,file.path)}),
       activeFilePath: () => { const root = this.windowSession.workspace.state.root; return root ? activeProjectWorkspacePath(root, this.activeDocument(), this.filesState.files) : null; },
       locateCurrentFile: () => this.locateCurrentProjectFile(),
       openSearch: () => this.openCommandSurface("workspace"),

@@ -1,10 +1,12 @@
+import type {EditorLanguageLocationsPublication,EditorLanguageServiceLocation} from "../../protocol/editor-language-service.ts";
+import type {FindLocationResultsSnapshot} from "./find-results-controller.ts";
 import type { LocaleCatalog } from "../../localization/catalog.ts";
 import type { CommandAvailability } from "../../application/commands/command-service.ts";
 import type { SearchCommandAction } from "../../application/commands/search-command-ids.ts";
 import type { ProjectFile, WorkspaceTextSearchMatch, WorkspaceTextSearchReport } from "../../models.ts";
 import type { NavigationMode } from "./navigation.ts";
 import { FindResultsController } from "./find-results-controller.ts";
-import { renderFindHeaderActions, renderFindResults } from "./find-results-view.ts";
+import { locationPreviewLine, type FindLocationPreview, renderFindHeaderActions, renderFindResults } from "./find-results-view.ts";
 
 interface FindResultsSource {
   readonly mode: NavigationMode | null;
@@ -19,6 +21,9 @@ interface FindResultsSource {
 export interface FindResultsRuntimeOptions {
   readonly copy: () => LocaleCatalog;
   readonly source: () => FindResultsSource;
+  readonly activeWorkspaceGeneration?:()=>number|null;
+  readonly openLocation?:(location:EditorLanguageServiceLocation)=>Promise<void>;
+  readonly readLocationSource?:(root:string,location:EditorLanguageServiceLocation)=>Promise<string|null>;
   readonly activeRepositoryRoot: () => string | null;
   readonly activeFilePath: () => string | null;
   readonly locateCurrentFile: () => void;
@@ -32,6 +37,8 @@ export interface FindResultsRuntimeOptions {
 }
 
 export class FindResultsRuntime {
+  private epoch=0;
+  private readonly previews=new Map<number,FindLocationPreview>();
   private readonly controller = new FindResultsController();
   private readonly root: HTMLElement;
   private readonly options: FindResultsRuntimeOptions;
@@ -50,12 +57,13 @@ export class FindResultsRuntime {
   }
 
   clear(): void {
+    this.epoch++;this.previews.clear();
     this.controller.clear();
   }
 
   render(): void {
     const host = this.query<HTMLElement>("#find-tool-host");
-    host.innerHTML = renderFindResults(this.controller.state, this.options.copy());
+    host.innerHTML = renderFindResults(this.controller.state, this.options.copy(),this.previews);
     this.renderHeaderActions();
     this.bindResults(host);
   }
@@ -63,7 +71,7 @@ export class FindResultsRuntime {
   commandAvailability(action: SearchCommandAction): CommandAvailability {
     const state = this.controller.state;
     const unavailable = this.options.copy().settings.keybindings.bottomToolRequired;
-    if (!this.options.visible() || !state.snapshot || state.snapshot.kind === "workspace") {
+    if (!this.options.visible() || !state.snapshot) {
       return { enabled: false, reason: unavailable };
     }
     if (action === "locate-current") {
@@ -72,7 +80,7 @@ export class FindResultsRuntime {
         : { enabled: false, reason: unavailable };
     }
     if (action === "toggle-results-view") return { enabled: true };
-    return state.fileView === "tree" && state.fileSelection?.kind === "directory"
+    return state.fileView === "tree" && (state.fileSelection?.kind === "directory"||state.resultSelection?.startsWith("file:")||state.resultSelection?.startsWith("directory:"))
       ? { enabled: true }
       : { enabled: false, reason: unavailable };
   }
@@ -98,8 +106,32 @@ export class FindResultsRuntime {
       installed = this.controller.install(repositoryRoot, source.query, source.report);
     }
     if (!installed) return;
+    this.epoch++;this.previews.clear();
     this.options.openPanel();
     queueMicrotask(() => this.focusSelection());
+  }
+
+  openLocations(publication:EditorLanguageLocationsPublication):void {
+    if(publication.workspaceRoot!==this.options.activeRepositoryRoot()||publication.workspaceGeneration!==this.options.activeWorkspaceGeneration?.())return;
+    if(!this.controller.installLocations(publication))return;
+    this.epoch++;this.previews.clear();this.options.openPanel();queueMicrotask(()=>this.focusSelection());
+    const snapshot=this.controller.state.snapshot;if(snapshot?.kind==="locations")void this.loadPreviews(snapshot,this.epoch);
+  }
+  private locationsCurrent(snapshot:FindLocationResultsSnapshot,epoch:number):boolean{return epoch===this.epoch&&this.controller.state.snapshot===snapshot&&this.options.activeRepositoryRoot()===snapshot.repositoryRoot&&this.options.activeWorkspaceGeneration?.()===snapshot.workspaceGeneration;}
+  private async loadPreviews(snapshot:FindLocationResultsSnapshot,epoch:number):Promise<void>{
+    const groups=new Map<string,number[]>();snapshot.locations.forEach((item,index)=>{const list=groups.get(item.uri)??[];list.push(index);groups.set(item.uri,list);});
+    const files=[...groups.values()].slice(0,32);let next=0;
+    await Promise.all(Array.from({length:Math.min(3,files.length)},async()=>{while(next<files.length){const indices=files[next++]!;if(!this.locationsCurrent(snapshot,epoch))return;
+      const location=snapshot.locations[indices[0]!]!;let text:string|null=null;
+      try{text=location.readonlySource?.text??await this.options.readLocationSource?.(snapshot.repositoryRoot,location)??null;}catch{/* Optional previews do not affect navigation. */}
+      if(!this.locationsCurrent(snapshot,epoch))return;if(text===null||text.length>512*1024)continue;const lines=text.split("\n");
+      for(const index of indices){const target=snapshot.locations[index]!,preview=locationPreviewLine(lines[target.range.start.line],target.range.start.character,target.range.start.line===target.range.end.line?target.range.end.character:lines[target.range.start.line]?.length??0);if(preview)this.previews.set(index,preview);}
+    }}));
+    if(this.locationsCurrent(snapshot,epoch)&&this.options.visible())this.renderPreservingResultState();
+  }
+  private renderPreservingResultState():void {
+    const list=this.root.querySelector<HTMLElement>(".find-results-list"),scroll=[list?.scrollTop??0,list?.scrollLeft??0],focused=!!list?.contains(this.root.ownerDocument.activeElement);
+    this.render();const next=this.root.querySelector<HTMLElement>(".find-results-list");if(next){next.scrollTop=scroll[0]!;next.scrollLeft=scroll[1]!;}if(focused)this.resultRow(this.controller.state.resultSelection)?.focus({preventScroll:true});
   }
 
   private renderHeaderActions(): void {
@@ -139,12 +171,9 @@ export class FindResultsRuntime {
   private bindResults(host: HTMLElement): void {
     host.querySelector<HTMLButtonElement>("[data-find-search]")
       ?.addEventListener("click", this.options.openSearch);
-    host.querySelectorAll<HTMLButtonElement>("[data-find-result]").forEach((button) => {
-      button.addEventListener("mousemove", () => this.selectText(button, false));
-      button.addEventListener("click", () => {
-        this.selectText(button, false);
-        void this.openSelected();
-      });
+    host.querySelectorAll<HTMLButtonElement>("[data-find-result],[data-find-node]").forEach(button=>{
+      button.addEventListener("focus",()=>this.selectResultRow(button,false));
+      button.addEventListener("click",()=>{this.selectResultRow(button,false);const node=button.dataset.findNode;if(node){if(this.controller.toggleResultNode(node))this.renderAndReveal(null);}else void this.openSelected();});
     });
     host.querySelectorAll<HTMLButtonElement>("[data-find-path]").forEach((button) => {
       button.addEventListener("mousemove", () => this.selectFile(button, false));
@@ -160,16 +189,31 @@ export class FindResultsRuntime {
       });
     });
     host.querySelector<HTMLElement>(".find-results-list")?.addEventListener("keydown", (event) => {
-      if (this.controller.state.snapshot?.kind === "workspace") this.handleTextKey(event);
+      if (this.controller.state.resultTree.length) this.handleResultKey(event);
       else this.handleFileKey(event);
     });
   }
 
-  private handleTextKey(event: KeyboardEvent): void {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    const previous = this.controller.state.selectedIndex;
-    if (this.controller.move(event.key === "ArrowDown" ? 1 : -1)) this.syncTextSelection(previous, true);
+  private handleResultKey(event:KeyboardEvent):void {
+    const rows=Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("[data-find-result],[data-find-node]")),selected=rows.findIndex(row=>row.classList.contains("selected")),current=rows[selected];
+    const move=(index:number)=>{const row=rows[index];if(row)this.selectResultRow(row,true);};
+    if(["ArrowDown","ArrowUp","Home","End"].includes(event.key)){event.preventDefault();move(event.key==="Home"?0:event.key==="End"?rows.length-1:((selected>=0?selected:event.key==="ArrowDown"?-1:0)+(event.key==="ArrowDown"?1:-1)+rows.length)%rows.length);return;}
+    if(!current)return;
+    if(event.key==="Enter"){event.preventDefault();current.click();return;}
+    if(event.key!=="ArrowLeft"&&event.key!=="ArrowRight")return;event.preventDefault();
+    const id=current.dataset.findNode,expanded=current.getAttribute("aria-expanded")==="true";
+    if(id&&((event.key==="ArrowRight"&&!expanded)||(event.key==="ArrowLeft"&&expanded))){this.controller.toggleResultNode(id,event.key==="ArrowRight");this.renderAndReveal(null);return;}
+    if(event.key==="ArrowRight"&&id&&expanded){move(selected+1);return;}
+    if(event.key==="ArrowLeft"){const key=id??`result:${current.dataset.findResult}`,parent=this.controller.resultRows().find(row=>row.id===key)?.parentId;if(parent){const row=this.resultRow(parent);if(row)this.selectResultRow(row,true);}}
+  }
+  private resultRow(id:string|null):HTMLButtonElement|null {
+    if(!id)return null;return Array.from(this.root.querySelectorAll<HTMLButtonElement>("[data-find-node],[data-find-result]")).find(row=>(row.dataset.findNode??`result:${row.dataset.findResult}`)===id)??null;
+  }
+  private selectResultRow(button:HTMLButtonElement,reveal:boolean):void {
+    const previous=this.controller.state.resultSelection,branch=!!button.dataset.findNode;
+    const changed=branch?this.controller.selectResultNode(button.dataset.findNode!):this.controller.select(Number(button.dataset.findResult));
+    if(changed){syncRowSelection(this.resultRow(previous),button,this.root.querySelector(".find-results-list"));const wasBranch=previous!==null&&!previous.startsWith("result:");if(branch!==wasBranch)this.renderHeaderActions();}
+    if(reveal)revealAndFocus(button);
   }
 
   private handleFileKey(event: KeyboardEvent): void {
@@ -201,19 +245,6 @@ export class FindResultsRuntime {
     }
   }
 
-  private selectText(button: HTMLButtonElement, reveal: boolean): void {
-    const previous = this.controller.state.selectedIndex;
-    if (this.controller.select(Number(button.dataset.findResult))) this.syncTextSelection(previous, reveal);
-  }
-
-  private syncTextSelection(previous: number, reveal: boolean): void {
-    const selected = this.controller.state.selectedIndex;
-    const previousRow = this.root.querySelector<HTMLElement>(`#find-result-${previous}`);
-    const selectedRow = this.root.querySelector<HTMLElement>(`#find-result-${selected}`);
-    syncRowSelection(previousRow, selectedRow, this.root.querySelector(".find-results-list"));
-    if (reveal) revealAndFocus(selectedRow);
-  }
-
   private selectFile(button: HTMLButtonElement, reveal: boolean): void {
     const previous = this.controller.state.fileSelection?.path ?? null;
     const kind = button.dataset.findKind === "directory" ? "directory" : "file";
@@ -230,13 +261,13 @@ export class FindResultsRuntime {
     this.render();
     const next = this.root.querySelector<HTMLElement>(".find-results-list");
     if (next) [next.scrollTop, next.scrollLeft] = scroll;
-    queueMicrotask(() => revealAndFocus(this.fileRow(path)));
+    queueMicrotask(() => revealAndFocus(this.controller.state.resultTree.length?this.resultRow(this.controller.state.resultSelection):this.fileRow(path)));
   }
 
   private focusSelection(): void {
     const state = this.controller.state;
-    const target = state.snapshot?.kind === "workspace"
-      ? this.root.querySelector<HTMLElement>(`#find-result-${state.selectedIndex}`)
+    const target = state.resultTree.length
+      ? this.resultRow(state.resultSelection)
       : this.fileRow(state.fileSelection?.path ?? null);
     revealAndFocus(target);
   }
@@ -252,6 +283,10 @@ export class FindResultsRuntime {
     if (!snapshot || this.options.activeRepositoryRoot() !== snapshot.repositoryRoot) {
       this.options.wrongWorkspace();
       return;
+    }
+    if(snapshot.kind==="locations"){
+      if(snapshot.workspaceGeneration!==this.options.activeWorkspaceGeneration?.()){this.options.wrongWorkspace();return;}
+      const location=this.controller.selectedLocation();if(location)await this.options.openLocation?.(location);return;
     }
     if (snapshot.kind === "workspace") {
       const match = this.controller.selectedMatch();

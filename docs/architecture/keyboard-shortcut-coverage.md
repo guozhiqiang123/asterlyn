@@ -163,7 +163,7 @@ verified; Asterlyn does not translate Command-number bindings speculatively.
 | Open/close Find results tool | presentation | `workbench.tool.search.toggle` | **Custom** |
 | Locate current file in Find results | navigation | `search.results.locateCurrent` | **Custom** |
 | Toggle tree/flat results | presentation | `search.results.view.toggle` | **Custom** |
-| Expand/collapse selected result folder | presentation | `search.results.expand`, `search.results.collapse` | **Custom** |
+| Expand/collapse selected result folder or file group | presentation | `search.results.expand`, `search.results.collapse` | **Custom** |
 
 ## 5. Editor, Markdown, and Diff
 
@@ -355,3 +355,5 @@ Shortcut coverage should close gaps in this order:
 
 This order maximizes useful coverage without turning dynamic target identities into stored shortcut
 arguments or weakening destructive-action safety.
+
+Find 的目录/文件/命中树共用于文本搜索和语言位置快照：本地 ArrowUp/ArrowDown、Home/End 选择可见行，ArrowRight/ArrowLeft 展开、收起或访问父子节点，Enter 展开分组或跳转命中。弹窗 Open in Window 可经 Tab/Shift+Tab 聚焦后 Enter 激活，Escape 关闭；转入后将焦点交给 Find 的选中命中。来源导航规则不变。

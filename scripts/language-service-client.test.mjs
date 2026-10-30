@@ -89,3 +89,9 @@ test("closing before approval prevents start and dispose removes native listener
   const native = fakeNative(); const preparing = native.deferPrepare(); const factory = createEditorLanguageServicePort((handle) => identityFor(handle), native, () => undefined); const port = factory(handleA); port.open(handleA, { version: 1, text: "x" }); await wait();
   port.close(handleA); preparing.resolve(review("late-review")); await wait(); assert.equal(native.calls.filter((call) => call[0] === "start").length, 0); factory.dispose(); assert.equal(native.events.size, 0);
 });
+
+test("Open in Window publications derive their workspace from the live document and reject obsolete versions/closed tabs",async()=>{
+ const native=fakeNative(),published=[];let generation=1;const factory=createEditorLanguageServicePort(h=>identityFor(h,generation),native,()=>{},undefined,undefined,undefined,undefined,value=>published.push(value)),port=factory(handleA);port.open(handleA,{version:1,text:"value"});await wait();
+ const results={kind:"references",query:"value",locations:[],limited:false,workspaceRoot:"/spoof",workspaceGeneration:99};port.openInWindow(results,1);assert.equal(published[0].workspaceRoot,"/repo");assert.equal(published[0].workspaceGeneration,1);
+ port.update(handleA,{version:2,text:"changed"});port.openInWindow(results,1);assert.equal(published.length,1);generation++;port.openInWindow(results,2);assert.equal(published.length,1);port.close(handleA);factory.dispose();
+});

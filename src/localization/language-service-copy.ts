@@ -1,5 +1,7 @@
+import {EN_OPEN_IN_WINDOW,ZH_OPEN_IN_WINDOW} from "./result-window-copy.ts";
 import { EN_LANGUAGE_STATUS, ZH_LANGUAGE_STATUS, type LanguageServiceStatusCopy } from "./language-service-status-copy.ts";
 export interface LanguageServiceCopy {
+  openInWindow:string;referencesTitle:string;definitionsTitle:string;
   workspaceStatus:LanguageServiceStatusCopy;
   readOnlySource:string;
   indexing: string; requestFailed: string;
@@ -8,6 +10,7 @@ export interface LanguageServiceCopy {
   findingReferences: string; chooseReference: string; noReferences: string; filterLocations: string; noMatchingLocations: string; limitedLocations: string;
 }
 export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  openInWindow:EN_OPEN_IN_WINDOW,referencesTitle:"References",definitionsTitle:"Definitions",
   workspaceStatus:EN_LANGUAGE_STATUS,
   readOnlySource:"Dependency source (read-only)",
   indexing: "Language services are indexing this project. Try again shortly.", requestFailed: "The language service request failed. Check the service status or logs.",
@@ -22,6 +25,7 @@ export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
   filterLocations: "Filter by file or path", noMatchingLocations: "No matching locations.", limitedLocations: "Showing the first {count} locations",
 };
 export const ZH_CN_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  openInWindow:ZH_OPEN_IN_WINDOW,referencesTitle:"引用",definitionsTitle:"定义",
   workspaceStatus:ZH_LANGUAGE_STATUS,
   readOnlySource:"依赖源码（只读）",
   indexing: "语言服务正在加载和索引项目，请稍后再试。", requestFailed: "语言服务请求失败，请检查服务状态或日志。",
