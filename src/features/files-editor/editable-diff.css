@@ -111,7 +111,7 @@
 .content-body.editable-diff-surface .cm-mergeView > .diff-side-labels {
   position: sticky;
   top: 0;
-  grid-template-columns: minmax(0, 1fr) var(--diff-action-gutter-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, var(--diff-before-width, 42%)) var(--diff-action-gutter-width) minmax(0, 1fr);
 }
 
 .content-body.editable-diff-surface .cm-mergeViewEditor {

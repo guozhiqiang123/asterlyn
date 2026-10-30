@@ -163,6 +163,25 @@ try {
       const close = (actual, expected, label) => {
         assert.ok(Math.abs(actual - expected) <= 1, `${name}: ${label}: ${actual} != ${expected}`);
       };
+      const assertEditableColumnAlignment = async (label) => {
+        const columns = await page.evaluate(() => {
+          const rect = (element) => {
+            const { left, right } = element.getBoundingClientRect();
+            return { left, right };
+          };
+          const editors = document.querySelectorAll(".cm-mergeViewEditor");
+          const header = document.querySelector(".diff-side-labels");
+          return [
+            [rect(header.querySelector('[data-pane-id="before"]')), rect(editors[0])],
+            [rect(header.querySelector(".diff-review-pane-gutter")), rect(document.querySelector(".cm-merge-revert"))],
+            [rect(header.querySelector('[data-pane-id="after"]')), rect(editors[1])],
+          ];
+        });
+        for (const [index, [header, editor]] of columns.entries()) {
+          close(header.left, editor.left, `${label}: column ${index} header start`);
+          close(header.right, editor.right, `${label}: column ${index} header end`);
+        }
+      };
 
       await page.evaluate(() => window.diffLayoutFixture.mountReadOnly());
       await settle();
@@ -277,6 +296,7 @@ try {
 
       await page.evaluate(() => window.diffLayoutFixture.mountEditable());
       await settle();
+      await assertEditableColumnAlignment("initial 42% split");
       const editable = await page.evaluate(() => {
         const rect = (selector) => {
           const value = document.querySelector(selector).getBoundingClientRect();
@@ -323,6 +343,7 @@ try {
             document.querySelector("#editor").style.border = `${border}px solid transparent`;
           }, { theme, border });
           await settle();
+          await assertEditableColumnAlignment(`${theme} ${border}px host border`);
           const connector = await page.evaluate(() => {
             const svg = document.querySelector(".diff-review-overlay");
             const frame = svg.getBoundingClientRect();
@@ -413,6 +434,7 @@ try {
       await page.mouse.move(editableSplitter.x + 106, editableSplitter.y + 80);
       await page.mouse.up();
       await settle();
+      await assertEditableColumnAlignment("dragged split");
       assert.ok(parseFloat(await page.$eval(
         "#editor",
         (element) => element.style.getPropertyValue("--diff-before-width"),
@@ -421,6 +443,10 @@ try {
       await settle();
       assert.match(await page.locator(".cm-mergeViewEditor").last().innerText(), /old x+/,
         `${name}: splitter must leave the revert button clickable`);
+      await page.locator(".editable-diff-splitter").dblclick({ position: { x: 6, y: 80 } });
+      await settle();
+      assert.equal(await page.$eval("#editor", (element) => element.style.getPropertyValue("--diff-before-width")), "42%");
+      await assertEditableColumnAlignment("reset split");
 
       await page.evaluate(() => window.diffLayoutFixture.mountLongEditable());
       await settle();
@@ -471,6 +497,7 @@ try {
           element.scrollTop = location === "300px" ? 300 : maximum * (location === "middle" ? 0.5 : 1);
         }, location);
         await settle();
+        await assertEditableColumnAlignment(`scrolled ${location}`);
         const scrolled = await visibleSplitter(location);
         assert.ok(scrolled.scrollTop > 0, `${name}: long fixture must actually scroll`);
         if (location === "300px") {
@@ -483,19 +510,21 @@ try {
       }
       await page.setViewportSize({ width: 1180, height: 620 });
       await settle();
+      await assertEditableColumnAlignment("resized long document");
       const scrolled = await visibleSplitter("resized at file end");
       await page.mouse.move(scrolled.x, scrolled.y);
       await page.mouse.down();
       await page.mouse.move(scrolled.x + 90, scrolled.y);
       await page.mouse.up();
       await settle();
+      await assertEditableColumnAlignment("dragged after scroll and resize");
       assert.ok(parseFloat(await page.$eval(
         "#editor",
         (element) => element.style.getPropertyValue("--diff-before-width"),
       )) > 42, `${name}: drag after scrolling must resize the panes`);
       assert.deepEqual(errors, [], `${name}: no browser runtime errors`);
       await page.evaluate(() => window.diffLayoutFixture.destroy());
-      console.log(`PASS ${name}: Diff footer alignment, 16 themed addition/deletion fill cases, splitters, revert, and long-file connector/dragging after scroll/resize`);
+      console.log(`PASS ${name}: Diff header/footer alignment, 16 themed addition/deletion fill cases, splitters/reset, revert, and long-file connector/dragging after scroll/resize`);
     } finally {
       await browser.close();
     }

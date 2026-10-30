@@ -299,3 +299,35 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   `2fb6765e5c8f07b9c8224e9a648a8092047650a70f27358b999c51c6d0f6e58c`.
   The app was relaunched; the previous installation is recoverable at
   `/Users/gzq/.Trash/Asterlyn-before-diff-scroll-anchor-20261010-1605.app`.
+
+### Phase 14 — editable Diff headers follow the actual split (2026-10-30)
+
+- The editable pane header still used two equal content columns while the editor and footer used
+  the persisted split percentage. At the 42% default in a 1500px Chromium fixture, the Before header
+  ended at X=734 but its editor ended at X=630, leaving a 104px discontinuity at the action gutter.
+- The header now consumes the same `--diff-before-width` and fixed action-gutter width as the
+  editor. Initial mounting, pointer resizing, double-click reset, host resizing, and document
+  scrolling retain aligned Before, gutter, and After boundaries without new measurement work.
+- The production Chromium/WebKit regression now compares all three header columns to their
+  actual editor columns with a 1px tolerance. It fails before the CSS correction and both engines
+  pass afterward, including light/dark themes, bordered hosts, 1500px and 1180px windows,
+  dragged/reset splits, and scrolled long documents. Existing footer, connector, rollback, and
+  splitter hit-testing checks remain enabled.
+- TypeScript checking, production frontend/native builds, and the complete 1,356-test script
+  suite pass. An unrelated XML folding assertion failed once during concurrent builds; its
+  focused rerun and the subsequent complete suite both pass without code changes.
+- The accepted arm64 `0.1.22` bundle passes ad-hoc hardened-runtime signing, strict deep signature
+  verification, and native rendered smoke. Multiple instances of the same bundle ID initially
+  confused the accessibility probe; the same artifact passes within 6 seconds with other instances
+  closed. `/Applications/Asterlyn.app` matches executable SHA-256
+  `5be25955174566805c65b3cb17f78b49ac966d92aa86ff56316d3490724a3416`.
+- The canonical installer preserves the installed app root and records two successful icon-bookmark
+  launches with `application.frontend_ready`. The original reported file
+  `0018-command-and-keybinding-system.md` was reopened in the installed client and its title,
+  action gutter, editor panes, and footer were visually verified as aligned in the light theme.
+- Accepted archive:
+  `.artifacts/diff-header-alignment-20261030.ojkDlc/Asterlyn-0.1.22-diff-header-alignment-macos-arm64.zip`,
+  25,224,288 bytes, SHA-256
+  `855a84977948e83c92831a5e16bd34bd043e1310d7d5e79c5604b87b20c74db1`.
+  Installation evidence and the verified previous-installation ZIP path are recorded in
+  `.artifacts/diff-header-alignment-20261030.ojkDlc/install-evidence.json`.
