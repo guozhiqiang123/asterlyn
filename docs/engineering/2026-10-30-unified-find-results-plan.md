@@ -16,7 +16,7 @@ Find 统一呈现目录 → 文件 → 命中/位置树，紧凑合并单子目�
 | F1 | 宿主通用结果快照、树投影和导航边界 | 同名文件不合并、UTF-16 行列、来源与工作区代际隔离；文本 revision 校验继续有效 | 已完成 |
 | F2 | 两种弹窗共用 Open in Window 路径和文案 | 转入后原弹窗关闭，Find 获焦，结果保留；源标签关闭后仍可查阅 | 已完成 |
 | F3 | Find 文件树、摘要、计数、键盘与工具栏 | 搜索/引用/文件三类一致；折叠不产生错误跳转；滚动、深路径、长行、大结果有边界 | 已完成 |
-| F4 | 单测/渲染/真实项目与原生交付 | 69 引用与文本搜索可转树并跳转；签名、标准覆盖安装及两次图标启动 | 待实施 |
+| F4 | 单测/渲染/真实项目与原生交付 | 69 引用与文本搜索可转树并跳转；签名、标准覆盖安装及两次图标启动 | 已完成 |
 
 ## 架构与正确性
 
@@ -33,3 +33,23 @@ Find 统一呈现目录 → 文件 → 命中/位置树，紧凑合并单子目�
 - 结果树按稳定文件身份分组；同名文件、只读依赖不同 URI 不合并。树/平铺互换时揭示选中项，分组折叠只影响该子树。文本搜索列号沿用原生一基 UTF-16，LSP 零基行列仅在显示时加一；树选择由点击、焦点和键盘驱动，悬停不抢走选择。
 - 源码预览每批最多 32 个文件、3 个并行读取、每文件 512 KiB；优先当前缓冲区或随结果携带的只读源码。按文件合并并复用目录身份索引，每条摘要约 440 个 UTF-16 单元，裁切不拆代理对；缺失/过大文件仍可按行列跳转。迟到读取按快照代际丢弃。
 - 保留单个结果快照，不落盘、不自动重新查询；文本完整计数和覆盖提示仍由原报告提供。当前对展开行作有限结果投影，不引入新的全量项目扫描或持久索引。
+
+## F4 验收与交付
+
+- `npm run check`、全量 `npm run test:scripts`：1,375 项通过；生产前端构建和 Tauri 原生构建通过，原有 app.ts 所有权和启动体积门槛保持不变。
+- `node scripts/test-find-results-rendered.mjs`：Chromium/WebKit 均通过，覆盖完整结果转入、筛选、分组折叠/键盘、工作区失效、迟到预览、替换搜索快照及 512 项渲染。本机合成样本约 4.9/5.0 ms，不包含语言服务器查询耗时。
+- `node scripts/test-language-definition-rendered.mjs`：Chromium/WebKit 的实际 Ctrl/Command 手势、定义/引用、512 项选择器、跨文件/未保存目标、陈旧结果与 F12/Shift+F12 回归通过。
+- boostCleaner 原生交互样本 `session-1793359988365-57439-0`：GlobalConfigNew 得到 69 引用，筛选后转入仍为完整 69 项；关闭原查询标签后，展开/收起并从 Find 打开 LauncherOutAppAdController.kt。文本查询同名符号得到 240 个匹配，完整转树且保留覆盖提示，并打开 GoogleAdsIdUtils.java。随后修正文本一基列号重复加一和鼠标悬停抢选择，补充回归并重跑上述检查。
+- 最终签名包原生会话 `session-1793360500572-59455-0`：精确验证 Android Gradle 0.6.3、LSP 0.3.10 的版本、摘要和 known-good 状态，语言服务 Ready。启动日志中的两条 `existing_project_directories / invalidPath` 单独保留；首次原生交互样本也存在，本轮没有扩展到最近项目目录恢复逻辑。
+- 标准安装器完成 `/Applications/Asterlyn.app` 覆盖，完整签名严格校验通过；应用根 device/inode 保持 `16777234/203606126`，上一安装仅保留为经验证的 ZIP。
+- 两次保存的图标书签启动均确认 frontendReady：PID 60347 / 60452，第二次会话 `session-1793360768090-60452-0`。安装后文件摘要与验收包相同，精确插件健康检查通过，语言服务 Ready，默认 `language.debug` 事件为 0。
+
+### 交付物
+
+- 版本：0.1.22。
+- 原生包：`target/release/bundle/macos/Asterlyn-0.1.22-unified-find-macos.app.zip`，25,307,217 bytes，完整 ZIP CRC 通过。
+- ZIP SHA-256：`7fa208561c42e354a2e4b48a04ebea8618231a596449d11ee5e70d7513c550d1`。
+- 已安装 executable SHA-256：`387d8b59211a2edaaef56b2fddc0e4de7a552b8581b73218675d1cc80b5e22c4`。
+- 构建身份：`6b0a6e6fae9ecad0cb6c9ac95b6870fdd452c16d-dirty-1793360381838`；保留前序已安装的 hover 移除改动，本轮不将其混入提交。
+- 本机详细证据：`/tmp/asterlyn-unified-find-install/installation.json`、`/tmp/asterlyn-unified-find-installed-summary.json` 及同前缀检查日志。
+- 提交顺序：计划 `6b0a6e6` → 宿主能力、树形 UI 与测试 `c4fafc5` → 本验收记录。
