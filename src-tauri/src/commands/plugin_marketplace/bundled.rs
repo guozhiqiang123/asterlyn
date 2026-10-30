@@ -8,12 +8,12 @@ pub(super) const BUNDLED_ANDROID_PACKAGE: &[u8] = include_bytes!(
     "../../../resources/plugins/asterlyn-plugin-android-gradle-0.6.3.asterlyn-plugin.tgz"
 );
 pub(super) const BUNDLED_LSP_PLUGIN_ID: &str = "dev.asterlyn.lsp";
-pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.3.8";
+pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.3.9";
 pub(super) const BUNDLED_LSP_REPOSITORY: &str = "guozhiqiang123/asterlyn-plugin-lsp";
 pub(super) const BUNDLED_LSP_PACKAGE_DIGEST: &str =
-    "sha256:7e13d86af56def8886c09a901250f737b7ed70008fe76b5c625677077f36f7b2";
+    "sha256:6cdcfe155f5bad62254290e319020f8a6b9bccbc5030971a1df5c32e3a6752ec";
 pub(super) const BUNDLED_LSP_PACKAGE: &[u8] =
-    include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.3.8.asterlyn-plugin.tgz");
+    include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.3.9.asterlyn-plugin.tgz");
 
 #[cfg(test)]
 pub(super) fn ensure_bundled_android_package(
