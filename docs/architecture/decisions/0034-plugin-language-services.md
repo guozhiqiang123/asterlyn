@@ -142,3 +142,20 @@ language data path and preserve the existing TS/Rust behavior while those gates 
 ## Plugin-owned Android model amendment
 
 [ADR-0035](0035-plugin-dependencies-and-build-models.md) assigns Android/AGP model extraction to the Android plugin and backend/model adapters to the LSP plugin. The host retains generic execution, lifecycle, model-reference and editor boundaries. LSP has a required Android plugin enablement dependency, independent of document language or runtime activation.
+
+## Source editor hover policy (2026-10-30)
+
+Automatic language-service symbol hover tooltips are temporarily disabled at the editor extension
+boundary. Plain pointer movement does not issue `textDocument/hover` requests. The transport's hover
+capability remains available for future explicit use; definition/reference navigation, completion,
+diagnostics and Git author information keep their existing behavior.
+
+Acceptance: TypeScript check and production build passed. Chromium/WebKit rendered probes waited
+1.5 seconds over a symbol with an instrumented hover responder: no tooltip or hover RPC occurred,
+and Command-click still navigated. The existing Ctrl/Command, F12/Shift-F12, reference-picker and
+focus/stale-result regression suite passed in both engines. Twenty navigation/menu cycles retained
+about 151 KB in the local Chromium heap sample; removing the hover extension also removes its
+pointer-triggered async work. This is a short local sample, not a long-running memory guarantee.
+The signed native bundle passed exact-plugin startup checks and replaced `/Applications/Asterlyn.app`
+with its root inode preserved. Both saved-icon launches reached frontend readiness; the installed
+executable matched the accepted bundle. Receipt: `/tmp/asterlyn-hover-install/installation.json`.

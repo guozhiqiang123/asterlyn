@@ -2,7 +2,7 @@ import { definitionGestureExtension } from "./language-definition-gesture.ts";
 import type { LanguageServiceCopy } from "../../localization/language-service-copy.ts";
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { lintGutter, type Diagnostic } from "@codemirror/lint";
-import { EditorView, hoverTooltip } from "@codemirror/view";
+import type { EditorView } from "@codemirror/view";
 import type { EditorLanguageServicePort, EditorLanguageServiceHandle, EditorLanguageServiceDiagnostic, EditorLanguageServicePosition, EditorLanguageServiceCompletionItem } from "../../protocol/editor-language-service.ts";
 export interface LanguageEditorContext {
   readonly port: EditorLanguageServicePort; readonly handle: EditorLanguageServiceHandle;
@@ -11,24 +11,12 @@ export interface LanguageEditorContext {
 }
 export function languageServiceEditorExtensions(context: LanguageEditorContext, complete = (completion: CompletionContext) => completeLanguageService(context, completion)) {
   return [lintGutter(), autocompletion({ override: [complete] }),
-    hoverTooltip((view, pos) => hover(context, view, pos)),
     definitionGestureExtension(context)];
 }
 export function languageDiagnostic(view: EditorView, diagnostic: EditorLanguageServiceDiagnostic): Diagnostic {
   const offset = (position: EditorLanguageServicePosition) => { const line = view.state.doc.line(Math.min(view.state.doc.lines, Math.max(1, position.line + 1))); return Math.min(line.to, line.from + Math.max(0, position.character)); };
   const from = offset(diagnostic.range.start), to = Math.max(from, offset(diagnostic.range.end));
   return { from, to, severity: diagnostic.severity === 1 ? "error" : diagnostic.severity === 2 ? "warning" : "info", message: diagnostic.message, source: diagnostic.source };
-}
-async function hover(context: LanguageEditorContext, view: EditorView, pos: number) {
-  if (!context.active()) return null; context.flush(); const version = context.version();
-  const line = view.state.doc.lineAt(pos);
-  const response = await context.port.request<{ contents?: unknown }>(context.handle, "textDocument/hover", { position: { line: line.number - 1, character: pos - line.from } }, version).catch(() => null);
-  if (!response || !context.active() || context.version() !== version) return null;
-  const content = response.contents;
-  const part = (value: unknown): string => typeof value === "string" ? value : value && typeof value === "object" && "value" in value && typeof value.value === "string" ? value.value : "";
-  const plain = (Array.isArray(content) ? content.map(part).join("\n") : part(content)).slice(0, 65536);
-  if (!plain) return null;
-  return { pos, end: pos, above: true, create: () => { const dom = document.createElement("div"); dom.className = "cm-tooltip-language-service"; dom.textContent = plain; return { dom }; } };
 }
 export async function completeLanguageService(context: LanguageEditorContext, completion: CompletionContext): Promise<CompletionResult | null> {
   if (!context.active()) return null; context.flush(); const version = context.version();
