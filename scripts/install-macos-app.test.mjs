@@ -5,7 +5,21 @@ import { promisify } from "node:util";
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { replaceBundleContents, planLaunchpadRepair, launchpadRepairSQL } from "./install-macos-app.mjs";
+import { replaceBundleContents, planLaunchpadRepair, launchpadRepairSQL,unregisterSourceBundle,prepareInstallEvidence } from "./install-macos-app.mjs";
+
+test("repeated source unregistration accepts only the specific already-absent LaunchServices result",async()=>{
+ const absent={code:1,stderr:"failed to scan /test/Asterlyn.app: -10814\n from spotlight"};
+ assert.deepEqual(await unregisterSourceBundle("/test/Asterlyn.app",async()=>{throw absent;}),{alreadyUnregistered:true});
+ for(const failure of [{code:1,stderr:"permission denied"},{code:9,stderr:absent.stderr}])await assert.rejects(unregisterSourceBundle("/test/Asterlyn.app",async()=>{throw failure;}),error=>error===failure);
+});
+test("evidence output is writable before application changes and rejects directory or symlink outputs",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"asterlyn-install-evidence-"));
+ try{
+  const output=await prepareInstallEvidence(join(root,"new","nested","receipt.json"));assert.equal((await lstat(output)).isFile(),true);assert.equal((await lstat(output)).mode&0o777,0o600);
+  await assert.rejects(prepareInstallEvidence(root));
+  await symlink(output,join(root,"linked.json"));await assert.rejects(prepareInstallEvidence(join(root,"linked.json")));assert.equal(await readFile(output,"utf8"),"");
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 
 const execute = promisify(execFile);
 async function fixture() {

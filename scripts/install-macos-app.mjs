@@ -1,7 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
+import {constants as fileFlags} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +13,21 @@ const BUNDLE_ID = "dev.asterlyn.desktop";
 const APP_EXECUTABLE = "Contents/MacOS/asterlyn";
 const nativeTool = fileURLToPath(new URL("./macos-app-tools.swift", import.meta.url));
 const registrationTool = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+export async function unregisterSourceBundle(source, execute = run) {
+  try {await execute(registrationTool,["-u",source]);return {alreadyUnregistered:false};}
+  catch(error){
+    // LaunchServices returns kLSApplicationNotFoundErr for a valid build path already removed.
+    if(error?.code===1&&/:\s*-10814(?:\r?\n|$)/u.test(String(error.stderr??"")))return {alreadyUnregistered:true};
+    throw error;
+  }
+}
+export async function prepareInstallEvidence(path) {
+  if(!path)return null;
+  const output=resolve(path);await mkdir(dirname(output),{recursive:true});
+  const file=await open(output,fileFlags.O_WRONLY|fileFlags.O_CREAT|fileFlags.O_APPEND|fileFlags.O_NOFOLLOW|fileFlags.O_NONBLOCK,0o600);
+  try{if(!(await file.stat()).isFile())throw Error("Installation evidence must be a regular file");await file.chmod(0o600);}finally{await file.close();}
+  return output;
+}
 const delay = (ms) => new Promise((accept) => setTimeout(accept, ms));
 
 async function run(command, args) {
@@ -237,6 +253,8 @@ export async function installMacOSApp({ source, destination = "/Applications/Ast
   if (process.platform !== "darwin") throw new Error("Local application installer requires macOS");
   source = resolve(source); destination = resolve(destination);
   if (source === destination) throw new Error("Source and destination must differ");
+  if(evidence&&[source,destination].some(root=>resolve(evidence)===root||resolve(evidence).startsWith(`${root}/`)))throw Error("Installation evidence must be outside application bundles");
+  evidence=await prepareInstallEvidence(evidence);
   for (const path of [source, ...(await exists(destination) ? [destination] : [])]) {
     const info = await lstat(path);
     if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Application roots must be real directories");
@@ -251,6 +269,7 @@ export async function installMacOSApp({ source, destination = "/Applications/Ast
   if (bundleId !== BUNDLE_ID) throw new Error("Source bundle identifier mismatch");
   const version = (await run("/usr/libexec/PlistBuddy", ["-c", "Print :CFBundleShortVersionString", plist])).stdout.trim();
   const executableSha256 = await hashFile(join(source, APP_EXECUTABLE));
+  const sourceRegistration=await unregisterSourceBundle(source);
   await quitInstalled(destination);
   const backup = await archivePrevious(destination, archiveRoot);
   const replacement = await replaceBundleContents({ source, destination,
@@ -261,14 +280,13 @@ export async function installMacOSApp({ source, destination = "/Applications/Ast
       if (await hashFile(join(path, APP_EXECUTABLE)) !== executableSha256) throw new Error("Installed executable differs from accepted bundle");
     },
   });
-  await run(registrationTool, ["-u", source]);
   await run(registrationTool, ["-f", destination]);
   const launchpad = await repairLaunchpad(destination, archiveRoot);
   const firstLaunch = await launchAndVerify(destination, launchpad);
   await quitInstalled(destination);
   const reopen = await launchAndVerify(destination, launchpad);
   const { bookmarkHex: _bookmark, ...launchEvidence } = launchpad;
-  const result = { source, destination, version, executableSha256, backup, replacement, launchpad: launchEvidence, firstLaunch, reopen };
+  const result = { source, destination, version, executableSha256, backup, replacement, sourceRegistration, launchpad: launchEvidence, firstLaunch, reopen };
   if (evidence) await writeFile(resolve(evidence), `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
   return result;
 }

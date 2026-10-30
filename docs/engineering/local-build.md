@@ -252,3 +252,9 @@ verified archives on 2026-10-23; see
 - The current public Release intentionally uses unsigned Windows packages and ad-hoc macOS signing without notarization. If commercial signing is adopted later, its credentials belong in protected CI facilities, never repository files.
 - Record compiler/runtime versions, artifact hashes, SBOM, startup/memory evidence, and smoke-test results with each preview or stable release.
 - The user-owned Linux sysroot is not bundled into the application; Linux uses the supported system WebKitGTK runtime.
+
+### Installation receipt preflight and repeated runs
+
+The installer prepares a private, writable receipt file and its parent directories **before** application changes. Evidence must live outside both app bundles; a directory or symlink output is rejected. This prevents a successful replacement being reported as a failure merely because a new evidence directory was absent.
+
+Unregistering a previously removed build path can return LaunchServices `kLSApplicationNotFoundErr` (`-10814`). Only that specific already-absent result is accepted as an idempotent no-op. Other registration failures remain fatal; canonical registration, preserved root identity, and both icon-bookmark launches are still required. Never reset the global LaunchServices database or create an expanded app backup to work around it.
