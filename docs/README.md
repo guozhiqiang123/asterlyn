@@ -46,6 +46,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0033-structured-local-diagnostics.md`](architecture/decisions/0033-structured-local-diagnostics.md) — one bounded local JSONL timeline across the webview, native host, capabilities, and isolated plugin lifecycle.
 - [`architecture/decisions/0034-plugin-language-services.md`](architecture/decisions/0034-plugin-language-services.md) — language-provider plugins, real document versions, supervised LSP sessions and execution authority.
 
+- [`engineering/2026-10-30-language-service-lifecycle-plan.md`](engineering/2026-10-30-language-service-lifecycle-plan.md) — persistent project approval, automatic startup, truthful indexing progress and opt-in language tracing.
+
 ## Plugin development
 
 - [`plugins/developer-guide.md`](plugins/developer-guide.md) — standalone template, manifest/runtime ownership, Release publication, source addition, lifecycle, and security boundary.
