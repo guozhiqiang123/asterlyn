@@ -252,3 +252,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0036-packaged-analysis-programs.md`](architecture/decisions/0036-packaged-analysis-programs.md) — fixed-entry plugin programs, scoped model artifacts and lightweight generic host supervision.
 
 - [`benchmarks/2026-10-27-android-lsp-core.md`](benchmarks/2026-10-27-android-lsp-core.md) — Java/Kotlin Android core, exact plugin artifacts, real dirty navigation/module/crash evidence, resources and remaining limits.
+
+- [`engineering/2026-10-30-language-navigation-latency-plan.md`](engineering/2026-10-30-language-navigation-latency-plan.md) — declaration click/reference chooser latency, measured query stages and native acceptance.
