@@ -72,6 +72,9 @@ jobs:
       - name: Test definition pointer navigation
         run: npm run test:lsp:definition
 
+      - name: Test grouped result window
+        run: npm run test:find:rendered
+
       - name: Verify public plugin template
         run: npm run plugin-template:verify
 

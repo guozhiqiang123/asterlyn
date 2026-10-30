@@ -1,6 +1,6 @@
 # Plugin diagnostics and migration
 
-Status: experimental public policy rooted at Asterlyn `0.1.22`; current Plugin SDK `1.13.0`.
+Status: experimental public policy rooted at Asterlyn `0.1.23`; current Plugin SDK `1.14.0`.
 
 ## Identify the failing phase
 
@@ -52,7 +52,7 @@ The following versions are independent:
 6. Host compatibility range controls which Asterlyn releases may admit the package.
 7. Plugin-owned persisted-data schemas control settings/workspace-state migration.
 
-Do not infer one axis from another. A plugin can use current SDK `1.13.0` (or the historical `1.10.0`), SDK major `1`, package schema `3`,
+Do not infer one axis from another. A plugin can use current SDK `1.14.0` (or the historical `1.10.0`), SDK major `1`, package schema `3`,
 and runtime protocol `1` while independently increasing its own version.
 
 ## Classify a contract change

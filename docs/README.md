@@ -256,3 +256,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/2026-10-30-language-navigation-latency-plan.md`](engineering/2026-10-30-language-navigation-latency-plan.md) — declaration click/reference chooser latency, measured query stages and native acceptance.
 
 - [`engineering/2026-10-30-unified-find-results-plan.md`](engineering/2026-10-30-unified-find-results-plan.md) — shared Open in Window result transfer and directory/file/match trees for search and language locations.
+
+- [`engineering/2026-10-30-public-release-plan.md`](engineering/2026-10-30-public-release-plan.md) - coordinated host and language plugin publication.

@@ -1,7 +1,7 @@
 {
   "name": "asterlyn",
   "private": true,
-  "version": "0.1.22",
+  "version": "0.1.23",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
@@ -23,7 +23,8 @@
     "tauri": "tauri",
     "test:lsp:activation": "node scripts/test-lsp-package-activation.mjs",
     "test:lsp:definition": "node scripts/test-language-definition-rendered.mjs",
-    "test:lsp:status": "node scripts/test-language-service-status-rendered.mjs"
+    "test:lsp:status": "node scripts/test-language-service-status-rendered.mjs",
+    "test:find:rendered": "node scripts/test-find-results-rendered.mjs"
   },
   "dependencies": {
     "@asterlyn/plugin-sdk": "file:packages/plugin-sdk",
