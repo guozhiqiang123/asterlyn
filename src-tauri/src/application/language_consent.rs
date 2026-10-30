@@ -71,6 +71,15 @@ fn fingerprint(package: &LanguagePackage) -> String {
         .expect("serializable language identities"),
     )
 }
+pub(super) fn cache_identity(root: &Path, package: &LanguagePackage) -> Result<String, String> {
+    Ok(hash(format!(
+        "{}\0{}\0{}",
+        workspace(root)?,
+        package.server_id(),
+        fingerprint(package)
+    )))
+}
+
 fn key(workspace: &str, profile: &str) -> String {
     hash(format!("dev.asterlyn.lsp\0{workspace}\0{profile}"))
 }

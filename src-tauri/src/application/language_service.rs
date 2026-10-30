@@ -4,6 +4,8 @@ mod actor_runtime;
 use actor_runtime::actor;
 #[path = "language_service_diagnostics.rs"]
 mod diagnostics;
+#[path = "language_service_cache.rs"]
+mod persistent_cache;
 #[path = "language_service_sources.rs"]
 mod sources;
 #[path = "language_service_trace.rs"]
@@ -330,6 +332,11 @@ impl LanguageServiceManager {
             .packaged
             .as_ref()
             .map(|profile| profile.selectors.clone());
+        let persistent_identity = package
+            .packaged
+            .as_ref()
+            .map(|_| super::language_consent::cache_identity(&subject.root, &package))
+            .transpose()?;
         let mut cache = None;
         let mut process = if let Some(mut profile) = package.packaged {
             std::fs::create_dir_all(&profile.cache_parent)
@@ -339,6 +346,13 @@ impl LanguageServiceManager {
                 .tempdir_in(&profile.cache_parent)
                 .map_err(|_| "language cache unavailable")?;
             profile.initialization_options["analysis"]["stateDirectory"] = json!(directory.path());
+            // Mutable backend/overlay state stays private to this session. Only immutable,
+            // verified plugin artifacts may be shared through the persistent namespace.
+            if let Some(identity) = persistent_identity {
+                if let Ok(path) = persistent_cache::directory(&profile.cache_parent, &identity) {
+                    profile.initialization_options["analysis"]["cacheDirectory"] = json!(path);
+                }
+            }
             profile.initialization_options["analysis"]["debugTrace"] = json!(self.debug_enabled());
             let process = LanguageServiceProcess::start_packaged(&profile);
             cache = Some(directory);
