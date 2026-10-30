@@ -6,6 +6,8 @@ export const WORKBENCH_COMMANDS = {
   toggleRepositoryMenu: commandId("workspace.repository.menu.toggle"),
   quickOpen: commandId("workspace.quickOpen.open"),
   recentFiles: commandId("workspace.recentFiles.open"),
+  navigateBack: commandId("workbench.navigation.back"),
+  navigateForward: commandId("workbench.navigation.forward"),
   workspaceSearch: commandId("workspace.search.open"),
   editorFind: commandId("editor.find.open"),
   historyFind: commandId("history.find.focus"),

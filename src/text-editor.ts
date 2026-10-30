@@ -1,3 +1,4 @@
+import { editorNavigationUpdate, validEditorRange } from "./features/files-editor/editor-navigation-view.ts";
 import { completeLanguageService, languageServiceEditorExtensions, languageDiagnostic, type LanguageEditorContext } from "./features/files-editor/language-service-editor.ts";
 import {
   defaultKeymap,
@@ -58,6 +59,7 @@ import {
   codeMirrorFocusOwnership,
 } from "./features/files-editor/editor-runtime-shared.ts";
 import type { EditorLanguageServiceHandle, EditorLanguageServicePort, EditorLanguageServicePortFactory } from "./protocol/editor-language-service.ts";
+import type { EditorNavigationUpdate } from "./features/files-editor/editor-navigation-history.ts";
 
 interface CachedTextEditor {
   id: string;
@@ -112,6 +114,9 @@ export class TextEditor {
   private synchronizing = false;
   private scrollRestorationGeneration = 0;
   private languageServiceFactory: EditorLanguageServicePortFactory | null = null;
+  private navigationObserver: ((update: EditorNavigationUpdate) => void) | null = null;
+
+  setNavigationObserver(observer: ((update: EditorNavigationUpdate) => void) | null): void { this.navigationObserver = observer; }
 
   constructor(
     private readonly blameRuntime: GitBlameRuntime,
@@ -231,6 +236,7 @@ export class TextEditor {
     if (mountedEntry.languageStatus === "loading") {
       this.loadLanguage(mountedEntry);
     }
+    this.navigationObserver?.(editorNavigationUpdate(view, tabId));
   }
 
   private restoreScroll(
@@ -288,32 +294,27 @@ export class TextEditor {
   }
 
   selectRange(fromUtf16: number, toUtf16: number): boolean {
-    const active = this.activeEntry();
-    const view = active?.view;
-    if (!view) return false;
-    const length = view.state.doc.length;
-    if (
-      !Number.isInteger(fromUtf16) ||
-      !Number.isInteger(toUtf16) ||
-      fromUtf16 < 0 ||
-      toUtf16 < fromUtf16 ||
-      toUtf16 > length
-    ) {
-      return false;
-    }
+    if (!validEditorRange(this.activeEntry()?.view?.state.doc.length, fromUtf16, toUtf16)) return false;
+    return this.restoreNavigationSelection(fromUtf16, toUtf16);
+  }
+
+  restoreNavigationSelection(anchor: number, head: number): boolean {
+    const active = this.activeEntry(), view = active?.view;
+    if (!view || !Number.isSafeInteger(anchor) || !Number.isSafeInteger(head) || anchor < 0 || head < 0) return false;
+    anchor = Math.min(anchor, view.state.doc.length); head = Math.min(head, view.state.doc.length);
     // A search result takes precedence over scroll restoration queued by a newly mounted tab.
     const scrollGeneration = ++this.scrollRestorationGeneration;
     const loadEpoch = active.loadEpoch;
     view.dispatch({
-      selection: { anchor: fromUtf16, head: toUtf16 },
-      effects: EditorView.scrollIntoView(fromUtf16, { y: "center" }),
+      selection: { anchor, head },
+      effects: EditorView.scrollIntoView(head, { y: "center" }),
     });
     view.focus();
     // On the first lazy mount, CodeMirror may not have measured the viewport yet.
     window.requestAnimationFrame(() => {
       if (this.scrollRestorationGeneration !== scrollGeneration || this.activeEntry() !== active ||
         active.loadEpoch !== loadEpoch || active.view !== view || !view.dom.isConnected) return;
-      view.dispatch({ effects: EditorView.scrollIntoView(fromUtf16, { y: "center" }) });
+      view.dispatch({ effects: EditorView.scrollIntoView(head, { y: "center" }) });
     });
     return true;
   }
@@ -577,6 +578,9 @@ export class TextEditor {
         ]),
         EditorView.updateListener.of((update) => {
           entry.state = update.state;
+          if (update.docChanged || update.selectionSet) {
+            this.navigationObserver?.(editorNavigationUpdate(update.view, entry.id, update));
+          }
           if (!update.docChanged) return;
           if (entry.languageServicePort && !this.readOnlyValue) {
             entry.languageServiceVersion += 1;

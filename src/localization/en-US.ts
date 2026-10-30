@@ -207,6 +207,7 @@ export const EN_US: LocaleCatalog = {
     updateLastChecked: (epochMs) => `Last checked ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochMs))}`, plugins: EN_US_PLUGIN_MANAGEMENT_COPY,
   },
   navigation: {
+    historyUnavailable: "No code location is available in this direction",
     navigationMode: "Navigation mode",
     tabs: { files: "Files", recent: "Recent", workspace: "Text", commands: "Commands" },
     titles: {
@@ -247,6 +248,8 @@ export const EN_US: LocaleCatalog = {
       "open-repository": { label: "Open Project", detail: "Choose a local folder", aliases: "open folder repository" },
       "go-file": { label: "Go to File", detail: "Open a project file by name", aliases: "quick open" },
       "recent-files": { label: "Recent Files", detail: "Reopen a successful file", aliases: "history" },
+      "navigate-back": { label: "Navigate Back", detail: "Return to the previous code location", aliases: "back previous cursor location" },
+      "navigate-forward": { label: "Navigate Forward", detail: "Return to the next code location", aliases: "forward next cursor location" },
       "find-workspace": { label: "Find in Files", detail: "Bounded search with reviewed replacement", aliases: "workspace search replace" },
       "find-current": { label: "Find and Replace in Current File", detail: "Undoable changes stay in the active buffer", aliases: "search" },
       "save-current": { label: "Save Current File", detail: "Use the conflict-safe save path", aliases: "write" },

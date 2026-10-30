@@ -25,6 +25,7 @@ import {
 import type { EditorCopy, GitOperationCopy } from "../../localization/catalog.ts";
 import { LazyConflictEditor, LazyEditableDiffEditor } from "./lazy-merge-editor-runtime.ts";
 import { scheduleEditorRuntimePreload } from "./editor-runtime-preload.ts";
+import type { EditorNavigationUpdate } from "./editor-navigation-history.ts";
 import {
   NOOP_CONTEXT_MENU_PORT,
   type ContextMenuPort,
@@ -150,6 +151,9 @@ export class EditorSurface {
   selectRange(fromUtf16: number, toUtf16: number): boolean {
     return this.textEditor.selectRange(fromUtf16, toUtf16);
   }
+
+  setNavigationObserver(observer: ((update: EditorNavigationUpdate) => void) | null): void { this.textEditor.setNavigationObserver(observer); }
+  restoreNavigationSelection(anchor: number, head: number): boolean { return this.textEditor.restoreNavigationSelection(anchor, head); }
 
   revealFirstSourceChange(): boolean {
     return this.textEditor.revealFirstChange();

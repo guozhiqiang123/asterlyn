@@ -27,6 +27,10 @@ const HISTORY_SCOPE: readonly CommandFocusScope[] = ["history"];
  * These are authored Asterlyn rules, not an imported IDE keymap or runtime dependency.
  */
 export const ANDROID_STUDIO_MACOS_KEYBINDINGS: readonly DefaultKeybindingRule[] = [
+  mac("workbench.navigation.back.primary", WORKBENCH_COMMANDS.navigateBack,
+    keySequence("ArrowLeft", { primary: true, alt: true }), WORKBENCH_FOCUS_SCOPES),
+  mac("workbench.navigation.forward.primary", WORKBENCH_COMMANDS.navigateForward,
+    keySequence("ArrowRight", { primary: true, alt: true }), WORKBENCH_FOCUS_SCOPES),
   tool("workbench.tool.files.macos-ide", WORKBENCH_COMMANDS.toggleFiles, primarySequence("1")),
   tool("workbench.tool.search.macos-ide", WORKBENCH_COMMANDS.toggleSearch, primarySequence("3")),
   tool("workbench.tool.changes.macos-ide", WORKBENCH_COMMANDS.toggleChanges, primarySequence("0")),

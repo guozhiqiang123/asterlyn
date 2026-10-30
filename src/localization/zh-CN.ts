@@ -114,6 +114,7 @@ export const ZH_CN = {
     updateLastChecked: (epochMs) => `最近检查：${new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochMs))}`, plugins: ZH_CN_PLUGIN_MANAGEMENT_COPY,
   },
   navigation: {
+    historyUnavailable: "此方向没有可返回的代码位置",
     navigationMode: "导航模式",
     tabs: { files: "文件", recent: "最近", workspace: "文本", commands: "命令" },
     titles: {
@@ -153,6 +154,8 @@ export const ZH_CN = {
       "open-repository": { label: "打开项目", detail: "选择本地文件夹", aliases: "open folder repository 打开文件夹仓库" },
       "go-file": { label: "转到文件", detail: "按名称打开项目文件", aliases: "go to file quick open 快速打开" },
       "recent-files": { label: "最近文件", detail: "重新打开成功读取过的文件", aliases: "recent files history 历史" },
+      "navigate-back": { label: "导航后退", detail: "返回上一个代码位置", aliases: "back previous cursor 后退 光标 位置" },
+      "navigate-forward": { label: "导航前进", detail: "返回下一个代码位置", aliases: "forward next cursor 前进 光标 位置" },
       "find-workspace": { label: "在文件中查找", detail: "有界搜索与经确认的替换", aliases: "find in files workspace search replace 全局搜索" },
       "find-current": { label: "在当前文件中查找和替换", detail: "可撤销的更改保留在活动缓冲区", aliases: "find replace search 查找" },
       "save-current": { label: "保存当前文件", detail: "使用可安全处理冲突的保存流程", aliases: "save write 保存" },

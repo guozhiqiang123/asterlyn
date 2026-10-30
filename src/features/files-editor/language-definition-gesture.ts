@@ -97,6 +97,8 @@ class DefinitionGesture {
   };
   async lookup(pos: number, anchor?: { x: number; y: number }, intent: "definition" | "references" = "definition"): Promise<void> {
     this.cancel(); if (!this.context.active()) return;
+    // Navigation history returns to the clicked source, even if the caret was elsewhere.
+    if (anchor && this.view.state.selection.main.head !== pos) this.view.dispatch({ selection: { anchor: pos } });
     const token = ++this.sequence; this.context.flush(); const version = this.context.version();
     const line = this.view.state.doc.lineAt(pos), ui = this.context.definitionUi;
     const position = { line: line.number - 1, character: pos - line.from }, uri = this.context.port.documentUri;

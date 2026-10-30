@@ -36,6 +36,10 @@ export interface WorkbenchCommandRuntimeOptions {
   readonly toggleTool: (tool: ActivityTool) => void;
   readonly hideLeftTool: () => void;
   readonly hideBottomTool: () => void;
+  readonly navigationHistory?: {
+    available(direction: -1 | 1): boolean;
+    navigate(direction: -1 | 1): void | Promise<void>;
+  };
 }
 
 export function registerWorkbenchCommands(
@@ -70,6 +74,13 @@ export function registerWorkbenchCommands(
     execute,
   });
   const descriptors: CommandDescriptor[] = [
+    ...([-1, 1] as const).map(direction => navigation(
+      direction < 0 ? WORKBENCH_COMMANDS.navigateBack : WORKBENCH_COMMANDS.navigateForward,
+      direction < 0 ? "navigate-back" : "navigate-forward", "workbench",
+      () => ({ enabled: options.navigationHistory?.available(direction) === true,
+        reason: options.catalog().navigation.historyUnavailable }),
+      () => options.navigationHistory?.navigate(direction),
+    )),
     {
       id: WORKBENCH_COMMANDS.commandPalette,
       category: "workbench",

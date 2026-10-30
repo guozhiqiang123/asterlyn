@@ -17,6 +17,7 @@ import {
   type ContextMenuPort,
 } from "../../shared/context-menu/context-menu-model.ts";
 import type { EditorLanguageServicePortFactory } from "../../protocol/editor-language-service.ts";
+import type { EditorNavigationUpdate } from "./editor-navigation-history.ts";
 
 type TextMount = {
   parent: HTMLElement;
@@ -60,6 +61,10 @@ export class LazyTextEditor {
   private phrases: Readonly<Record<string, string>> = {};
   private readonly contextMenu: ContextMenuPort;
   private languageServiceFactory: EditorLanguageServicePortFactory | null = null;
+  private navigationObserver: ((update: EditorNavigationUpdate) => void) | null = null;
+  setNavigationObserver(observer: ((update: EditorNavigationUpdate) => void) | null): void {
+    this.navigationObserver = observer; this.implementation?.setNavigationObserver(observer);
+  }
   constructor(
     blameRuntime: GitBlameRuntime,
     blameCopy: EditorCopy,
@@ -123,6 +128,7 @@ export class LazyTextEditor {
       mount.parent.removeAttribute("aria-busy");
       editor.setReadOnly(this.readOnly);
       editor.setLanguageServices(this.languageServiceFactory);
+      editor.setNavigationObserver(this.navigationObserver);
       editor.setPreferences(this.preferences ?? mount.preferences);
       editor.setTheme(this.theme);
       editor.setPhrases(this.phrases);
@@ -179,6 +185,10 @@ export class LazyTextEditor {
       if (generation === this.mountGeneration) editor.selectRange(fromUtf16, toUtf16);
     });
     return true;
+  }
+
+  restoreNavigationSelection(anchor: number, head: number): boolean {
+    return this.implementation?.restoreNavigationSelection(anchor, head) ?? false;
   }
 
   revealFirstChange(): boolean {
@@ -292,6 +302,7 @@ export class LazyTextEditor {
           this.contextMenu,
         );
         editor.setLanguageServices(this.languageServiceFactory);
+        editor.setNavigationObserver(this.navigationObserver);
         this.implementation = editor;
         return editor;
       });

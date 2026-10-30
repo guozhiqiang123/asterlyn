@@ -1,4 +1,6 @@
 import { createLanguageDefinitionNavigator } from "./composition/language-definition-navigation.ts";
+import { createEditorNavigationRuntime, applyEditorSearchNavigation } from "./composition/editor-navigation-runtime.ts";
+import type { EditorNavigationHistory } from "./features/files-editor/editor-navigation-history.ts";
 import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
 import { createLanguageServicesRuntime, languageExecutionConfirmation, languageWorkspaceForWindow, workspaceFileUri } from "./composition/language-services-runtime.ts";
 import { createTauriLanguageServiceBridge } from "./adapters/tauri/tauri-language-service-bridge.ts";
@@ -359,7 +361,6 @@ import {
   type NavigationCommand,
   type NavigationMode,
 } from "./features/files-editor/navigation";
-import { evaluateSearchNavigation } from "./features/files-editor/search-navigation";
 import { projectFileMatchOptions, retainedCommandSurfaceQuery, type WorkspaceSearchControls } from "./features/files-editor/workspace-search";
 import { bindWorkspaceSearchDetailControls, bindWorkspaceSearchOptionControls } from "./features/files-editor/workspace-search-binding";
 import { bindCommandSurfaceLineBreak, focusCommandSurfaceQuery, renderCommandSurfacePreservingFocus, syncCommandSurfaceQueryHeight } from "./features/files-editor/command-surface-input";
@@ -408,6 +409,7 @@ export class AsterlynApp {
   private localeRequestGeneration = 0;
   private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
+  private readonly editorNavigation: EditorNavigationHistory;
   private readonly languageServices: ReturnType<typeof createLanguageServicesRuntime> | null;
   private readonly contextMenuHost: LazyContextMenuHost;
   private readonly stashRuntime: StashRuntime;
@@ -565,6 +567,12 @@ export class AsterlynApp {
       blameRuntime,
       this.contextMenuHost,
     );
+    this.editorNavigation = createEditorNavigationRuntime({
+      surface: this.editorSurface, root: () => this.windowSession.workspace.state.root, loading: () => this.state.loading,
+      files: () => this.filesState.files, editor: () => this.filesEditorRuntime.editor,
+      open: (root, file) => this.openProjectFile(root, file),
+      diagnostic: (direction, outcome) => diagnostics.report("info", "editor.navigation", `direction=${direction < 0 ? "back" : "forward"};outcome=${outcome}`),
+    });
     this.pushDiffEditor = new LazyDiffEditor(
       blameRuntime,
       initialCatalog.editor,
@@ -622,6 +630,8 @@ export class AsterlynApp {
         return tab?.status === "ready";
       },
       refreshAvailable: () => this.windowSession.workspace.state.root !== null && !this.state.loading,
+      navigationHistory: { available: direction => !this.state.loading && this.editorNavigation.available(direction),
+        navigate: direction => this.editorNavigation.navigate(direction) },
       openCommandSurface: (mode) => this.openCommandSurface(mode),
       openRepository: async () => { await this.chooseRepository(); },
       openEditorFind: () => this.editorSurface.openFindReplace(),
@@ -1687,6 +1697,10 @@ export class AsterlynApp {
   }
 
   private handleEditorSessionChange(change: EditorSessionChange): void {
+    if (change.reason === "workspace") {
+      if (!this.editorState.session.textTabs.length) this.editorNavigation.reset(this.editorState.workspaceRoot);
+      else this.editorNavigation.installWorkspace(this.editorState.workspaceRoot);
+    }
     if (
       change.reason === "activation" || change.reason === "close" ||
       change.reason === "load-start" ||
@@ -2060,6 +2074,8 @@ export class AsterlynApp {
     if (this.disposed) return;
     this.disposed = true;
     this.languageServices?.dispose();
+    this.editorSurface.setNavigationObserver(null);
+    this.editorNavigation.reset(null);
     this.shellEventBinding.dispose();
     this.notificationPresentationRuntime.dispose();
     this.notificationCenter.dispose();
@@ -4666,29 +4682,14 @@ export class AsterlynApp {
     tab: TextTabState,
     match: WorkspaceTextSearchMatch,
   ): void {
-    const decision = evaluateSearchNavigation(
-      this.windowSession.workspace.state.root,
-      tab,
-      match,
-    );
-    if (decision !== "ready") {
-      const message =
-        decision === "wrongWorkspace"
-          ? this.localization.catalog.editor.wrongWorkspace
-          : decision === "dirty"
-            ? this.localization.catalog.editor.searchUnsaved
-            : decision === "invalidRange"
-              ? this.localization.catalog.editor.invalidSearchLocation
-              : this.localization.catalog.editor.staleSearchResult;
-      this.setStatus(message, "warning");
-      return;
-    }
-    if (this.filesEditorRuntime.commands.state.mode) this.dismissCommandSurface();
-    this.renderEditor();
-    queueMicrotask(() => {
-      if (!this.editorSurface.selectRange(match.fromUtf16, match.toUtf16)) {
-        this.setStatus(this.localization.catalog.editor.invalidSearchLocation, "warning");
-      }
+    applyEditorSearchNavigation(tab, match, {
+      root: this.windowSession.workspace.state.root, copy: this.localization.catalog.editor,
+      select: (from, to) => this.editorSurface.selectRange(from, to),
+      warn: message => this.setStatus(message, "warning"),
+      prepare: () => {
+        if (this.filesEditorRuntime.commands.state.mode) this.dismissCommandSurface();
+        this.renderEditor();
+      },
     });
   }
 
@@ -5851,6 +5852,7 @@ export class AsterlynApp {
     this.languageServices?.refresh();
     const snapshot = this.windowSession.repository.state.snapshot;
     const document = this.activeDocument();
+    if (document.kind !== "project-file") this.editorNavigation.leave();
     const retainedEditorKeys = this.editorState.session.textTabs.map((tab) => tab.id);
     if (document.kind === "historical-file" || document.kind==="language-source") retainedEditorKeys.push(editorDocumentKey(document));
     this.editorSurface.retain(retainedEditorKeys);
