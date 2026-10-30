@@ -18,3 +18,8 @@ v0.1.23 passed functionality but failed strict Clippy (`items_after_test_module`
 analysis worker. Move its test module after production items, retaining identical behavior.
 The failed tag remains historical; publish v0.1.24 after local strict Clippy and fresh CI.
 SDK stays 1.14.0. Coordinate plugin policy/CI baselines to the successful v0.1.24 Release.
+
+The v0.1.24 quality gate and macOS Apple Silicon package succeeded, but Windows found a test-only
+ExitStatus display mismatch (the actual preserved code was correctly 23). Accept the exact native
+Windows/Unix display in that test, keep all isolation assertions, and publish v0.1.25. Failed tags
+remain historical; SDK stays byte-identical at 1.14.0.
