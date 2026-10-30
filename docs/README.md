@@ -254,3 +254,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-10-27-android-lsp-core.md`](benchmarks/2026-10-27-android-lsp-core.md) — Java/Kotlin Android core, exact plugin artifacts, real dirty navigation/module/crash evidence, resources and remaining limits.
 
 - [`engineering/2026-10-30-language-navigation-latency-plan.md`](engineering/2026-10-30-language-navigation-latency-plan.md) — declaration click/reference chooser latency, measured query stages and native acceptance.
+
+- [`engineering/2026-10-30-unified-find-results-plan.md`](engineering/2026-10-30-unified-find-results-plan.md) — shared Open in Window result transfer and directory/file/match trees for search and language locations.
