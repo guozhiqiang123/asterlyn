@@ -90,6 +90,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   const refresh = () => {
     const workspace = options.workspace();
     if(shownProject!==projectKey()){shownProject=projectKey();states.clear();suspended=null;}
+    for(const [id,state] of states)if(!scopeCurrent(state.scope))states.delete(id);
     renderStatus();
     const next = JSON.stringify([workspace, options.registry.list().filter((item) => item.kind === "language-service").map((item) => [item.qualifiedId, item.pluginVersion, item.serverId])]);
     if (key === next) return;

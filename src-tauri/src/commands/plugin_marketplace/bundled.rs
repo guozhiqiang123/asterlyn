@@ -11,7 +11,7 @@ pub(super) const BUNDLED_LSP_PLUGIN_ID: &str = "dev.asterlyn.lsp";
 pub(super) const BUNDLED_LSP_PLUGIN_VERSION: &str = "0.3.8";
 pub(super) const BUNDLED_LSP_REPOSITORY: &str = "guozhiqiang123/asterlyn-plugin-lsp";
 pub(super) const BUNDLED_LSP_PACKAGE_DIGEST: &str =
-    "sha256:076c79e5c0a977d3d9901581c46f8e334ea1676e2e8aa090198f6a07616f2612";
+    "sha256:7e13d86af56def8886c09a901250f737b7ed70008fe76b5c625677077f36f7b2";
 pub(super) const BUNDLED_LSP_PACKAGE: &[u8] =
     include_bytes!("../../../resources/plugins/asterlyn-plugin-lsp-0.3.8.asterlyn-plugin.tgz");
 

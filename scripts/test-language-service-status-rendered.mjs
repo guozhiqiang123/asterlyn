@@ -24,6 +24,9 @@ try{for(const [name,engine] of [["Chromium",chromium],["WebKit",webkit]]){
   const started=performance.now();await page.evaluate(()=>{for(let n=0;n<100;n++)window.languageStatusFixture.update({progress:{phase:"sources",completed:n,total:100,unit:"items"}});});assert.ok(performance.now()-started<1500);
   await page.evaluate(()=>window.languageStatusFixture.rerender());assert.equal(await status.count(),1);assert.equal(await panel.count(),1);
   await status.click();const bounds=await panel.boundingBox();assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=900&&bounds.y+bounds.height<=600);
+  await page.evaluate(()=>window.languageStatusFixture.runtime());await page.waitForFunction(()=>window.languageStatusFixture.snapshot().starts===1);assert.equal(await status.isVisible(),true);
+  await page.evaluate(()=>window.languageStatusFixture.provider(false));assert.equal(await status.isVisible(),false,"disabled providers must not leave stale indexing progress");assert.equal((await snapshot()).intervals,busyIntervals-1);
+  await page.evaluate(()=>window.languageStatusFixture.provider(true));await page.waitForFunction(()=>window.languageStatusFixture.snapshot().starts===2);assert.equal(await status.isVisible(),true);
   await page.evaluate(()=>window.languageStatusFixture.dispose());assert.equal((await snapshot()).intervals,busyIntervals-1);assert.equal(await panel.count(),0);assert.equal(await status.count(),0);assert.deepEqual(errors,[]);console.log(`${name}: progress, failure/retry, opt-in debug, keyboard focus, reduced motion and cleanup passed`);
  }finally{await browser.close();}
 }}finally{await server.close();}
