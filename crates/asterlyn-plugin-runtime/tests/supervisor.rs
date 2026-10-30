@@ -339,8 +339,13 @@ fn invoke_crash_evicts_only_the_faulty_helper_and_keeps_the_peer_usable() {
         termination.reason,
         PluginSessionTerminationReason::UnexpectedExit
     );
+    let expected_status = if cfg!(windows) {
+        "exit code: 23"
+    } else {
+        "exit status: 23"
+    };
     assert!(
-        termination.detail.contains("exit status: 23"),
+        termination.detail.ends_with(expected_status),
         "EOF termination must preserve the fixture's original exit status: {}",
         termination.detail
     );
