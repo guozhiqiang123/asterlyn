@@ -408,6 +408,7 @@ pub fn run() {
             read_installed_plugin_runtime_diagnostics,
             prepare_language_service,
             start_language_service,
+            forget_language_service_consent,
             open_language_document,
             change_language_document,
             close_language_document,

@@ -18,7 +18,7 @@ pub(crate) use git_recovery::{
 pub(crate) use language_service::{
     cancel_language_request, change_language_document, close_language_document,
     open_language_document, prepare_language_service, request_language_service,
-    start_language_service, stop_language_service,
+    start_language_service, stop_language_service, forget_language_service_consent,
 };
 pub(crate) use plugin_cache::{
     cleanup_plugin_task_cache, compute_workspace_fingerprint, mark_plugin_task_cache_dirty,

@@ -34,6 +34,7 @@ pub(crate) struct LanguageServiceReview {
     pub resource_digest: String,
     pub executable_identity: String,
     pub expires_at: u64,
+    pub remembered: bool,
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -247,11 +248,14 @@ pub(crate) async fn prepare_language_service(
     let owner = subject(&active, &window, &workspace_root)?;
     tauri::async_runtime::spawn_blocking(move || {
         let package = installed_package(&app, &owner.root, &server_id)?;
+        let store = crate::application::language_consent::app_store_path(&app)?;
+        let remembered = crate::application::language_consent::matches(&store, &owner.root, &package).unwrap_or(false);
         let review_id = app
             .state::<LanguageServiceManager>()
             .prepare(owner, package.clone())?;
         Ok(LanguageServiceReview {
             review_id,
+            remembered,
             plugin_id,
             server_id: package.server_id().into(),
             plugin_version: package.version,
@@ -273,6 +277,7 @@ pub(crate) async fn start_language_service(
     workspace_root: String,
     review_id: String,
     server_id: Option<String>,
+    remember: Option<bool>,
     app: AppHandle,
     window: WebviewWindow,
     active: State<'_, ActiveWorkspaces>,
@@ -283,6 +288,10 @@ pub(crate) async fn start_language_service(
         let package = installed_package(&app, &owner.root, &server_id)?;
         let authority = app.state::<LanguageServiceManager>()
             .consume(&review_id, &owner, &package)?;
+        if remember == Some(true) {
+            crate::application::language_consent::remember(
+                &crate::application::language_consent::app_store_path(&app)?, &owner.root, &package)?;
+        }
         let permitted_app = app.clone();
         let permitted_owner = owner.clone();
         let digest = package.digest.clone();
@@ -342,6 +351,19 @@ async fn reply(rx: std::sync::mpsc::Receiver<Result<Value, String>>) -> Result<V
     })
     .await
     .map_err(|_| "language operation task failed")?
+}
+
+#[tauri::command]
+pub(crate) async fn forget_language_service_consent(
+    workspace_root: String, app: AppHandle, window: WebviewWindow, active: State<'_, ActiveWorkspaces>,
+) -> Result<(), String> {
+    let owner = subject(&active, &window, &workspace_root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::application::language_consent::forget(
+            &crate::application::language_consent::app_store_path(&app)?, &owner.root)?;
+        app.state::<LanguageServiceManager>().cancel_workspace(&owner.root);
+        Ok(())
+    }).await.map_err(|_| "language approval reset failed")?
 }
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]

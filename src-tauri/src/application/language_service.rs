@@ -527,6 +527,18 @@ impl LanguageServiceManager {
             reviews.retain(|_, review| review.subject.owner != owner);
         }
     }
+    pub(crate) fn cancel_workspace(&self, root: &std::path::Path) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.retain(|_, session| {
+                if session.subject.root != root { return true; }
+                let _ = session.control.try_send(ActorCommand::Stop);
+                terminate_process_tree(session.pid); false
+            });
+        }
+        if let Ok(mut reviews) = self.reviews.lock() {
+            reviews.retain(|_, review| review.subject.root != root);
+        }
+    }
     pub(crate) fn finished(&self, id: &str) {
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.remove(id);

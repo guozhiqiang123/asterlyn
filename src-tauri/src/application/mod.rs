@@ -4,6 +4,7 @@ mod git_operation_coordinator;
 pub(crate) mod git_worktree_transactions;
 mod history_page_cache;
 pub(crate) mod language_service;
+pub(crate) mod language_consent;
 mod operation_supervisor;
 mod plugin_marketplace;
 mod plugin_process_query;

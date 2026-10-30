@@ -6,6 +6,19 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 async function until(check) { for (let i = 0; i < 200 && !check(); i++) await tick(); assert.ok(check(), "expected lifecycle transition did not settle"); }
 const provider = { kind: "language-service", qualifiedId: "dev.asterlyn.lsp:typescript", pluginId: "dev.asterlyn.lsp", pluginVersion: "0.1.0", languageIds: ["typescript"], extensions: [".ts"] };
 const unrelated = { ...provider, qualifiedId: "other:rust", pluginId: "other", languageIds: ["rust"], extensions: [".rs"] };
+test("native project approval is reused after a fresh window, while explicit revocation forces confirmation", async () => {
+  const first=harness(); first.state.review.remembered=true;
+  try { await first.open(); assert.equal(first.count("confirm"),0); assert.equal(first.count("start"),1); }
+  finally { first.runtime.dispose(); }
+  const reopened=harness(); reopened.state.review.remembered=true;
+  try {
+    let port=await reopened.open();assert.equal(reopened.count("confirm"),0);
+    port.close(handle);await until(()=>reopened.count("stop")===1);
+    reopened.state.review.remembered=false;
+    port=await reopened.open();assert.equal(reopened.count("confirm"),1);
+    assert.equal(reopened.state.calls.findLast(call=>call[0]==="start").at(-1),true);
+  } finally {reopened.runtime.dispose();}
+});
 const handle = { tabId: "source", path: "source.ts", loadEpoch: 1 };
 function harness(approved = true) {
   const window = new WindowSession({}, { schedule() { throw Error("unexpected scheduling"); }, cancel() {} });
@@ -15,7 +28,7 @@ function harness(approved = true) {
   const native = {
     prepare: async (root, pluginId, serverId = "typescript") => { state.calls.push(["prepare", root]); const reviewId = `review-${++next}`; reviews.add(reviewId); return { ...state.review, pluginId, serverId, reviewId, expiresAt: Date.now() + 60000 }; },
     confirm: async (review) => { state.calls.push(["confirm", review.reviewId]); return approved; },
-    start: async (root, reviewId) => { assert.equal(reviews.delete(reviewId), true, "each process start must consume its own fresh review"); state.calls.push(["start", root]); return `session-${++next}`; },
+    start: async (root, reviewId, serverId, remember) => { assert.equal(reviews.delete(reviewId), true, "each process start must consume its own fresh review"); state.calls.push(["start", root, serverId, remember]); return `session-${++next}`; },
     open: async (...args) => { state.calls.push(["open", ...args]); }, change: async () => {}, close: async () => {},
     request: async (_root, sessionId, uri, version) => ({ sessionId, uri, version, result: null }), cancel: async () => {},
     stop: async (...args) => { state.calls.push(["stop", ...args]); },
@@ -98,7 +111,7 @@ test("a consent answer arriving after a project switch cannot authorize that new
     const old = h.open(); await until(() => h.count("confirm") === 1);
     h.window.workspace.activate({ root: "/other", repository: null }); h.runtime.refresh(); resolve(true); await old;
     assert.equal(h.count("start"), 0); await h.open(); assert.equal(h.count("confirm"), 2);
-    assert.deepEqual(h.state.calls.filter((call) => call[0] === "start"), [["start", "/other"]]);
+    assert.deepEqual(h.state.calls.filter((call) => call[0] === "start"), [["start", "/other", "typescript", true]]);
     assert.ok(h.state.approvals.some((event) => event.outcome === "discarded"));
   } finally { h.runtime.dispose(); }
 });

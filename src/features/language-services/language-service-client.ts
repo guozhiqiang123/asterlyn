@@ -132,14 +132,16 @@ class Session {
       if (review.serverId !== (this.info.serverId ?? "typescript")) throw Error("Language execution profile changed");
       const identity = JSON.stringify([review.pluginId, review.serverId, review.pluginVersion, review.packageDigest, review.resourceDigest, review.executableIdentity]);
       if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) return null;
-      if (this.consent.approvedIdentity !== identity) {
+      if (review.remembered === true) {
+        this.consent.approvedIdentity = identity; this.approval({ outcome: "reused" });
+      } else if (review.remembered === false || this.consent.approvedIdentity !== identity) {
         this.approval({ outcome: "requested", reason: this.consent.approvedIdentity === null ? "first-use" : "identity-changed" });
         const approved = await this.native.confirm(review);
         if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) { this.approval({ outcome: "discarded" }); return null; }
         if (!approved) { this.consent.denied = true; this.approval({ outcome: "declined" }); return null; }
         this.consent.approvedIdentity = identity; this.approval({ outcome: "approved" });
       } else this.approval({ outcome: "reused" });
-      const session = await this.native.start(this.info.workspaceRoot, review.reviewId, this.info.serverId ?? "typescript");
+      const session = await this.native.start(this.info.workspaceRoot, review.reviewId, this.info.serverId ?? "typescript", true);
       if (this.dead || ![...this.docs.values()].some((doc) => this.current(doc))) { await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); return null; }
       this.sessionId = session; return session;
     })().finally(() => { this.starting = null; });
