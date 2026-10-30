@@ -1,6 +1,6 @@
 [package]
 name = "asterlyn"
-version = "0.1.23"
+version = "0.1.24"
 description = "A lightweight developer workspace with Git at its center"
 edition.workspace = true
 license.workspace = true

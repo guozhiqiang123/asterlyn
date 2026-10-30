@@ -11,3 +11,10 @@ User authorization covers commits, host version/tag/push, Actions monitoring, an
 | R4 | Delivery audit | Independently verify remote commit/tag, Actions and Release asset digests; record URLs and limits |
 
 Publish the host through GitRepository preview/ordinary Push, without rewriting remote history. Publish LSP only after the compatible host SDK Release succeeds. Development SDK bytes are not evidence of a published artifact. Freeze existing Kotlin/JDT component archives by manifest digests; distribute only verified archives, retaining source/license records and reusable verification scripts.
+
+## First CI result and follow-up
+
+v0.1.23 passed functionality but failed strict Clippy (`items_after_test_module`) in the
+analysis worker. Move its test module after production items, retaining identical behavior.
+The failed tag remains historical; publish v0.1.24 after local strict Clippy and fresh CI.
+SDK stays 1.14.0. Coordinate plugin policy/CI baselines to the successful v0.1.24 Release.
