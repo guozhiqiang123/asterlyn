@@ -6,6 +6,8 @@ use actor_runtime::actor;
 mod diagnostics;
 #[path = "language_service_sources.rs"]
 mod sources;
+#[path = "language_service_trace.rs"]
+mod trace;
 use asterlyn_language_service::{
     DocumentIdentity, DocumentState, JsonRpcId, JsonRpcMessage, LanguageServiceProcess,
     PackagedServerProfile, RustServerProfile, ServerEvent, TextChange, TextPosition,
@@ -75,6 +77,7 @@ struct Session {
 }
 #[derive(Default)]
 pub(crate) struct LanguageServiceManager {
+    tracing: Arc<AtomicBool>,
     sessions: Mutex<HashMap<String, Session>>,
     reviews: Mutex<HashMap<String, Review>>,
     sequence: AtomicU64,
@@ -95,6 +98,10 @@ pub(crate) struct LanguageServiceEvent {
     pub version: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +122,7 @@ pub(crate) struct ModelReply {
 pub(crate) type ModelAccess =
     Arc<dyn Fn(Arc<AtomicBool>, bool) -> Result<ModelReply, String> + Send + Sync>;
 pub(super) struct ActorServices {
+    pub tracing: Arc<AtomicBool>,
     selectors: Option<Vec<(String, Vec<String>)>>,
     model_access: Option<ModelAccess>,
 }
@@ -160,6 +168,7 @@ struct DiagnosticJob {
     failed: bool,
 }
 struct Pending {
+    started: Instant,
     external: String,
     uri: String,
     version: i64,
@@ -169,6 +178,12 @@ struct Pending {
 }
 
 impl LanguageServiceManager {
+    pub(crate) fn debug_enabled(&self) -> bool {
+        self.tracing.load(Ordering::Relaxed)
+    }
+    pub(crate) fn set_debug(&self, enabled: bool) {
+        self.tracing.store(enabled, Ordering::Relaxed);
+    }
     pub(crate) fn prepare(
         &self,
         subject: LanguageSubject,
@@ -324,6 +339,7 @@ impl LanguageServiceManager {
                 .tempdir_in(&profile.cache_parent)
                 .map_err(|_| "language cache unavailable")?;
             profile.initialization_options["analysis"]["stateDirectory"] = json!(directory.path());
+            profile.initialization_options["analysis"]["debugTrace"] = json!(self.debug_enabled());
             let process = LanguageServiceProcess::start_packaged(&profile);
             cache = Some(directory);
             process
@@ -370,6 +386,7 @@ impl LanguageServiceManager {
         );
         drop(sessions);
         let actor_id = id.clone();
+        let tracing = self.tracing.clone();
         std::thread::spawn(move || {
             let _cache = cache;
             actor(
@@ -380,6 +397,7 @@ impl LanguageServiceManager {
                 allowed,
                 emit,
                 ActorServices {
+                    tracing: tracing.clone(),
                     selectors,
                     model_access,
                 },
@@ -530,9 +548,12 @@ impl LanguageServiceManager {
     pub(crate) fn cancel_workspace(&self, root: &std::path::Path) {
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.retain(|_, session| {
-                if session.subject.root != root { return true; }
+                if session.subject.root != root {
+                    return true;
+                }
                 let _ = session.control.try_send(ActorCommand::Stop);
-                terminate_process_tree(session.pid); false
+                terminate_process_tree(session.pid);
+                false
             });
         }
         if let Ok(mut reviews) = self.reviews.lock() {

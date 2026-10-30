@@ -25,6 +25,10 @@ pub struct Progress {
     pub count: Option<u64>,
     pub duration_ms: Option<u64>,
     pub cause_class: Option<String>,
+    pub error_code: Option<String>,
+    pub cause_chain: Option<String>,
+    pub source_file: Option<String>,
+    pub source_line: Option<u64>,
 }
 /// Created by the native admission boundary. Not deserializable from a plugin/frontend.
 pub struct AdmittedProgram {
@@ -331,6 +335,7 @@ pub(super) fn verify_artifact(artifact: &SealedArtifact) -> Result<(), String> {
 }
 fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
     let mut last = Instant::now() - Duration::from_secs(1);
+    let mut terminal_seen = false;
     let mut chunk = [0u8; 4096];
     let mut line = Vec::new();
     let mut overflow = false;
@@ -344,7 +349,6 @@ fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
         for byte in &chunk[..count] {
             if *byte == b'\n' {
                 if !overflow
-                    && last.elapsed() >= Duration::from_millis(100)
                     && let Ok(value) = serde_json::from_slice::<serde_json::Value>(&line)
                     && let Some(stage) = value.get("stage").and_then(|v| v.as_str()).filter(|v| {
                         !v.is_empty()
@@ -355,7 +359,10 @@ fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
                                     || matches!(b, b'.' | b'-')
                             })
                     })
+                    && (last.elapsed() >= Duration::from_millis(100)
+                        || (stage == "error" && !terminal_seen))
                 {
+                    terminal_seen |= stage == "error";
                     last = Instant::now();
                     let event = Progress {
                         stage: stage.into(),
@@ -371,6 +378,46 @@ fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
                                     })
                             })
                             .map(str::to_owned),
+                        error_code: value
+                            .get("errorCode")
+                            .and_then(|v| v.as_str())
+                            .filter(|name| {
+                                !name.is_empty()
+                                    && name.len() <= 80
+                                    && name.bytes().all(|b| {
+                                        b.is_ascii_lowercase()
+                                            || b.is_ascii_digit()
+                                            || matches!(b, b'.' | b'-')
+                                    })
+                            })
+                            .map(str::to_owned),
+                        cause_chain: value
+                            .get("causeChain")
+                            .and_then(|v| v.as_str())
+                            .filter(|name| {
+                                name.len() <= 160
+                                    && name.bytes().all(|b| {
+                                        b.is_ascii_alphanumeric()
+                                            || matches!(b, b'.' | b'$' | b'_' | b'>')
+                                    })
+                            })
+                            .map(str::to_owned),
+                        source_file: value
+                            .get("sourceFile")
+                            .and_then(|v| v.as_str())
+                            .filter(|name| {
+                                !name.is_empty()
+                                    && name.len() <= 96
+                                    && !name.contains("..")
+                                    && name.bytes().all(|b| {
+                                        b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_')
+                                    })
+                            })
+                            .map(str::to_owned),
+                        source_line: value
+                            .get("sourceLine")
+                            .and_then(|v| v.as_u64())
+                            .filter(|n| *n > 0 && *n <= 1_000_000),
                     };
                     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink(event)));
                 }
@@ -382,6 +429,43 @@ fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
                 overflow = true
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+    #[test]
+    fn bounded_diagnostics_keep_terminal_failures_and_discard_raw_paths_and_messages() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let captured = events.clone();
+        let input = concat!(
+            "{\"stage\":\"model\"}\n",
+            "{\"stage\":\"error\",\"errorCode\":\"project-configuration-failed\",\"causeClass\":\"org.gradle.GradleException\",\"causeChain\":\"org.gradle.BuildFailure>org.gradle.GradleException\",\"sourceFile\":\"build.gradle\",\"sourceLine\":18,\"message\":\"secret\"}\n"
+        );
+        drain_progress(
+            input.as_bytes(),
+            Arc::new(move |event| captured.lock().unwrap().push(event)),
+        );
+        let values = events.lock().unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(
+            values[1].error_code.as_deref(),
+            Some("project-configuration-failed")
+        );
+        assert_eq!(values[1].source_line, Some(18));
+        assert!(!format!("{:?}", *values).contains("secret"));
+        drop(values);
+        let captured = events.clone();
+        drain_progress(b"{\"stage\":\"error\",\"causeChain\":\"password=secret\",\"sourceFile\":\"/private/build.gradle\",\"sourceLine\":0,\"errorCode\":\"bad code secret\"}\n".as_slice(),Arc::new(move|event|captured.lock().unwrap().push(event)));
+        let values = events.lock().unwrap();
+        let last = values.last().unwrap();
+        assert!(
+            last.cause_chain.is_none()
+                && last.source_file.is_none()
+                && last.source_line.is_none()
+                && last.error_code.is_none()
+        );
     }
 }
 

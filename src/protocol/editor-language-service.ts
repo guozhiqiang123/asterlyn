@@ -42,3 +42,6 @@ export type EditorLanguageServicePortFactory = (handle: EditorLanguageServiceHan
 export class LanguageServiceIndexingError extends Error {
   constructor() { super("Language services are indexing this project."); this.name = "LanguageServiceIndexingError"; }
 }
+export class LanguageServiceUnavailableError extends Error {
+  constructor() { super("Language services are unavailable. Check language service status and retry."); this.name = "LanguageServiceUnavailableError"; }
+}

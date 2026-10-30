@@ -53,11 +53,13 @@ before integration; do not silently ship incompatible layouts.
   workspace document and after host-owned workspace/server execution approval.
 - Approval binds workspace/window activation, plugin identity/version/digest, server assets and
   executable identity. Revalidate before launch and revoke on replacement/disable/window close.
-- The enable/decline choice is in-memory for the current window's WorkspaceSession identity, not
-  its Git-operation generation. Transport and one-use native reviews are independent: an idle or
-  manually reactivated process still obtains a fresh review, while an identical fingerprint can
-  reuse the current project's choice. Explicit plugin disable/uninstall clears that choice;
-  project/provider-version changes and window shutdown prune it. No cross-restart grant is stored.
+- Project approval is stored by the native host against canonical directory identity, profile,
+  package/resource chain and actual tools. Reopening a project and restarting the application can
+  reuse only an identical approval; replacement directories, worktrees and changed package/tool
+  identities require review again. Transport still consumes a fresh one-use native review. Decline
+  stays in-memory for the current project session. Clearing project approval stops its live sessions
+  and removes its persisted grants. See the 2026-10-30 lifecycle plan for automatic model-backed
+  startup, visible progress and session-only opt-in debug tracing.
 - Node/server subprocesses run as the user. No OS filesystem/network sandbox is claimed. Approval
   must describe native code execution and project/source access. No shell, automatic `npm install`,
   arbitrary download, project-local interpreter, or unreviewed project plugin loading is allowed.

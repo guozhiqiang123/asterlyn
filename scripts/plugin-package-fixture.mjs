@@ -2,7 +2,7 @@ import { gunzipSync } from "node:zlib";
 import { readFile } from "node:fs/promises";
 
 export const BUNDLED_ANDROID_PACKAGE_URL = new URL(
-  "../src-tauri/resources/plugins/asterlyn-plugin-android-gradle-0.6.2.asterlyn-plugin.tgz",
+  "../src-tauri/resources/plugins/asterlyn-plugin-android-gradle-0.6.3.asterlyn-plugin.tgz",
   import.meta.url,
 );
 

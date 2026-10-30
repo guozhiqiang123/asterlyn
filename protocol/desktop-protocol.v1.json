@@ -17,6 +17,7 @@
     "InstalledPluginRuntimeDiagnostics": "./plugin-runtime",
     "PluginRuntimeTheme": "./plugin-runtime",
     "PluginRuntimeValue": "./plugin-runtime"
+    ,"LanguageServiceWorkspaceState": "./language-service"
     ,"LanguageServiceReview": "./language-service"
     ,"LanguageServiceTextChange": "./language-service"
     ,"LanguageServiceResultEnvelope": "./language-service"
@@ -48,9 +49,11 @@
     { "name": "invoke_installed_plugin_callback", "args": { "pluginId": "string", "callbackHandle": "string", "operation": "string", "payload": "PluginRuntimeValue" }, "result": "PluginRuntimeValue", "validator": "pluginRuntimeValue" },
     { "name": "deactivate_installed_plugin_runtime", "args": { "pluginId": "string" }, "result": "void", "validator": "void" },
     { "name": "read_installed_plugin_runtime_diagnostics", "args": { "pluginId": "string" }, "result": "InstalledPluginRuntimeDiagnostics", "validator": "installedPluginRuntimeDiagnostics" },
+    { "name": "language_service_workspace_state", "args": { "workspaceRoot": "string" }, "result": "LanguageServiceWorkspaceState", "validator": "languageServiceWorkspaceState" },
+    { "name": "set_language_service_debug", "args": { "enabled": "boolean" }, "result": "void", "validator": "void" },
     { "name": "prepare_language_service", "args": { "workspaceRoot": "string", "pluginId": "string", "serverId?": "string" }, "result": "LanguageServiceReview", "validator": "languageServiceReview" },
     { "name": "forget_language_service_consent", "args": { "workspaceRoot": "string" }, "result": "void", "validator": "void" },
-    { "name": "start_language_service", "args": { "workspaceRoot": "string", "reviewId": "string", "serverId?": "string", "remember?": "boolean" }, "result": "string", "validator": "string" },
+    { "name": "start_language_service", "args": { "workspaceRoot": "string", "reviewId": "string", "serverId?": "string", "remember?": "boolean", "refreshModel?": "boolean" }, "result": "string", "validator": "string" },
     { "name": "open_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "languageId": "string", "version": "number", "text": "string" }, "result": "void", "validator": "void" },
     { "name": "change_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "version": "number", "changes": "array:LanguageServiceTextChange" }, "result": "void", "validator": "void" },
     { "name": "close_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string" }, "result": "void", "validator": "void" },

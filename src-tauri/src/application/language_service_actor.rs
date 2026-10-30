@@ -12,6 +12,7 @@ pub(super) fn actor(
     let ActorServices {
         selectors,
         model_access,
+        tracing,
     } = services;
     let alive = Arc::new(AtomicBool::new(true));
     struct Alive(Arc<AtomicBool>);
@@ -46,9 +47,24 @@ pub(super) fn actor(
     let mut diagnostic_pending = HashMap::<u64, (String, i64, Instant)>::new();
     let mut diagnostic_jobs = HashMap::<String, DiagnosticJob>::new();
     let mut authority_check = Instant::now();
+    let mut trace_state = false;
+    let mut failure_code: Option<String> = None;
+    let mut trace = super::trace::LanguageTrace::new(tracing.clone(), emit.clone(), id.clone());
+    let mut termination = "session-ended";
     'session: loop {
+        let next_trace = tracing.load(Ordering::Relaxed);
+        if next_trace != trace_state {
+            trace_state = next_trace;
+            if packaged {
+                let _ = process.notify(
+                    "asterlyn/setDebugTracing",
+                    Some(json!({"enabled":next_trace})),
+                );
+            }
+        }
         if authority_check.elapsed() >= Duration::from_millis(250) {
             if !allowed() {
+                termination = "authority-revoked";
                 break;
             }
             if model_resource
@@ -70,6 +86,12 @@ pub(super) fn actor(
         if let Ok(result) = model_receiver.try_recv()
             && let Some(request) = model_pending.take()
         {
+            trace.record(
+                "model.completed",
+                None,
+                None,
+                || json!({"outcome":if result.is_ok(){"completed"}else{"failed"}}),
+            );
             let value = match result {
                 Ok(reply) if reply.resource.is_current() => {
                     if model_resource
@@ -81,7 +103,18 @@ pub(super) fn actor(
                     model_resource = Some(reply.resource);
                     Ok(reply.value)
                 }
-                _ => Err("workspace model is no longer current".into()),
+                Ok(_) => Err("model-obsolete".into()),
+                Err(error) => Err(
+                    if error.len() <= 80
+                        && error.bytes().all(|b| {
+                            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-')
+                        })
+                    {
+                        error
+                    } else {
+                        "model-unavailable".into()
+                    },
+                ),
             };
             if process.reply_to_server(request.id, value).is_err() {
                 break;
@@ -122,6 +155,8 @@ pub(super) fn actor(
                             job.remaining = job.remaining.saturating_sub(1);
                             if job.remaining == 0 && !job.failed {
                                 emit(LanguageServiceEvent {
+                                    progress: None,
+                                    details: None,
                                     session_id: id.clone(),
                                     kind: "diagnostics",
                                     code: None,
@@ -138,13 +173,30 @@ pub(super) fn actor(
                             let result = if !valid || request.model_generation != model_generation {
                                 Err("language result is stale".into())
                             } else if let Some(error) = response.error {
-                                Err(response_failure(error.code).into())
+                                if packaged
+                                    && error.code != -32801
+                                    && !error.message.is_empty()
+                                    && error.message.len() <= 80
+                                    && error.message.bytes().all(|b| {
+                                        b.is_ascii_lowercase()
+                                            || b.is_ascii_digit()
+                                            || matches!(b, b'.' | b'-')
+                                    })
+                                {
+                                    Err(format!(
+                                        "Language services are unavailable ({}). Check language service status and retry.",
+                                        error.message
+                                    ))
+                                } else {
+                                    Err(response_failure(error.code).into())
+                                }
                             } else {
                                 {
                                     let value = response.result.unwrap_or(Value::Null);
                                     sources::validate_sources(&value).map(|()| value)
                                 }
                             };
+                            trace.response(&request, &result);
                             let _ = request.reply.send(result);
                         }
                     }
@@ -189,6 +241,7 @@ pub(super) fn actor(
                         && let Some(access) = model_access.as_ref()
                     {
                         let access = access.clone();
+                        trace.record("model.started", None, None, || json!({}));
                         let lifetime = alive.clone();
                         let sender = model_sender.clone();
                         let refresh = request
@@ -227,13 +280,8 @@ pub(super) fn actor(
                                     })
                             })
                     {
-                        emit(LanguageServiceEvent {
-                            session_id: id.clone(),
-                            kind: "backend-log",
-                            code: Some(code.into()),
-                            uri: None,
-                            version: None,
-                            diagnostics: None,
+                        trace.record(&format!("backend.{code}"), None, None, || {
+                            super::trace::backend_details(notification.params.as_ref())
                         });
                     }
                     if (rust || packaged)
@@ -258,6 +306,14 @@ pub(super) fn actor(
                             })
                             .map(str::to_owned);
                         let was_ready = rust_ready;
+                        failure_code = if health == "error" {
+                            Some(
+                                code.clone()
+                                    .unwrap_or_else(|| "language-service-unavailable".into()),
+                            )
+                        } else {
+                            None
+                        };
                         rust_ready = quiescent && health != "error";
                         if rust_ready && !was_ready {
                             for (number, _) in diagnostic_pending.drain() {
@@ -271,6 +327,8 @@ pub(super) fn actor(
                             }
                         }
                         emit(LanguageServiceEvent {
+                            progress: super::super::language_progress::progress(params),
+                            details: None,
                             session_id: id.clone(),
                             kind: if health == "error" {
                                 "degraded"
@@ -296,6 +354,8 @@ pub(super) fn actor(
                         && items.len() <= 512
                     {
                         emit(LanguageServiceEvent {
+                            progress: None,
+                            details: None,
                             session_id: id.clone(),
                             kind: "diagnostics",
                             code: None,
@@ -307,7 +367,23 @@ pub(super) fn actor(
                         });
                     }
                 }
-                Ok(Some(ServerEvent::Eof | ServerEvent::Io(_))) | Err(_) => break 'session,
+                Ok(Some(ServerEvent::Eof)) => {
+                    termination = "backend-exited";
+                    break 'session;
+                }
+                Ok(Some(ServerEvent::Io(_))) => {
+                    termination = "transport-failed";
+                    break 'session;
+                }
+                Err(asterlyn_language_service::SessionError::LimitExceeded(reason)) => {
+                    trace.record("resource-limit", None, None, || json!({"reason":reason}));
+                    termination = "resource-limit";
+                    break 'session;
+                }
+                Err(_) => {
+                    termination = "transport-failed";
+                    break 'session;
+                }
                 Ok(None) => break,
             }
         }
@@ -318,6 +394,7 @@ pub(super) fn actor(
             .collect::<Vec<_>>();
         for number in expired {
             if let Some(p) = pending.remove(&number) {
+                trace.record("request.timeout",Some(&p.uri),Some(p.version),||json!({"requestId":p.external,"durationMs":p.started.elapsed().as_millis() as u64}));
                 let _ = process.cancel(number);
                 let _ = p.reply.send(Err("language request timed out".into()));
             }
@@ -383,8 +460,12 @@ pub(super) fn actor(
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
             Err(_) => break,
         };
+        trace.command(&command);
         match command {
-            ActorCommand::Stop => break,
+            ActorCommand::Stop => {
+                termination = "requested-stop";
+                break;
+            }
             ActorCommand::Open {
                 uri,
                 language,
@@ -550,7 +631,7 @@ pub(super) fn actor(
                 let result = (|| {
                     let doc = documents.get(&uri).ok_or("language document is not open")?;
                     if (rust || packaged) && !rust_ready {
-                        return Err("Language services are loading this project. Try navigation again shortly.".into());
+                        return Err(if failure_code.is_some() { "Language services could not load this project. Check language service status and retry." } else { "Language services are loading this project. Try navigation again shortly." }.into());
                     }
                     if doc.version != version
                         || request_id.is_empty()
@@ -579,6 +660,7 @@ pub(super) fn actor(
                         pending.insert(
                             number,
                             Pending {
+                                started: Instant::now(),
                                 external: request_id,
                                 uri,
                                 version,
@@ -613,9 +695,11 @@ pub(super) fn actor(
     }
     let _ = process.stop();
     emit(LanguageServiceEvent {
+        progress: None,
+        details: None,
         session_id: id,
         kind: "terminated",
-        code: None,
+        code: Some(termination.into()),
         uri: None,
         version: None,
         diagnostics: None,

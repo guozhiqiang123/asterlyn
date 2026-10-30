@@ -1,0 +1,15 @@
+.language-service-status { margin-inline-start: 10px; padding: 1px 7px; min-width: 0; max-width: min(52vw, 480px); border: 0; color: inherit; background: transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
+.language-service-status:hover { background: var(--accent-soft); }
+.language-service-status[data-state="failed"] { color: var(--text); border-bottom: 1px solid var(--danger); }
+.language-service-status[data-busy="true"]::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-inline-end: 6px; border: 1px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: language-service-spin 1s linear infinite; }
+@keyframes language-service-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .language-service-status::before { animation: none !important; } }
+.language-service-details { position: fixed; z-index: 65; inset-inline-start: 12px; bottom: 35px; width: min(470px, calc(100vw - 24px)); max-height: min(560px, calc(100vh - 72px)); overflow: auto; padding: 14px; background: var(--bg-panel); color: var(--text); border: 1px solid var(--border-strong); border-radius: 7px; box-shadow: 0 8px 28px var(--shadow-dialog); font-size: 12px; }
+.language-service-details[hidden], .language-service-status[hidden] { display: none; }
+.language-service-details header { display: flex; align-items: center; justify-content: space-between; margin-block-end: 12px; }
+.language-service-close { border: 0; background: transparent; color: inherit; font-size: 20px; padding: 0 6px; }
+.language-service-list section { display: flex; flex-direction: column; gap: 5px; padding-block: 8px; border-block-end: 1px solid var(--border); }
+.language-service-details small, .language-service-details code { display: block; color: var(--text-muted); overflow-wrap: anywhere; }
+.language-service-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 12px; }
+.language-service-details label { display: flex; gap: 7px; align-items: center; margin-block: 8px; }
+.language-service-details progress { width: 100%; }

@@ -324,6 +324,8 @@ pub fn run() {
                 }),
             );
             app.manage(diagnostics);
+            app.state::<LanguageServiceManager>()
+                .set_debug(std::env::var("ASTERLYN_LSP_TRACE").as_deref() == Ok("1"));
             ensure_bundled_plugins(app.handle()).map_err(std::io::Error::other)?;
             recover_interrupted_plugin_activations(app.handle()).map_err(std::io::Error::other)?;
             let plugin_hosts = build_plugin_host_supervisor(app.handle().clone())
@@ -407,6 +409,8 @@ pub fn run() {
             deactivate_installed_plugin_runtime,
             read_installed_plugin_runtime_diagnostics,
             prepare_language_service,
+            language_service_workspace_state,
+            set_language_service_debug,
             start_language_service,
             forget_language_service_consent,
             open_language_document,

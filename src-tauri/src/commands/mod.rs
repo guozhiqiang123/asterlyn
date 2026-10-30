@@ -5,6 +5,10 @@ mod git_operations;
 mod git_recovery;
 mod language_rust;
 mod language_service;
+mod language_service_state;
+pub(crate) use language_service_state::{
+    language_service_workspace_state, set_language_service_debug,
+};
 pub(crate) mod packaged_analysis;
 mod plugin_cache;
 mod plugin_marketplace;
@@ -17,8 +21,8 @@ pub(crate) use git_recovery::{
 };
 pub(crate) use language_service::{
     cancel_language_request, change_language_document, close_language_document,
-    open_language_document, prepare_language_service, request_language_service,
-    start_language_service, stop_language_service, forget_language_service_consent,
+    forget_language_service_consent, open_language_document, prepare_language_service,
+    request_language_service, start_language_service, stop_language_service,
 };
 pub(crate) use plugin_cache::{
     cleanup_plugin_task_cache, compute_workspace_fingerprint, mark_plugin_task_cache_dirty,

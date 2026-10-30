@@ -249,7 +249,9 @@ pub(crate) async fn prepare_language_service(
     tauri::async_runtime::spawn_blocking(move || {
         let package = installed_package(&app, &owner.root, &server_id)?;
         let store = crate::application::language_consent::app_store_path(&app)?;
-        let remembered = crate::application::language_consent::matches(&store, &owner.root, &package).unwrap_or(false);
+        let remembered =
+            crate::application::language_consent::matches(&store, &owner.root, &package)
+                .unwrap_or(false);
         let review_id = app
             .state::<LanguageServiceManager>()
             .prepare(owner, package.clone())?;
@@ -278,6 +280,7 @@ pub(crate) async fn start_language_service(
     review_id: String,
     server_id: Option<String>,
     remember: Option<bool>,
+    refresh_model: Option<bool>,
     app: AppHandle,
     window: WebviewWindow,
     active: State<'_, ActiveWorkspaces>,
@@ -321,15 +324,22 @@ pub(crate) async fn start_language_service(
         });
         let event_app = app.clone();
         let label = owner.owner.clone();
-        let emit = Arc::new(
-            move |event: crate::application::language_service::LanguageServiceEvent| {
-                if event.kind == "terminated" { event_app.state::<LanguageServiceManager>().finished(&event.session_id); }
-            event_app.state::<DiagnosticsLog>().info("language.service", match event.kind { "terminated"=>"session.terminated", "indexing"=>"workspace.indexing", "ready"=>"workspace.ready", "degraded"=>"workspace.degraded", "backend-log"=>"backend.failed", _=>"diagnostics.completed" }, None,
-                serde_json::json!({"sessionId":event.session_id,"code":event.code,"version":event.version,"diagnosticCount":event.diagnostics.as_ref().and_then(Value::as_array).map(Vec::len),"documentHash":event.uri.as_ref().map(|uri|event_app.state::<DiagnosticsLog>().hash_identifier(uri))}));
-            let _ = event_app.emit_to(&label, EVENT, event);
-            },
-        );
+        let workspace_hash=app.state::<DiagnosticsLog>().hash_identifier(owner.root.to_string_lossy().as_bytes());
+        let emit = Arc::new(move |event: crate::application::language_service::LanguageServiceEvent| {
+            let log=event_app.state::<DiagnosticsLog>();
+            let manager=event_app.state::<LanguageServiceManager>();
+            if event.kind == "terminated" { manager.finished(&event.session_id); }
+            let fields=serde_json::json!({"window":label,"workspaceHash":workspace_hash,"sessionId":event.session_id,"code":event.code,"version":event.version,"progress":event.progress,"diagnosticCount":event.diagnostics.as_ref().and_then(Value::as_array).map(Vec::len),"documentHash":event.uri.as_ref().map(|uri|log.hash_identifier(uri))});
+            if event.kind=="debug" {
+                if manager.debug_enabled() {let mut fields=fields;fields["details"]=event.details.unwrap_or(Value::Null);log.info("language.debug",event.code.as_deref().unwrap_or("operation"),Some(&event.session_id),fields);}
+                return;
+            }
+            log.info("language.service",match event.kind {"terminated"=>"session.terminated","indexing"=>"workspace.indexing","ready"=>"workspace.ready","degraded"=>"workspace.degraded",_=>"diagnostics.completed"},Some(&event.session_id),fields);
+            let _=event_app.emit_to(&label,EVENT,event);
+        });
         let models=super::packaged_analysis::model_access(&app,&owner,&package)?;
+        let mut package=package;
+        if let Some(profile)=package.packaged.as_mut(){profile.initialization_options["analysis"]["refreshModel"]=serde_json::json!(refresh_model.unwrap_or(false));}
         let session = app
             .state::<LanguageServiceManager>()
             .start_with_models(owner, package, authority, allowed, emit, models)?;
@@ -355,15 +365,23 @@ async fn reply(rx: std::sync::mpsc::Receiver<Result<Value, String>>) -> Result<V
 
 #[tauri::command]
 pub(crate) async fn forget_language_service_consent(
-    workspace_root: String, app: AppHandle, window: WebviewWindow, active: State<'_, ActiveWorkspaces>,
+    workspace_root: String,
+    app: AppHandle,
+    window: WebviewWindow,
+    active: State<'_, ActiveWorkspaces>,
 ) -> Result<(), String> {
     let owner = subject(&active, &window, &workspace_root)?;
     tauri::async_runtime::spawn_blocking(move || {
         crate::application::language_consent::forget(
-            &crate::application::language_consent::app_store_path(&app)?, &owner.root)?;
-        app.state::<LanguageServiceManager>().cancel_workspace(&owner.root);
+            &crate::application::language_consent::app_store_path(&app)?,
+            &owner.root,
+        )?;
+        app.state::<LanguageServiceManager>()
+            .cancel_workspace(&owner.root);
         Ok(())
-    }).await.map_err(|_| "language approval reset failed")?
+    })
+    .await
+    .map_err(|_| "language approval reset failed")?
 }
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]

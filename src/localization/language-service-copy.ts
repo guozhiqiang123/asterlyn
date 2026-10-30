@@ -1,4 +1,6 @@
+import { EN_LANGUAGE_STATUS, ZH_LANGUAGE_STATUS, type LanguageServiceStatusCopy } from "./language-service-status-copy.ts";
 export interface LanguageServiceCopy {
+  workspaceStatus:LanguageServiceStatusCopy;
   readOnlySource:string;
   indexing: string; requestFailed: string;
   pointerHint: string; findingDefinition: string; chooseDefinition: string; definitionsLimited: string;
@@ -6,6 +8,7 @@ export interface LanguageServiceCopy {
   findingReferences: string; chooseReference: string; noReferences: string; filterLocations: string; noMatchingLocations: string; limitedLocations: string;
 }
 export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  workspaceStatus:EN_LANGUAGE_STATUS,
   readOnlySource:"Dependency source (read-only)",
   indexing: "Language services are indexing this project. Try again shortly.", requestFailed: "The language service request failed. Check the service status or logs.",
   pointerHint: "Ctrl-click to go to definition or usages (Command-click also works on macOS)",
@@ -19,6 +22,7 @@ export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
   filterLocations: "Filter by file or path", noMatchingLocations: "No matching locations.", limitedLocations: "Showing the first {count} locations",
 };
 export const ZH_CN_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  workspaceStatus:ZH_LANGUAGE_STATUS,
   readOnlySource:"依赖源码（只读）",
   indexing: "语言服务正在加载和索引项目，请稍后再试。", requestFailed: "语言服务请求失败，请检查服务状态或日志。",
   pointerHint: "Ctrl＋单击跳转到定义或引用（macOS 也支持 ⌘＋单击）",

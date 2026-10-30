@@ -79,6 +79,16 @@ fn cache(app: &AppHandle) -> Result<PathBuf, String> {
         .map(|root| root.join("analysis"))
         .map_err(|_| "analysis cache unavailable".into())
 }
+pub(super) fn startup_profiles(app: &AppHandle) -> Result<Vec<String>, String> {
+    let (_, report, _) = package(app, "dev.asterlyn.lsp")?;
+    Ok(report
+        .management_manifest
+        .language_servers
+        .iter()
+        .filter(|server| server.model.is_some())
+        .map(|server| server.id.clone())
+        .collect())
+}
 fn resources(
     app: &AppHandle,
     workspace: &Path,
@@ -376,7 +386,10 @@ pub(super) fn model_access(
                         _ => "workspace model authority is unavailable",
                     }
                 })?;
-            let input = json!({"protocolVersion":1,"workspaceRoot":owner.root,"state":state,"tools":admitted_resources["tools"],"components":admitted_resources["components"],"inputDigest":fingerprint});
+            let debug = app
+                .state::<crate::application::language_service::LanguageServiceManager>()
+                .debug_enabled();
+            let input = json!({"protocolVersion":1,"workspaceRoot":owner.root,"state":state,"tools":admitted_resources["tools"],"components":admitted_resources["components"],"inputDigest":fingerprint,"debugTrace":debug});
             let mut environment = BTreeMap::new();
             for name in ["HOME", "USERPROFILE", "TMPDIR", "TEMP", "SystemRoot"] {
                 if let Some(value) = std::env::var_os(name) {
@@ -443,10 +456,43 @@ pub(super) fn model_access(
             let program = program.with_launch_guard(launch_guard);
             let progress_app = app.clone();
             let service = provider.id.clone();
+            let error_code = Arc::new(Mutex::new(None::<String>));
+            let worker_error = error_code.clone();
+            let workspace_hash = app
+                .state::<DiagnosticsLog>()
+                .hash_identifier(owner.root.to_string_lossy().as_bytes());
+            let window = owner.owner.clone();
             let progress = Arc::new(move |progress: asterlyn_plugin_analysis::Progress| {
-                progress_app.state::<DiagnosticsLog>().info("language.model","worker.progress",None,json!({"serviceId":service,"stage":progress.stage,"count":progress.count,"durationMs":progress.duration_ms,"causeClass":progress.cause_class}));
+                if progress.stage == "error" {
+                    if let Ok(mut code) = worker_error.lock() {
+                        *code = progress.error_code.clone();
+                    }
+                }
+                let mut fields = json!({"window":window,"workspaceHash":workspace_hash,"serviceId":service,"stage":progress.stage,"count":progress.count,"durationMs":progress.duration_ms,"code":progress.error_code,"causeClass":progress.cause_class});
+                if progress_app
+                    .state::<crate::application::language_service::LanguageServiceManager>()
+                    .debug_enabled()
+                {
+                    fields["causeChain"] = json!(progress.cause_chain);
+                    fields["sourceFile"] = json!(progress.source_file);
+                    fields["sourceLine"] = json!(progress.source_line);
+                }
+                progress_app.state::<DiagnosticsLog>().info(
+                    "language.model",
+                    "worker.progress",
+                    None,
+                    fields,
+                );
             });
-            let handle = runtime.acquire(grant, program, authority, allowed, progress)?;
+            let handle = runtime
+                .acquire(grant, program, authority, allowed, progress)
+                .map_err(|error| {
+                    error_code
+                        .lock()
+                        .ok()
+                        .and_then(|code| code.clone())
+                        .unwrap_or(error)
+                })?;
             if inputs::fingerprint(&owner.root, &provider.input_globs)? != fingerprint
                 || selection(&app, &owner, &producer, &provider, &runtime_entry)? != state
             {
@@ -477,6 +523,13 @@ pub(super) fn model_access(
                 "authority-revoked"
             } else if error.contains("input") || error.contains("fingerprint") {
                 "inputs-unavailable"
+            } else if !error.is_empty()
+                && error.len() <= 80
+                && error.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-')
+                })
+            {
+                error.as_str()
             } else {
                 "model-unavailable"
             };

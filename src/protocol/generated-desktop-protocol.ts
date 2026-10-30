@@ -6,7 +6,7 @@ import type { PluginProcessQueryResult } from "./plugin-process-query";
 import type { PluginToolOperationParameters, PluginToolOperationResult } from "./plugin-tool-operation";
 import type { PluginSourceSnapshot, PluginInstallationSnapshot, InstalledPluginManifestSnapshot, PluginPackageAdmissionReview } from "./plugin-marketplace";
 import type { InstalledPluginActivation, InstalledPluginRuntimeDiagnostics, PluginRuntimeTheme, PluginRuntimeValue } from "./plugin-runtime";
-import type { LanguageServiceReview, LanguageServiceTextChange, LanguageServiceResultEnvelope } from "./language-service";
+import type { LanguageServiceWorkspaceState, LanguageServiceReview, LanguageServiceTextChange, LanguageServiceResultEnvelope } from "./language-service";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 export const DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS = ["activate_installed_plugin_runtime","invoke_installed_plugin_callback","prepare_task_execution","start_task_execution"] as const;
@@ -37,9 +37,11 @@ export interface DesktopCommandMap {
   invoke_installed_plugin_callback: { args: { pluginId: string; callbackHandle: string; operation: string; payload: PluginRuntimeValue; } & { diagnosticTraceId?: string }; result: PluginRuntimeValue };
   deactivate_installed_plugin_runtime: { args: { pluginId: string; }; result: void };
   read_installed_plugin_runtime_diagnostics: { args: { pluginId: string; }; result: InstalledPluginRuntimeDiagnostics };
+  language_service_workspace_state: { args: { workspaceRoot: string; }; result: LanguageServiceWorkspaceState };
+  set_language_service_debug: { args: { enabled: boolean; }; result: void };
   prepare_language_service: { args: { workspaceRoot: string; pluginId: string; serverId?: string; }; result: LanguageServiceReview };
   forget_language_service_consent: { args: { workspaceRoot: string; }; result: void };
-  start_language_service: { args: { workspaceRoot: string; reviewId: string; serverId?: string; remember?: boolean; }; result: string };
+  start_language_service: { args: { workspaceRoot: string; reviewId: string; serverId?: string; remember?: boolean; refreshModel?: boolean; }; result: string };
   open_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; languageId: string; version: number; text: string; }; result: void };
   change_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; version: number; changes: Array<LanguageServiceTextChange>; }; result: void };
   close_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; }; result: void };
@@ -200,6 +202,8 @@ export const DESKTOP_RESULT_VALIDATORS: {
   invoke_installed_plugin_callback: "pluginRuntimeValue",
   deactivate_installed_plugin_runtime: "void",
   read_installed_plugin_runtime_diagnostics: "installedPluginRuntimeDiagnostics",
+  language_service_workspace_state: "languageServiceWorkspaceState",
+  set_language_service_debug: "void",
   prepare_language_service: "languageServiceReview",
   forget_language_service_consent: "void",
   start_language_service: "string",

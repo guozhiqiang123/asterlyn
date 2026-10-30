@@ -31,7 +31,8 @@ export async function invokeDesktopCommand<
 export function invokeDesktopCommandUnvalidated<Command extends DesktopCommandName>(
   command: Command,
   args?: DesktopCommandMap[Command]["args"],
+  expectedFailure?: (error:unknown)=>boolean,
 ): Promise<unknown> {
   return observeDesktopCommand(command, (traceId) => invokeTauri<unknown>(command,
-    contextCommands.has(command) ? { ...args, diagnosticTraceId: traceId } : args), contextCommands.has(command));
+    contextCommands.has(command) ? { ...args, diagnosticTraceId: traceId } : args), contextCommands.has(command),expectedFailure);
 }

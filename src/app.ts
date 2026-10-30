@@ -676,6 +676,7 @@ export class AsterlynApp {
       copy: () => this.localization.catalog.editor.languageService, status: (message, kind) => this.setStatus(message, kind === "warning" ? "warning" : "normal"),
       diagnostic: (outcome) => diagnostics.report("info", "language.definition.navigation", `outcome=${outcome}`) });
     this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({
+      host: root, copy: () => this.localization.catalog.editor.languageService, registerCommand: command => this.shortcuts.registerPluginCommand(command),
       registry: this.pluginTasksRuntime.contributionRegistry,
       diagnostic: (fields) => diagnostics.report("info", "language.provider.changed", `providers=${fields.providerCount};generation=${fields.workspaceGeneration ?? "none"}`),
       native: createTauriLanguageServiceBridge((review) => this.dialogRuntime.confirm(languageExecutionConfirmation(review, this.localization.catalog.locale === "zh-CN"))),

@@ -180,6 +180,7 @@ this is a routing and accessibility contract, not permission to modify a read-on
 | Save active editable file | write | `editor.file.save` | **Default:** Primary+S |
 | Close active tab/preview | navigation | `editor.tab.close` | **Default:** Control+Shift+F4 on macOS; dirty confirmation remains intact; Command+W stays window-reserved |
 | Activate previous/next tab | navigation | `editor.tab.previous`, `editor.tab.next` | **Default:** Control+Shift+Left/Right on macOS; follows the visible tab order and wraps |
+| Language service status, retry, debug tracing and project approval reset | presentation / lifecycle | `languageServices.status`, `languageServices.retry`, `languageServices.debug.enable`, `languageServices.debug.disable`, `languageServices.forgetProjectConsent` | **Custom:** commands in the palette; footer status and keyboard-accessible details; debug tracing defaults off for each application session |
 | Back/Forward through code locations | navigation | `workbench.navigation.back`, `workbench.navigation.forward` | **Default:** Command+Option+Left/Right on macOS; customizable; window/workspace-local bounded source history, independent of tab ordering |
 | Open the tab list | navigation | `editor.tabList.toggle` | **Default:** Control+Shift+Down on macOS; **Custom** elsewhere |
 | Select a tab or close a named tab | navigation | tab/list component interaction | **Local** dynamic target |
