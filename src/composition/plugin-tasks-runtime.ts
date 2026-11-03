@@ -1,3 +1,4 @@
+import { taskFailureMessage } from "../application/tasks/task-failure-message.ts";
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import type {
   PluginManagementSnapshot,
@@ -521,7 +522,7 @@ export class PluginTasksRuntime {
           status: "crashed",
           outputs: [],
           truncated: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: taskFailureMessage(error),
         }));
       };
       signal.addEventListener("abort", abort, { once: true });
@@ -535,7 +536,7 @@ export class PluginTasksRuntime {
         status: "crashed",
         outputs: [],
         truncated: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: taskFailureMessage(error),
       }));
     });
   }

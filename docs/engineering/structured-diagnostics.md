@@ -53,6 +53,16 @@ Task execution records the reviewed plugin/provider/task identifiers, run status
 code, output event count, stdout/stderr byte totals, and omitted byte total. Output bodies and task
 arguments are never copied to the diagnostic stream.
 
+Root Gradle wrapper tasks additionally record `prepare.completed.fields.runtime` and a
+`runtime.selected` event in the run trace. They contain the wrapper version, selected Java major,
+selection reason and runtime/configuration digest, without Java paths or environment values.
+Preparation/start failures and terminal Gradle failures include `failureCategory`: Java selection,
+configuration or unsupported wrapper failures are distinct from observed Java, TLS, dependency,
+cache-lock, storage and general build failures. Output classification inspects at most 2 MiB and
+retains only 256 bytes per stream between frames; its messages are fixed descriptions, never raw
+output excerpts. These categories are diagnostic hints; the existing task output retains details.
+See [the Gradle runtime recovery plan](2026-11-03-gradle-task-java-runtime-plan.md).
+
 ## Diagnosing a plugin task refresh
 
 1. Note the timestamp immediately before reproducing.

@@ -15,6 +15,26 @@ import { EN_US_TASK_EXECUTION_COPY } from "../src/localization/task-execution-co
 const identity = { root: "/repo", generation: 3 };
 const review = { protocolVersion: 1, reviewId: "review-1", workspaceRoot: "/repo", pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", canonicalExecutablePath: "/repo/gradlew", args: ["assembleDebug"], cwd: "/repo", trust: "trusted" };
 
+test("task failures retain actionable details while diagnostic category stays out of the UI", async () => {
+  let deliver;
+  const controller = new TaskExecutionController({
+    native: false,
+    prepareTaskExecution: async () => review,
+    startTaskExecution: async () => ({ protocolVersion: 1, runId: "run-java", reviewId: review.reviewId, workspaceRoot: identity.root }),
+    subscribeTaskSession: async (listener) => { deliver = listener; return () => {}; },
+    cancelTaskExecution: async () => {},
+  });
+  controller.activateWorkspace(identity);
+  await controller.prepare(identity, { pluginId: "android", providerId: "gradle", taskId: "assembleDebug", label: "assembleDebug", executablePath: "gradlew", args: [] });
+  await controller.confirm(identity);
+  deliver({ protocolVersion: 1, kind: "status", runId: "run-java", workspaceRoot: identity.root, sequence: 1, status: "failed", exitCode: 1, message: "gradle.failure.tls: Check repository certificate settings." });
+  assert.equal(controller.state.status, "failed");
+  assert.equal(controller.state.error, "Check repository certificate settings.");
+  controller.activateWorkspace({ ...identity, generation: 4 });
+  controller.fail({ ...identity, generation: 4 }, new Error("gradle.runtime.javaMissing: Install a compatible JDK."));
+  assert.equal(controller.state.error, "Install a compatible JDK.");
+});
+
 test("completed task output coalesces adjacent transport frames without reordering streams", () => {
   const result = coalesceTaskExecutionOutputs([
     { stream: "stdout", dataBase64: Buffer.from("hello ").toString("base64") },

@@ -1,5 +1,6 @@
 import type { TaskExecutionRequest, TaskExecutionReview, TaskSessionEvent } from "../../models.ts";
 import type { TaskExecutionBridge } from "../../protocol/task-execution.ts";
+import { taskFailureMessage } from "./task-failure-message.ts";
 
 export type TaskExecutionStatus = "idle" | "review" | "starting" | "queued" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled" | "crashed";
 export type TaskConfirmationMemory = "unsupported" | "available" | "remembered";
@@ -205,7 +206,7 @@ export class TaskExecutionController {
       ...this.value,
       status: "crashed",
       outputs: this.outputSnapshot(),
-      error: error instanceof Error ? error.message : String(error),
+      error: taskFailureMessage(error),
     };
     this.emit();
     if (runId) void this.cancelRunOnce(runId, true);
@@ -256,7 +257,7 @@ export class TaskExecutionController {
     } else if (event.kind === "truncated") next = { ...next, outputTruncated: true };
     else {
       const status = next.status === "cancelling" && event.status === "running" ? "cancelling" : event.status;
-      next = { ...next, status, error: event.status === "failed" || event.status === "crashed" ? event.message : null };
+      next = { ...next, status, error: (event.status === "failed" || event.status === "crashed") && event.message ? taskFailureMessage(event.message) : null };
       if (["succeeded", "failed", "cancelled", "crashed"].includes(status)) {
         next = { ...next, outputs: this.outputSnapshot() };
       }
