@@ -32,6 +32,7 @@ export interface EditorLanguageServiceCompletionItem { readonly label: string; r
 export interface EditorDefinitionEvent { readonly kind?: "definition" | "references"; readonly outcome: "requested" | "discarded" | "invalid" | "empty" | "selected" | "choices"; readonly targetCount: number; }
 
 export interface EditorLanguageServicePort {
+  generation?():number;
   readonly documentUri?: string;
   definitionEvent?(event: EditorDefinitionEvent): void;
   open(handle: EditorLanguageServiceHandle, snapshot: EditorLanguageServiceSnapshot): void;
@@ -49,6 +50,9 @@ export type EditorLanguageServicePortFactory = (handle: EditorLanguageServiceHan
 /** A host-owned loading state, distinct from a successful empty symbol result. */
 export class LanguageServiceIndexingError extends Error {
   constructor() { super("Language services are indexing this project."); this.name = "LanguageServiceIndexingError"; }
+}
+export class LanguageServiceRecoveringError extends LanguageServiceIndexingError {
+  constructor(){super();this.name="LanguageServiceRecoveringError";}
 }
 export class LanguageServiceUnavailableError extends Error {
   constructor() { super("Language services are unavailable. Check language service status and retry."); this.name = "LanguageServiceUnavailableError"; }

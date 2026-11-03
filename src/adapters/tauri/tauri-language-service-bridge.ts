@@ -15,7 +15,7 @@ export function validateLanguageReview(value: unknown): LanguageServiceReview {
 }
 export function eventValue(value: unknown): LanguageServiceEvent | null {
   const item = record(value); if (!text(item.sessionId, 128)) return null;
-  if (item.kind === "terminated" || item.kind === "indexing" || item.kind === "ready" || item.kind === "degraded") return { kind: item.kind, sessionId: item.sessionId,
+  if (item.kind === "terminated" || item.kind === "indexing" || item.kind === "ready" || item.kind === "degraded" || item.kind === "recovering") return { kind: item.kind, sessionId: item.sessionId,
     ...(typeof item.code==="string"&&/^[a-z][a-z0-9.-]{0,79}$/u.test(item.code)?{code:item.code}:{}),progress:languageServiceProgress(item.progress) };
   if (item.kind !== "diagnostics" || !text(item.uri) || !Number.isSafeInteger(item.version) || !Array.isArray(item.diagnostics) || item.diagnostics.length > 512) return null;
   const position = (p: unknown) => { const v = record(p); return Number.isSafeInteger(v.line) && Number(v.line) >= 0 && Number.isSafeInteger(v.character) && Number(v.character) >= 0; };
@@ -45,7 +45,7 @@ export function createTauriLanguageServiceBridge(confirm: NativeLanguageServiceB
       const window=Math.floor(performance.now()/1000);if(window!==traceWindow){traceWindow=window;traceCount=0;}if(++traceCount>120)return;
       void Promise.all([hash(event.workspaceRoot),event.uri?hash(event.uri):undefined,event.targetUri?hash(event.targetUri):undefined]).then(([workspaceHash,documentHash,targetHash])=>{
         if(!debugTracing||released)return;
-        diagnostics.report("info","language.debug.operation",JSON.stringify({workspaceHash,documentHash,targetHash,operation:event.operation,outcome:event.outcome,sessionId:event.sessionId,requestId:event.requestId,version:event.version,bytes:event.bytes,durationMs:event.durationMs,resultCount:event.resultCount,reason:event.reason,feature:event.feature}));
+        diagnostics.report("info","language.debug.operation",JSON.stringify({workspaceHash,documentHash,targetHash,operation:event.operation,outcome:event.outcome,sessionId:event.sessionId,requestId:event.requestId,version:event.version,bytes:event.bytes,durationMs:event.durationMs,resultCount:event.resultCount,reason:event.reason,feature:event.feature,attempt:event.attempt,generation:event.generation,delayMs:event.delayMs}));
       }).catch(()=>{});
     },
     prepare: async (workspaceRoot, pluginId, serverId = "typescript") => { await ready; const review = validateLanguageReview(await invoke("prepare_language_service", { workspaceRoot, pluginId, serverId })); if (review.serverId !== serverId) throw Error("Language profile review mismatch"); return review; },

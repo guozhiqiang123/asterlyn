@@ -15,7 +15,7 @@ const files = [
   { repositoryId: ".", path: "other.ts", workspacePath: "other.ts" },
 ];
 const contents = [source, "\uFEFFexport function target() { return 1; }\r\n", "export const target = 2;\n"];
-const state: any = { mode: "link", active: files[0], requests: [], statuses: [], outcomes: [], pending: [], epoch: 1 };
+const state: any = { mode: "link", active: files[0], requests: [], statuses: [], outcomes: [], pending: [], epoch: 1, serviceGeneration:0 };
 const menu = new ContextMenuHost(document, window);
 const editor = new TextEditor({ load: async () => null as any, openCommit() {}, status(message, kind) { state.statuses.push({ message, kind }); }, error(error) { throw error; } }, EN_US.editor, menu);
 const range = (line: number, from: number, to: number) => ({ start: { line, character: from }, end: { line, character: to } });
@@ -32,7 +32,7 @@ const navigate = createLanguageDefinitionNavigator({ workspace: () => ({ root: "
   activeUri: () => state.active.uri ?? workspaceFileUri("/repo", state.active.workspacePath), content: () => editor.content(), select: (from, to) => editor.selectRange(from, to),
   copy: () => EN_US.editor.languageService, status: (message, kind) => state.statuses.push({ message, kind }), diagnostic: (outcome) => state.outcomes.push(outcome),
 });
-const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: () => () => {},
+const port: any = { generation:()=>state.serviceGeneration,open() {}, update() {}, close() {}, subscribeDiagnostics: () => () => {},
   analyzeReferences:locations=>analyzeReferenceLocations(locations,async location=>{
     const index=files.findIndex(file=>workspaceFileUri('/repo',file.workspacePath)===location.uri);
     return index<0?null:index===files.indexOf(state.active)?editor.content():contents[index]!;

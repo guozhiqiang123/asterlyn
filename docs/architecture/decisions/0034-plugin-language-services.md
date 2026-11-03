@@ -180,3 +180,29 @@ in this milestone; standard TS/JS/Rust and older Android responses remain accept
 
 See the [evolution plan](../../engineering/2026-11-03-openidea-inspired-evolution-plan.md) for the
 separate adapter/backend recovery owners and delivery evidence.
+
+## Bounded recovery (2026-11-03)
+
+The native actor remains the sole process/authority owner. Window lifecycle code may request a new
+adapter after a classified unexpected EOF; the Android adapter alone restarts its internal JDT and
+module Kotlin JVMs. Each owner allows at most three restarts (500/1000/2000 ms), resetting only after
+180 seconds of continuous healthy readiness. Query deadlines do not kill a cold analysis process.
+Protocol, resource/OOM, integrity, model/configuration, permission, quarantine and user-stop failures
+are terminal until explicit action or a valid model change; they do not enter periodic retry loops.
+
+Adapter restart re-prepares the exact approval identity. Automatic recovery never opens a new
+confirmation or accepts a changed package/tool identity. New actors reacquire model leases; current
+dirty buffers alone are replayed. Old navigation requests are not replayed. Cancelled timers cannot
+start an obsolete project, and diagnostic observers cannot interrupt recovery.
+
+Internal backend replacement advances the native analysis snapshot even when model/document
+versions stay equal. Pending requests and diagnostic pulls are cancelled, old diagnostics cleared,
+and frontend result generations invalidate delayed replies and open choice UIs. This result clock
+is separate from document synchronization: internal JVM recovery never duplicates didOpen on the
+still-live adapter. Each reported backend replacement advances it, including overlapping failures.
+
+Unchanged periodic model checks do not advance the adapter generation. Only model replacement,
+explicit invalidation, failure or closure invalidates its callbacks. A failed Kotlin module retains
+its retry budget outside the two-JVM LRU; another click cannot bypass it, and Java remains available.
+Resource classification retains no more than a private 128-character stderr tail and emits fixed
+codes only. Detailed attempt/generation tracing remains opt-in and metadata-only.

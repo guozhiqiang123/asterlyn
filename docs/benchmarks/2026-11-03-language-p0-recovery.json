@@ -1,0 +1,688 @@
+{
+  "schema": 1,
+  "status": "automated acceptance passed; installed delivery pending",
+  "pluginCommit": "a2b7453",
+  "package": {
+    "asset": "dev.asterlyn.lsp-0.3.12.asterlyn-plugin.tgz",
+    "version": "0.3.12",
+    "bytes": 4666014,
+    "sha256": "8ce50f891a8a9b62caa08939e89b8a37f609fcabdfb5b547ebca32ffbdc121b7"
+  },
+  "integrityEntries": 166,
+  "faultProbe": {
+    "schema": 1,
+    "entryHash": "cb268ac797b0c2f798767e142d9a27caf487423a1e18ac907291511a13027776",
+    "modelHash": "e617da01686aaf5d1047cdbaa606a27e9d11107f4b14787ff6f6c3692195ade6",
+    "sourceHash": "abbf6ca2633d0bc9fdf965836adf818dedbb02082e853e73b488d889d70f5890",
+    "checks": [
+      "real-project-ready-with-exact-references",
+      "noop-model-poll-retains-active-backend",
+      "jdt-child-rebuilt-and-latest-overlay-retained",
+      "kotlin-child-rebuilt-three-times-and-fourth-exit-stops",
+      "java-remains-usable-with-kotlin-exhausted",
+      "model-reacquired-after-jdt-restart"
+    ],
+    "faults": [
+      {
+        "kind": "java",
+        "moduleHash": null,
+        "exhausted": false,
+        "elapsedMs": 49563
+      },
+      {
+        "kind": "kotlin",
+        "moduleHash": "fe6d6407b0d4",
+        "exhausted": false,
+        "elapsedMs": 9918
+      },
+      {
+        "kind": "kotlin",
+        "moduleHash": "fe6d6407b0d4",
+        "exhausted": false,
+        "elapsedMs": 11331
+      },
+      {
+        "kind": "kotlin",
+        "moduleHash": "fe6d6407b0d4",
+        "exhausted": false,
+        "elapsedMs": 11693
+      },
+      {
+        "kind": "kotlin",
+        "moduleHash": "fe6d6407b0d4",
+        "exhausted": true,
+        "elapsedMs": 2660
+      }
+    ],
+    "passed": true,
+    "referenceDigest": "416afd27c1ec755b6768577491406b9e1792363cc82828b969b5a295b66df953",
+    "sourceUnchanged": true,
+    "remainingProcesses": 0,
+    "modelRequests": 10,
+    "stderrBytes": 0,
+    "statuses": [
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696176199,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "model"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696176200,
+        "quiescent": false,
+        "health": "ok",
+        "code": "preparing-language-model",
+        "phase": "model"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696176200,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696180366,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696187915,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696198806,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696199370,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696202500,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696211255,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696214565,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696223600,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696227171,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696236708,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696240018,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696249613,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696253169,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696264297,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696266571,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696277507,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696279829,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696294942,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696298806,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696309411,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696311545,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696322224,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696323950,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696334205,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696336642,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696337230,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696339077,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "indexing"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696341096,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696341096,
+        "quiescent": true,
+        "health": "warning",
+        "code": "java-analysis-awaiting-kotlin",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696341096,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696343725,
+        "quiescent": true,
+        "health": "warning",
+        "code": "java-analysis-awaiting-kotlin",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696343725,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "indexing"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696361366,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "ready"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696361390,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696363114,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "ready"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696368273,
+        "quiescent": false,
+        "health": "warning",
+        "code": "java-backend-recovering",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696372178,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "model"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696372178,
+        "quiescent": false,
+        "health": "ok",
+        "code": "preparing-language-model",
+        "phase": "model"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696372178,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376474,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376514,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376537,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376545,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376550,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376555,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376563,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376567,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376571,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376577,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376583,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376587,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376624,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376640,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376655,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376667,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376678,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376694,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376715,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376724,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376728,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376733,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376740,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696376754,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696392254,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "sources"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696392793,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696394692,
+        "quiescent": false,
+        "health": "ok",
+        "phase": "indexing"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696397106,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696397106,
+        "quiescent": true,
+        "health": "warning",
+        "code": "java-analysis-awaiting-kotlin",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696397106,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696399589,
+        "quiescent": true,
+        "health": "warning",
+        "code": "java-analysis-awaiting-kotlin",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696399589,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "indexing"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696417249,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "ready"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696417872,
+        "quiescent": true,
+        "health": "warning",
+        "code": "kotlin-backend-recovering",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696418472,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696420336,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "ready"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696427816,
+        "quiescent": true,
+        "health": "warning",
+        "code": "kotlin-backend-recovering",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696428920,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696430832,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "ready"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696439180,
+        "quiescent": true,
+        "health": "warning",
+        "code": "kotlin-backend-recovering",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696441268,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "backend"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696443145,
+        "quiescent": true,
+        "health": "ok",
+        "phase": "ready"
+      },
+      {
+        "method": "experimental/serverStatus",
+        "time": 1793696450901,
+        "quiescent": true,
+        "health": "warning",
+        "code": "kotlin-backend-unavailable",
+        "phase": "failed"
+      }
+    ]
+  },
+  "validation": {
+    "frontendScriptTests": 1427,
+    "nativePassed": 192,
+    "nativeExistingIgnored": 3,
+    "pluginTests": 29,
+    "nativeInspector": true,
+    "isolatedActivation": true,
+    "reproduciblePackage": true,
+    "clippyWarningsDenied": true
+  },
+  "limits": [
+    "macOS acceptance only",
+    "legacy result coverage remains unknown",
+    "desktop signature, installation and bookmark launches pending",
+    "no new manual acceptance recorded"
+  ]
+}

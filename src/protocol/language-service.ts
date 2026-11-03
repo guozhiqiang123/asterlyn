@@ -15,7 +15,7 @@ export interface LanguageServiceApprovalEvent {
 }
 
 export interface LanguageServiceEvent {
-  readonly sessionId: string; readonly kind: "diagnostics" | "terminated" | "indexing" | "ready" | "degraded";
+  readonly sessionId: string; readonly kind: "diagnostics" | "terminated" | "indexing" | "ready" | "degraded" | "recovering";
   readonly uri?: string; readonly version?: number; readonly diagnostics?: readonly EditorLanguageServiceDiagnostic[];
   readonly code?: string; readonly progress?: LanguageServiceProgress;
 }
@@ -28,6 +28,7 @@ export interface LanguageServiceWorkspaceState {
   readonly debugTracing: boolean;
 }
 export interface LanguageServiceTrace {
+  readonly attempt?:number;readonly generation?:number;readonly delayMs?:number;
   readonly operation: string; readonly outcome: string; readonly workspaceRoot: string;
   readonly uri?: string; readonly targetUri?:string; readonly sessionId?: string; readonly requestId?: string;
   readonly version?: number; readonly bytes?: number; readonly durationMs?: number; readonly resultCount?: number;

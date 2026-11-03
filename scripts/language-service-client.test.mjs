@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createEditorLanguageServicePort } from "../src/features/language-services/language-service-client.ts";
 import { LanguageServiceIndexingError } from "../src/protocol/editor-language-service.ts";
+import {LanguageServiceRecoveringError} from "../src/protocol/editor-language-service.ts";
 
 const handleA = { tabId: "tab-a", path: "file:///repo/a.ts", loadEpoch: 1 };
 const handleB = { tabId: "tab-b", path: "file:///repo/b.ts", loadEpoch: 1 };
 const identityFor = (handle, generation = 1) => ({ workspaceRoot: "/repo", workspaceGeneration: generation, uri: handle.path, languageId: "typescript", pluginId: "dev.asterlyn.lsp", providerVersion: "1.0.0" });
 const review = (id) => ({ reviewId: id, pluginId: "dev.asterlyn.lsp", serverId: "typescript", pluginVersion: "1.0.0", packageDigest: "sha256:package", resourceDigest: "sha256:resources", executableIdentity: "/usr/local/bin/node@22.22.2", expiresAt: Date.now() + 60_000 });
 const wait = () => new Promise((resolve) => setTimeout(resolve, 25));
+async function until(predicate,timeout=4000){const deadline=Date.now()+timeout;while(!predicate()&&Date.now()<deadline)await wait();assert.ok(predicate(),"recovery did not settle");}
 
 test('reference import analysis uses scoped host reads and discards a reply after editing without restarting a session',async()=>{
  const native=fakeNative();let release,reads=0,defer=false;
@@ -104,4 +106,90 @@ test("Open in Window publications derive their workspace from the live document 
  const native=fakeNative(),published=[];let generation=1;const factory=createEditorLanguageServicePort(h=>identityFor(h,generation),native,()=>{},undefined,undefined,undefined,undefined,value=>published.push(value)),port=factory(handleA);port.open(handleA,{version:1,text:"value"});await wait();
  const results={kind:"references",query:"value",locations:[],limited:false,workspaceRoot:"/spoof",workspaceGeneration:99};port.openInWindow(results,1);assert.equal(published[0].workspaceRoot,"/repo");assert.equal(published[0].workspaceGeneration,1);
  port.update(handleA,{version:2,text:"changed"});port.openInWindow(results,1);assert.equal(published.length,1);generation++;port.openInWindow(results,2);assert.equal(published.length,1);port.close(handleA);factory.dispose();
+});
+
+test("unexpected exit rebuilds one session with latest dirty text; old results and closed documents stay discarded",async()=>{
+ const native=fakeNative(),errors=[],states=[];
+ const factory=createEditorLanguageServicePort(identityFor,native,e=>errors.push(e),undefined,undefined,undefined,state=>states.push(state));
+ try{
+  const a=factory(handleA),b=factory(handleB),diagnostics=[];a.subscribeDiagnostics(value=>diagnostics.push(value));
+  a.open(handleA,{version:1,text:"const value = 1"});b.open(handleB,{version:1,text:"closed file"});await wait();
+  const old=native.lastSession,deferred=native.deferRequest();const pending=a.request(handleA,"definition",{position:{line:0,character:6}},1);await wait();
+  a.update(handleA,{version:2,text:"const value = 2"});
+  for(const listener of native.events)listener({sessionId:old,kind:"terminated",code:"backend-exited"});
+  assert.equal(states.at(-1).state,"recovering");assert.equal(states.at(-1).recovery.attempt,1);
+  a.update(handleA,{version:3,text:"const value = 3"});b.close(handleB);
+  await assert.rejects(a.request(handleA,"definition",{position:{line:0,character:6}},3),LanguageServiceRecoveringError);
+  deferred.resolve({sessionId:old,uri:handleA.path,version:1,result:{stale:true}});assert.equal(await pending,null);
+  await until(()=>native.lastSession!==old&&native.calls.some(call=>call[0]==="change"&&call[2]===native.lastSession&&call[4]===3));
+  const reopened=native.calls.filter(call=>call[0]==="open"&&call[2]===native.lastSession);
+  assert.equal(reopened.length,1);assert.equal(reopened[0][3],handleA.path);assert.equal(reopened[0][6],"const value = 3");
+  const count=diagnostics.length;for(const listener of native.events)listener({sessionId:old,kind:"diagnostics",uri:handleA.path,version:3,diagnostics:[{message:"old"}]});
+  assert.equal(diagnostics.length,count);assert.equal(native.calls.filter(c=>c[0]==="confirm").length,1);assert.deepEqual(errors,[]);
+ }finally{factory.dispose();}
+});
+
+test("three short-lived restarts exhaust the crash budget and user queries cannot reset it",async()=>{
+ const native=fakeNative(),states=[],errors=[],traces=[];native.trace=value=>traces.push(value);
+ const factory=createEditorLanguageServicePort(identityFor,native,e=>errors.push(e),undefined,undefined,undefined,state=>states.push(state));
+ try{const port=factory(handleA);port.open(handleA,{version:1,text:"private source"});await wait();
+  for(let index=0;index<3;index++){const previous=native.lastSession;for(const listener of native.events)listener({sessionId:previous,kind:"terminated",code:"backend-exited"});await until(()=>native.lastSession!==previous);}
+  const final=native.lastSession;for(const listener of native.events)listener({sessionId:final,kind:"terminated",code:"backend-exited"});
+  assert.equal(states.at(-1).code,"language-recovery-exhausted");assert.equal(states.at(-1).state,"failed");
+  await assert.rejects(port.request(handleA,"definition",{position:{line:0,character:0}},1));await wait();
+  assert.equal(native.calls.filter(c=>c[0]==="start").length,4);assert.equal(traces.filter(e=>e.operation==="recovery").length,3);assert.ok(!JSON.stringify(traces).includes("private source"));
+ }finally{factory.dispose();}
+});
+
+test("automatic recovery cannot approve a changed identity even if another persistent grant exists",async()=>{
+ const native=fakeNative(),states=[],errors=[];
+ const factory=createEditorLanguageServicePort(identityFor,native,e=>errors.push(e),undefined,undefined,undefined,state=>states.push(state));
+ try{factory(handleA).open(handleA,{version:1,text:"value"});await wait();const original=native.prepare;
+  native.prepare=async(...args)=>({...await original(...args),remembered:true,resourceDigest:"changed"});
+  for(const listener of native.events)listener({sessionId:native.lastSession,kind:"terminated",code:"backend-exited"});
+  await until(()=>states.at(-1).state==="failed");assert.equal(states.at(-1).code,"language-execution-identity-changed");assert.equal(native.calls.filter(c=>c[0]==="start").length,1);assert.equal(native.calls.filter(c=>c[0]==="confirm").length,1);
+ }finally{factory.dispose();}
+});
+
+test("authority/protocol/resource stops and cancelled recovery timers never launch another process",async()=>{
+ const cases=[];
+ try{
+  for(const reason of ["authority-revoked","resource-limit","transport-failed","protocol-failed","session-ended"]){
+   const native=fakeNative(),factory=createEditorLanguageServicePort(identityFor,native,()=>{});factory(handleA).open(handleA,{version:1,text:"value"});await wait();
+   for(const listener of native.events)listener({sessionId:native.lastSession,kind:"terminated",code:reason});cases.push({native,factory});
+  }
+  for(const operation of ["close","revoke","dispose","reconcile"]){
+   const native=fakeNative();let generation=1;const factory=createEditorLanguageServicePort(h=>identityFor(h,generation),native,()=>{}),port=factory(handleA);port.open(handleA,{version:1,text:"value"});await wait();
+   for(const listener of native.events)listener({sessionId:native.lastSession,kind:"terminated",code:"backend-exited"});
+   if(operation==="close")port.close(handleA);if(operation==="revoke")factory.revoke("dev.asterlyn.lsp");if(operation==="dispose")factory.dispose();if(operation==="reconcile"){generation=2;factory.reconcile();}cases.push({native,factory});
+  }
+  await new Promise(resolve=>setTimeout(resolve,650));for(const {native}of cases)assert.equal(native.calls.filter(c=>c[0]==="start").length,1);
+ }finally{for(const {factory}of cases)factory.dispose();}
+});
+
+test("an internal backend recovery invalidates results without duplicating the live document transport",async()=>{
+ const native=fakeNative(),states=[],factory=createEditorLanguageServicePort(identityFor,native,()=>{},undefined,undefined,undefined,s=>states.push(s));
+ try{
+  const port=factory(handleA);port.open(handleA,{version:1,text:"value"});await wait();const generation=port.generation(),id=native.lastSession;
+  const deferred=native.deferRequest(),pending=port.request(handleA,"definition",{position:{line:0,character:0}},1);await wait();
+  for(const listener of native.events)listener({sessionId:id,kind:"recovering",code:"kotlin-backend-recovering",progress:{phase:"backend"}});
+  assert.equal(port.generation(),generation+1);assert.equal(states.at(-1).state,"recovering");
+  deferred.resolve({sessionId:id,uri:handleA.path,version:1,result:{stale:true}});assert.equal(await pending,null);
+  port.update(handleA,{version:2,text:"value2"});await until(()=>native.calls.some(c=>c[0]==="change"&&c[4]===2));
+  assert.equal(native.calls.filter(c=>c[0]==="open").length,1);assert.equal(native.calls.filter(c=>c[0]==="start").length,1);
+  for(const listener of native.events)listener({sessionId:id,kind:"ready",progress:{phase:"ready"}});
+  assert.equal(port.generation(),generation+1);
+  const another=native.deferRequest(),again=port.request(handleA,"definition",{position:{line:0,character:0}},2);await wait();
+  for(const listener of native.events)listener({sessionId:id,kind:"recovering",code:"kotlin-backend-recovering",progress:{phase:"backend"}});
+  assert.equal(port.generation(),generation+2);another.resolve({sessionId:id,uri:handleA.path,version:2,result:{stale:true}});assert.equal(await again,null);
+ }finally{factory.dispose();}
+});
+
+test("a failed diagnostic observer cannot interrupt recovery or sibling document synchronization",async()=>{
+ const native=fakeNative(),factory=createEditorLanguageServicePort(identityFor,native,()=>{});
+ try{const a=factory(handleA),b=factory(handleB);a.subscribeDiagnostics(()=>{throw Error("disposed view");});
+  a.open(handleA,{version:1,text:"a"});b.open(handleB,{version:1,text:"b"});await wait();const old=native.lastSession;
+  for(const listener of native.events)listener({sessionId:old,kind:"terminated",code:"backend-exited"});
+  await until(()=>native.lastSession!==old&&native.calls.filter(c=>c[0]==="open"&&c[2]===native.lastSession).length===2);
+ }finally{factory.dispose();}
 });

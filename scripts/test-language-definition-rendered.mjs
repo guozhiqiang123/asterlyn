@@ -45,6 +45,7 @@ try {
    assert.equal((await snap()).requests.length, 2, `${name}: filtering must not query LSP`);
    await page.keyboard.press("Enter"); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "other.ts"); assert.equal((await snap()).selection, "target");
    await reset("self"); await click(); await page.getByRole("option").filter({ hasText: "other.ts" }).click(); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "other.ts");
+   await reset("deferred");await click();await page.waitForFunction(()=>window.definitionFixture.state.pending.length===1);await page.evaluate(()=>{window.definitionFixture.state.serviceGeneration++;window.definitionFixture.resolve();});await page.waitForTimeout(100);assert.equal((await snap()).active,"source.ts",`${name}: a replaced internal backend cannot navigate an older request`);
    await reset("oneReference"); await click(); await page.waitForFunction(() => window.definitionFixture.state.active.workspacePath === "other.ts"); assert.equal(await page.locator('.language-location-picker').count(), 0);
    for (const modifier of ["Control", ...(await page.evaluate(() => /Mac/u.test(navigator.platform)) ? ["Meta"] : [])]) {
     await reset("emptyDefinitionOneReference"); await click(modifier);

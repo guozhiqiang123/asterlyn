@@ -1,6 +1,105 @@
 //! Opt-in real Android adapter acceptance through the production native actor.
 use super::*;
 #[test]
+fn internal_backend_recovery_invalidates_pending_results_without_reopening_documents() {
+    let Ok(node) = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE") else {
+        return;
+    };
+    let package = tempfile::tempdir().unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let entry = package.path().join("server.mjs");
+    std::fs::write(&entry,r#"let b=Buffer.alloc(0),first=true;function send(m){const out=Buffer.from(JSON.stringify({jsonrpc:'2.0',...m}));process.stdout.write('Content-Length: '+out.length+'\r\n\r\n');process.stdout.write(out);}function status(code){send({method:'experimental/serverStatus',params:{health:code?'warning':'ok',quiescent:true,code,progress:{phase:code?'backend':'ready'}}});}process.stdin.on('data',c=>{b=Buffer.concat([b,c]);for(;;){const i=b.indexOf('\r\n\r\n');if(i<0)return;const n=Number(/Content-Length: (\d+)/i.exec(b.subarray(0,i).toString())[1]);if(b.length<i+4+n)return;const m=JSON.parse(b.subarray(i+4,i+4+n));b=b.subarray(i+4+n);if(m.method==='initialize')send({id:m.id,result:{capabilities:{positionEncoding:'utf-16'}}});else if(m.method==='initialized')status();else if(m.method==='textDocument/definition'){if(first){first=false;status('kotlin-backend-recovering');setTimeout(()=>status(),50);}send({id:m.id,result:[{uri:m.params.textDocument.uri,range:{start:{line:0,character:0},end:{line:0,character:1}}}]});}}});"#).unwrap();
+    let root = workspace.path().canonicalize().unwrap();
+    let source = root.join("Source.java");
+    std::fs::write(&source, "class Source {}\n").unwrap();
+    let uri = url::Url::from_file_path(source).unwrap().to_string();
+    let subject = LanguageSubject {
+        owner: "internal-recovery-test".into(),
+        root,
+        activation: 1,
+    };
+    let language = LanguagePackage {
+        version: "test".into(),
+        digest: "test".into(),
+        content_digest: "test".into(),
+        root: package.path().to_owned(),
+        node: node.clone().into(),
+        node_digest: "test".into(),
+        rust: None,
+        packaged: Some(PackagedServerProfile {
+            id: "android-jvm".into(),
+            node: node.into(),
+            package_root: package.path().to_owned(),
+            entry: "server.mjs".into(),
+            initialization_options: json!({}),
+            selectors: vec![("java".into(), vec![".java".into()])],
+            cache_parent: cache.path().to_owned(),
+        }),
+    };
+    let manager = LanguageServiceManager::default();
+    let (sender, events) = mpsc::channel();
+    let id = manager
+        .start_with_models(
+            subject.clone(),
+            language,
+            0,
+            Arc::new(|| true),
+            Arc::new(move |event| {
+                let _ = sender.send(event);
+            }),
+            None,
+        )
+        .unwrap();
+    let ready = || {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline {
+            if let Ok(event) = events.recv_timeout(Duration::from_millis(100))
+                && event.kind == "ready"
+            {
+                return;
+            }
+        }
+        panic!("fixture never ready");
+    };
+    ready();
+    manager
+        .open(
+            &id,
+            &subject,
+            uri.clone(),
+            "java".into(),
+            1,
+            "class Source {}\n".into(),
+        )
+        .unwrap()
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap()
+        .unwrap();
+    let ask = |request: &str| {
+        manager
+            .request(
+                &id,
+                &subject,
+                uri.clone(),
+                1,
+                request.into(),
+                "definition".into(),
+                TextPosition {
+                    line: 0,
+                    character: 6,
+                },
+            )
+            .unwrap()
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+    };
+    assert!(ask("old").unwrap_err().contains("stale"));
+    ready();
+    assert_eq!(ask("fresh").unwrap().as_array().unwrap().len(), 1);
+    manager.stop(&id, &subject).unwrap();
+}
+#[test]
 fn actual_packaged_java_keeps_documents_responsive_during_model_work() {
     let (Ok(model), Ok(package), Ok(component), Ok(java)) = (
         std::env::var("ASTERLYN_ANDROID_MODEL"),

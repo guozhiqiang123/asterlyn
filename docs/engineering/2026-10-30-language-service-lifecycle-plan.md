@@ -121,3 +121,12 @@ Location coverage is kept separate from display truncation. Legacy providers rem
 empty unknown/partial results no longer imply confirmed absence. Both chooser and Find retain that
 metadata through import/path filters and projections. Detailed recovery and package acceptance are
 recorded separately after O2; these frontend checks alone do not claim installed runtime acceptance.
+
+
+### O2 follow-up
+
+Finite restart owners now preserve exact approval identity and current dirty buffers. Internal JVM
+recovery invalidates request/diagnostic generations without reopening documents in the live adapter.
+Unchanged model polls keep valid callbacks, and resource/protocol/configuration failures stop retrying.
+The [P0 recovery receipt](../benchmarks/2026-11-03-language-p0-recovery.md) records fault evidence,
+package identity, delivery and the remaining limits separately from this historical milestone.

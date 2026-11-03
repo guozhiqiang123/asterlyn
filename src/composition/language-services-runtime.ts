@@ -40,7 +40,7 @@ export interface LanguageServicesRuntimeOptions {
 const LANGUAGES: Readonly<Record<string, string>> = { java:"java", kt:"kotlin", kts:"kotlin", groovy:"groovy", gradle:"groovy", rs: "rust", ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
 export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOptions) {
   let storage=options.providerStorage;
-  try{storage??=typeof localStorage!=="undefined"?localStorage:undefined;}catch{/* Persistence is optional. */}
+  try{if(typeof window!=="undefined")storage??=window.localStorage;}catch{/* Persistence is optional. */}
   const preferences=new LanguageProviderPreferences(storage);
   const providersFor=(languageId:string)=>options.registry.list().filter((item):item is Extract<RegisteredPluginContribution,{kind:"language-service"}>=>item.kind==="language-service"&&item.languageIds.includes(languageId));
   const providerFor=(languageId:string)=>{const workspace=options.workspace();return selectLanguageProvider(providersFor(languageId),workspace?preferences.get(workspace.root,languageId):null).provider;};

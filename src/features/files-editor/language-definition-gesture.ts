@@ -1,4 +1,4 @@
-import { LanguageServiceIndexingError } from "../../protocol/editor-language-service.ts";
+import { LanguageServiceIndexingError,LanguageServiceRecoveringError } from "../../protocol/editor-language-service.ts";
 import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import type { LanguageEditorContext } from "./language-service-editor.ts";
 import { isCurrentSymbolDefinition, normalizeDefinitionTargets } from "../../application/language-services/definition-targets.ts";
@@ -11,6 +11,7 @@ class DefinitionGesture {
   private picker: LanguageLocationPicker|null = null;
   decorations: DecorationSet = Decoration.none;
   private sequence = 0;
+  private requestGeneration:number|undefined;
   private alive = true;
   private choosing = false;
   private lastPointer: { x: number; y: number } | null = null;
@@ -29,7 +30,7 @@ class DefinitionGesture {
     this.document.addEventListener("mouseup", this.mouseup, true);
     this.window.addEventListener("blur", this.windowBlur);
   }
-  private current(token: number, version: number): boolean { return this.alive && this.sequence === token && this.context.active() && this.context.version() === version; }
+  private current(token: number, version: number): boolean { return this.alive && this.sequence === token && this.context.active() && this.context.version() === version && this.context.port.generation?.()===this.requestGeneration; }
   private marked: string | null = null;
   private clear(repaint = true): void { if (this.marked !== null) { this.marked = null; this.decorations = Decoration.none; if (repaint) this.view.dispatch({}); } }
   private cancel(repaint = true): void { this.sequence++; this.gesture = null; this.choosing = false; this.picker?.close(false); this.clear(repaint); }
@@ -99,7 +100,7 @@ class DefinitionGesture {
     this.cancel(); if (!this.context.active()) return;
     // Navigation history returns to the clicked source, even if the caret was elsewhere.
     if (anchor && this.view.state.selection.main.head !== pos) this.view.dispatch({ selection: { anchor: pos } });
-    const token = ++this.sequence; this.context.flush(); const version = this.context.version();
+    const token = ++this.sequence; this.context.flush(); const version = this.context.version();this.requestGeneration=this.context.port.generation?.();
     const line = this.view.state.doc.lineAt(pos), ui = this.context.definitionUi;
     const position = { line: line.number - 1, character: pos - line.from }, uri = this.context.port.documentUri;
     const word = this.view.state.wordAt(pos), symbol = word ? { start: { line: position.line, character: word.from - line.from }, end: { line: position.line, character: word.to - line.from } } : null;
@@ -108,7 +109,7 @@ class DefinitionGesture {
     let requestError: unknown = null;
     const failed = () => {
       if (requestError === null) return false;
-      if (this.current(token, version)) ui?.status(requestError instanceof LanguageServiceIndexingError ? ui.copy().indexing : ui.copy().requestFailed, requestError instanceof LanguageServiceIndexingError ? "information" : "warning");
+      if (this.current(token, version)) ui?.status(requestError instanceof LanguageServiceRecoveringError ? ui.copy().workspaceStatus.stages.recovering : requestError instanceof LanguageServiceIndexingError ? ui.copy().indexing : ui.copy().requestFailed, requestError instanceof LanguageServiceIndexingError ? "information" : "warning");
       trace("discarded"); return true;
     };
     const request = async () => {

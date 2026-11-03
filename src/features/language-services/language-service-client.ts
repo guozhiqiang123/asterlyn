@@ -1,5 +1,6 @@
 import type { EditorDefinitionEvent, EditorLanguageServiceDiagnostic, EditorLanguageServiceHandle, EditorLanguageServiceLocation, EditorLanguageServicePort, EditorLanguageServicePortFactory, EditorLanguageServiceSnapshot } from "../../protocol/editor-language-service.ts";
-import { LanguageServiceIndexingError, LanguageServiceUnavailableError } from "../../protocol/editor-language-service.ts";
+import { LanguageServiceIndexingError, LanguageServiceRecoveringError, LanguageServiceUnavailableError } from "../../protocol/editor-language-service.ts";
+import { LanguageRecoveryPolicy, type LanguageRecoveryAttempt } from "../../application/language-services/recovery-policy.ts";
 
 export interface LanguageDocumentIdentity {
   readonly workspaceRoot: string; readonly workspaceGeneration: number; readonly uri: string;
@@ -13,7 +14,8 @@ export type LanguageConsentScope = Pick<LanguageDocumentIdentity, "workspaceRoot
 export interface LanguageServiceStatus {
   scope: LanguageConsentScope; sessionId: string | null;
   choices?:readonly {id:string;label:string}[]; selectionKey?:string; selectedProvider?:string;
-  state: "provider-selected" | "conflict" | "partial" | "preparing" | "awaiting-approval" | "declined" | "indexing" | "ready" | "failed" | "stopped";
+  recovery?:LanguageRecoveryAttempt;
+  state: "recovering" | "provider-selected" | "conflict" | "partial" | "preparing" | "awaiting-approval" | "declined" | "indexing" | "ready" | "failed" | "stopped";
   progress?: LanguageServiceProgress; code?: string; startedAt: number;
 }
 export type LanguageServiceFactory = EditorLanguageServicePortFactory & { dispose(): void; reconcile(retainConsent?: (identity: LanguageConsentScope) => boolean, retainBackground?: (identity: LanguageConsentScope) => boolean): void; revoke(pluginId: string): void; warm(scope: LanguageConsentScope): Promise<void>; restart(): Promise<void> };
@@ -98,6 +100,11 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
   return factory;
 }
 class Session {
+  private readonly recoveryPolicy=new LanguageRecoveryPolicy();
+  private recovery:LanguageRecoveryAttempt|null=null;
+  private recoveryTimer:ReturnType<typeof setTimeout>|null=null;
+  private generation=0;
+  private resultGeneration=0;
   private warmed=false;
   private startedAt=Date.now();
   private working=false;
@@ -119,18 +126,57 @@ class Session {
   private readonly approvalTrace: ((event: LanguageServiceApprovalEvent) => void) | undefined;
   private readonly lifecycle: ((state:LanguageServiceStatus)=>void) | undefined;
   private readonly openInWindow:((results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void)|undefined;
-  private readonly refreshModel:boolean;
+  private refreshModel:boolean;
   constructor(info: LanguageConsentScope, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, consent: Consent, idle: () => void, navigate?: (location: EditorLanguageServiceLocation) => void, trace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void, refreshModel=false,openInWindow?: (results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void) { this.openInWindow=openInWindow;this.refreshModel=refreshModel;this.lifecycle=lifecycle; this.idle = idle; this.consent = consent; this.approvalTrace = approvalTrace; this.trace = trace; this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
   get scope():LanguageConsentScope{return this.info;}
   referenceCurrent(handle:EditorLanguageServiceHandle,version:number):boolean {const doc=this.docs.get(handleKey(handle));return !!doc&&this.current(doc)&&doc.latest.version===version;}
   private live():boolean{return !this.dead && (this.warmed || [...this.docs.values()].some(doc=>this.current(doc)));}
   private status(state:LanguageServiceStatus["state"],code?:string,progress?:LanguageServiceProgress):void {
-    const working=["preparing","awaiting-approval","indexing"].includes(state)||((state==="ready"||state==="partial")&&progress!==undefined&&!["ready","failed"].includes(progress.phase));
+    this.recoveryPolicy.healthy(state==="ready"&&(!progress||progress.phase==="ready"));
+    const working=["recovering","preparing","awaiting-approval","indexing"].includes(state)||((state==="ready"||state==="partial")&&progress!==undefined&&!["ready","failed"].includes(progress.phase));
     if(working&&(!this.working||(this.lastState==="awaiting-approval"&&state!=="awaiting-approval")))this.startedAt=Date.now();
     this.working=working;this.lastState=state;
-    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
+    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,recovery:this.recovery??undefined,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
   }
-  async warm():Promise<void>{this.warmed=true;try{await this.ensure();}catch{this.failed=true;/* ensure publishes the failed state; retry is explicit. */}}
+  async warm():Promise<void>{this.warmed=true;try{await this.ensure();}catch{/* ensure owns classification and finite recovery. */}}
+  private failureCode(error:unknown):string {
+    const code=typeof error==="string"?error:error instanceof Error?error.message:"";
+    return /^[a-z][a-z0-9.-]{0,79}$/u.test(code)?code:"language-start-failed";
+  }
+  private recover(code:string):boolean {
+    if(this.dead||!this.live())return false;
+    if(this.recovery)return true;
+    const attempt=this.recoveryPolicy.reserve(code);
+    if(!attempt)return false;
+    this.recovery=attempt;this.failed=false;++this.generation;++this.resultGeneration;
+    const previous=this.sessionId;this.sessionId=null;
+    this.earlyEvents.clear();
+    for(const doc of this.docs.values()){
+      if(doc.timer)clearTimeout(doc.timer);doc.timer=null;
+      for(const id of doc.requests.keys())if(previous)void this.native.cancel(this.info.workspaceRoot,previous,id).catch(()=>undefined);
+      doc.opened=false;doc.sent=0;this.publish(doc,[]);
+    }
+    this.status("recovering",code);
+    try{this.native.trace?.({workspaceRoot:this.info.workspaceRoot,operation:"recovery",outcome:"scheduled",reason:code,attempt:attempt.attempt,generation:this.generation,delayMs:attempt.delayMs});}catch{/* Observation cannot authorize recovery. */}
+    const stopped=previous?this.native.stop(this.info.workspaceRoot,previous).catch(()=>undefined):Promise.resolve();
+    this.recoveryTimer=setTimeout(()=>{
+      this.recoveryTimer=null;
+      void stopped.then(async()=>{
+        if(this.dead||!this.live())return;
+        await this.ensure(true);
+        if(this.dead||this.recovery)return;
+        for(const doc of this.docs.values())if(this.current(doc))await this.enqueue(()=>this.flush(doc));
+      }).catch(()=>{/* ensure already classified the failed start. */});
+    },attempt.delayMs);
+    return true;
+  }
+  private fail(error:unknown,generation:number):void {
+    if(this.dead||generation!==this.generation||this.consent.denied)return;
+    const code=this.failureCode(error);
+    if(this.recover(code))return;
+    this.failed=true;this.status("failed",this.recoveryPolicy.exhausted()&&["backend-exited","language-start-backend-exited"].includes(code)?"language-recovery-exhausted":code);
+    this.reportError(error);
+  }
   private approval(event: LanguageServiceApprovalEvent): void { try { this.approvalTrace?.(event); } catch { /* Logging cannot change consent. */ } }
   private operation(doc:Document,operation:string,outcome:string,extra:Partial<import("../../protocol/language-service.ts").LanguageServiceTrace>={}):void {
     try{this.native.trace?.({workspaceRoot:this.info.workspaceRoot,uri:doc.info.uri,sessionId:this.sessionId??undefined,version:doc.latest.version,operation,outcome,...extra});}catch{/* Tracing is observational only. */}
@@ -141,6 +187,7 @@ class Session {
     if (this.dead || this.docs.size >= 32) return null;
     const doc = { handle: { ...handle }, info, latest: { version: 0, text: "" }, sent: 0, opened: false, closed: false, timer: null, listeners: new Set<Listener>(), requests: new Map<string, number>() } as unknown as Document;
     doc.port = {
+      generation:()=>this.resultGeneration,
       documentUri: info.uri,
       definitionEvent: (event) => { this.operation(doc,event.kind??"definition",event.outcome,{resultCount:event.targetCount});try { this.trace?.(event); } catch { /* Diagnostics cannot block navigation. */ } },
       open: (_handle, snapshot) => { if(this.accept(doc, snapshot)){this.operation(doc,"document-open","accepted");this.enqueue(() => this.flush(doc));} },
@@ -168,20 +215,24 @@ class Session {
     this.publish(doc, []); return true;
   }
   private enqueue(action: () => Promise<void>): Promise<void> {
-    this.serial = this.serial.then(action).catch((error) => { if (!this.dead && !this.consent.denied && !this.failed) { this.failed = true; this.reportError(error); } });
+    const generation=this.generation;
+    this.serial = this.serial.then(()=>{if(generation===this.generation)return action();}).catch((error) => { if(!this.failed)this.fail(error,generation); });
     return this.serial;
   }
-  private async ensure(): Promise<string | null> {
+  private async ensure(automatic=false): Promise<string | null> {
     if (this.dead || this.consent.denied || this.failed || !this.live()) return null;
+    if(this.recovery&&!automatic)return null;
     if (this.sessionId) return this.sessionId;
     if (this.starting) return this.starting;
-    this.status("preparing");
+    const generation=this.generation;
+    this.status(automatic?"recovering":"preparing");
     this.starting = (async () => {
       let review = await this.native.prepare(this.info.workspaceRoot, this.info.pluginId, this.info.serverId ?? "typescript");
       let explicitlyApproved=false;
       if (review.serverId !== (this.info.serverId ?? "typescript")) throw Error("Language execution profile changed");
       const identity = JSON.stringify([review.pluginId, review.serverId, review.pluginVersion, review.packageDigest, review.resourceDigest, review.executableIdentity]);
       if (this.dead || !this.live()) return null;
+      if(automatic&&(this.consent.approvedIdentity!==identity||review.remembered===false))throw Error("language-execution-identity-changed");
       if (review.remembered === true) {
         this.consent.approvedIdentity = identity; this.approval({ outcome: "reused" });
       } else if (review.remembered === false || this.consent.approvedIdentity !== identity) {
@@ -201,25 +252,29 @@ class Session {
         if(!explicitlyApproved&&review.remembered===true&&fresh.remembered!==true)throw Error("language-approval-revoked");
         review=fresh;
       }
-      const session = await this.native.start(this.info.workspaceRoot, review.reviewId, this.info.serverId ?? "typescript", true,this.refreshModel);
-      if (this.dead || !this.live()) { await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); return null; }
+      const refreshModel=this.refreshModel;this.refreshModel=false;
+      const session = await this.native.start(this.info.workspaceRoot, review.reviewId, this.info.serverId ?? "typescript", true,refreshModel);
+      if (this.dead || !this.live()||generation!==this.generation) { await this.native.stop(this.info.workspaceRoot, session).catch(() => undefined); return null; }
+      this.recovery=null;
       this.sessionId = session; this.status((this.info.serverId ?? "typescript") === "typescript" ? "ready" : "indexing");
       const early=this.earlyEvents.get(session);this.earlyEvents.clear();if(early)this.event(early); return session;
-    })().catch(error=>{if(!this.dead)this.status("failed",/^[a-z][a-z0-9.-]{0,79}$/u.test(error?.message) ? error.message : "language-start-failed");throw error;}).finally(() => { this.starting = null; });
+    })().catch(error=>{if(generation===this.generation){this.recovery=null;this.fail(error,generation);}throw error;}).finally(() => { this.starting = null; });
     return this.starting;
   }
   private async flush(doc: Document): Promise<void> {
     if (!this.current(doc) || doc.latest.version === doc.sent || doc.latest.version === 0) return;
-    const session = await this.ensure(); if (!session || !this.current(doc)) return;
+    const generation=this.generation;
+    const session = await this.ensure(); if (!session || session!==this.sessionId||generation!==this.generation||!this.current(doc)) return;
     const snapshot = doc.latest;
     if (!doc.opened) {
       // Server versions begin at one for each freshly opened URI, then follow the editor clock.
       await this.native.open(this.info.workspaceRoot, session, doc.info.uri, doc.info.languageId, 1, snapshot.text);
+      if(generation!==this.generation||session!==this.sessionId||!this.current(doc))return;
       doc.opened = true; doc.sent = 1;
       if (!this.current(doc)) return;
     }
     if (snapshot.version > doc.sent) await this.native.change(this.info.workspaceRoot, session, doc.info.uri, snapshot.version, [{ range: null, text: snapshot.text }]);
-    doc.sent = snapshot.version;
+    if(generation===this.generation&&session===this.sessionId)doc.sent = snapshot.version;
   }
   private close(doc: Document): void {
     if(!doc.closed)this.operation(doc,"document-close","accepted");
@@ -238,22 +293,27 @@ class Session {
     const feature = ({ "textDocument/hover": "hover", "textDocument/definition": "definition", "textDocument/completion": "completion", "textDocument/references": "references", hover: "hover", definition: "definition", completion: "completion", references: "references" } as const)[method as "hover"];
     const pos = (params as { position?: { line?: unknown; character?: unknown } } | null)?.position;
     if (!feature || !pos || !Number.isSafeInteger(pos.line) || !Number.isSafeInteger(pos.character) || Number(pos.line) < 0 || Number(pos.character) < 0 || !this.current(doc) || doc.latest.version !== version || doc.requests.size >= 16 || [...this.docs.values()].reduce((count, item) => count + item.requests.size, 0) >= 64) {this.operation(doc,"request","discarded",{reason:"stale-or-ineligible"});return null;}
+    if(this.recovery)throw new LanguageServiceRecoveringError();
     if(this.failed)throw new LanguageServiceUnavailableError();
     if (doc.timer) { clearTimeout(doc.timer); doc.timer = null; }
     await this.enqueue(() => this.flush(doc));
+    if(this.recovery)throw new LanguageServiceRecoveringError();
+    if(this.failed)throw new LanguageServiceUnavailableError();
     const session = this.sessionId;
     if (!session || !doc.opened || !this.current(doc) || doc.latest.version !== version || doc.sent !== version) return null;
+    const resultGeneration=this.resultGeneration;
     const id = `${++this.sequence}`; doc.requests.set(id, version);
     const started=performance.now();this.operation(doc,"request","requested",{feature,requestId:id});
     try {
       const envelope = await this.native.request(this.info.workspaceRoot, session, doc.info.uri, version, id, feature, Number(pos.line), Number(pos.character));
-      const current=this.current(doc) && this.sessionId === session && doc.latest.version === version && envelope.sessionId === session && envelope.uri === doc.info.uri && envelope.version === version;
+      const current=this.current(doc) && resultGeneration===this.resultGeneration && this.sessionId === session && doc.latest.version === version && envelope.sessionId === session && envelope.uri === doc.info.uri && envelope.version === version;
       this.operation(doc,"request",current?"completed":"discarded",{feature,requestId:id,durationMs:performance.now()-started,resultCount:Array.isArray(envelope.result)?envelope.result.length:undefined});
       return current ? envelope.result : null;
     } catch (error) {
       this.operation(doc,"request",error instanceof LanguageServiceIndexingError?"indexing":"failed",{feature,requestId:id,durationMs:performance.now()-started});
       // Preserve a host loading state only for this exact live document/session/version.
       if ((error instanceof LanguageServiceIndexingError||error instanceof LanguageServiceUnavailableError)
+        && resultGeneration===this.resultGeneration
         && this.current(doc)
         && this.sessionId === session
         && doc.latest.version === version) throw error;
@@ -265,15 +325,24 @@ class Session {
       if(this.starting && !this.sessionId && event.kind!=="diagnostics"){if(this.earlyEvents.size>=16)this.earlyEvents.clear();this.earlyEvents.set(event.sessionId,event);}
       return;
     }
-    if(event.kind!=="diagnostics")this.status(event.kind==="terminated"||event.kind==="degraded"?"failed":event.kind==="ready"&&event.code?"partial":event.kind,event.code,event.progress);
-    if (event.kind === "terminated") { this.sessionId = null; this.failed = true; for (const doc of this.docs.values()) this.publish(doc, []); return; }
+    if (event.kind === "terminated") {
+      const code=event.code??"session-ended";
+      if(this.recover(code))return;
+      this.sessionId=null;this.failed=true;++this.generation;++this.resultGeneration;
+      this.status("failed",this.recoveryPolicy.exhausted()&&code==="backend-exited"?"language-recovery-exhausted":code);
+      for(const doc of this.docs.values()){doc.opened=false;doc.sent=0;this.publish(doc,[]);}return;
+    }
+    if(event.kind==="recovering"){++this.resultGeneration;for(const doc of this.docs.values())this.publish(doc,[]);}
+    if(event.kind!=="diagnostics")this.status(event.kind==="degraded"?"failed":event.kind==="ready"&&event.code?"partial":event.kind,event.code,event.progress);
     for (const doc of this.docs.values()) if (this.current(doc) && event.uri === doc.info.uri && event.version === doc.latest.version && event.diagnostics) this.publish(doc, event.diagnostics);
   }
-  private publish(doc: Document, diagnostics: readonly EditorLanguageServiceDiagnostic[]): void { for (const listener of doc.listeners) listener({ handle: doc.handle, version: doc.latest.version, diagnostics }); }
+  private publish(doc: Document, diagnostics: readonly EditorLanguageServiceDiagnostic[]): void {
+    for(const listener of doc.listeners){try{listener({handle:doc.handle,version:doc.latest.version,diagnostics});}catch{/* A disposed presentation observer cannot interrupt synchronization or recovery. */}}
+  }
   reconcile(retainWarm=false): boolean { this.warmed=this.warmed && retainWarm;for (const doc of [...this.docs.values()]) if (!this.current(doc)) this.close(doc); return this.warmed || this.docs.size > 0; }
   async dispose(): Promise<void> {
     if (this.dead) return;
-    this.dead = true; this.warmed=false; this.status("stopped"); this.earlyEvents.clear();
+    this.dead = true; this.warmed=false;++this.generation;++this.resultGeneration;if(this.recoveryTimer)clearTimeout(this.recoveryTimer);this.recoveryTimer=null;this.recovery=null;this.status("stopped"); this.earlyEvents.clear();
     for (const doc of [...this.docs.values()]) this.close(doc);
     const session = this.sessionId; this.sessionId = null;
     await Promise.allSettled([this.starting,session ? this.native.stop(this.info.workspaceRoot, session) : null]);

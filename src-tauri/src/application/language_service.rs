@@ -609,7 +609,10 @@ impl Drop for LanguageServiceManager {
         self.cancel_all();
     }
 }
-fn safe_error(error: impl std::fmt::Debug) -> String {
+fn safe_error(error: asterlyn_language_service::SessionError) -> String {
+    if error == asterlyn_language_service::SessionError::Closed {
+        return "language-start-backend-exited".into();
+    }
     format!("language service transport failed: {error:?}")
 }
 
@@ -649,6 +652,100 @@ fn document_language(path: &Path) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn startup_eof_is_classified_without_retrying_protocol_or_spawn_errors() {
+        use asterlyn_language_service::SessionError;
+        assert_eq!(
+            safe_error(SessionError::Closed),
+            "language-start-backend-exited"
+        );
+        for error in [
+            SessionError::InvalidMessage("invalid".into()),
+            SessionError::Process("spawn failed".into()),
+            SessionError::LimitExceeded("frame"),
+            SessionError::Timeout,
+        ] {
+            assert_ne!(safe_error(error), "language-start-backend-exited");
+        }
+    }
+    #[test]
+    fn real_actor_eof_and_malformed_frames_are_distinct_and_new_sessions_get_new_ids() {
+        let Ok(node) = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE") else {
+            eprintln!("actor exit fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
+            return;
+        };
+        for (mode, expected) in [("eof", "backend-exited"), ("protocol", "transport-failed")] {
+            let package = tempfile::tempdir().unwrap();
+            let servers = package.path().join("servers/typescript");
+            std::fs::create_dir_all(servers.join("typescript/lib")).unwrap();
+            std::fs::write(servers.join("typescript/lib/tsserver.js"), "").unwrap();
+            let script = r#"const mode='MODE';let b=Buffer.alloc(0);process.stdin.on('data',c=>{b=Buffer.concat([b,c]);for(;;){const end=b.indexOf('\r\n\r\n');if(end<0)return;const n=Number(/Content-Length: (\d+)/i.exec(b.subarray(0,end).toString())[1]);if(b.length<end+4+n)return;const m=JSON.parse(b.subarray(end+4,end+4+n));b=b.subarray(end+4+n);if(m.method==='initialize'){const out=Buffer.from(JSON.stringify({jsonrpc:'2.0',id:m.id,result:{capabilities:{positionEncoding:'utf-16'}}}));process.stdout.write('Content-Length: '+out.length+'\r\n\r\n');process.stdout.write(out);}if(m.method==='textDocument/didOpen'){if(mode==='eof')process.exit(11);else process.stdout.write('Content-Length: invalid\r\n\r\n{}');}}});"#;
+            std::fs::write(servers.join("server.mjs"), script.replace("MODE", mode)).unwrap();
+            let workspace = tempfile::tempdir().unwrap();
+            let root = workspace.path().canonicalize().unwrap();
+            let file = root.join("a.ts");
+            std::fs::write(&file, "let x=1").unwrap();
+            let uri = url::Url::from_file_path(file).unwrap().to_string();
+            let owner = LanguageSubject {
+                owner: "fault-test".into(),
+                root,
+                activation: 1,
+            };
+            let identity = LanguagePackage {
+                version: "test".into(),
+                digest: "test".into(),
+                content_digest: "test".into(),
+                root: package.path().to_owned(),
+                node: PathBuf::from(&node),
+                node_digest: "test".into(),
+                rust: None,
+                packaged: None,
+            };
+            let manager = LanguageServiceManager::default();
+            let mut ids = HashSet::new();
+            for _ in 0..2 {
+                let (sender, receiver) = mpsc::channel();
+                let id = manager
+                    .start(
+                        owner.clone(),
+                        identity.clone(),
+                        0,
+                        Arc::new(|| true),
+                        Arc::new(move |event| {
+                            let _ = sender.send(event);
+                        }),
+                    )
+                    .unwrap();
+                assert!(ids.insert(id.clone()));
+                manager
+                    .open(
+                        &id,
+                        &owner,
+                        uri.clone(),
+                        "typescript".into(),
+                        1,
+                        "let x=2".into(),
+                    )
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap()
+                    .unwrap();
+                let deadline = Instant::now() + Duration::from_secs(4);
+                let mut code = None;
+                while Instant::now() < deadline {
+                    if let Ok(event) = receiver.recv_timeout(Duration::from_millis(100))
+                        && event.kind == "terminated"
+                    {
+                        code = event.code;
+                        break;
+                    }
+                }
+                assert_eq!(code.as_deref(), Some(expected));
+                // Admission can briefly race the actor's final map removal. A new identity is
+                // still independently supervised, and the manager is never asked to replay edits.
+            }
+        }
+    }
     #[test]
     fn reviews_are_one_time_and_bind_owner_activation_package() {
         let manager = LanguageServiceManager::default();

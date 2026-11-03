@@ -88,3 +88,22 @@ are not retained. Each run verifies exact query-set stability and final source d
 RSS sampling excludes the desktop host and its WebKit services; it is not whole-app physical memory.
 Use native lifecycle and platform memory acceptance separately. Initialization/ready notifications
 alone are not semantic acceptance. Run the framing/model/status privacy tests with the JVM probe tests.
+
+
+## Private Android process-failure acceptance
+
+`node scripts/probes/verify-android-recovery.mjs /private/baseline-config.json /private/evidence.json`
+uses the same explicit Android model/tool inputs and starts its own detached adapter. It checks exact
+references, a no-op model polling interval, then kills only matching direct JVM children in that
+adapter's private process group. It tests JDT replacement, current unsaved-overlay retention, three
+Kotlin restarts, fourth-exit exhaustion, continued Java availability, model reacquisition, unchanged
+source and final process cleanup. It never kills a user Gradle daemon or another application's JVM.
+The current representative Java probe is boostCleaner's HttpClient; use that authorized project for
+this acceptance entry. Optional `cacheSeed` copies verified derived artifacts into its private cache;
+it never deletes the seed or user caches. The adapter validates cache entries normally.
+
+SIGINT/SIGTERM stop the owned group, evidence checkpoints retain only counts/hashes/stages and fixed
+failure codes, and failure attempts must be preserved separately from the final package receipt.
+This is a developer fault tool, never an application entry or plugin permission. A direct backend
+pass does not replace native authority/lifecycle fixtures, package admission, desktop health and icon
+restart acceptance.

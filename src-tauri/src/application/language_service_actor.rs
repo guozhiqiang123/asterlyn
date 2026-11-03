@@ -305,6 +305,40 @@ pub(super) fn actor(
                                     })
                             })
                             .map(str::to_owned);
+                        let recovering = matches!(
+                            code.as_deref(),
+                            Some("java-backend-recovering" | "kotlin-backend-recovering")
+                        );
+                        if recovering {
+                            // Internal backend replacement changes the analysis snapshot even
+                            // when the build model lease and document versions did not change.
+                            model_generation += 1;
+                            for (number, request) in std::mem::take(&mut pending) {
+                                let _ = process.cancel(number);
+                                let _ = request.reply.send(Err("language result is stale".into()));
+                            }
+                            for (number, _) in diagnostic_pending.drain() {
+                                let _ = process.cancel(number);
+                            }
+                            for job in diagnostic_jobs.values_mut() {
+                                job.remaining = 0;
+                                job.failed = false;
+                                job.items.clear();
+                                job.due = Instant::now() + Duration::from_millis(150);
+                            }
+                            for (uri, doc) in &documents {
+                                emit(LanguageServiceEvent {
+                                    session_id: id.clone(),
+                                    kind: "diagnostics",
+                                    code: None,
+                                    uri: Some(uri.clone()),
+                                    version: Some(doc.version),
+                                    diagnostics: Some(json!([])),
+                                    progress: None,
+                                    details: None,
+                                });
+                            }
+                        }
                         let was_ready = rust_ready;
                         failure_code = if health == "error" {
                             Some(
@@ -332,6 +366,11 @@ pub(super) fn actor(
                             session_id: id.clone(),
                             kind: if health == "error" {
                                 "degraded"
+                            } else if matches!(
+                                code.as_deref(),
+                                Some("java-backend-recovering" | "kotlin-backend-recovering")
+                            ) {
+                                "recovering"
                             } else if rust_ready {
                                 "ready"
                             } else {

@@ -2,7 +2,7 @@ import type { LanguageServiceStatus } from "./language-service-client.ts";
 import type { LanguageServiceCopy } from "../../localization/language-service-copy.ts";
 
 type Status=LanguageServiceStatus & {label:string};
-const busy=(state:Status)=>["preparing","awaiting-approval","indexing"].includes(state.state)||((state.state==="ready"||state.state==="partial")&&state.progress!==undefined&&!["ready","failed"].includes(state.progress.phase));
+const busy=(state:Status)=>["recovering","preparing","awaiting-approval","indexing"].includes(state.state)||((state.state==="ready"||state.state==="partial")&&state.progress!==undefined&&!["ready","failed"].includes(state.progress.phase));
 
 /** One persistent footer control; phase announcements exclude the once-per-second timer. */
 export class LanguageServiceStatusView {
@@ -57,7 +57,7 @@ export class LanguageServiceStatusView {
     const stage=(state.state==="indexing"||state.state==="ready"||state.state==="partial")&&state.progress?state.progress.phase:state.state;
     const counts=state.progress?.completed===undefined?"":` · ${state.progress.completed}${state.progress.total===undefined?"":`/${state.progress.total}`} ${copy.units[state.progress.unit??"items"]}`;
     const label=(state.state==="ready"||state.state==="partial")&&state.code&&(!state.progress||["ready","failed"].includes(state.progress.phase))?copy.partiallyReady:copy.stages[stage];
-    return `${label}${counts}`;
+    return `${label}${counts}${state.state==="recovering"&&state.recovery?` (${state.recovery.attempt}/${state.recovery.maximum})`:""}`;
   }
   update(states:readonly Status[],debug:boolean):void{
     if(this.disposed)return;this.states=states;

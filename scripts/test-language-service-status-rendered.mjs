@@ -18,6 +18,7 @@ try{for(const [name,engine] of [["Chromium",chromium],["WebKit",webkit]]){
   await panel.getByLabel("Debug tracing",{exact:true}).check();assert.equal(await panel.locator("code").innerText(),"repository-credentials-missing");
   await panel.getByRole("button",{name:"Retry language services",exact:true}).click();await panel.getByRole("button",{name:"Clear this project's approval and stop services",exact:true}).click();assert.deepEqual((await snapshot()).actions,["debug:true","retry","forget"]);
   await update({state:"partial",code:"java-analysis-awaiting-kotlin",progress:{phase:"backend"}});assert.equal(await status.getAttribute("data-busy"),"true");
+  await update({state:"recovering",progress:undefined,recovery:{attempt:2,maximum:3,delayMs:1000,reason:"backend-exited"}});assert.match(await status.innerText(),/Recovering.*2\/3/u);assert.equal(await status.getAttribute("data-busy"),"true");
   await update({state:"conflict",progress:undefined,choices:[{id:"one",label:"Provider One"},{id:"two",label:"Provider Two"}],selectionKey:"kotlin"});
   assert.match(await status.innerText(),/selection required/u);const providerChoice=panel.getByRole("combobox",{name:"Choose a language provider: kotlin"});await providerChoice.focus();await providerChoice.selectOption("two");assert.equal((await snapshot()).actions.at(-1),"provider:kotlin:two");assert.equal(await status.getAttribute("data-busy"),"false");
   await update({state:"ready",code:undefined,progress:{phase:"ready"},choices:undefined,selectionKey:undefined});
