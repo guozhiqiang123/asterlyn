@@ -62,6 +62,14 @@ jobs:
       - name: Test definition pointer navigation
         run: npm run test:lsp:definition
 
+      - name: Preserve rendered language budget evidence
+        if: ${{ always() && hashFiles('target/language-ui-gates/summary.json') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rendered-language-budgets
+          path: target/language-ui-gates/summary.json
+          retention-days: 7
+
       - name: Verify public plugin template
         run: npm run plugin-template:verify
 

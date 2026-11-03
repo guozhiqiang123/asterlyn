@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "renderedFixture": {
+    "samples": 30,
+    "feedbackFrameP95Ms": 100,
+    "responseToResultFrameP95Ms": 50,
+    "retainedHeapGrowthBytes": 2097152
+  },
+  "realBackendTargets": {
+    "samples": 30,
+    "firstQueryMs": 1000,
+    "hotQueryP95Ms": 500,
+    "enforcement": "explicit private probe; report workload and cache identity"
+  }
+}

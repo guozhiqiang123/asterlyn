@@ -107,3 +107,21 @@ failure codes, and failure attempts must be preserved separately from the final 
 This is a developer fault tool, never an application entry or plugin permission. A direct backend
 pass does not replace native authority/lifecycle fixtures, package admission, desktop health and icon
 restart acceptance.
+
+## Portable core gates and rendered budgets
+
+`node scripts/run-core-language-gates.mjs` runs the UI-free Rust contract suites plus three mandatory
+real Node stdio lifecycle fixtures. The runner supplies its own absolute `process.execPath`; explicitly
+enabled fixtures fail if that executable is absent, rather than returning early. Evidence goes under
+`target/core-language-gates` (override `ASTERLYN_GATE_EVIDENCE`). The runner bounds output/time and
+terminates only its own fresh process tree on interruption. The three-OS `core-language.yml` workflow
+retains each job's summary and logs; configuration does not constitute a successful remote run.
+
+`npm run test:lsp:definition` additionally measures 30 pointer gestures per browser, actual feedback
+and result DOM at requestAnimationFrame timestamps, and Chromium's fixed-cycle retained JS heap.
+Thresholds live in `protocol/language-experience-budgets.v1.json`; results go to
+`target/language-ui-gates/summary.json` (override `ASTERLYN_UI_EVIDENCE`). These deterministic backend
+fixtures measure component rendering, not real project startup or semantic latency. First-query / hot
+backend goals remain explicit private-project measurements with the O0 model/cache/tool identities
+and process/RSS evidence. Never substitute fixture timings for those results or infer full WebView
+physical memory from a JavaScript heap sample.

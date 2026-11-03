@@ -17,7 +17,14 @@ const files = [
 const contents = [source, "\uFEFFexport function target() { return 1; }\r\n", "export const target = 2;\n"];
 const state: any = { mode: "link", active: files[0], requests: [], statuses: [], outcomes: [], pending: [], epoch: 1, serviceGeneration:0 };
 const menu = new ContextMenuHost(document, window);
-const editor = new TextEditor({ load: async () => null as any, openCommit() {}, status(message, kind) { state.statuses.push({ message, kind }); }, error(error) { throw error; } }, EN_US.editor, menu);
+function reportStatus(message:string,kind:unknown) {
+  state.statuses.push({message,kind});
+  if(state.measurement?.actionAt!==undefined&&state.measurement.feedbackFrameAt===undefined){
+    let feedback=document.querySelector<HTMLElement>("#fixture-feedback");if(!feedback){feedback=document.createElement("div");feedback.id="fixture-feedback";feedback.setAttribute("role","status");document.body.append(feedback);}feedback.textContent=message;
+    requestAnimationFrame(()=>{if(state.measurement&&state.measurement.feedbackFrameAt===undefined)state.measurement.feedbackFrameAt=performance.now();});
+  }
+}
+const editor = new TextEditor({ load: async () => null as any, openCommit() {}, status(message, kind) { reportStatus(message,kind); }, error(error) { throw error; } }, EN_US.editor, menu);
 const range = (line: number, from: number, to: number) => ({ start: { line, character: from }, end: { line, character: to } });
 const definition = () => ({ targetUri: workspaceFileUri("/repo", files[1]!.workspacePath), targetRange: range(0, 0, 0), targetSelectionRange: range(1, 17, 23) });
 const second = () => ({ uri: workspaceFileUri("/repo", files[2]!.workspacePath), range: range(0, 13, 19) });
@@ -30,7 +37,7 @@ const navigate = createLanguageDefinitionNavigator({ workspace: () => ({ root: "
   open: async (_root, file) => { mount(files.findIndex((entry) => entry.workspacePath === file.workspacePath)); },
   openSource: async (_root, location) => {state.active = {workspacePath: "SDK.java", uri: location.uri}; editor.setReadOnly(true); const source = location.readonlySource!; editor.mount(document.querySelector("#editor")!, location.uri, 1, source.text, source.text, source.path, DEFAULT_APP_PREFERENCES, null, "untracked", () => {});},
   activeUri: () => state.active.uri ?? workspaceFileUri("/repo", state.active.workspacePath), content: () => editor.content(), select: (from, to) => editor.selectRange(from, to),
-  copy: () => EN_US.editor.languageService, status: (message, kind) => state.statuses.push({ message, kind }), diagnostic: (outcome) => state.outcomes.push(outcome),
+  copy: () => EN_US.editor.languageService, status: (message, kind) => reportStatus(message,kind), diagnostic: (outcome) => state.outcomes.push(outcome),
 });
 const port: any = { generation:()=>state.serviceGeneration,open() {}, update() {}, close() {}, subscribeDiagnostics: () => () => {},
   analyzeReferences:locations=>analyzeReferenceLocations(locations,async location=>{
@@ -63,16 +70,23 @@ const port: any = { generation:()=>state.serviceGeneration,open() {}, update() {
     return Promise.resolve(definition());
   },
 };
+const originalRequest=port.request;
+port.request=(...args:unknown[])=>Promise.resolve(originalRequest(...args)).then(value=>{if(state.measurement?.actionAt!==undefined)state.measurement.responseAt=performance.now();return value;});
+function markAction(event:MouseEvent|KeyboardEvent){if(state.measurement&&state.measurement.actionAt===undefined&&((event instanceof KeyboardEvent&&event.key==="F12")||(event instanceof MouseEvent&&(event.ctrlKey||event.metaKey))))state.measurement.actionAt=performance.now();}
+document.addEventListener("keydown",markAction,true);document.addEventListener("mousedown",markAction,true);
+const metricsObserver=new MutationObserver(()=>{const measurement=state.measurement;if(measurement?.responseAt===undefined||measurement.frameScheduled||!document.querySelector('.language-location-picker [role="option"]'))return;measurement.frameScheduled=true;requestAnimationFrame(()=>{measurement.resultFrameAt=performance.now();});});
+metricsObserver.observe(document.body,{childList:true,subtree:true});
 editor.setLanguageServices(() => port);
 mount(1);
 (editor as any).activeEntry().view.dispatch({ changes: { from: 0, insert: "// unsaved 😀\n" } });
 mount(0);
 const fixture = { state, editor, menu, definition, second,
+  measureStart(){state.measurement={};},measurement(){return state.measurement;},
   reset(mode = "link") { state.mode = mode; state.epoch++; mount(0); state.requests.length = 0; state.statuses.length = 0; state.outcomes.length = 0; state.pending.length = 0; },
   otherTab() { mount(2); },
   resolve(index = 0) { state.pending[index]?.(definition()); },
   point(which = "use") { const view = (editor as any).activeEntry().view; const text = view.state.doc.toString(); const pos = which === "use" ? text.lastIndexOf("target") + 2 : 1; const bounds = view.coordsAtPos(pos); if (!bounds) throw Error("symbol has no coordinates"); return { x: bounds.left + 1, y: (bounds.top + bounds.bottom) / 2, pos }; },
   snapshot() { const view = (editor as any).activeEntry().view; return { active: state.active.workspacePath, text: view.state.doc.toString(), exact: editor.content(), selection: view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to), head: view.state.selection.main.head, focused: view.hasFocus, requests: state.requests, statuses: state.statuses, outcomes: state.outcomes }; },
-  destroy() { editor.destroy(); menu.dispose(); },
+  destroy() { metricsObserver.disconnect();document.removeEventListener("keydown",markAction,true);document.removeEventListener("mousedown",markAction,true);editor.destroy(); menu.dispose(); },
 };
 (window as any).definitionFixture = fixture;

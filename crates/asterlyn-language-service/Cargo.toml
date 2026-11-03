@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+process-fixtures = []
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [dependencies]
 asterlyn-process = { path = "../asterlyn-process" }
 serde.workspace = true

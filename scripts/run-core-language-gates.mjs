@@ -1,0 +1,28 @@
+import {spawn} from "node:child_process";
+import {mkdir,writeFile} from "node:fs/promises";
+import {resolve,join} from "node:path";
+import {fileURLToPath} from "node:url";
+const root=fileURLToPath(new URL("../",import.meta.url));
+const output=resolve(process.env.ASTERLYN_GATE_EVIDENCE??join(root,"target/core-language-gates"));await mkdir(output,{recursive:true});
+const results=[];
+let active=null;
+function stopOwned(child){
+ if(!child?.pid)return;
+ if(process.platform!=="win32"){try{process.kill(-child.pid,"SIGKILL");}catch{}return;}
+ if(process.env.SystemRoot){const kill=spawn(join(process.env.SystemRoot,"System32","taskkill.exe"),["/F","/T","/PID",String(child.pid)],{stdio:"ignore"});kill.on("error",()=>child.kill());}else child.kill();
+}
+const interrupted=()=>{stopOwned(active);process.exitCode=130;};process.once("SIGINT",interrupted);process.once("SIGTERM",interrupted);
+async function gate(name,args,expectedTests){
+ const began=performance.now();let text="",overflow=false,timedOut=false;
+ const child=spawn("cargo",args,{cwd:root,detached:process.platform!=="win32",env:{...process.env,ASTERLYN_LANGUAGE_SERVICE_NODE:process.execPath},stdio:["ignore","pipe","pipe"]});active=child;
+ for(const stream of [child.stdout,child.stderr])stream.on("data",data=>{const chunk=data.toString(),remaining=16*1024*1024-text.length;text+=chunk.slice(0,Math.max(0,remaining));if(chunk.length>remaining){overflow=true;stopOwned(child);}});
+ const timer=setTimeout(()=>{timedOut=true;stopOwned(child);},15*60*1000);
+ const status=await new Promise((resolve,reject)=>{child.on("error",reject);child.on("close",resolve);}).finally(()=>{clearTimeout(timer);active=null;});
+ await writeFile(join(output,`${name}.log`),text);const matches=[...text.matchAll(/test result: ok\. (\d+) passed/gu)];const tests=matches.reduce((sum,item)=>sum+Number(item[1]),0);
+ const result={name,exitCode:status,passed:status===0&&!overflow&&!timedOut&&tests>=expectedTests,tests,durationMs:Math.round(performance.now()-began)};results.push(result);console.log(JSON.stringify(result));
+ if(!result.passed)throw Error(`Core gate failed: ${name}; see ${join(output,`${name}.log`)}`);
+}
+try{
+ await gate("core",["test","--locked","-p","asterlyn-process","-p","asterlyn-language-service","-p","asterlyn-task","-p","asterlyn-plugin-models","-p","asterlyn-plugin-dependencies","--","--test-threads=2"],1);
+ await gate("portable-process",["test","--locked","-p","asterlyn-language-service","--features","process-fixtures","--test","process_lifecycle","--","--test-threads=1"],3);
+}finally{process.removeListener("SIGINT",interrupted);process.removeListener("SIGTERM",interrupted);await writeFile(join(output,"summary.json"),JSON.stringify({schema:1,platform:process.platform,arch:process.arch,node:process.version,results},null,2)+"\n");}

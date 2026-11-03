@@ -395,14 +395,23 @@ impl LanguageServiceProcess {
     pub fn pid(&self) -> u32 {
         self.child.id()
     }
+    fn observed(&mut self, event: ServerEvent) -> ServerEvent {
+        if matches!(event, ServerEvent::Eof | ServerEvent::Io(_)) {
+            self.session.close();
+        }
+        event
+    }
     pub fn poll_event(&mut self) -> Result<Option<ServerEvent>, SessionError> {
         if let Some(event) = self.buffered.pop() {
-            return Ok(Some(event));
+            return Ok(Some(self.observed(event)));
         }
         match self.events.try_recv() {
-            Ok(event) => Ok(Some(event)),
+            Ok(event) => Ok(Some(self.observed(event))),
             Err(std::sync::mpsc::TryRecvError::Empty) => Ok(None),
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(SessionError::Closed),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.session.close();
+                Err(SessionError::Closed)
+            }
         }
     }
     pub fn accept_response(&mut self, response: &JsonRpcResponse) -> bool {
@@ -463,16 +472,21 @@ impl LanguageServiceProcess {
     }
     pub fn next_event(&mut self, timeout: Duration) -> Result<ServerEvent, SessionError> {
         if let Some(event) = self.buffered.pop() {
-            return Ok(event);
+            return Ok(self.observed(event));
         }
-        self.events
+        let event = self
+            .events
             .recv_timeout(timeout)
             .map_err(|error| match error {
                 std::sync::mpsc::RecvTimeoutError::Timeout => SessionError::InvalidMessage(
                     "language server response deadline exceeded".into(),
                 ),
-                std::sync::mpsc::RecvTimeoutError::Disconnected => SessionError::Closed,
-            })
+                std::sync::mpsc::RecvTimeoutError::Disconnected => {
+                    self.session.close();
+                    SessionError::Closed
+                }
+            })?;
+        Ok(self.observed(event))
     }
     pub fn request_wait(
         &mut self,
@@ -517,8 +531,14 @@ impl LanguageServiceProcess {
                         .push(ServerEvent::Message(message))
                         .map_err(SessionError::LimitExceeded)?;
                 }
-                ServerEvent::Eof => return Err(SessionError::Closed),
-                ServerEvent::Io(error) => return Err(SessionError::Process(error)),
+                ServerEvent::Eof => {
+                    self.session.close();
+                    return Err(SessionError::Closed);
+                }
+                ServerEvent::Io(error) => {
+                    self.session.close();
+                    return Err(SessionError::Process(error));
+                }
             }
         }
     }

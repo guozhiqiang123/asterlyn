@@ -1,4 +1,10 @@
 import assert from "node:assert/strict";
+import {readFile,mkdir,writeFile} from "node:fs/promises";
+import {resolve,join} from "node:path";
+const budgets=JSON.parse(await readFile(new URL("../protocol/language-experience-budgets.v1.json",import.meta.url),"utf8")).renderedFixture;
+const evidenceDir=resolve(process.env.ASTERLYN_UI_EVIDENCE??"target/language-ui-gates");await mkdir(evidenceDir,{recursive:true});
+const measurements=[];
+const p95=values=>[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1];
 import { chromium, webkit } from "playwright";
 import { createServer } from "vite";
 const server = await createServer({ root: process.cwd(), server: { host: "127.0.0.1", port: 0, hmr: false }, plugins: [{ name: "definition-fixture", configureServer(vite) { vite.middlewares.use("/__definition", (_req, res) => { res.setHeader("Content-Type", "text/html"); res.end('<!doctype html><html><body><main id="editor" style="width:960px;height:460px"></main><script type="module" src="/scripts/fixtures/language-definition-fixture.ts"></script></body></html>'); }); } }] });
@@ -108,7 +114,14 @@ try {
    await reset(); await page.evaluate(() => window.definitionFixture.editor.setReadOnly(true)); await click(); assert.equal((await snap()).requests.length, 0);
    if (cdp) { await cdp.send("HeapProfiler.collectGarbage"); heapBefore = (await cdp.send("Runtime.getHeapUsage")).usedSize; }
    for (let cycle = 0; cycle < 20; cycle++) { await reset(cycle % 2 ? "same" : "multiple"); await click(); if (cycle % 2) await page.waitForFunction(() => window.definitionFixture.snapshot().selection === "target"); else { await page.waitForSelector('.language-location-picker[role="dialog"]'); await page.keyboard.press("Escape"); } assert.equal((await snap()).requests.length, 1); }
-   if (cdp) { await cdp.send("HeapProfiler.collectGarbage"); console.log(`${name}: retained JS heap delta over 20 navigation/menu cycles = ${(await cdp.send("Runtime.getHeapUsage")).usedSize - heapBefore} bytes (local sample).`); }
+   if (cdp) { await cdp.send("HeapProfiler.collectGarbage"); const retained=(await cdp.send("Runtime.getHeapUsage")).usedSize-heapBefore;console.log(`${name}: retained JS heap delta over 20 navigation/menu cycles = ${retained} bytes (local sample).`);assert.ok(retained<=budgets.retainedHeapGrowthBytes,`${name}: retained heap exceeds fixed-cycle budget`); }
+   const feedbackFrames=[],resultFrames=[];
+   for(let sample=0;sample<budgets.samples;sample++){
+    await reset("multiple");await page.evaluate(()=>window.definitionFixture.measureStart());await click();await page.waitForFunction(()=>window.definitionFixture.measurement()?.resultFrameAt!==undefined&&window.definitionFixture.measurement()?.feedbackFrameAt!==undefined);
+    const measure=await page.evaluate(()=>window.definitionFixture.measurement());feedbackFrames.push(measure.feedbackFrameAt-measure.actionAt);resultFrames.push(measure.resultFrameAt-measure.responseAt);await page.keyboard.press("Escape");
+   }
+   const measured={engine:name,samples:feedbackFrames.length,feedbackFrameP95Ms:p95(feedbackFrames),responseToResultFrameP95Ms:p95(resultFrames),feedbackFrames,resultFrames,scope:"rendered component with deterministic backend, requestAnimationFrame timestamps"};measurements.push(measured);console.log(JSON.stringify({engine:name,samples:measured.samples,feedbackFrameP95Ms:measured.feedbackFrameP95Ms,responseToResultFrameP95Ms:measured.responseToResultFrameP95Ms}));
+   assert.ok(measured.feedbackFrameP95Ms<=budgets.feedbackFrameP95Ms,`${name}: feedback frame exceeds budget`);assert.ok(measured.responseToResultFrameP95Ms<=budgets.responseToResultFrameP95Ms,`${name}: result frame exceeds budget`);
    await reset("deferred"); await click(); await page.waitForFunction(() => window.definitionFixture.state.pending.length === 1);
    await page.evaluate(() => { window.definitionFixture.destroy(); window.definitionFixture.resolve(); }); await page.waitForTimeout(40);
    assert.equal(await page.locator('.cm-definition-link, .language-location-picker').count(), 0);
@@ -119,4 +132,4 @@ try {
    throw error;
   } finally { await browser.close(); }
  }
-} finally { await server.close(); }
+} finally { await writeFile(join(evidenceDir,"summary.json"),JSON.stringify({schema:1,budgets,measurements},null,2)+"\n");await server.close(); }
