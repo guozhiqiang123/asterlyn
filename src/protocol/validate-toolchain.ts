@@ -1,3 +1,4 @@
+import {isNativeLanguageModel} from "./native-language-validation.ts";
 import type {JavaToolchainSnapshot} from "./toolchain.ts";
 import type {DesktopCommandName} from "./generated-desktop-protocol.ts";
 import {assert,record} from "./desktop-result-validation-primitives.ts";
@@ -5,7 +6,7 @@ const text=(value:unknown,max:number):value is string=>typeof value==="string"&&
 const major=(value:unknown):value is number=>Number.isInteger(value)&&Number(value)>0&&Number(value)<=65535;
 export function assertToolchains(value:unknown,command:DesktopCommandName):asserts value is readonly JavaToolchainSnapshot[]{
   assert(Array.isArray(value)&&value.length<=32,command,"toolchains must be bounded");
-  for(const raw of value as unknown[]){const item=record(raw,command),req=record(item.requirement,command);
+  for(const raw of value as unknown[]){assert(isNativeLanguageModel("ToolchainSnapshot",raw),command,"invalid native toolchain shape");const item=record(raw,command),req=record(item.requirement,command);
     assert(text(item.id,128)&&text(item.selectionReason,128),command,"invalid toolchain selection");
     assert(["build-runtime","build-model","language-server"].includes(String(item.role)),command,"invalid toolchain role");
     assert(["installed","environment","project","user","command-line"].includes(String(item.source)),command,"invalid toolchain source");

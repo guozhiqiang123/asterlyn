@@ -23,20 +23,15 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 const PLUGIN_ID: &str = "dev.asterlyn.lsp";
 const EVENT: &str = "asterlyn://language-service-event";
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LanguageServiceReview {
-    pub review_id: String,
-    pub plugin_id: String,
-    pub server_id: String,
-    pub plugin_version: String,
-    pub package_digest: String,
-    pub resource_digest: String,
-    pub executable_identity: String,
-    pub expires_at: u64,
-    pub remembered: bool,
-    pub toolchains: Vec<asterlyn_process::toolchain::ToolchainSnapshot>,
+#[derive(Clone, Serialize)]
+struct PublicLanguageServiceEvent<'a> {
+    #[serde(flatten)]
+    event: &'a asterlyn_language_service::application::LanguageServiceEvent,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    failure: Option<LanguageServiceFailure>,
 }
+
+use asterlyn_language_service::protocol::{LanguageServiceFailure, LanguageServiceReview};
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct LanguageServiceChange {
@@ -354,7 +349,8 @@ pub(crate) async fn start_language_service(
                 return;
             }
             log.info("language.service",match event.kind {"terminated"=>"session.terminated","indexing"=>"workspace.indexing","ready"=>"workspace.ready","degraded"=>"workspace.degraded",_=>"diagnostics.completed"},Some(&event.session_id),fields);
-            let _=event_app.emit_to(&label,EVENT,event);
+            let failure=matches!(event.kind,"terminated"|"degraded").then(||LanguageServiceFailure::from_code(event.code.as_deref().unwrap_or("session-ended")));
+            let _=event_app.emit_to(&label,EVENT,PublicLanguageServiceEvent{event:&event,failure});
         });
         let models=super::packaged_analysis::model_access(&app,&owner,&package)?;
         let mut package=package;

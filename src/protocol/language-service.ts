@@ -1,11 +1,6 @@
 import type { EditorLanguageServiceDiagnostic } from "./editor-language-service.ts";
-export interface LanguageServiceReview {
-  readonly toolchains?: readonly import("./toolchain.ts").JavaToolchainSnapshot[];
-  readonly reviewId: string; readonly pluginId: string; readonly serverId: string;
-  readonly pluginVersion: string; readonly packageDigest: string; readonly resourceDigest: string;
-  readonly executableIdentity: string; readonly expiresAt: number;
-  readonly remembered?: boolean;
-}
+import type {NativeLanguageServiceReview,NativeLanguageServiceFailure} from "./generated-native-language-types.ts";
+export type LanguageServiceReview = Omit<NativeLanguageServiceReview,"remembered"|"toolchains"> & Partial<Pick<NativeLanguageServiceReview,"remembered"|"toolchains">>;
 export interface LanguageServiceTextPosition { readonly line: number; readonly character: number; }
 export interface LanguageServiceTextRange { readonly start: LanguageServiceTextPosition; readonly end: LanguageServiceTextPosition; }
 export interface LanguageServiceTextChange { readonly range: LanguageServiceTextRange | null; readonly text: string; }
@@ -18,7 +13,7 @@ export interface LanguageServiceApprovalEvent {
 export interface LanguageServiceEvent {
   readonly sessionId: string; readonly kind: "diagnostics" | "terminated" | "indexing" | "ready" | "degraded" | "recovering";
   readonly uri?: string; readonly version?: number; readonly diagnostics?: readonly EditorLanguageServiceDiagnostic[];
-  readonly code?: string; readonly progress?: LanguageServiceProgress;
+  readonly code?: string; readonly progress?: LanguageServiceProgress; readonly failure?:NativeLanguageServiceFailure;
 }
 export interface LanguageServiceProgress {
   readonly phase: "model" | "sources" | "backend" | "indexing" | "refreshing" | "ready" | "failed";

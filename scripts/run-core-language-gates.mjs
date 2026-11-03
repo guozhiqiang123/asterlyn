@@ -12,9 +12,9 @@ function stopOwned(child){
  if(process.env.SystemRoot){const kill=spawn(join(process.env.SystemRoot,"System32","taskkill.exe"),["/F","/T","/PID",String(child.pid)],{stdio:"ignore"});kill.on("error",()=>child.kill());}else child.kill();
 }
 const interrupted=()=>{stopOwned(active);process.exitCode=130;};process.once("SIGINT",interrupted);process.once("SIGTERM",interrupted);
-async function gate(name,args,expectedTests,requiredNames=[]){
+async function gate(name,args,expectedTests,requiredNames=[],executable="cargo"){
  const began=performance.now();let text="",overflow=false,timedOut=false;
- const child=spawn("cargo",args,{cwd:root,detached:process.platform!=="win32",env:{...process.env,ASTERLYN_LANGUAGE_SERVICE_NODE:process.execPath},stdio:["ignore","pipe","pipe"]});active=child;
+ const child=spawn(executable,args,{cwd:root,detached:process.platform!=="win32",env:{...process.env,ASTERLYN_LANGUAGE_SERVICE_NODE:process.execPath},stdio:["ignore","pipe","pipe"]});active=child;
  for(const stream of [child.stdout,child.stderr])stream.on("data",data=>{const chunk=data.toString(),remaining=16*1024*1024-text.length;text+=chunk.slice(0,Math.max(0,remaining));if(chunk.length>remaining){overflow=true;stopOwned(child);}});
  const timer=setTimeout(()=>{timedOut=true;stopOwned(child);},15*60*1000);
  const status=await new Promise((resolve,reject)=>{child.on("error",reject);child.on("close",resolve);}).finally(()=>{clearTimeout(timer);active=null;});
@@ -27,4 +27,5 @@ try{
  await gate("core",["test","--locked","-p","asterlyn-process","-p","asterlyn-language-service","-p","asterlyn-task","-p","asterlyn-plugin-models","-p","asterlyn-plugin-dependencies","--","--test-threads=2"],1);
  await gate("portable-process",["test","--locked","-p","asterlyn-language-service","--features","process-fixtures","--test","process_lifecycle","--","--test-threads=1"],3);
  await gate("portable-actors",["test","--locked","-p","asterlyn-language-service","--features","process-fixtures","--lib","--","--test-threads=2"],3,["real_actor_eof_and_malformed_frames_are_distinct_and_new_sessions_get_new_ids","actor_cancellation_bypasses_a_stalled_request_and_rejects_foreign_owners","internal_backend_recovery_invalidates_pending_results_without_reopening_documents"]);
+ await gate("native-bindings",["scripts/generate-native-language-contract.mjs","--check"],0,[],process.execPath);
 }finally{process.removeListener("SIGINT",interrupted);process.removeListener("SIGTERM",interrupted);await writeFile(join(output,"summary.json"),JSON.stringify({schema:1,platform:process.platform,arch:process.arch,node:process.version,results},null,2)+"\n");}

@@ -217,3 +217,13 @@ There is one review/session owner, no Tauri dependency in the core, and no forwa
 
 Process fixtures are explicit features with required executable/package/model inputs. The core CI
 executes the EOF, cancellation and internal-generation actor fixtures without booting a desktop.
+
+## Native protocol authority
+
+`asterlyn-language-service::protocol` and `asterlyn-process::toolchain` provide the native serde
+authority for language reviews, inspected Java facts and fixed failure metadata. The opt-in bindings
+export generates TypeScript and structural output checks; CI re-exports and rejects drift. Compatibility
+permits older review fields to be absent and future output fields to be ignored, while identity/path
+refinements and safe-integer checks remain mandatory. The actual native bridge uses this shared path.
+Existing command version/error strings and event codes remain; optional failure metadata cannot
+grant execution or bypass the finite restart owner.

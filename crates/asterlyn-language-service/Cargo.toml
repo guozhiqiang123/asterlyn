@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+bindings = ["dep:schemars", "asterlyn-process/bindings"]
 process-fixtures = []
 typescript-fixtures = ["process-fixtures"]
 workspace-fixtures = ["typescript-fixtures"]
@@ -19,6 +20,12 @@ url = "=2.5.8"
 asterlyn-process = { path = "../asterlyn-process" }
 serde.workspace = true
 serde_json.workspace = true
+schemars = { version = "=0.8.22", optional = true }
+
+[[bin]]
+name = "export-language-contract"
+path = "src/bin/export-language-contract.rs"
+required-features = ["bindings"]
 
 
 [target.'cfg(unix)'.dependencies]

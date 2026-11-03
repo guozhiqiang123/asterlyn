@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub mod application;
 mod inbox;
+pub mod protocol;
 mod rust_profile;
 use inbox::{EventBuffer, EventReceiver, EventSender};
 pub use rust_profile::RustServerProfile;

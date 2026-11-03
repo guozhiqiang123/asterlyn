@@ -24,7 +24,9 @@
     "test:lsp:activation": "node scripts/test-lsp-package-activation.mjs",
     "test:lsp:definition": "node scripts/test-language-definition-rendered.mjs",
     "test:lsp:status": "node scripts/test-language-service-status-rendered.mjs",
-    "test:find:rendered": "node scripts/test-find-results-rendered.mjs"
+    "test:find:rendered": "node scripts/test-find-results-rendered.mjs",
+    "protocol:native": "node scripts/generate-native-language-contract.mjs",
+    "protocol:native:check": "node scripts/generate-native-language-contract.mjs --check"
   },
   "dependencies": {
     "@asterlyn/plugin-sdk": "file:packages/plugin-sdk",

@@ -136,3 +136,9 @@ Private fixture values are never defaults in public CI.
 `workspace-fixtures` additionally requires `ASTERLYN_LSP_WORKSPACE_ROOT`; it is separate from the
 standalone TypeScript fixture so selecting a packaged server test does not silently select a private
 workspace. `ASTERLYN_LSP_WORKSPACE_FILE` can choose the authorized representative source file.
+
+Native contract authority: `npm run protocol:native` regenerates language types/schema from Rust;
+`npm run protocol:native:check` fails on drift. Binding compilation reuses pinned schemars 0.8.22 and
+is opt-in; it is not a normal client runtime dependency. The core gate includes this check with its
+own summary/log entry. Generated structural checks complement the existing semantic admission
+checks; they are not an arbitrary schema execution API for plugins.

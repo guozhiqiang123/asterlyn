@@ -15,6 +15,7 @@ export interface LanguageServiceStatus {
   scope: LanguageConsentScope; sessionId: string | null;
   choices?:readonly {id:string;label:string}[]; selectionKey?:string; selectedProvider?:string;
   recovery?:LanguageRecoveryAttempt;
+  failure?:import("../../protocol/generated-native-language-types.ts").NativeLanguageServiceFailure;
   toolchains?:readonly import("../../protocol/toolchain.ts").JavaToolchainSnapshot[];
   state: "recovering" | "provider-selected" | "conflict" | "partial" | "preparing" | "awaiting-approval" | "declined" | "indexing" | "ready" | "failed" | "stopped";
   progress?: LanguageServiceProgress; code?: string; startedAt: number;
@@ -101,6 +102,7 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
   return factory;
 }
 class Session {
+  private failure:import("../../protocol/generated-native-language-types.ts").NativeLanguageServiceFailure|undefined;
   private toolchains:readonly import("../../protocol/toolchain.ts").JavaToolchainSnapshot[]=[];
   private readonly recoveryPolicy=new LanguageRecoveryPolicy();
   private recovery:LanguageRecoveryAttempt|null=null;
@@ -138,7 +140,7 @@ class Session {
     const working=["recovering","preparing","awaiting-approval","indexing"].includes(state)||((state==="ready"||state==="partial")&&progress!==undefined&&!["ready","failed"].includes(progress.phase));
     if(working&&(!this.working||(this.lastState==="awaiting-approval"&&state!=="awaiting-approval")))this.startedAt=Date.now();
     this.working=working;this.lastState=state;
-    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,toolchains:this.toolchains,recovery:this.recovery??undefined,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
+    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,failure:this.failure,toolchains:this.toolchains,recovery:this.recovery??undefined,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
   }
   async warm():Promise<void>{this.warmed=true;try{await this.ensure();}catch{/* ensure owns classification and finite recovery. */}}
   private failureCode(error:unknown):string {
@@ -227,7 +229,7 @@ class Session {
     if (this.sessionId) return this.sessionId;
     if (this.starting) return this.starting;
     const generation=this.generation;
-    this.status(automatic?"recovering":"preparing");
+    this.failure=undefined;this.status(automatic?"recovering":"preparing");
     this.starting = (async () => {
       let review = await this.native.prepare(this.info.workspaceRoot, this.info.pluginId, this.info.serverId ?? "typescript");
       this.toolchains=review.toolchains??[];
@@ -328,6 +330,7 @@ class Session {
       if(this.starting && !this.sessionId && event.kind!=="diagnostics"){if(this.earlyEvents.size>=16)this.earlyEvents.clear();this.earlyEvents.set(event.sessionId,event);}
       return;
     }
+    if(event.kind!=="diagnostics")this.failure=event.failure;
     if (event.kind === "terminated") {
       const code=event.code??"session-ended";
       if(this.recover(code))return;

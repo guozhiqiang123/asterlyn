@@ -5,10 +5,12 @@ export interface LanguageServiceStatusCopy {
   title:string; statusCommand:string; retry:string; forget:string; debugOn:string; debugOff:string;
   debug:string; debugHint:string; close:string; empty:string; elapsed(seconds:number):string;
   stages:Record<"recovering"|"provider-selected"|"conflict"|"partial"|"preparing"|"awaiting-approval"|"declined"|"indexing"|"ready"|"failed"|"stopped"|"model"|"sources"|"backend"|"refreshing",string>;
+  failureReasons:Record<import("../protocol/generated-native-language-types.ts").LanguageFailureCode,string>;
   failure:string; partial:string;partiallyReady:string;units:Record<"modules"|"files"|"items",string>;
 }
 export const EN_LANGUAGE_STATUS:LanguageServiceStatusCopy={
   toolchains:EN_TOOLCHAINS,
+  failureReasons:{"backend-exited":"The language process exited unexpectedly.","protocol-failed":"The language transport stopped safely.","resource-limit":"The language service reached its resource limit.","authority-revoked":"Project approval or tool identity changed.","model-unavailable":"A current project model is unavailable.","toolchain-unavailable":"A compatible toolchain is unavailable.",cancelled:"The language operation was cancelled.",unavailable:"Language services are unavailable."},
   chooseProvider:"Choose a language provider",providerConflict:"Choose a provider to enable this language. Execution still requires project approval.",
   units:{modules:"modules",files:"files",items:"items"},title:"Language services",statusCommand:"Show language service progress",retry:"Retry language services",
   forget:"Clear this project's approval and stop services",debugOn:"Enable language service debug tracing",debugOff:"Disable language service debug tracing",
@@ -18,6 +20,7 @@ export const EN_LANGUAGE_STATUS:LanguageServiceStatusCopy={
 };
 export const ZH_LANGUAGE_STATUS:LanguageServiceStatusCopy={
   toolchains:ZH_TOOLCHAINS,
+  failureReasons:{"backend-exited":"语言进程意外退出。","protocol-failed":"语言服务通信已安全停止。","resource-limit":"语言服务达到资源上限。","authority-revoked":"项目授权或工具身份已变化。","model-unavailable":"当前项目模型不可用。","toolchain-unavailable":"缺少可用的兼容工具链。",cancelled:"语言操作已取消。",unavailable:"语言服务暂不可用。"},
   chooseProvider:"选择语言服务提供者",providerConflict:"请选择此语言的提供者；运行仍需项目授权。",
   units:{modules:"个模块",files:"个文件",items:"项"},title:"语言服务",statusCommand:"查看语言服务进度",retry:"重试语言服务",forget:"清除此项目授权并停止服务",
   debugOn:"开启语言服务调试追踪",debugOff:"关闭语言服务调试追踪",debug:"调试追踪",debugHint:"仅当前应用会话生效。记录操作元数据，不记录源码或原始服务通信。排查项目导入失败时，请先开启再重试。",close:"关闭语言服务状态",empty:"此项目尚无运行中的语言服务。",elapsed:seconds=>`${seconds} 秒`,

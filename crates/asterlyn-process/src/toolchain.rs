@@ -11,6 +11,7 @@ const RELEASE_LIMIT: u64 = 64 * 1024;
 const LAUNCHER_LIMIT: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum ToolchainRole {
     BuildRuntime,
@@ -19,6 +20,7 @@ pub enum ToolchainRole {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum ToolchainSource {
     Installed,
@@ -29,6 +31,7 @@ pub enum ToolchainSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct JavaRequirement {
     pub minimum_major: u16,
@@ -44,6 +47,7 @@ impl JavaRequirement {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ToolchainSnapshot {
     pub id: String,

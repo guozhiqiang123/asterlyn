@@ -1,3 +1,4 @@
+import {isNativeLanguageModel} from "./native-language-validation.ts";
 import type { LanguageServiceResultEnvelope, LanguageServiceReview, LanguageServiceWorkspaceState, LanguageServiceProgress } from "./language-service.ts";
 import type { DesktopCommandName } from "./generated-desktop-protocol.ts";
 import { assert, record } from "./desktop-result-validation-primitives.ts";
@@ -13,6 +14,7 @@ function boundedString(value: unknown, max: number): value is string {
 
 export function assertLanguageServiceReview(value: unknown, command: DesktopCommandName = "prepare_language_service"): asserts value is LanguageServiceReview {
   const item = record(value, command);
+  assert(isNativeLanguageModel("NativeLanguageServiceReview",value,["remembered","toolchains"]),command,"invalid native language review shape");
   assert(boundedString(item.reviewId, MAX_ID), command, "reviewId must be a bounded string");
   assert(item.pluginId === "dev.asterlyn.lsp", command, "pluginId is not admitted");
   assert(typeof item.serverId === "string" && /^[a-z][a-z0-9.-]{0,127}$/u.test(item.serverId), command, "serverId is not admitted");

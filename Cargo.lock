@@ -127,6 +127,7 @@ version = "0.1.0"
 dependencies = [
  "asterlyn-process",
  "libc",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "sha2",
@@ -229,6 +230,7 @@ name = "asterlyn-process"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "schemars 0.8.22",
  "serde",
  "sha2",
  "tempfile",
