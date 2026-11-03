@@ -81,3 +81,25 @@ Find 统一呈现目录 → 文件 → 命中/位置树，紧凑合并单子目�
 - 随后通过安装客户端打开 boostCleaner（PID 54104，`session-1793670992164-54104-0`），日志核对 Android Gradle 0.6.3、LSP 0.3.10 的精确 digest 和 known-good 状态，3 个语言 provider 可用，项目授权复用。图标启动的 Welcome 空项目无插件激活属于预期，健康检查使用了实际源码项目。
 - 当前项目启动仍有两条既有 `existing_project_directories / invalidPath`；仅记录，未扩展本次修复范围或修改项目目录记录。空白预览的直接复现与修复验证来自此前双引擎的真实源码渲染样本；本次安装验收补充的是原生构建、插件健康和图标重开证据。
 - 本机证据：`/tmp/asterlyn-find-blank-install/installation.json`、`/tmp/asterlyn-find-blank-package.json`、`/tmp/asterlyn-find-blank-installed-summary.json`、`/tmp/asterlyn-find-blank-native-smoke-direct-ax.log` 及同前缀测试/签名/内存日志。人工验收已通过；本项与后续排除导入功能分步提交。
+
+## 引用结果排除导入（2026-11-03，实施前约定）
+
+- 引用选择弹窗与 Find 的语言引用结果摘要栏均增加默认勾选的“排除 import”。定义位置、普通文本/文件搜索不出现该选项；新查询默认勾选，同一结果的勾选状态转入 Find 时保留。
+- 保存完整、未筛选的位置快照，筛选只改变可见投影。取消勾选恢复全部结果，标题/文件夹/文件计数同步更新；路径筛选不裁剪转入窗口的快照。若全是导入，仍显示选项和空状态，以便取消勾选。
+- 仅宿主的显示处理，不改变 LSP 请求、索引、插件 SDK 或原生协议。共用轻量源码分类器：TS/JS（含 JSX/TSX/MJS/CJS/MTS/CTS）、Java、Kotlin/KTS、Groovy/Gradle 的静态 import，以及 Rust use/extern crate；处理多行、别名、静态导入、嵌套 use、注释与字符串。动态 import 调用和 re-export 表达式保留；不能确定、不可读取、超限或不支持的源码保守保留。
+- 分类只读取结果中已授权的文件，优先未保存缓冲区/只读依赖文本，按 URI 合并、最多三个并发、每文件 512 KiB、最多 512 个位置。复用分类时生成的有界预览与布尔判定，避免 Find 重读/重分词，不缓存整份源码；切项目/版本或查询失效后丢弃迟到结果。
+- 检查：各语言正反例（尤其同一行导入后的真实使用）、UTF-16/CRLF、全部导入、勾选/取消、路径筛选叠加、转入 Find、隐藏选中项/计数/树切换、超过 32 个文件与此前空白修复回归。按项目标准重新签名打包、覆盖安装并核对两次图标启动；先保留此前未提交修复。
+
+### 排除导入实现与验收（2026-11-03）
+
+- 两处引用视图均默认勾选，定义/文件/普通文本结果不显示该选项。共用源码分类结果；转入时传递完整位置、导入索引、截断信息、原始选中索引及勾选状态，路径筛选不裁剪快照。Find 的树/平铺、文件夹和文件计数均使用可见投影；过滤掉选中项时选取仍可见的位置，全导入时保留空状态与取消勾选入口。
+- 轻量词法判定覆盖 TS/JS 扩展、Java、Kotlin/KTS、Groovy/Gradle、Rust use/extern crate；单测包含多行、别名、静态导入、嵌套 use、原始/三引号/正则字符串、注释、未完成导入和同一行后续真实使用。动态 import、普通 require 调用及 JS re-export 保留；未知/超限/无法读取的来源保守显示。未改 LSP/插件 SDK 或原生协议。
+- 引用分类需要检查整份已返回快照，按 URI 合并后只读指定的授权目标，不扫描项目；共用读取口全局最多 3 个在途读取，进入队列及完成时核对工作区代际。每个文件只分类一次，生成有界、分离原文存储的预览；Find 复用预览和标志，不重复读文件。此前可见区域预览读取仍用于未预先分类的位置快照；测试显式保留超过 32 个文件的回归。
+- 分类器与引用选择器均按需加载，现有源码所有权/启动构建门槛不放宽。导航诊断默认接线移至 composition，app.ts 不增长。`language.imports.classified` 仅记录结果/文件/导入数量及耗时，不写符号或源码。
+- `npm run check`、1,410 项脚本测试、生产构建和原生构建通过。Chromium/WebKit 实际 Ctrl/Command/F12/Shift-F12 手势回归通过；六语言弹窗/Find 的默认勾选、取消恢复、路径筛选叠加、转入状态、全部导入、Space 键不误跳转、只读/未保存/迟到读取/跨项目失效和预览缓存均通过。双引擎 boostCleaner 真实文本位置样本为 84 文件、512 位置，无空白预览；合成 512 行渲染约 5.6/7.0 ms。
+- 本项目 app.ts 的 `branchSafety` 实样本：6 个原始位置、1 个导入、默认投影 5 个使用位置；本机 Node 分类约 36.5 ms（不包含 LSP 查询或 Tauri 读取往返）。
+- 签名包原生会话 `session-1793673537346-74660-0` 在 25 秒观察内通过可见版本标记、frontendReady 以及 Android Gradle 0.6.3/LSP 0.3.10 的精确包 digest 和 known-good 检查。保留既有两条 `existing_project_directories / invalidPath`，不扩展本次范围。
+- 原生 ZIP：`target/release/bundle/macos/Asterlyn-0.1.25-exclude-imports-macos.app.zip`，25,323,081 bytes，完整 CRC 通过；SHA-256 `ad327c93002147d7648f0c28d8ae24c9bbc2436fbb3f434c801b5bda21b5fab3`。
+- 标准安装器已覆盖 `/Applications/Asterlyn.app`，保持根 device/inode `16777234/203606126`，仅创建已验证 ZIP 备份；installed executable SHA-256 `e872116352600fd05ec34ec65d12b58b3905b5a99ede6f7ca74722c0550ee7f6` 与验收包一致，严格验签通过。
+- 两次保存图标书签启动均 frontendReady：PID 74941 / 75036，会话 `session-1793673633737-74941-0` / `session-1793673635676-75036-0`。本地修复构建版本 0.1.25，构建身份 `372e068f18cbde414deb8b1ca4f3c06b74610de6-dirty-1793673384292`。
+- 证据：`/tmp/asterlyn-import-filter-install/installation.json`、`/tmp/asterlyn-import-filter-package.json`、`/tmp/asterlyn-import-filter-native-evidence.json` 及同前缀分类、测试、构建与签名日志。临时原生 AX 验证工具已删除。本项与前一项空白预览修复均已通过人工验收，依次提交。

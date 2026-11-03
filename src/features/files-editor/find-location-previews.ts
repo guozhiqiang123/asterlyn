@@ -50,6 +50,8 @@ export class FindLocationPreviews {
       file.indices.push(index);
       files.set(location.uri, file);
     });
+    for(const item of snapshot?.referenceAnalysis?.previews??[])if(Number.isSafeInteger(item.index)&&item.index>=0&&item.index<snapshot!.locations.length)this.values.set(item.index,item.preview);
+    if(this.session)for(const[uri,file]of this.session.files)if(file.indices.every(index=>this.values.has(index)))this.session.completed.add(uri);
   }
 
   request(indices: readonly number[]): void {

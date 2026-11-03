@@ -33,7 +33,7 @@ try{for(const[name,engine]of[["Chromium",chromium],["WebKit",webkit]]){
   await page.evaluate(()=>{window.findResultsFixture.state.generation++;});await first.click();assert.equal(await page.evaluate(()=>window.findResultsFixture.state.wrong),1);
   await page.evaluate(()=>{const f=window.findResultsFixture;f.reset();f.state.defer=true;f.openPicker();});await page.getByRole('button',{name:'Open in Window',exact:true}).click();await page.waitForFunction(()=>window.findResultsFixture.state.reads===1);await page.evaluate(()=>{window.findResultsFixture.openSearch();window.findResultsFixture.release();});await page.waitForTimeout(50);assert.match(await page.locator('.find-results-summary').innerText(),/needle/);assert.equal(await page.locator('[data-find-result]').count(),1);
   await page.evaluate(()=>{window.findResultsFixture.reset();window.findResultsFixture.openPicker();});await page.getByRole('button',{name:'Open in Window',exact:true}).focus();await page.keyboard.press('Enter');await page.waitForSelector('.find-result-tree');assert.equal(await page.locator('.language-location-picker').count(),0);
-  await page.evaluate(()=>{const f=window.findResultsFixture;f.reset();f.runtime.openLocations({workspaceRoot:'/repo',workspaceGeneration:1,kind:'references',query:'value',limited:false,locations:Array.from({length:48},(_,index)=>({uri:`file:///repo/src/file-${String(index).padStart(3,'0')}.ts`,range:{start:{line:2,character:6},end:{line:2,character:11}}}))});});
+  await page.evaluate(()=>{const f=window.findResultsFixture;f.reset();f.runtime.openLocations({workspaceRoot:'/repo',workspaceGeneration:1,kind:'references',query:'value',limited:false,referenceAnalysis:{imports:[],previews:[]},locations:Array.from({length:48},(_,index)=>({uri:`file:///repo/src/file-${String(index).padStart(3,'0')}.ts`,range:{start:{line:2,character:6},end:{line:2,character:11}}}))});});
   await page.locator('[data-find-result="0"] mark').waitFor();
   assert.ok(await page.evaluate(()=>window.findResultsFixture.state.reads<48),'off-screen files must not all be read eagerly');
   await page.locator('[data-find-result="47"]').scrollIntoViewIfNeeded();
@@ -68,7 +68,8 @@ try{for(const[name,engine]of[["Chromium",chromium],["WebKit",webkit]]){
   assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-find-result')),'1');
   assert.equal(await page.locator('.find-results-list').evaluate(e=>e.scrollTop),focused,'hydration preserves scroll and DOM focus');
   if(realSample){
-   await page.evaluate(sample=>{const f=window.findResultsFixture;f.reset();f.state.root=sample.project;f.state.sources=new Map(sample.sources);f.runtime.openLocations({workspaceRoot:sample.project,workspaceGeneration:1,kind:'references',query:'Env_ST',limited:false,locations:sample.locations});},realSample);
+   await page.evaluate(sample=>{const f=window.findResultsFixture;f.reset();f.state.root=sample.project;f.state.sources=new Map(sample.sources);f.runtime.openLocations({workspaceRoot:sample.project,workspaceGeneration:1,kind:'references',query:'Env_ST',excludeImports:false,limited:false,locations:sample.locations});},realSample);
+   await page.waitForFunction(()=>document.querySelectorAll('.find-preview-status').length===0);
    const files=new Set();for(const[index,location]of realSample.locations.entries()){
     if(files.has(location.uri))continue;files.add(location.uri);
     const row=page.locator(`[data-find-result="${index}"]`);await row.scrollIntoViewIfNeeded();await row.locator('mark').waitFor();assert.equal(await row.locator('mark').innerText(),'Env_ST');
@@ -76,6 +77,22 @@ try{for(const[name,engine]of[["Chromium",chromium],["WebKit",webkit]]){
    assert.equal(await page.locator('.find-preview-status').count(),0);assert.equal(await page.evaluate(()=>window.findResultsFixture.state.reads),files.size);assert.ok(await page.evaluate(()=>window.findResultsFixture.state.maxReads<=3));
    console.log(JSON.stringify({engine:name,realProjectFiles:files.size,realProjectLocations:realSample.locations.length,blankPreviews:0}));
   }
-  const performance=await page.evaluate(()=>{const f=window.findResultsFixture;f.reset();const start=performance.now();f.runtime.openLocations({workspaceRoot:'/repo',workspaceGeneration:1,kind:'references',query:'bounded',locations:f.locations(512),limited:true});return {renderMs:performance.now()-start,rows:document.querySelectorAll('[data-find-result]').length};});assert.equal(performance.rows,512);assert.ok(performance.renderMs<2000,JSON.stringify(performance));assert.deepEqual(errors,[]);console.log(JSON.stringify({engine:name,success:true,...performance}));
+  await page.evaluate(async()=>{const f=window.findResultsFixture;f.reset();await f.openImportPicker();});
+  let exclude=page.getByRole('checkbox',{name:'Exclude imports',exact:true});assert.equal(await exclude.isChecked(),true);
+  assert.equal(await page.locator('.language-location-results>button').count(),6);
+  await exclude.uncheck();assert.equal(await page.locator('.language-location-results>button').count(),12);
+  await page.getByRole('combobox').fill('a.ts');assert.equal(await page.locator('.language-location-results>button').count(),2);
+  await page.getByRole('button',{name:'Open in Window',exact:true}).click();
+  exclude=page.getByRole('checkbox',{name:'Exclude imports',exact:true});assert.equal(await exclude.isChecked(),false);
+  assert.equal(await page.locator('[data-find-result]').count(),12,'path filter must not discard raw references during transfer');
+  assert.equal(await page.evaluate(()=>window.findResultsFixture.state.reads),6,'Find reuses the classification previews');
+  await exclude.check();assert.equal(await page.locator('[data-find-result]').count(),6);assert.match(await page.locator('.find-results-summary').innerText(),/6 matches/);
+  await page.getByRole('button',{name:'Show files as flat list'}).click();assert.equal(await page.locator('[data-find-result]').count(),6);
+  await exclude.uncheck();assert.equal(await page.locator('[data-find-result]').count(),12);assert.equal(await page.evaluate(()=>window.findResultsFixture.state.reads),6);
+  await page.evaluate(async()=>{const f=window.findResultsFixture;f.reset();await f.openImportPicker(true);});
+  exclude=page.getByRole('checkbox',{name:'Exclude imports',exact:true});assert.equal(await exclude.isChecked(),true);assert.equal(await page.locator('.language-location-results>button').count(),0);
+  await page.getByRole('button',{name:'Open in Window',exact:true}).click();assert.equal(await page.locator('[data-find-result]').count(),0);
+  await page.getByRole('checkbox',{name:'Exclude imports',exact:true}).uncheck();assert.equal(await page.locator('[data-find-result]').count(),6);
+  const performance=await page.evaluate(()=>{const f=window.findResultsFixture;f.reset();const start=performance.now();f.runtime.openLocations({workspaceRoot:'/repo',workspaceGeneration:1,kind:'references',query:'bounded',referenceAnalysis:{imports:[],previews:[]},locations:f.locations(512),limited:true});return {renderMs:performance.now()-start,rows:document.querySelectorAll('[data-find-result]').length};});assert.equal(performance.rows,512);assert.ok(performance.renderMs<2000,JSON.stringify(performance));assert.deepEqual(errors,[]);console.log(JSON.stringify({engine:name,success:true,...performance}));
  }finally{await browser.close();}
 }}finally{await server.close();}

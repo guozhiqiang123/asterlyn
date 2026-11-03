@@ -1,4 +1,5 @@
 import { LanguageServiceIndexingError } from "../../src/protocol/editor-language-service.ts";
+import {analyzeReferenceLocations} from "../../src/application/language-services/reference-imports.ts";
 import "../../src/styles.css";
 import "../../src/features/files-editor/language-location-picker.css";
 import { TextEditor } from "../../src/text-editor.ts";
@@ -32,6 +33,10 @@ const navigate = createLanguageDefinitionNavigator({ workspace: () => ({ root: "
   copy: () => EN_US.editor.languageService, status: (message, kind) => state.statuses.push({ message, kind }), diagnostic: (outcome) => state.outcomes.push(outcome),
 });
 const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: () => () => {},
+  analyzeReferences:locations=>analyzeReferenceLocations(locations,async location=>{
+    const index=files.findIndex(file=>workspaceFileUri('/repo',file.workspacePath)===location.uri);
+    return index<0?null:index===files.indexOf(state.active)?editor.content():contents[index]!;
+  },()=>true),
   get documentUri() { return workspaceFileUri("/repo", state.active.workspacePath); },
   definitionEvent(event) { state.outcomes.push(event); }, navigate: (location) => { void navigate(location); },
   request(_handle, method, params, version) {
@@ -39,6 +44,7 @@ const port: any = { open() {}, update() {}, close() {}, subscribeDiagnostics: ()
     state.requests.push({ method, params, version });
     if (state.mode === "indexing") return Promise.reject(new LanguageServiceIndexingError());
     if (method === "textDocument/references") {
+      if(state.mode==='importReferences')return Promise.resolve([{uri:workspaceFileUri('/repo','source.ts'),range:range(0,9,15)},second()]);
       if (["deferredReferences", "deferredEmptyDefinitionReferences"].includes(state.mode)) return new Promise((resolve) => state.pending.push(resolve));
       if (["noReferences", "empty", "emptyDefinitionNoReferences"].includes(state.mode)) return Promise.resolve([]);
       if (["oneReference", "emptyDefinitionOneReference"].includes(state.mode)) return Promise.resolve([second()]);

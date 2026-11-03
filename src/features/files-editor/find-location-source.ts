@@ -17,6 +17,11 @@ export interface FindLocationSourcePorts {
 export function createFindLocationSourcePorts(ports:FindLocationSourcePorts) {
   let catalog:readonly ProjectFile[]|null=null,catalogRoot="";
   const byUri=new Map<string,ProjectFile>();
+  let active=0;const waiting:(()=>void)[]=[];
+  const read=async(root:string,file:ProjectFile,current:()=>boolean)=>{
+    if(active>=3)await new Promise<void>(resolve=>waiting.push(resolve));else active++;
+    try{return current()?await ports.read(root,file):null;}finally{const next=waiting.shift();if(next)next();else active--;}
+  };
   return {
     activeWorkspaceGeneration:()=>ports.workspace()?.generation??null,
     openLocation:ports.navigate,
@@ -32,8 +37,8 @@ export function createFindLocationSourcePorts(ports:FindLocationSourcePorts) {
       ports.capture();
       const tab=ports.buffers().find(tab=>tab.status==="ready"&&tab.document.repositoryRoot===root&&tab.document.workspacePath===file.workspacePath);
       if(tab)return tab.content.length<=512*1024?tab.content:null;
-      const snapshot=await ports.read(root,file),current=ports.workspace();
-      return current?.root===root&&current.generation===scope.generation&&snapshot.byteLength<=512*1024?snapshot.content:null;
+      const snapshot=await read(root,file,()=>{const current=ports.workspace();return current?.root===root&&current.generation===scope.generation;}),current=ports.workspace();
+      return snapshot&&current?.root===root&&current.generation===scope.generation&&snapshot.byteLength<=512*1024?snapshot.content:null;
     },
   };
 }

@@ -8,7 +8,8 @@ export class LanguageLocationPicker {
   close(restoreFocus = true): void { const release = this.release; this.release = null; release?.(); if (restoreFocus) this.restore?.(); this.restore = null; }
   private restore: (() => void) | null = null;
   open(document: Document, anchor: { x: number; y: number }, locations: readonly EditorLanguageServiceLocation[], options: {
-    openInWindow?(selected:EditorLanguageServiceLocation|null):void; title: string; limited: boolean; copy: LanguageServiceCopy; current(): boolean;
+    referenceImports?:readonly number[];excludeImports?:boolean;
+    openInWindow?(selected:EditorLanguageServiceLocation|null,excludeImports:boolean):void; title: string; limited: boolean; copy: LanguageServiceCopy; current(): boolean;
     select(location: EditorLanguageServiceLocation): void; dismissed(): void; restoreFocus(): void;
   }): void {
     this.close(false); if (!options.current()) { options.dismissed(); return; }
@@ -22,14 +23,19 @@ export class LanguageLocationPicker {
     list.id = id; list.className = "language-location-results"; list.setAttribute("role", "listbox"); list.setAttribute("aria-label", options.title);
     status.setAttribute("role", "status");
     const header=document.createElement("header");header.className="language-location-header";header.append(title);
-    if(options.openInWindow){const button=document.createElement("button");button.type="button";button.className="secondary-button language-location-open-window";button.textContent=options.copy.openInWindow;button.addEventListener("click",()=>{if(!options.current())return;const choice=filtered[selected]?.location??null;this.close(false);options.openInWindow?.(choice);});header.append(button);}
-    root.append(header, input, list, status);
-    const choices = locations.map((location) => ({ location, path: decodeURIComponent(new URL(location.uri).pathname) }));
+    let excludeImports=options.excludeImports!==false;
+    const importIndices=new Set(options.referenceImports??[]),filterRow=document.createElement("div");filterRow.className="language-location-filter";filterRow.append(input);
+    if(options.referenceImports){const label=document.createElement("label"),checkbox=document.createElement("input");label.className="language-exclude-imports";checkbox.type="checkbox";checkbox.checked=excludeImports;checkbox.addEventListener("change",()=>{excludeImports=checkbox.checked;render();});label.append(checkbox,options.copy.excludeImports);filterRow.append(label);}
+    if(options.openInWindow){const button=document.createElement("button");button.type="button";button.className="secondary-button language-location-open-window";button.textContent=options.copy.openInWindow;button.addEventListener("click",()=>{if(!options.current())return;const choice=filtered[selected]?.location??null;this.close(false);options.openInWindow?.(choice,excludeImports);});header.append(button);}
+    root.append(header, filterRow, list, status);
+    const choices = locations.map((location,index) => ({ location,index, path: decodeURIComponent(new URL(location.uri).pathname) }));
     let filtered = choices, selected = 0, buttons: HTMLButtonElement[] = [];
     const choose = (index: number) => { const choice = filtered[index]; if (!choice || !options.current()) { this.close(); return; } this.close(); if (options.current()) options.select(choice.location); };
     const highlight = () => { buttons.forEach((button, index) => button.setAttribute("aria-selected", String(index === selected))); const button = buttons[selected]; if (button) { input.setAttribute("aria-activedescendant", button.id); button.scrollIntoView({ block: "nearest" }); } else input.removeAttribute("aria-activedescendant"); };
     const render = () => {
-      const query = input.value.toLocaleLowerCase(); filtered = choices.filter((choice) => choice.path.toLocaleLowerCase().includes(query)); selected = 0;
+      const visible=choices.filter(choice=>!excludeImports||!importIndices.has(choice.index));
+      title.textContent=`${options.title} (${visible.length}${options.limited?"+":""})`;
+      const query = input.value.toLocaleLowerCase(); filtered = visible.filter((choice) => choice.path.toLocaleLowerCase().includes(query)); selected = 0;
       const fragment = document.createDocumentFragment(); buttons = [];
       for (const [index, choice] of filtered.entries()) {
         const button = document.createElement("button"), name = document.createElement("span"), path = document.createElement("small");
@@ -46,12 +52,12 @@ export class LanguageLocationPicker {
     input.addEventListener("input", render);
     root.addEventListener("keydown", (event) => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); this.close(); return; }
-      if ((event.key==="Enter"||event.key===" ")&&(event.target as Element).closest(".language-location-open-window"))return;
+      if ((event.key==="Enter"||event.key===" ")&&(event.target as Element).closest(".language-location-open-window,.language-exclude-imports"))return;
       if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); choose(selected); return; }
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         event.preventDefault(); event.stopPropagation(); selected = !filtered.length ? 0 : event.key === "Home" ? 0 : event.key === "End" ? filtered.length - 1 : (selected + (event.key === "ArrowDown" ? 1 : -1) + filtered.length) % filtered.length; highlight();
       }
-      if (event.key === "Tab") {if(!options.openInWindow){this.close();return;}const focusable=Array.from(root.querySelectorAll<HTMLElement>("button.language-location-open-window,input"));const index=focusable.indexOf(document.activeElement as HTMLElement);event.preventDefault();focusable[(index+(event.shiftKey?-1:1)+focusable.length)%focusable.length]?.focus();}
+      if (event.key === "Tab") {if(!options.openInWindow&&!options.referenceImports){this.close();return;}const focusable=Array.from(root.querySelectorAll<HTMLElement>("button.language-location-open-window,input"));const index=focusable.indexOf(document.activeElement as HTMLElement);event.preventDefault();focusable[(index+(event.shiftKey?-1:1)+focusable.length)%focusable.length]?.focus();}
     });
     document.addEventListener("pointerdown", (event) => { if (!root.contains(event.target as Node)) this.close(false); }, { capture: true, signal: controller.signal });
     window.addEventListener("blur", () => this.close(false), { signal: controller.signal });

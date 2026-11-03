@@ -1,6 +1,7 @@
 import {EN_OPEN_IN_WINDOW,ZH_OPEN_IN_WINDOW} from "./result-window-copy.ts";
 import { EN_LANGUAGE_STATUS, ZH_LANGUAGE_STATUS, type LanguageServiceStatusCopy } from "./language-service-status-copy.ts";
 export interface LanguageServiceCopy {
+  excludeImports:string;
   openInWindow:string;referencesTitle:string;definitionsTitle:string;
   workspaceStatus:LanguageServiceStatusCopy;
   readOnlySource:string;
@@ -10,6 +11,7 @@ export interface LanguageServiceCopy {
   findingReferences: string; chooseReference: string; noReferences: string; filterLocations: string; noMatchingLocations: string; limitedLocations: string;
 }
 export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  excludeImports:"Exclude imports",
   openInWindow:EN_OPEN_IN_WINDOW,referencesTitle:"References",definitionsTitle:"Definitions",
   workspaceStatus:EN_LANGUAGE_STATUS,
   readOnlySource:"Dependency source (read-only)",
@@ -25,6 +27,7 @@ export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
   filterLocations: "Filter by file or path", noMatchingLocations: "No matching locations.", limitedLocations: "Showing the first {count} locations",
 };
 export const ZH_CN_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  excludeImports:"排除 import",
   openInWindow:ZH_OPEN_IN_WINDOW,referencesTitle:"引用",definitionsTitle:"定义",
   workspaceStatus:ZH_LANGUAGE_STATUS,
   readOnlySource:"依赖源码（只读）",

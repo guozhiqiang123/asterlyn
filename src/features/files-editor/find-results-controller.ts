@@ -1,6 +1,6 @@
 import {buildFindResultTree,findResultBranches,findResultRows,type FindResultNode,type FindTreeEntry} from "./find-result-tree.ts";
 import {normalizeDefinitionTargets} from "../../application/language-services/definition-targets.ts";
-import type {EditorLanguageLocationsPublication,EditorLanguageServiceLocation} from "../../protocol/editor-language-service.ts";
+import type {EditorLanguageLocationsPublication,EditorLanguageServiceLocation,EditorReferenceAnalysis} from "../../protocol/editor-language-service.ts";
 import type { ProjectFile, WorkspaceTextSearchMatch, WorkspaceTextSearchReport } from "../../models.ts";
 import { sortFilesByName } from "../../presentation/file-name-order.ts";
 import {
@@ -27,10 +27,11 @@ export interface FindFileResultsSnapshot {
   readonly files: readonly ProjectFile[];
 }
 
-export interface FindLocationResultsSnapshot {readonly kind:"locations";readonly repositoryRoot:string;readonly workspaceGeneration:number;readonly query:string;readonly intent:"definition"|"references";readonly locations:readonly EditorLanguageServiceLocation[];readonly limited:boolean;}
+export interface FindLocationResultsSnapshot {readonly referenceAnalysis?:EditorReferenceAnalysis;readonly kind:"locations";readonly repositoryRoot:string;readonly workspaceGeneration:number;readonly query:string;readonly intent:"definition"|"references";readonly locations:readonly EditorLanguageServiceLocation[];readonly limited:boolean;}
 export type FindResultsSnapshot = FindTextResultsSnapshot | FindFileResultsSnapshot | FindLocationResultsSnapshot;
 
 export interface FindResultsState {
+  readonly excludeImports:boolean;
   readonly snapshot: FindResultsSnapshot | null;
   readonly selectedIndex: number;
   readonly resultSelection:string|null;
@@ -42,6 +43,7 @@ export interface FindResultsState {
 
 export class FindResultsController {
   private value: FindResultsState = emptyState("tree");
+  private locationEntries:readonly FindTreeEntry[]=[];
 
   get state(): Readonly<FindResultsState> {
     return this.value;
@@ -61,11 +63,31 @@ export class FindResultsController {
     const normalized=normalizeDefinitionTargets(publication.locations,publication.kind);
     if(!publication.workspaceRoot||!normalized.locations.length||normalized.invalid)return false;
     const locations=normalized.locations;
-    this.installResults({kind:"locations",repositoryRoot:publication.workspaceRoot,workspaceGeneration:publication.workspaceGeneration,query:publication.query,intent:publication.kind,locations,limited:publication.limited||normalized.limited},locations.map((location,index)=>{
+    const snapshot:FindLocationResultsSnapshot={referenceAnalysis:publication.referenceAnalysis,kind:"locations",repositoryRoot:publication.workspaceRoot,workspaceGeneration:publication.workspaceGeneration,query:publication.query,intent:publication.kind,locations,limited:publication.limited||normalized.limited};
+    this.locationEntries=locations.map((location,index)=>{
       const url=new URL(location.uri),absolute=decodeURIComponent(url.pathname),prefix=publication.workspaceRoot.replace(/\\/gu,"/").replace(/\/$/u,"")+"/";
       const path=location.readonlySource?.path??(absolute.startsWith(prefix)?absolute.slice(prefix.length):absolute.replace(/^\/+/,""));
       return {index,fileKey:location.uri,path,line:location.range.start.line+1,column:location.range.start.character+1};
-    }));if(Number.isSafeInteger(publication.selectedIndex))this.select(publication.selectedIndex!);return true;
+    });this.installResults(snapshot,this.locationEntries);this.value={...this.value,excludeImports:publication.excludeImports!==false};this.filterImports();if(Number.isSafeInteger(publication.selectedIndex))this.select(publication.selectedIndex!);return true;
+  }
+  setReferenceAnalysis(analysis:EditorReferenceAnalysis):boolean {
+    const snapshot=this.value.snapshot;if(snapshot?.kind!=="locations"||snapshot.intent!=="references")return false;
+    this.value={...this.value,snapshot:{...snapshot,referenceAnalysis:analysis}};this.filterImports();return true;
+  }
+  setExcludeImports(excludeImports:boolean):boolean {
+    if(this.value.snapshot?.kind!=="locations"||this.value.snapshot.intent!=="references"||this.value.excludeImports===excludeImports)return false;
+    this.value={...this.value,excludeImports};this.filterImports();return true;
+  }
+  private filterImports():void {
+    const snapshot=this.value.snapshot;if(snapshot?.kind!=="locations")return;
+    const imports=new Set(snapshot.intent==="references"&&this.value.excludeImports?snapshot.referenceAnalysis?.imports:[]);
+    const entries=this.locationEntries.filter(entry=>!imports.has(entry.index)),resultTree=buildFindResultTree(entries);
+    const selected=entries.some(e=>e.index===this.value.selectedIndex)?this.value.selectedIndex:entries.find(e=>e.index>=this.value.selectedIndex)?.index??entries.at(-1)?.index??-1;
+    const branches=findResultBranches(resultTree),valid=new Set(branches.map(n=>n.id)),previous=new Set(findResultBranches(this.value.resultTree).map(n=>n.id));
+    const expandedDirectories=new Set([...this.value.expandedDirectories].filter(id=>valid.has(id)));
+    // Restored import-only files should be visible when the checkbox is cleared.
+    for(const node of branches)if(!previous.has(node.id))expandedDirectories.add(node.id);
+    this.value={...this.value,resultTree,selectedIndex:selected,resultSelection:selected>=0?`result:${selected}`:null,expandedDirectories};
   }
   private installResults(snapshot:FindTextResultsSnapshot|FindLocationResultsSnapshot,entries:readonly FindTreeEntry[]):void {
     const resultTree=buildFindResultTree(entries);this.value={...emptyState(this.value.fileView),snapshot,resultTree,resultSelection:"result:0",expandedDirectories:new Set(findResultBranches(resultTree).map(n=>n.id))};
@@ -92,6 +114,7 @@ export class FindResultsController {
     const snapshot: FindFileResultsSnapshot = { kind, repositoryRoot, query, files: [...files] };
     const first = sortedFindFiles(snapshot)[0] ?? null;
     this.value = {
+      excludeImports:true,
       snapshot,
       selectedIndex: 0,
       resultSelection:null,resultTree:[],
@@ -103,6 +126,7 @@ export class FindResultsController {
   }
 
   clear(): void {
+    this.locationEntries=[];
     this.value = emptyState(this.value.fileView);
   }
 
@@ -110,6 +134,7 @@ export class FindResultsController {
     const snapshot = this.value.snapshot;
     const count = snapshot?.kind === "workspace" ? snapshot.report.matches.length : snapshot?.kind==="locations"?snapshot.locations.length:0;
     if (!Number.isInteger(index) || index < 0 || index >= count) return false;
+    if(snapshot?.kind==="locations"&&this.value.excludeImports&&snapshot.intent==="references"&&snapshot.referenceAnalysis?.imports.includes(index))return false;
     if (this.value.selectedIndex === index&&this.value.resultSelection===`result:${index}`) return false;
     this.value = { ...this.value, selectedIndex: index,resultSelection:`result:${index}` };
     return true;
@@ -117,7 +142,11 @@ export class FindResultsController {
 
   move(delta: number): boolean {
     const snapshot = this.value.snapshot;
-    const count = snapshot?.kind === "workspace" ? snapshot.report.matches.length : snapshot?.kind==="locations"?snapshot.locations.length:0;
+    if(snapshot?.kind==="locations"){
+      const imports=new Set(this.value.excludeImports&&snapshot.intent==="references"?snapshot.referenceAnalysis?.imports:[]),visible=snapshot.locations.map((_,i)=>i).filter(i=>!imports.has(i));
+      if(!visible.length)return false;const at=Math.max(0,visible.indexOf(this.value.selectedIndex));return this.select(visible[(at+delta%visible.length+visible.length)%visible.length]!);
+    }
+    const count = snapshot?.kind === "workspace" ? snapshot.report.matches.length : 0;
     if (count === 0) return false;
     const selectedIndex = (this.value.selectedIndex + delta % count + count) % count;
     if (selectedIndex === this.value.selectedIndex) return false;
@@ -218,5 +247,5 @@ function allDirectoryPaths(nodes: readonly ProjectTreeNode[]): string[] {
 }
 
 function emptyState(fileView: FindFileView): FindResultsState {
-  return { snapshot: null, selectedIndex: 0, resultSelection:null,resultTree:[],fileSelection: null, fileView, expandedDirectories: new Set() };
+  return { excludeImports:true,snapshot: null, selectedIndex: 0, resultSelection:null,resultTree:[],fileSelection: null, fileView, expandedDirectories: new Set() };
 }

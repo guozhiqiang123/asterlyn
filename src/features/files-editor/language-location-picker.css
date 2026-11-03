@@ -14,6 +14,10 @@
   box-shadow: 0 8px 28px var(--shadow-dialog);
 }
 .language-location-picker > input { flex: 0 0 auto; width: 100%; }
+.language-location-filter{display:flex;align-items:center;gap:10px;flex:0 0 auto;min-width:0;}
+.language-location-filter>input{min-width:0;flex:1;}
+.language-exclude-imports{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:var(--ui-font-size,13px);cursor:pointer;}
+.language-exclude-imports>input{margin:0;}
 .language-location-picker > [role="status"]:empty { display: none; }
 .language-location-results { min-height: 0; overflow: auto; }
 .language-location-results > button {

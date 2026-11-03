@@ -9,6 +9,16 @@ const identityFor = (handle, generation = 1) => ({ workspaceRoot: "/repo", works
 const review = (id) => ({ reviewId: id, pluginId: "dev.asterlyn.lsp", serverId: "typescript", pluginVersion: "1.0.0", packageDigest: "sha256:package", resourceDigest: "sha256:resources", executableIdentity: "/usr/local/bin/node@22.22.2", expiresAt: Date.now() + 60_000 });
 const wait = () => new Promise((resolve) => setTimeout(resolve, 25));
 
+test('reference import analysis uses scoped host reads and discards a reply after editing without restarting a session',async()=>{
+ const native=fakeNative();let release,reads=0,defer=false;
+ const factory=createEditorLanguageServicePort(handle=>identityFor(handle),native,()=>{},undefined,undefined,undefined,undefined,undefined,async root=>{assert.equal(root,'/repo');reads++;if(defer)await new Promise(resolve=>release=resolve);return 'import { Target } from "x";';});
+ const port=factory(handleA);port.open(handleA,{version:1,text:'Target()'});await wait();
+ const location={uri:'file:///repo/other.ts',range:{start:{line:0,character:9},end:{line:0,character:15}}};
+ assert.deepEqual((await port.analyzeReferences([location],1)).imports,[0]);
+ defer=true;const pending=port.analyzeReferences([location],1);while(!release)await wait();port.update(handleA,{version:2,text:'Target(2)'});release();assert.equal(await pending,null);
+ factory.dispose();assert.equal(await port.analyzeReferences([location],2),null);assert.equal(reads,2);
+});
+
 function fakeNative({ approved = true, requestResult = { ok: true } } = {}) {
   const calls = []; const events = new Set(); let sequence = 0; let deferredRequest = null; let deferredPrepare = null;
   const native = {

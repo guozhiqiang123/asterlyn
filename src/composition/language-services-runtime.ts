@@ -29,6 +29,7 @@ export interface LanguageServicesRuntimeOptions {
   readonly reportError: (error: unknown) => void;
   readonly openInWindow?: (results:import("../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void;
   readonly navigate: (location: EditorLanguageServiceLocation) => void;
+  readonly readReferenceSource?: (root:string,location:EditorLanguageServiceLocation)=>Promise<string|null>;
   readonly definitionDiagnostic?: (event: import("../protocol/editor-language-service.ts").EditorDefinitionEvent) => void;
   readonly approvalDiagnostic?: (event: import("../protocol/language-service.ts").LanguageServiceApprovalEvent) => void;
   readonly diagnostic?: (fields: { providerCount: number; workspaceGeneration: number | null }) => void;
@@ -56,7 +57,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     if (providers.length !== 1 || !languageId) return null;
     const provider = providers[0]!; if (provider.kind !== "language-service") return null; const uri = workspaceFileUri(workspace.root, document.workspacePath);
     return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion, serverId: provider.serverId } : null;
-  }, options.native, options.reportError, options.navigate, event=>{if(debugTracing)options.definitionDiagnostic?.(event);}, options.approvalDiagnostic,publish,options.openInWindow);
+  }, options.native, options.reportError, options.navigate, event=>{if(debugTracing)options.definitionDiagnostic?.(event);}, options.approvalDiagnostic,publish,options.openInWindow,options.readReferenceSource);
   const view=options.host&&options.copy?new LanguageServiceStatusView(options.host,options.copy,{
     retry:()=>{void retry().catch(options.reportError);},forget:()=>{void forget();},debug:enabled=>{void setDebug(enabled);},error:options.reportError,
   }):null;

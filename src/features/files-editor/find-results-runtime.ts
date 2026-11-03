@@ -43,6 +43,7 @@ export class FindResultsRuntime {
   private previewObserver: ResizeObserver | null = null;
   private previewFrame: number | null = null;
   private previewTrace = "";
+  private referenceLoading=false;
   private readonly controller = new FindResultsController();
   private readonly root: HTMLElement;
   private readonly options: FindResultsRuntimeOptions;
@@ -69,6 +70,7 @@ export class FindResultsRuntime {
   }
 
   clear(): void {
+    this.referenceLoading=false;
     this.stopPreviewViewport();
     this.previews.reset(null);
     this.controller.clear();
@@ -121,6 +123,7 @@ export class FindResultsRuntime {
       installed = this.controller.install(repositoryRoot, source.query, source.report);
     }
     if (!installed) return;
+    this.referenceLoading=false;
     this.previews.reset(null);
     this.options.openPanel();
     queueMicrotask(() => this.focusSelection());
@@ -131,8 +134,27 @@ export class FindResultsRuntime {
     if(!this.controller.installLocations(publication))return;
     const snapshot=this.controller.state.snapshot;
     this.previews.reset(snapshot?.kind==="locations"?snapshot:null);
+    this.referenceLoading=snapshot?.kind==="locations"&&snapshot.intent==="references"&&!snapshot.referenceAnalysis;
     this.previewTrace=diagnostics.newTrace();
     this.options.openPanel();queueMicrotask(()=>this.focusSelection());
+    if(this.referenceLoading&&snapshot?.kind==="locations")void this.analyzeImports(snapshot).catch(error=>{
+      if(!this.locationsCurrent(snapshot))return;this.referenceLoading=false;this.schedulePreviewViewport();
+      diagnostics.report("warning","find.imports.unavailable",error,{traceId:this.previewTrace});
+    });
+  }
+  private async analyzeImports(snapshot:FindLocationResultsSnapshot):Promise<void>{
+    const {analyzeReferenceLocations}=await import("../../application/language-services/reference-imports.ts");
+    const analysis=await analyzeReferenceLocations(snapshot.locations,location=>this.options.readLocationSource?.(snapshot.repositoryRoot,location)??Promise.resolve(null),()=>this.locationsCurrent(snapshot));
+    if(!analysis||!this.locationsCurrent(snapshot))return;
+    this.referenceLoading=false;this.controller.setReferenceAnalysis(analysis);
+    const current=this.controller.state.snapshot;if(current?.kind==="locations")this.previews.reset(current);
+    if(this.options.visible())this.refreshFilterPresentation();
+  }
+
+  private refreshFilterPresentation():void{
+    const list=this.root.querySelector<HTMLElement>(".find-results-list"),scroll=[list?.scrollTop??0,list?.scrollLeft??0],focused=!!list?.contains(this.root.ownerDocument.activeElement),filter=this.root.ownerDocument.activeElement?.hasAttribute("data-find-exclude-imports");
+    this.render();const next=this.root.querySelector<HTMLElement>(".find-results-list");if(next){next.scrollTop=scroll[0]!;next.scrollLeft=scroll[1]!;}
+    if(filter)this.root.querySelector<HTMLElement>("[data-find-exclude-imports]")?.focus({preventScroll:true});else if(focused)this.resultRow(this.controller.state.resultSelection)?.focus({preventScroll:true});
   }
   private locationsCurrent(snapshot:FindLocationResultsSnapshot):boolean{return this.controller.state.snapshot===snapshot&&this.options.activeRepositoryRoot()===snapshot.repositoryRoot&&this.options.activeWorkspaceGeneration?.()===snapshot.workspaceGeneration;}
 
@@ -159,7 +181,7 @@ export class FindResultsRuntime {
     this.previewFrame=view.requestAnimationFrame(()=>{
       this.previewFrame=null;
       const snapshot=this.controller.state.snapshot,list=this.root.querySelector<HTMLElement>(".find-results-list");
-      if(snapshot?.kind!=="locations"||!this.locationsCurrent(snapshot)||!this.options.visible()||!list?.clientHeight)return;
+      if(snapshot?.kind!=="locations"||this.referenceLoading||!this.locationsCurrent(snapshot)||!this.options.visible()||!list?.clientHeight)return;
       const viewport=list.getBoundingClientRect(),indices:number[]=[];
       for(const row of list.querySelectorAll<HTMLElement>("[data-find-result]")){
         const bounds=row.getBoundingClientRect();
@@ -215,6 +237,9 @@ export class FindResultsRuntime {
   }
 
   private bindResults(host: HTMLElement): void {
+    host.querySelector<HTMLInputElement>("[data-find-exclude-imports]")?.addEventListener("change",event=>{
+      if(this.controller.setExcludeImports((event.currentTarget as HTMLInputElement).checked))this.refreshFilterPresentation();
+    });
     host.querySelector<HTMLButtonElement>("[data-find-search]")
       ?.addEventListener("click", this.options.openSearch);
     host.querySelectorAll<HTMLButtonElement>("[data-find-result],[data-find-node]").forEach(button=>{

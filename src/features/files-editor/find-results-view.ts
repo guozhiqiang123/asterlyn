@@ -1,3 +1,5 @@
+import {type FindLocationPreview} from "../../application/language-services/location-preview.ts";
+export {type FindLocationPreview,locationPreview,locationPreviewLine} from "../../application/language-services/location-preview.ts";
 import {findResultRows,findResultBranches,type FindResultRow} from "./find-result-tree.ts";
 import { fileTypeIcon } from "../../file-icons.ts";
 import { icon } from "../../icons.ts";
@@ -28,11 +30,13 @@ export function renderFindResults(
   const entries=tree?rows:findResultBranches(state.resultTree).flatMap(n=>n.kind==="file"?n.entries:[]).sort((a,b)=>a.index-b.index).map(entry=>({id:`result:${entry.index}`,parentId:null,depth:0,label:"",entry}));
   const html=entries.map((row,index)=>renderResultTreeRow(row,state,catalog,previews,tree,index)).join("");
   const title=snapshot.kind!=="locations"?snapshot.query:`${snapshot.intent==="references"?catalog.editor.languageService.referencesTitle:catalog.editor.languageService.definitionsTitle}${snapshot.query?`: ${snapshot.query}`:""}`;
-  const detail=snapshot.kind==="workspace"?formatLocalizedWorkspaceSearchCoverage(snapshot.report,catalog.navigation):snapshot.kind==="locations"?(snapshot.limited?catalog.editor.languageService.limitedLocations.replace("{count}",String(snapshot.locations.length)):catalog.navigation.resultCount("workspace",snapshot.locations.length)):"";
+  const visibleCount=findResultBranches(state.resultTree).filter(n=>n.kind==="file").reduce((sum,n)=>sum+n.entries.length,0);
+  const detail=snapshot.kind==="workspace"?formatLocalizedWorkspaceSearchCoverage(snapshot.report,catalog.navigation):snapshot.kind==="locations"?(catalog.navigation.resultCount("workspace",visibleCount)+(snapshot.limited?` · ${catalog.editor.languageService.limitedLocations.replace("{count}",String(snapshot.locations.length))}`:"")):"";
+  const filter=snapshot.kind==="locations"&&snapshot.intent==="references"?`<label class="language-exclude-imports"><input type="checkbox" data-find-exclude-imports ${state.excludeImports?"checked":""}>${escapeHtml(catalog.editor.languageService.excludeImports)}</label>`:"";
   const selected=entries.findIndex(row=>row.id===state.resultSelection);
   return `<section class="find-results-panel find-location-results" aria-label="${escapeAttribute(catalog.navigation.findWindow)}">
-    ${findSummary(title,detail)}
-    <div class="find-results-list find-result-tree compact-file-tree ${tree?"tree":"flat"}" role="${tree?"tree":"listbox"}" tabindex="0" aria-label="${escapeAttribute(catalog.navigation.findResultsAria)}"${selected>=0?` aria-activedescendant="find-tree-row-${selected}"`:""}>${html}</div>
+    ${findSummary(title,detail,filter)}
+    <div class="find-results-list find-result-tree compact-file-tree ${tree?"tree":"flat"}" role="${tree?"tree":"listbox"}" tabindex="0" aria-label="${escapeAttribute(catalog.navigation.findResultsAria)}"${selected>=0?` aria-activedescendant="find-tree-row-${selected}"`:""}>${html||escapeHtml(catalog.editor.languageService.noMatchingLocations)}</div>
   </section>`;
 
 }
@@ -97,21 +101,6 @@ function renderFindFileRow(
   return `<button class="find-file-row file ${tree ? "tree-row" : "flat-row"} ${selected ? "selected" : ""}" type="button" role="${tree ? "treeitem" : "option"}" style="--tree-depth:${depth}" aria-selected="${selected}" data-find-path="${escapeAttribute(workspacePath)}" data-find-kind="file" title="${escapeAttribute(workspacePath)}">${disclosureSpacer}<span class="find-file-glyph">${fileTypeIcon(workspacePath)}</span><span class="find-file-name">${escapeHtml(basename(workspacePath))}</span>${tree ? "" : `<span class="find-file-directory">${escapeHtml(directory)}</span>`}</button>`;
 }
 
-export interface FindLocationPreview {readonly before:string;readonly found:string;readonly after:string;readonly leading:boolean;readonly trailing:boolean;}
-export function locationPreview(text:string,line:number,from:number,to:number):FindLocationPreview|null {
-  return locationPreviewLine(text.split("\n")[line],from,to);
-}
-export function locationPreviewLine(source:string|undefined,from:number,to:number):FindLocationPreview|null {
-  if(source===undefined||!Number.isInteger(from)||!Number.isInteger(to)||from<0||from>source.length||to<from)return null;
-  const splitsPair=(offset:number)=>offset>0&&/[\uD800-\uDBFF]/.test(source[offset-1]??"")&&/[\uDC00-\uDFFF]/.test(source[offset]??"");
-  if(splitsPair(from))return null;
-  let start=Math.max(0,from-80),highlightEnd=Math.min(source.length,to,from+160),end=Math.min(source.length,highlightEnd+200);
-  if(splitsPair(start))start--;if(splitsPair(highlightEnd))highlightEnd--;if(splitsPair(end))end++;
-  // Engines may keep an entire source file alive through a tiny sliced string.
-  // Materialize only the bounded preview's UTF-16 units before caching it.
-  const copy=(a:number,b:number)=>source.slice(a,b).split("").join("");
-  return {before:copy(start,from),found:copy(from,highlightEnd),after:copy(highlightEnd,end),leading:start>0,trailing:end<source.length};
-}
 export function renderFindLocationPreview(preview:FindLocationPreview|null|undefined,copy:NavigationCopy):string {
   if(!preview)return `<span class="find-preview-status">${escapeHtml(preview===null?copy.findPreviewUnavailable:copy.findPreviewLoading)}</span>`;
   return `${preview.leading?"…":""}${escapeHtml(preview.before)}<mark class="command-result-match">${escapeHtml(preview.found)}</mark>${escapeHtml(preview.after)}${preview.trailing?"…":""}`;
@@ -129,8 +118,8 @@ function renderResultTreeRow(row:FindResultRow,state:Readonly<FindResultsState>,
   return `<button class="workspace-search-result find-result find-match-row ${selected?"selected":""}" type="button" tabindex="-1" ${common} data-find-result="${entry.index}">${content}</button>`;
 }
 
-function findSummary(query: string, detail: string): string {
-  return `<div class="find-results-summary">${icon("search", 14)}<strong title="${escapeAttribute(query)}">${escapeHtml(query)}</strong><small>${escapeHtml(detail)}</small></div>`;
+function findSummary(query: string, detail: string,filter=""): string {
+  return `<div class="find-results-summary">${icon("search", 14)}<strong title="${escapeAttribute(query)}">${escapeHtml(query)}</strong><small>${escapeHtml(detail)}</small>${filter}</div>`;
 }
 
 function basename(path: string): string {

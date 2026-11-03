@@ -673,14 +673,14 @@ export class AsterlynApp {
       openSource: async (root,location)=>{const source=location.readonlySource;if(!source||this.windowSession.workspace.state.root!==root)return;this.captureMountedTextEditor();this.filesEditorRuntime.editor.activatePreview({kind:"language-source",workspaceRoot:root,uri:location.uri,path:source.path,content:source.text,languageId:source.languageId});this.renderEditor();},
       activeUri: () => { const active = this.activeDocument(); return active.kind === "language-source" ? active.uri : active.kind === "project-file" ? workspaceFileUri(active.repositoryRoot, active.workspacePath) : null; },
       content: () => { this.captureMountedTextEditor();const active=this.activeDocument();return active.kind==="language-source"?active.content:activeTextTab(this.editorState.session)?.content ?? null; }, select: (from, to) => this.editorSurface.selectRange(from, to),
-      copy: () => this.localization.catalog.editor.languageService, status: (message, kind) => this.setStatus(message, kind === "warning" ? "warning" : "normal"),
-      diagnostic: (outcome) => diagnostics.report("info", "language.definition.navigation", `outcome=${outcome}`) });
+      copy: () => this.localization.catalog.editor.languageService, status: (message, kind) => this.setStatus(message, kind === "warning" ? "warning" : "normal") });
+    const locationSources=createFindLanguageResultsPorts({workspace:languageWorkspace,files:()=>this.filesState.files,buffers:()=>this.editorState.session.textTabs,capture:()=>this.captureMountedTextEditor(),navigate:definitionNavigator,read:(root,file)=>bridge.readTextFile(root,file.repositoryId,file.path)});
     this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({
       host: root, copy: () => this.localization.catalog.editor.languageService, registerCommand: command => this.shortcuts.registerPluginCommand(command),
       registry: this.pluginTasksRuntime.contributionRegistry,
       diagnostic: (fields) => diagnostics.report("info", "language.provider.changed", `providers=${fields.providerCount};generation=${fields.workspaceGeneration ?? "none"}`),
       native: createTauriLanguageServiceBridge((review) => this.dialogRuntime.confirm(languageExecutionConfirmation(review, this.localization.catalog.locale === "zh-CN"))),
-      workspace: languageWorkspace,
+      workspace: languageWorkspace, readReferenceSource:locationSources.readLocationSource,
       document: (handle) => { const tab = textTab(this.editorState.session, handle.tabId); return tab?.status === "ready" && tab.document.repositoryRoot === this.windowSession.workspace.state.root ? { workspacePath: tab.document.workspacePath, readOnly: tab.document.readOnly === true || this.state.loading, loadEpoch: tab.loadEpoch } : null; },
       bind: (factory) => this.editorSurface.setLanguageServices(factory), reportError: (error) => this.showError(error),
       navigate: (location) => { void definitionNavigator(location).catch((error) => this.showError(error)); },
@@ -694,7 +694,7 @@ export class AsterlynApp {
       copy: () => this.localization.catalog,
       source: () => ({ mode: this.filesEditorRuntime.commands.state.mode, repositoryRoot: this.windowSession.workspace.state.root, query: this.filesEditorRuntime.commands.state.query, files: this.commandSurfaceFiles, searchRepositoryRoot: this.filesEditorRuntime.search.state.search.request?.repositoryRoot ?? null, report: this.filesEditorRuntime.search.state.search.report, searchCurrent: this.workspaceSearchHasCurrentResults() }),
       activeRepositoryRoot: () => this.windowSession.workspace.state.root,
-      ...createFindLanguageResultsPorts({workspace:languageWorkspace,files:()=>this.filesState.files,buffers:()=>this.editorState.session.textTabs,capture:()=>this.captureMountedTextEditor(),navigate:definitionNavigator,read:(root,file)=>bridge.readTextFile(root,file.repositoryId,file.path)}),
+      ...locationSources,
       activeFilePath: () => { const root = this.windowSession.workspace.state.root; return root ? activeProjectWorkspacePath(root, this.activeDocument(), this.filesState.files) : null; },
       locateCurrentFile: () => this.locateCurrentProjectFile(),
       openSearch: () => this.openCommandSurface("workspace"),

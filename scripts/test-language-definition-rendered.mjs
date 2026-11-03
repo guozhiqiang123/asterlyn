@@ -60,6 +60,10 @@ try {
    assert.equal((await snap()).active, "source.ts"); assert.equal((await snap()).requests.length, 2);
    await reset("invalidDefinition"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some(status => status.kind === "warning"));
    assert.equal((await snap()).requests.length, 1, `${name}: malformed definition results must not trigger reference fallback`);
+   await reset("importReferences");await page.locator(".cm-content").click();await page.keyboard.press("Shift+F12");await page.waitForSelector('.language-location-picker');
+   const excludeImports=page.getByRole('checkbox',{name:'Exclude imports',exact:true});assert.equal(await excludeImports.isChecked(),true);assert.equal(await page.getByRole('option').count(),1);
+   await excludeImports.focus();await page.keyboard.press('Space');assert.equal(await page.getByRole('option').count(),2);assert.equal(await page.locator('.language-location-picker').count(),1,'checkbox Space must not navigate');
+   await page.keyboard.press('Escape');
    await reset("oneReference"); await page.locator(".cm-content").click(); await page.keyboard.press("Shift+F12"); await page.waitForSelector('.language-location-picker'); assert.equal(await page.getByRole("option").count(), 1); assert.equal((await snap()).requests[0].method, "textDocument/references"); await page.keyboard.press("Escape");
    await reset("oneReference"); await page.locator(".cm-content").click(); await page.keyboard.press("Alt+F7"); await page.waitForSelector('.language-location-picker'); assert.equal((await snap()).requests[0].method, "textDocument/references"); await page.keyboard.press("Escape");
    await reset("noReferences"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message === "No references were found.")); assert.equal((await snap()).active, "source.ts");

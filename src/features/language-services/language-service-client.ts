@@ -29,7 +29,7 @@ const sessionKey = (i: LanguageConsentScope) => JSON.stringify([i.workspaceRoot,
 const validSnapshot = (s: EditorLanguageServiceSnapshot) => Number.isSafeInteger(s.version) && s.version > 0 && s.text.length <= MAX_TEXT_BYTES && new TextEncoder().encode(s.text).length <= MAX_TEXT_BYTES;
 
 /** Owns current overlays, ordered synchronization and result identity independently of editor UI. */
-export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, definitionTrace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void, openInWindow?: (results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void): LanguageServiceFactory {
+export function createEditorLanguageServicePort(resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, native: NativeLanguageServiceBridge, reportError: (error: unknown) => void, navigate?: (location: EditorLanguageServiceLocation) => void, definitionTrace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void, openInWindow?: (results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void, readReferenceSource?:(root:string,location:EditorLanguageServiceLocation)=>Promise<string|null>): LanguageServiceFactory {
   const sessions = new Map<string, Session>();
   const refreshProfiles=new Set<string>();
   const consents = new Map<string, Consent>();
@@ -63,7 +63,12 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
     return session;
   };
   const factory = ((handle: EditorLanguageServiceHandle) => {
-    const info=resolve(handle);return disposed || !info ? null : sessionFor(info)?.port(handle,info) ?? null;
+    const info=resolve(handle),port=disposed||!info?null:sessionFor(info)?.port(handle,info)??null;
+    if(port&&info&&readReferenceSource)port.analyzeReferences=async(locations,version)=>(await import("../../application/language-services/reference-imports.ts")).analyzeReferenceLocations(locations,
+      location=>readReferenceSource(info.workspaceRoot,location),()=>{
+        const current=resolve(handle);return !disposed&&current?.workspaceRoot===info.workspaceRoot&&current.workspaceGeneration===info.workspaceGeneration&&sessions.get(sessionKey(info))?.referenceCurrent(handle,version)===true;
+      });
+    return port;
   }) as LanguageServiceFactory;
   factory.warm = async info => { await sessionFor(info)?.warm(); };
   factory.restart = async () => {
@@ -116,6 +121,7 @@ class Session {
   private readonly refreshModel:boolean;
   constructor(info: LanguageConsentScope, native: NativeLanguageServiceBridge, resolve: (handle: EditorLanguageServiceHandle) => LanguageDocumentIdentity | null, reportError: (error: unknown) => void, consent: Consent, idle: () => void, navigate?: (location: EditorLanguageServiceLocation) => void, trace?: (event: EditorDefinitionEvent) => void, approvalTrace?: (event: LanguageServiceApprovalEvent) => void, lifecycle?: (state:LanguageServiceStatus)=>void, refreshModel=false,openInWindow?: (results:import("../../protocol/editor-language-service.ts").EditorLanguageLocationsPublication)=>void) { this.openInWindow=openInWindow;this.refreshModel=refreshModel;this.lifecycle=lifecycle; this.idle = idle; this.consent = consent; this.approvalTrace = approvalTrace; this.trace = trace; this.info = info; this.native = native; this.resolve = resolve; this.reportError = reportError; this.navigate = navigate; }
   get scope():LanguageConsentScope{return this.info;}
+  referenceCurrent(handle:EditorLanguageServiceHandle,version:number):boolean {const doc=this.docs.get(handleKey(handle));return !!doc&&this.current(doc)&&doc.latest.version===version;}
   private live():boolean{return !this.dead && (this.warmed || [...this.docs.values()].some(doc=>this.current(doc)));}
   private status(state:LanguageServiceStatus["state"],code?:string,progress?:LanguageServiceProgress):void {
     const working=["preparing","awaiting-approval","indexing"].includes(state)||(state==="ready"&&progress!==undefined&&!["ready","failed"].includes(progress.phase));

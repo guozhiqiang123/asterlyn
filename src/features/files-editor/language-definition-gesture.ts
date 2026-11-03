@@ -2,13 +2,13 @@ import { LanguageServiceIndexingError } from "../../protocol/editor-language-ser
 import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import type { LanguageEditorContext } from "./language-service-editor.ts";
 import { isCurrentSymbolDefinition, normalizeDefinitionTargets } from "../../application/language-services/definition-targets.ts";
-import { LanguageLocationPicker } from "./language-location-picker.ts";
+import type { LanguageLocationPicker } from "./language-location-picker.ts";
 
 export function definitionModifier(event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }, mac: boolean): boolean {
   return !event.shiftKey && !event.altKey && (event.ctrlKey || (mac && event.metaKey));
 }
 class DefinitionGesture {
-  private readonly picker = new LanguageLocationPicker();
+  private picker: LanguageLocationPicker|null = null;
   decorations: DecorationSet = Decoration.none;
   private sequence = 0;
   private alive = true;
@@ -32,7 +32,7 @@ class DefinitionGesture {
   private current(token: number, version: number): boolean { return this.alive && this.sequence === token && this.context.active() && this.context.version() === version; }
   private marked: string | null = null;
   private clear(repaint = true): void { if (this.marked !== null) { this.marked = null; this.decorations = Decoration.none; if (repaint) this.view.dispatch({}); } }
-  private cancel(repaint = true): void { this.sequence++; this.gesture = null; this.choosing = false; this.picker.close(false); this.clear(repaint); }
+  private cancel(repaint = true): void { this.sequence++; this.gesture = null; this.choosing = false; this.picker?.close(false); this.clear(repaint); }
   update(update: ViewUpdate): void {
     // WebKit may move its DOM selection during Control-click before mouseup.
     // The held gesture still addresses the hit-tested symbol, independently of that caret.
@@ -130,20 +130,24 @@ class DefinitionGesture {
       trace(result.invalid ? "invalid" : "empty");
       ui?.status(result.invalid ? ui.copy().invalidDefinition : missingDefinition ? ui.copy().noDefinition : kind === "references" ? ui.copy().noReferences : ui.copy().noDefinition, "warning"); return;
     }
+    const referenceAnalysis=kind==="references"?await this.context.port.analyzeReferences?.(result.locations,version).catch(()=>null)??undefined:undefined;
+    if(!this.current(token,version)){trace("discarded");return;}
     const navigate = (location: (typeof result.locations)[number]) => {
       if (!this.current(token, version)) return;
       trace("selected", result.locations.length);
       this.context.port.navigate?.(location);
     };
-    if (result.locations.length === 1 && !result.limited && intent !== "references") { navigate(result.locations[0]!); return; }
+    if (result.locations.length === 1 && !result.limited && intent !== "references"&&!referenceAnalysis?.imports.includes(0)) { navigate(result.locations[0]!); return; }
     trace("choices", result.locations.length);
     if (!ui) return;
+    if(!this.picker){const {LanguageLocationPicker}=await import("./language-location-picker.ts");if(!this.current(token,version)){trace("discarded");return;}this.picker=new LanguageLocationPicker();}
     this.choosing = true;
     const title = kind === "references" ? ui.copy().chooseReference : ui.copy().chooseDefinition;
     ui.status(title, "information");
     const caret = this.view.coordsAtPos(pos);
     this.picker.open(this.document, anchor ?? { x: caret?.left ?? 0, y: caret?.bottom ?? 0 }, result.locations, {
-      openInWindow:this.context.port.openInWindow?(selected)=>{if(this.current(token,version))this.context.port.openInWindow?.({selectedIndex:selected?result.locations.indexOf(selected):0,kind,query:word?this.view.state.doc.sliceString(word.from,word.to).slice(0,256):"",locations:result.locations,limited:result.limited},version);}:undefined,
+      referenceImports:kind==="references"?referenceAnalysis?.imports??[]:undefined,
+      openInWindow:this.context.port.openInWindow?(selected,excludeImports)=>{if(this.current(token,version))this.context.port.openInWindow?.({referenceAnalysis,excludeImports,selectedIndex:selected?result.locations.indexOf(selected):0,kind,query:word?this.view.state.doc.sliceString(word.from,word.to).slice(0,256):"",locations:result.locations,limited:result.limited},version);}:undefined,
       title, limited: result.limited, copy: ui.copy(), current: () => this.current(token, version), select: navigate,
       dismissed: () => { this.choosing = false; }, restoreFocus: () => { if (this.context.active()) this.view.focus(); },
     });
