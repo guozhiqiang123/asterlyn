@@ -58,6 +58,8 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Delivery
 
+- [`benchmarks/2026-11-03-language-p0-baseline.md`](benchmarks/2026-11-03-language-p0-baseline.md) — measured TS/JS/Rust and real Android backend baselines, resource ownership, recovery fault matrix and explicit limits.
+
 - [`engineering/2026-11-03-openidea-inspired-evolution-plan.md`](engineering/2026-11-03-openidea-inspired-evolution-plan.md) — planned language-service recovery, provider selection, toolchains, portable services, protocol models, optional symbol indexing and later editing/plugin capabilities informed by the OpenIDEA comparison.
 
 - [`engineering/2026-11-03-gradle-task-java-runtime-plan.md`](engineering/2026-11-03-gradle-task-java-runtime-plan.md) — reviewed Gradle task JDK selection, compatibility, cache identity, diagnostics and boostCleaner recovery.

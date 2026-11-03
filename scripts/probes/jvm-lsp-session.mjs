@@ -20,8 +20,9 @@ export class JvmLspProbeSession {
   stderrBytes = 0;
   protocolFailed = false;
 
-  constructor(binary, args, { cwd, env, configuration }) {
+  constructor(binary, args, { cwd, env, configuration, workspaceModel }) {
     this.configuration = configuration;
+    this.workspaceModel = workspaceModel;
     this.child = spawn(binary, args, { cwd, env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
     this.exit = new Promise((resolve) => {
       const finish = (exit) => {
@@ -99,7 +100,8 @@ export class JvmLspProbeSession {
           if (typeof item.section !== "string" || item.section.length > 256) throw new ProbeFailure("configuration-section");
           return item.section.split(".").reduce((object, key) => object && Object.hasOwn(object, key) ? object[key] : undefined, this.configuration) ?? null;
         });
-      } else if (value.method === "workspace/applyEdit") result = { applied: false, failureReason: "Probe does not apply edits" };
+      } else if (value.method === "asterlyn/workspaceModel" && this.workspaceModel) result = this.workspaceModel;
+      else if (value.method === "workspace/applyEdit") result = { applied: false, failureReason: "Probe does not apply edits" };
       else if (!["window/workDoneProgress/create", "window/showMessageRequest", "workspace/diagnostic/refresh"].includes(value.method)) {
         this.send({ id: value.id, error: { code: -32601, message: "Unsupported probe request" } });
         return;
@@ -112,6 +114,12 @@ export class JvmLspProbeSession {
       this.diagnostics.set(params.uri, { version: params.version ?? null, count: params.diagnostics.length, receivedAt: Date.now(), ranges: params.diagnostics.slice(0, 512).map((d) => d.range) });
     }
     const event = { method: value.method, time: Date.now() };
+    if (value.method === "experimental/serverStatus") {
+      event.quiescent = params.quiescent === true;
+      event.health = ["ok", "warning", "error"].includes(params.health) ? params.health : "unknown";
+      if (/^[a-z][a-z0-9.-]{0,79}$/u.test(params.code)) event.code = params.code;
+      if (["model", "sources", "backend", "indexing", "refreshing", "ready", "failed"].includes(params.progress?.phase)) event.phase = params.progress.phase;
+    }
     if (value.method === "language/status") event.type = String(params.type).slice(0, 64);
     if (value.method === "$/progress") { event.kind = params.value?.kind; event.tokenHash = hash(String(params.token)); }
     if (["window/logMessage", "window/showMessage"].includes(value.method)) { event.messageHash = hash(String(params.message ?? "")); event.messageBytes = Buffer.byteLength(String(params.message ?? "")); event.level = params.type; }

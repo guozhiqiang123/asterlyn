@@ -1,0 +1,940 @@
+{
+  "schema": 1,
+  "scope": "direct stdio backends, not desktop end-to-end startup or UI latency",
+  "evidenceDirectory": "/tmp/asterlyn-o0-baseline",
+  "baselineSource": {
+    "host": "3defc013d252bedea34c76c7e1e18bbcd77f07df",
+    "lsp": "1f9065d0c5dbcaab39d53d037427a54951e2e843",
+    "android": "406081be373ed9b8bf9c34f5c7a41b76b11d0eaa"
+  },
+  "profiles": {
+    "boostCleaner": {
+      "schema": 1,
+      "profile": "android",
+      "startedAt": "2026-11-03T07:41:54.838Z",
+      "machine": {
+        "platform": "darwin",
+        "release": "24.6.0",
+        "arch": "arm64",
+        "cpu": "Apple M2 Pro",
+        "logicalCpus": 10,
+        "memoryBytes": 17179869184
+      },
+      "workspaceHash": "f68529dba00844ea69b4255017db14d1dc071b0f335c4fd5bd0ee8f0e2547ee2",
+      "sourceHash": "abbf6ca2633d0bc9fdf965836adf818dedbb02082e853e73b488d889d70f5890",
+      "modelHash": "e617da01686aaf5d1047cdbaa606a27e9d11107f4b14787ff6f6c3692195ade6",
+      "moduleCount": 25,
+      "executableHash": "f023ca4cc73074018b8085e846c8f46fc175f923d6349708e9af2e3cef76af59",
+      "node": "26.8.1",
+      "entryHash": "5917f2209a4e342cc72195193ee6389172d412b5583fbea9e2370d1ec1d031de",
+      "memoryMetric": "sampled descendant RSS KiB; excludes desktop/WebKit, not a hard limit or physical footprint",
+      "cacheScope": "new private analysis cache for each cold/warm pair; user caches untouched",
+      "passed": true,
+      "sourceUnchanged": true,
+      "runs": [
+        {
+          "cycle": 1,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1880432,
+          "initializeMs": 41.090375,
+          "reportedReadyMs": 184184.841542,
+          "firstQuery": {
+            "definitionMs": 8.616833000007318,
+            "referencesMs": 707.4902080000029,
+            "totalMs": 716.109375,
+            "definitionCount": 1,
+            "referenceCount": 69,
+            "resultDigest": "416afd27c1ec755b6768577491406b9e1792363cc82828b969b5a295b66df953",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 184901.473625,
+          "distributionMs": {
+            "count": 30,
+            "p50": 143.85583300000872,
+            "p95": 195.4916249999951,
+            "max": 223.86504200001946
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 1,
+          "condition": "warm",
+          "peakDescendantRssKiB": 2132720,
+          "initializeMs": 52.582709000009345,
+          "reportedReadyMs": 25641.298209,
+          "firstQuery": {
+            "definitionMs": 8.729250000003958,
+            "referencesMs": 725.4195419999887,
+            "totalMs": 734.1491249999963,
+            "definitionCount": 1,
+            "referenceCount": 69,
+            "resultDigest": "416afd27c1ec755b6768577491406b9e1792363cc82828b969b5a295b66df953",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 26375.65525000001,
+          "distributionMs": {
+            "count": 30,
+            "p50": 148.09908400001586,
+            "p95": 243.22649999998976,
+            "max": 396.81158300000243
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1959248,
+          "initializeMs": 53.62987500001327,
+          "reportedReadyMs": 187214.250125,
+          "firstQuery": {
+            "definitionMs": 10.456750000012107,
+            "referencesMs": 624.1293329999899,
+            "totalMs": 634.5862920000218,
+            "definitionCount": 1,
+            "referenceCount": 69,
+            "resultDigest": "416afd27c1ec755b6768577491406b9e1792363cc82828b969b5a295b66df953",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 187849.03775,
+          "distributionMs": {
+            "count": 30,
+            "p50": 151.1369999999879,
+            "p95": 217.04579100001138,
+            "max": 249.4147080000257
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1463168,
+          "initializeMs": 52.50587499997346,
+          "reportedReadyMs": 52962.44987499999,
+          "firstQuery": {
+            "definitionMs": 18.672583000035957,
+            "referencesMs": 1164.99329199997,
+            "totalMs": 1183.666125000047,
+            "definitionCount": 1,
+            "referenceCount": 69,
+            "resultDigest": "416afd27c1ec755b6768577491406b9e1792363cc82828b969b5a295b66df953",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 54146.39858400001,
+          "distributionMs": {
+            "count": 30,
+            "p50": 291.07616599998437,
+            "p95": 649.510166000051,
+            "max": 656.0913329999894
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1879088,
+          "initializeMs": 61.67766699998174,
+          "reportedReadyMs": 220773.03545899998,
+          "firstQuery": {
+            "definitionMs": 14.678874999983236,
+            "referencesMs": 781.956208000076,
+            "totalMs": 796.6354580000043,
+            "definitionCount": 1,
+            "referenceCount": 69,
+            "resultDigest": "416afd27c1ec755b6768577491406b9e1792363cc82828b969b5a295b66df953",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 221570.11058399995,
+          "distributionMs": {
+            "count": 30,
+            "p50": 170.43137500004377,
+            "p95": 300.5053749999497,
+            "max": 437.5644999999786
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1860208,
+          "initializeMs": 51.07204100000672,
+          "reportedReadyMs": 27683.664332999964,
+          "firstQuery": {
+            "definitionMs": 18.17929199989885,
+            "referencesMs": 848.0708750000922,
+            "totalMs": 866.2504999999655,
+            "definitionCount": 1,
+            "referenceCount": 69,
+            "resultDigest": "416afd27c1ec755b6768577491406b9e1792363cc82828b969b5a295b66df953",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 28550.421332999947,
+          "distributionMs": {
+            "count": 30,
+            "p50": 146.41562500002328,
+            "p95": 215.62895900011063,
+            "max": 241.7760830000043
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        }
+      ],
+      "allRunsSameResultSet": true
+    },
+    "FilesRecovery": {
+      "schema": 1,
+      "profile": "android",
+      "startedAt": "2026-11-03T07:55:02.037Z",
+      "machine": {
+        "platform": "darwin",
+        "release": "24.6.0",
+        "arch": "arm64",
+        "cpu": "Apple M2 Pro",
+        "logicalCpus": 10,
+        "memoryBytes": 17179869184
+      },
+      "workspaceHash": "5db9dceb123f0951fa7ccb7703120f82de5e5b78baa121650286f42020c247a4",
+      "sourceHash": "2e32bc1d60f1481a8723d152ab32d07b2abcdf37199d20795d805e4b7fbb3162",
+      "modelHash": "c1445ca9e8f4ffd70f9add6c8f437598434f533d8ee2eac44a374f5023aee405",
+      "moduleCount": 6,
+      "executableHash": "f023ca4cc73074018b8085e846c8f46fc175f923d6349708e9af2e3cef76af59",
+      "node": "26.8.1",
+      "analysisIdentityDigest": "5e21b3e3ac6fdeaae849ebe1372ede69d5b5816cc11f817b31031bcb0d48712c",
+      "entryHash": "5917f2209a4e342cc72195193ee6389172d412b5583fbea9e2370d1ec1d031de",
+      "memoryMetric": "sampled descendant RSS KiB; excludes desktop/WebKit, not a hard limit or physical footprint",
+      "cacheScope": "new private analysis cache for each cold/warm pair; user caches untouched",
+      "passed": true,
+      "sourceUnchanged": true,
+      "runs": [
+        {
+          "cycle": 1,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1620448,
+          "initializeMs": 41.409958,
+          "reportedReadyMs": 65038.645916999994,
+          "firstQuery": {
+            "definitionMs": 24.05908400000044,
+            "referencesMs": 477.38016599999537,
+            "totalMs": 501.4416670000064,
+            "definitionCount": 1,
+            "referenceCount": 1,
+            "resultDigest": "706c6e978000fbbec0f28076d25912a1541c012f84100e6a44f4df3a2ffa39c5",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 65540.397833,
+          "distributionMs": {
+            "count": 30,
+            "p50": 153.92033300000185,
+            "p95": 199.64154199999757,
+            "max": 205.05420899999444
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 1,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1199680,
+          "initializeMs": 45.660874999986845,
+          "reportedReadyMs": 43364.21279199999,
+          "firstQuery": {
+            "definitionMs": 73.05020900000818,
+            "referencesMs": 1594.2615409999999,
+            "totalMs": 1667.3128750000033,
+            "definitionCount": 1,
+            "referenceCount": 1,
+            "resultDigest": "706c6e978000fbbec0f28076d25912a1541c012f84100e6a44f4df3a2ffa39c5",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 45032.06858399999,
+          "distributionMs": {
+            "count": 30,
+            "p50": 218.07283299999835,
+            "p95": 635.3296670000127,
+            "max": 1046.2943749999977
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1585520,
+          "initializeMs": 48.81804199999897,
+          "reportedReadyMs": 115710.450417,
+          "firstQuery": {
+            "definitionMs": 12.229749999998603,
+            "referencesMs": 557.1351250000007,
+            "totalMs": 569.3656250000058,
+            "definitionCount": 1,
+            "referenceCount": 1,
+            "resultDigest": "706c6e978000fbbec0f28076d25912a1541c012f84100e6a44f4df3a2ffa39c5",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 116280.106208,
+          "distributionMs": {
+            "count": 30,
+            "p50": 145.5437920000113,
+            "p95": 214.18116700000246,
+            "max": 253.85270800002036
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1950272,
+          "initializeMs": 53.14245799998753,
+          "reportedReadyMs": 27998.77679100001,
+          "firstQuery": {
+            "definitionMs": 9.519792000006419,
+            "referencesMs": 518.2455000000191,
+            "totalMs": 527.7655420000083,
+            "definitionCount": 1,
+            "referenceCount": 1,
+            "resultDigest": "706c6e978000fbbec0f28076d25912a1541c012f84100e6a44f4df3a2ffa39c5",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 28526.785999999993,
+          "distributionMs": {
+            "count": 30,
+            "p50": 146.60745800001314,
+            "p95": 175.52287500002421,
+            "max": 181.89033299998846
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1929392,
+          "initializeMs": 80.86362499999814,
+          "reportedReadyMs": 68167.67970799998,
+          "firstQuery": {
+            "definitionMs": 18.31195800000569,
+            "referencesMs": 498.2607919999864,
+            "totalMs": 516.5729580000043,
+            "definitionCount": 1,
+            "referenceCount": 1,
+            "resultDigest": "706c6e978000fbbec0f28076d25912a1541c012f84100e6a44f4df3a2ffa39c5",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 68684.43708299997,
+          "distributionMs": {
+            "count": 30,
+            "p50": 142.14266599999974,
+            "p95": 164.42520800000057,
+            "max": 195.6866250000312
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1552208,
+          "initializeMs": 45.79887500003679,
+          "reportedReadyMs": 28840.878125000047,
+          "firstQuery": {
+            "definitionMs": 9.987832999962848,
+            "referencesMs": 733.1447080000071,
+            "totalMs": 743.1327499999898,
+            "definitionCount": 1,
+            "referenceCount": 1,
+            "resultDigest": "706c6e978000fbbec0f28076d25912a1541c012f84100e6a44f4df3a2ffa39c5",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 29584.451250000042,
+          "distributionMs": {
+            "count": 30,
+            "p50": 156.1948749999865,
+            "p95": 245.82195900002262,
+            "max": 437.116624999966
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        }
+      ],
+      "allRunsSameResultSet": true
+    },
+    "typescript": {
+      "schema": 1,
+      "profile": "typescript",
+      "startedAt": "2026-11-03T08:02:46.104Z",
+      "machine": {
+        "platform": "darwin",
+        "release": "24.6.0",
+        "arch": "arm64",
+        "cpu": "Apple M2 Pro",
+        "logicalCpus": 10,
+        "memoryBytes": 17179869184
+      },
+      "workspaceHash": "8ee1ae5057db624acbc74de1fdece9760438a983f3e67ecce9d667aeb2a9cf69",
+      "sourceHash": "132c11419bb6d04326b8df7babbddf9f4c9984a42f77afd82c07fe18e0161a3a",
+      "modelHash": null,
+      "moduleCount": null,
+      "executableHash": "f023ca4cc73074018b8085e846c8f46fc175f923d6349708e9af2e3cef76af59",
+      "node": "26.8.1",
+      "analysisIdentityDigest": "b2f7696932806839a9f3f198c1bf439c2cda4e97beba63134c06e157245fdb35",
+      "entryHash": "192638f1fa62c907fd54c0b55b12dd3dff01325a1a0ed5973907efca1c57b5eb",
+      "memoryMetric": "sampled descendant RSS KiB; excludes desktop/WebKit, not a hard limit or physical footprint",
+      "cacheScope": "new server process each run; no persistent analysis-cache claim",
+      "passed": true,
+      "sourceUnchanged": true,
+      "runs": [
+        {
+          "cycle": 1,
+          "condition": "cold",
+          "peakDescendantRssKiB": 533088,
+          "initializeMs": 63.908167,
+          "reportedReadyMs": 63.948375000000006,
+          "firstQuery": {
+            "definitionMs": 1129.21925,
+            "referencesMs": 26.10437499999989,
+            "totalMs": 1155.3256250000002,
+            "definitionCount": 1,
+            "referenceCount": 2,
+            "resultDigest": "b9ee0460f6217696e6a2f7f3277543988b971f978b9c1cc5506f796af29fd807",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1219.338042,
+          "distributionMs": {
+            "count": 30,
+            "p50": 4.804125000000113,
+            "p95": 6.44379200000003,
+            "max": 26.13112500000011
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 1,
+          "condition": "warm",
+          "peakDescendantRssKiB": 598736,
+          "initializeMs": 62.30966600000011,
+          "reportedReadyMs": 62.33666600000015,
+          "firstQuery": {
+            "definitionMs": 992.1911249999998,
+            "referencesMs": 18.540457999999944,
+            "totalMs": 1010.7317079999998,
+            "definitionCount": 1,
+            "referenceCount": 2,
+            "resultDigest": "b9ee0460f6217696e6a2f7f3277543988b971f978b9c1cc5506f796af29fd807",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1073.105458,
+          "distributionMs": {
+            "count": 30,
+            "p50": 4.759625000000142,
+            "p95": 6.926124999999956,
+            "max": 31.953833999999915
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "cold",
+          "peakDescendantRssKiB": 597376,
+          "initializeMs": 63.89491700000008,
+          "reportedReadyMs": 63.92016700000022,
+          "firstQuery": {
+            "definitionMs": 993.7843750000006,
+            "referencesMs": 17.589499999999134,
+            "totalMs": 1011.3740840000005,
+            "definitionCount": 1,
+            "referenceCount": 2,
+            "resultDigest": "b9ee0460f6217696e6a2f7f3277543988b971f978b9c1cc5506f796af29fd807",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1075.3340000000003,
+          "distributionMs": {
+            "count": 30,
+            "p50": 4.912207999999737,
+            "p95": 6.001999999999498,
+            "max": 32.69054200000028
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "warm",
+          "peakDescendantRssKiB": 609552,
+          "initializeMs": 62.822917000000416,
+          "reportedReadyMs": 62.84266699999989,
+          "firstQuery": {
+            "definitionMs": 959.3645420000003,
+            "referencesMs": 21.132166999999754,
+            "totalMs": 980.4969590000001,
+            "definitionCount": 1,
+            "referenceCount": 2,
+            "resultDigest": "b9ee0460f6217696e6a2f7f3277543988b971f978b9c1cc5506f796af29fd807",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1043.3713750000006,
+          "distributionMs": {
+            "count": 30,
+            "p50": 4.609124999999949,
+            "p95": 6.414416999999958,
+            "max": 6.471125000000029
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "cold",
+          "peakDescendantRssKiB": 608448,
+          "initializeMs": 68.96608399999968,
+          "reportedReadyMs": 68.99487500000032,
+          "firstQuery": {
+            "definitionMs": 953.404958000001,
+            "referencesMs": 17.403291999999055,
+            "totalMs": 970.8084159999999,
+            "definitionCount": 1,
+            "referenceCount": 2,
+            "resultDigest": "b9ee0460f6217696e6a2f7f3277543988b971f978b9c1cc5506f796af29fd807",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1039.8314169999994,
+          "distributionMs": {
+            "count": 30,
+            "p50": 4.717166000000361,
+            "p95": 6.667124999999942,
+            "max": 31.452624999999898
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "warm",
+          "peakDescendantRssKiB": 594512,
+          "initializeMs": 61.58683299999939,
+          "reportedReadyMs": 61.6064580000002,
+          "firstQuery": {
+            "definitionMs": 985.9259170000005,
+            "referencesMs": 17.273167000001195,
+            "totalMs": 1003.1992500000015,
+            "definitionCount": 1,
+            "referenceCount": 2,
+            "resultDigest": "b9ee0460f6217696e6a2f7f3277543988b971f978b9c1cc5506f796af29fd807",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1064.8324169999996,
+          "distributionMs": {
+            "count": 30,
+            "p50": 4.729457999999795,
+            "p95": 6.350166000000172,
+            "max": 33.23933400000169
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        }
+      ],
+      "allRunsSameResultSet": true
+    },
+    "javascript": {
+      "schema": 1,
+      "profile": "typescript",
+      "startedAt": "2026-11-03T08:04:14.010Z",
+      "machine": {
+        "platform": "darwin",
+        "release": "24.6.0",
+        "arch": "arm64",
+        "cpu": "Apple M2 Pro",
+        "logicalCpus": 10,
+        "memoryBytes": 17179869184
+      },
+      "workspaceHash": "8ee1ae5057db624acbc74de1fdece9760438a983f3e67ecce9d667aeb2a9cf69",
+      "sourceHash": "96f2c44981d0019252c830056d625bfe6c256339589686bd4b36eef59cd3e95d",
+      "modelHash": null,
+      "moduleCount": null,
+      "executableHash": "f023ca4cc73074018b8085e846c8f46fc175f923d6349708e9af2e3cef76af59",
+      "node": "26.8.1",
+      "analysisIdentityDigest": "b2f7696932806839a9f3f198c1bf439c2cda4e97beba63134c06e157245fdb35",
+      "entryHash": "192638f1fa62c907fd54c0b55b12dd3dff01325a1a0ed5973907efca1c57b5eb",
+      "memoryMetric": "sampled descendant RSS KiB; excludes desktop/WebKit, not a hard limit or physical footprint",
+      "cacheScope": "new server process each run; no persistent analysis-cache claim",
+      "passed": true,
+      "sourceUnchanged": true,
+      "runs": [
+        {
+          "cycle": 1,
+          "condition": "cold",
+          "peakDescendantRssKiB": 682624,
+          "initializeMs": 66.124084,
+          "reportedReadyMs": 66.16158399999999,
+          "firstQuery": {
+            "definitionMs": 1516.3603329999999,
+            "referencesMs": 26.918750000000045,
+            "totalMs": 1543.280917,
+            "definitionCount": 1,
+            "referenceCount": 5,
+            "resultDigest": "6ed4500d7478ce51bf49db96384c9961aa16258d18d818ca84ce9fdfe2067a58",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1609.55025,
+          "distributionMs": {
+            "count": 30,
+            "p50": 1.2469999999998436,
+            "p95": 2.3234590000001845,
+            "max": 73.60670900000014
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 1,
+          "condition": "warm",
+          "peakDescendantRssKiB": 631136,
+          "initializeMs": 61.34629099999984,
+          "reportedReadyMs": 61.36629099999982,
+          "firstQuery": {
+            "definitionMs": 1242.8986250000003,
+            "referencesMs": 18.18941700000005,
+            "totalMs": 1261.0882080000001,
+            "definitionCount": 1,
+            "referenceCount": 5,
+            "resultDigest": "6ed4500d7478ce51bf49db96384c9961aa16258d18d818ca84ce9fdfe2067a58",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1322.5146250000003,
+          "distributionMs": {
+            "count": 30,
+            "p50": 1.2665000000001783,
+            "p95": 2.6157499999999345,
+            "max": 66.4591660000001
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "cold",
+          "peakDescendantRssKiB": 610816,
+          "initializeMs": 61.8774999999996,
+          "reportedReadyMs": 61.89858399999957,
+          "firstQuery": {
+            "definitionMs": 1278.2261250000001,
+            "referencesMs": 18.783166999999594,
+            "totalMs": 1297.0095840000004,
+            "definitionCount": 1,
+            "referenceCount": 5,
+            "resultDigest": "6ed4500d7478ce51bf49db96384c9961aa16258d18d818ca84ce9fdfe2067a58",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1358.963667,
+          "distributionMs": {
+            "count": 30,
+            "p50": 1.2664999999997235,
+            "p95": 3.0723330000000715,
+            "max": 71.16699999999946
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "warm",
+          "peakDescendantRssKiB": 630176,
+          "initializeMs": 63.26758299999983,
+          "reportedReadyMs": 63.288665999999466,
+          "firstQuery": {
+            "definitionMs": 1240.6539999999995,
+            "referencesMs": 18.523959000000104,
+            "totalMs": 1259.1780840000001,
+            "definitionCount": 1,
+            "referenceCount": 5,
+            "resultDigest": "6ed4500d7478ce51bf49db96384c9961aa16258d18d818ca84ce9fdfe2067a58",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1322.522333,
+          "distributionMs": {
+            "count": 30,
+            "p50": 1.2990409999993062,
+            "p95": 3.0017500000003565,
+            "max": 64.98937500000011
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "cold",
+          "peakDescendantRssKiB": 612736,
+          "initializeMs": 62.53837500000009,
+          "reportedReadyMs": 62.56412499999897,
+          "firstQuery": {
+            "definitionMs": 1287.9244999999992,
+            "referencesMs": 18.1372080000001,
+            "totalMs": 1306.061916999999,
+            "definitionCount": 1,
+            "referenceCount": 5,
+            "resultDigest": "6ed4500d7478ce51bf49db96384c9961aa16258d18d818ca84ce9fdfe2067a58",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1368.6867079999993,
+          "distributionMs": {
+            "count": 30,
+            "p50": 1.225749999999607,
+            "p95": 2.8162499999998545,
+            "max": 66.97045799999978
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "warm",
+          "peakDescendantRssKiB": 734640,
+          "initializeMs": 64.02204100000017,
+          "reportedReadyMs": 64.05187500000102,
+          "firstQuery": {
+            "definitionMs": 1346.7387080000008,
+            "referencesMs": 18.475374999999985,
+            "totalMs": 1365.214333,
+            "definitionCount": 1,
+            "referenceCount": 5,
+            "resultDigest": "6ed4500d7478ce51bf49db96384c9961aa16258d18d818ca84ce9fdfe2067a58",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 1429.3554160000003,
+          "distributionMs": {
+            "count": 30,
+            "p50": 1.3467500000006112,
+            "p95": 19.919459000000643,
+            "max": 71.8366670000014
+          },
+          "stderrBytes": 0,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        }
+      ],
+      "allRunsSameResultSet": true
+    },
+    "rust": {
+      "schema": 1,
+      "profile": "rust",
+      "startedAt": "2026-11-03T08:04:48.800Z",
+      "machine": {
+        "platform": "darwin",
+        "release": "24.6.0",
+        "arch": "arm64",
+        "cpu": "Apple M2 Pro",
+        "logicalCpus": 10,
+        "memoryBytes": 17179869184
+      },
+      "workspaceHash": "8ee1ae5057db624acbc74de1fdece9760438a983f3e67ecce9d667aeb2a9cf69",
+      "sourceHash": "95ce3e43964481e3f40993cf6f7858a91281be237fee5c780abbb5d6ec4514a3",
+      "modelHash": null,
+      "moduleCount": null,
+      "executableHash": "78082ea1a96a008751767bd35f43738b5d4565cbef06ee5b31ad742a316133b5",
+      "node": "26.8.1",
+      "analysisIdentityDigest": "ad111a979bc98fff4ea1bb27ad1941193589f5b95362caf60b93006d3c9fedea",
+      "entryHash": "78082ea1a96a008751767bd35f43738b5d4565cbef06ee5b31ad742a316133b5",
+      "memoryMetric": "sampled descendant RSS KiB; excludes desktop/WebKit, not a hard limit or physical footprint",
+      "cacheScope": "new server process each run; no persistent analysis-cache claim",
+      "passed": true,
+      "sourceUnchanged": true,
+      "runs": [
+        {
+          "cycle": 1,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1433888,
+          "initializeMs": 138.81791599999997,
+          "reportedReadyMs": 2054.116458,
+          "firstQuery": {
+            "definitionMs": 2271.133125,
+            "referencesMs": 9294.104958,
+            "totalMs": 11565.240791,
+            "definitionCount": 1,
+            "referenceCount": 15,
+            "resultDigest": "3bc6b752af56cbc2aaeeb8ca9ff46afe5a6040a22778c08b5b201532ce88ca7b",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 13619.573375,
+          "distributionMs": {
+            "count": 30,
+            "p50": 0.5807920000006561,
+            "p95": 1.2730000000010477,
+            "max": 1.570583999999144
+          },
+          "stderrBytes": 291,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 1,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1126656,
+          "initializeMs": 16.250958000000537,
+          "reportedReadyMs": 1526.6461660000004,
+          "firstQuery": {
+            "definitionMs": 2185.549166999999,
+            "referencesMs": 10085.981875000001,
+            "totalMs": 12271.5315,
+            "definitionCount": 1,
+            "referenceCount": 15,
+            "resultDigest": "3bc6b752af56cbc2aaeeb8ca9ff46afe5a6040a22778c08b5b201532ce88ca7b",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 13798.362707999999,
+          "distributionMs": {
+            "count": 30,
+            "p50": 0.47999999999956344,
+            "p95": 0.8091659999990952,
+            "max": 1.3031670000018494
+          },
+          "stderrBytes": 290,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1246512,
+          "initializeMs": 16.473165999999765,
+          "reportedReadyMs": 1633.0908750000017,
+          "firstQuery": {
+            "definitionMs": 2304.5177079999994,
+            "referencesMs": 9341.126667000004,
+            "totalMs": 11645.644790999999,
+            "definitionCount": 1,
+            "referenceCount": 15,
+            "resultDigest": "3bc6b752af56cbc2aaeeb8ca9ff46afe5a6040a22778c08b5b201532ce88ca7b",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 13278.998624999997,
+          "distributionMs": {
+            "count": 30,
+            "p50": 0.46700000000419095,
+            "p95": 0.8151660000003176,
+            "max": 1.757791999996698
+          },
+          "stderrBytes": 290,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 2,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1284720,
+          "initializeMs": 16.588833000001614,
+          "reportedReadyMs": 1631.3474160000042,
+          "firstQuery": {
+            "definitionMs": 2245.5810829999973,
+            "referencesMs": 9406.563125,
+            "totalMs": 11652.144499999995,
+            "definitionCount": 1,
+            "referenceCount": 15,
+            "resultDigest": "3bc6b752af56cbc2aaeeb8ca9ff46afe5a6040a22778c08b5b201532ce88ca7b",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 13283.701625000002,
+          "distributionMs": {
+            "count": 30,
+            "p50": 0.4837499999994179,
+            "p95": 0.764500000004773,
+            "max": 1.2045410000064294
+          },
+          "stderrBytes": 291,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "cold",
+          "peakDescendantRssKiB": 1369648,
+          "initializeMs": 16.75050000000192,
+          "reportedReadyMs": 1529.8550830000022,
+          "firstQuery": {
+            "definitionMs": 2184.7155420000054,
+            "referencesMs": 9758.798542000004,
+            "totalMs": 11943.515625,
+            "definitionCount": 1,
+            "referenceCount": 15,
+            "resultDigest": "3bc6b752af56cbc2aaeeb8ca9ff46afe5a6040a22778c08b5b201532ce88ca7b",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 13473.569541000004,
+          "distributionMs": {
+            "count": 30,
+            "p50": 0.527457999996841,
+            "p95": 0.7887919999920996,
+            "max": 1.8036250000004657
+          },
+          "stderrBytes": 291,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        },
+        {
+          "cycle": 3,
+          "condition": "warm",
+          "peakDescendantRssKiB": 1266496,
+          "initializeMs": 16.48004100000253,
+          "reportedReadyMs": 1629.5725410000014,
+          "firstQuery": {
+            "definitionMs": 2406.08333400001,
+            "referencesMs": 9701.877041,
+            "totalMs": 12107.961542000005,
+            "definitionCount": 1,
+            "referenceCount": 15,
+            "resultDigest": "3bc6b752af56cbc2aaeeb8ca9ff46afe5a6040a22778c08b5b201532ce88ca7b",
+            "coverage": "unknown"
+          },
+          "semanticReadyMs": 13737.70812499999,
+          "distributionMs": {
+            "count": 30,
+            "p50": 0.569707999995444,
+            "p95": 0.8053329999966081,
+            "max": 1.1899579999881098
+          },
+          "stderrBytes": 291,
+          "protocolFailed": false,
+          "remainingProcessCount": 0
+        }
+      ],
+      "allRunsSameResultSet": true
+    }
+  },
+  "nativeObservation": {
+    "capturedAt": "2026-11-03T16:05:30+0800",
+    "installedExecutableSha256": "27661dc6334ab6234c30acd5e1751447b57d2768dfe692ce8e6f1c81a6890b81",
+    "metric": "observed descendant RSS KiB; not a cold launch or physical footprint; WebKit XPC not attributed",
+    "rootProcesses": 1,
+    "descendantProcesses": 2,
+    "descendantRssKiB": 27056,
+    "machineLoad": "user application remained running; independent baseline jobs ran separately"
+  }
+}

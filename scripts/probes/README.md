@@ -61,3 +61,30 @@ Kotlin/Java overlays, resource costs and editor/native acceptance remain additio
 
 Run the probe regression checks with:
 `node --test scripts/jvm-language-service-probe.test.mjs`.
+
+
+## P0 language baseline (2026-11-03)
+
+`node scripts/probes/measure-language-baseline.mjs /private/config.json /private/evidence.json`
+measures explicit TS/JS, Rust or packaged Android stdio profiles. It is never loaded by the
+application. Configuration names an absolute executable, argument array, workspace, one relative
+source path, language ID and declaration needle, plus profile-specific initialization options.
+Android additionally requires a captured, matching `modelFile` and verified `analysis` tool/component
+locations. This path consumes the captured model; it does not invoke Gradle or silently refresh that
+model. Record its age/fingerprint and source/variant identity separately; a stale capture is not a live
+model acceptance result. Server assets and tool identities must be independently verified first.
+
+Defaults are three cold/warm pairs and 30 repeated definition→reference samples after a separately
+reported first query. Android allocates a new private analysis-cache namespace per pair. TS/JS/Rust
+use fresh processes; their labels do not claim persistent semantic cache support. Project sources
+remain unchanged, captured-model inputs are read only, and user caches are never deleted. Rust
+must disable build scripts, procedural macros, checks and network dependency recovery; supply the
+pinned sysroot and toolchain explicitly. The probe environment forwards only HOME, TMPDIR, PATH,
+LANG and USER, with fixed Rust overrides. A real-project run must be authorized explicitly.
+
+Evidence stores timings, machine/tool/source/model hashes, exact result-set digests, coverage state,
+stages, stderr byte counts and process cleanup; raw source, reference URIs, RPC bodies and stderr
+are not retained. Each run verifies exact query-set stability and final source digest. Descendant
+RSS sampling excludes the desktop host and its WebKit services; it is not whole-app physical memory.
+Use native lifecycle and platform memory acceptance separately. Initialization/ready notifications
+alone are not semantic acceptance. Run the framing/model/status privacy tests with the JVM probe tests.

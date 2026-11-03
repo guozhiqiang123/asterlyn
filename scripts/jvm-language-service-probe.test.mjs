@@ -34,6 +34,20 @@ test("probe rejects mutations, dynamic registrations and unknown requests; confi
   assert.deepEqual(value.replies[2].result, [true, null]);
 });
 
+test("baseline model access is explicit and status evidence discards arbitrary server text", () => {
+  const value=parser();
+  value.accept({jsonrpc:"2.0",id:1,method:"asterlyn/workspaceModel",params:{}});
+  assert.equal(value.replies[0].error.code,-32601);
+  value.workspaceModel={schema:1,generation:2,digest:"sha256:test",bytes:1,path:"/explicit/model"};
+  value.accept({jsonrpc:"2.0",id:2,method:"asterlyn/workspaceModel",params:{}});
+  assert.deepEqual(value.replies[1].result,value.workspaceModel);
+  value.accept({jsonrpc:"2.0",method:"experimental/serverStatus",params:{quiescent:true,health:"ok",code:"secret/source",message:"private source",progress:{phase:"ready",text:"private source"}}});
+  assert.equal(value.events[0].phase,"ready");
+  assert.equal(value.events[0].quiescent,true);
+  assert.ok(!JSON.stringify(value.events).includes("private source"));
+  assert.ok(!JSON.stringify(value.events).includes("secret/source"));
+});
+
 test("probe spawn failure rejects pending initialization and shutdown completes", async () => {
   const value = new JvmLspProbeSession("/asterlyn-nonexistent-jvm-probe", [], { cwd: tmpdir(), env: {}, configuration: {} });
   await assert.rejects(value.request("initialize", {}, 5000), /server-exited/u);
