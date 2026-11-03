@@ -58,6 +58,8 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Delivery
 
+- [`engineering/2026-11-03-gradle-task-java-runtime-plan.md`](engineering/2026-11-03-gradle-task-java-runtime-plan.md) — reviewed Gradle task JDK selection, compatibility, cache identity, diagnostics and boostCleaner recovery.
+
 - [`engineering/2026-10-26-language-definition-navigation-plan.md`](engineering/2026-10-26-language-definition-navigation-plan.md) — Ctrl/Command-click definition navigation, target identity, feedback and real gesture acceptance.
 - [`engineering/2026-10-26-language-reference-navigation-plan.md`](engineering/2026-10-26-language-reference-navigation-plan.md) — declaration-to-usages behavior, explicit reference lookup and searchable multi-target selection.
 - [`engineering/2026-10-26-language-approval-session-fix.md`](engineering/2026-10-26-language-approval-session-fix.md) — correct project-scoped consent lifetime, idle retention and repeated-dialog regression.
