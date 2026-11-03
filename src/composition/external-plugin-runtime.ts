@@ -50,6 +50,8 @@ interface ActiveExternalPlugin {
   readonly release: Disposable;
   readonly session: ExternalPluginSession;
   readonly activation: InstalledPluginActivation;
+  readonly identity: PluginWorkspaceIdentity;
+  readonly catalogReady: boolean;
   healthTimer: ReturnType<typeof setTimeout> | null;
   healthy: boolean;
 }
@@ -88,11 +90,15 @@ export class ExternalPluginRuntime {
     const candidates = snapshot.plugins
       .filter((plugin) => plugin.enabled && enabled(plugin.pluginId) && activatable(plugin))
       .sort((left, right) => left.pluginId.localeCompare(right.pluginId));
+    const wireEvidence = boundedRuntimeEvidence(evidence);
+    const catalogReady = completeRuntimeCatalog(wireEvidence);
     if (preserveActive) {
       const desired = new Map(candidates.map((plugin) => [plugin.pluginId, plugin]));
       for (const [pluginId, entry] of [...this.active]) {
         const plugin = desired.get(pluginId);
-        if (!plugin || !reusableActivation(entry.activation, plugin)) {
+        if (!plugin || !reusableActivation(entry.activation, plugin) ||
+          entry.identity.root !== identity.root || entry.identity.generation !== identity.generation ||
+          (!entry.catalogReady && catalogReady)) {
           await this.releaseActive(pluginId, entry);
           if (this.disposed || token !== this.sequence) return [];
         }
@@ -105,7 +111,7 @@ export class ExternalPluginRuntime {
         activated.push(plugin.pluginId);
         continue;
       }
-      await this.activatePlugin(plugin, identity, evidence, token).then((didActivate) => {
+      await this.activatePlugin(plugin, identity, wireEvidence, catalogReady, token).then((didActivate) => {
         if (didActivate) activated.push(plugin.pluginId);
       }, this.options.reportError);
     }
@@ -133,7 +139,8 @@ export class ExternalPluginRuntime {
   private async activatePlugin(
     plugin: InstalledPlugin,
     identity: PluginWorkspaceIdentity,
-    evidence: PluginEvidenceSnapshot,
+    wireEvidence: PluginRuntimeValue,
+    catalogReady: boolean,
     token: number,
   ): Promise<boolean> {
     let activation: InstalledPluginActivation | null = null;
@@ -145,7 +152,7 @@ export class ExternalPluginRuntime {
         plugin.pluginId,
         identity.root,
         identity.generation,
-        boundedRuntimeEvidence(evidence),
+        wireEvidence,
         this.options.locale(),
         this.options.theme?.() ?? "dark",
       );
@@ -165,6 +172,8 @@ export class ExternalPluginRuntime {
         release,
         session,
         activation,
+        identity: Object.freeze({ ...identity }),
+        catalogReady,
         healthTimer: null,
         healthy: false,
       };
@@ -644,6 +653,17 @@ function sameRuntimeSession(
     activation.pluginVersion === termination.pluginVersion &&
     activation.packageDigest === termination.packageDigest &&
     activation.sessionId === termination.sessionId;
+}
+
+// Bootstrap sessions may register unconditional contributions before directory discovery finishes.
+// Refresh once at the first usable catalog, then retain sessions across ordinary watcher updates.
+function completeRuntimeCatalog(evidence: PluginRuntimeValue): boolean {
+  return Array.isArray(evidence) && evidence.some(item => {
+    if (!item || typeof item !== "object" || Array.isArray(item) || item.kind !== "workspace-catalog") return false;
+    const values = item.values;
+    return Boolean(values && typeof values === "object" && !Array.isArray(values) &&
+      values.truncated === false && Array.isArray(values.files) && values.files.length > 0);
+  });
 }
 
 export function boundedRuntimeEvidence(

@@ -164,6 +164,39 @@ test("activates admitted external contributions and removes them on deactivation
   await runtime.dispose();
 });
 
+test("refreshes bootstrap contributions once a complete catalog arrives without restarting on ordinary edits", async () => {
+  const registry = new PluginContributionRegistry();
+  const starts = [], stops = [];
+  const bridge = {
+    activate: async (_pluginId, root, generation, wireEvidence) => {
+      starts.push({ root, generation, wireEvidence });
+      const complete = wireEvidence[0].values.truncated === false && wireEvidence[0].values.files.length > 0;
+      return { pluginId, pluginVersion: "1.2.3", packageDigest: `sha256:${"a".repeat(64)}`, sessionId: `bootstrap-${starts.length}`,
+        contributions: [{ kind: "command", id: complete ? "catalog-ready" : "bootstrap", payload: {}, callbacks: { title: "title", detail: "detail", execute: "execute" } }] };
+    },
+    invoke: async (_id, handle) => handle === "title" ? "Fixture" : handle === "detail" ? "Catalog-dependent fixture" : null,
+    deactivate: async id => { stops.push(id); },
+    confirmHealthy: async () => installation(), abandonActivation: async () => installation(), failActivation: async () => installation(),
+    subscribe: async () => () => {}, subscribeNotifications: async () => () => {}, subscribeTerminations: async () => () => {},
+  };
+  const runtime = new ExternalPluginRuntime({ registry, bridge, marketplace: { listPluginInstallations: async () => installation() }, locale: () => "en-US", reportError: error => { throw error; } });
+  try {
+    await runtime.activate(identity, { ...evidence, files: [] }, () => true);
+    assert.ok(registry.get(`${pluginId}.bootstrap`));
+    await runtime.activate(identity, { ...evidence, truncated: true }, () => true, true);
+    assert.equal(starts.length, 1, "incomplete evidence cannot complete bootstrap");
+    await runtime.activate(identity, evidence, () => true, true);
+    assert.equal(starts.length, 2, "complete evidence must refresh conditional contributions");
+    assert.equal(registry.get(`${pluginId}.bootstrap`), null);
+    assert.ok(registry.get(`${pluginId}.catalog-ready`));
+    await runtime.activate(identity, { ...evidence, files: [...evidence.files, { workspacePath: "new-source.kt" }] }, () => true, true);
+    assert.equal(starts.length, 2, "routine catalog updates keep the ready session");
+    await runtime.activate({ root: "/other", generation: 8 }, evidence, () => true, true);
+    assert.equal(starts.length, 3, "preservation cannot cross workspace identity");
+    assert.equal(stops.length, 2);
+  } finally { await runtime.dispose(); }
+});
+
 test("workspace transition removes contributions and returns within its budget despite stale RPCs", async () => {
   const registry = new PluginContributionRegistry();
   const never = new Promise(() => undefined);
