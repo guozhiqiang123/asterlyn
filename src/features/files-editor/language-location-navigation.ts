@@ -18,7 +18,7 @@ export interface DefinitionNavigationPorts {
 /** A window owns one navigator; concurrent opens cannot apply a prior request's selection. */
 export function createLanguageDefinitionNavigator(ports: DefinitionNavigationPorts) {
   let sequence = 0;
-  return async (value: EditorLanguageServiceLocation): Promise<void> => {
+  return async (value: EditorLanguageServiceLocation, expectedText?:string): Promise<void> => {
     const token = ++sequence, location = normalizeDefinitionTargets(value).locations[0];
     const workspace = ports.workspace(); if (!workspace || !location) return;
     const key = definitionFileKey(location.uri);
@@ -29,7 +29,7 @@ export function createLanguageDefinitionNavigator(ports: DefinitionNavigationPor
     if (token !== sequence || current?.root !== workspace.root || current.generation !== workspace.generation || definitionFileKey(ports.activeUri()) !== key) { ports.diagnostic?.("stale"); return; }
     const content = ports.content(); if (content === null) return;
     const offsets = definitionOffsets(content, location);
-    if (!offsets) { ports.status(ports.copy().invalidTargetRange, "warning"); ports.diagnostic?.("invalid-range"); return; }
+    if (!offsets || expectedText!==undefined&&content.slice(offsets.from,offsets.to)!==expectedText) { ports.status(ports.copy().invalidTargetRange, "warning"); ports.diagnostic?.("invalid-range"); return; }
     if (ports.select(offsets.from, offsets.to)) { ports.status(ports.copy().definitionOpened, "information"); ports.diagnostic?.("opened"); }
   };
 }

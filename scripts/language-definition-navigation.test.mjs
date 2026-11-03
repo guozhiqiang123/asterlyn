@@ -96,3 +96,5 @@ test("dependency source content opens only through the dedicated readonly previe
  await createLanguageDefinitionNavigator(ports)(target);assert.equal(preview,1);assert.equal(state.opens.length,0);assert.deepEqual(state.selections,[{from:6,to:9}]);
  for(const mutation of [{uri:"file:///outside/Api.java"},{readonlySource:{...target.readonlySource,path:"../Api.java"}},{readonlySource:{...target.readonlySource,text:"a".repeat(512*1024+1)}}])assert.equal(normalizeDefinitionTargets({...target,...mutation}).locations.length,0);
 });
+
+test("syntax candidate navigation rechecks the loaded token after native validation",async()=>{const {state,ports}=fixture();await createLanguageDefinitionNavigator(ports)(location(undefined,range(0,0,3)),"changed-token");assert.equal(state.selections.length,0);assert.deepEqual(state.outcomes,["invalid-range"]);});

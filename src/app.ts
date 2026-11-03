@@ -682,7 +682,7 @@ export class AsterlynApp {
       workspace:languageWorkspace,chinese:()=>this.localization.catalog.locale==="zh-CN",
       origin:()=>{const active=this.activeDocument();return active.kind==="project-file"?active.workspacePath:null;},
       overlays:()=>{this.captureMountedTextEditor();return dirtyTextTabs(this.editorState.session).filter(tab=>tab.document.repositoryRoot===this.windowSession.workspace.state.root).map(tab=>({workspacePath:tab.document.workspacePath,text:new TextEncoder().encode(tab.content).length<=256*1024?tab.content:null}));},
-      navigate:async(workspaceRoot,candidate)=>{const uri=workspaceFileUri(workspaceRoot,candidate.workspacePath);if(uri)await definitionNavigator({uri,range:candidate.range});},
+      navigate:async(workspaceRoot,candidate)=>{const uri=workspaceFileUri(workspaceRoot,candidate.workspacePath);if(uri)await definitionNavigator({uri,range:candidate.range},candidate.name);},
     });
     const locationSources=createFindLanguageResultsPorts({workspace:languageWorkspace,files:()=>this.filesState.files,buffers:()=>this.editorState.session.textTabs,capture:()=>this.captureMountedTextEditor(),navigate:definitionNavigator,read:(root,file)=>bridge.readTextFile(root,file.repositoryId,file.path)});
     this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({

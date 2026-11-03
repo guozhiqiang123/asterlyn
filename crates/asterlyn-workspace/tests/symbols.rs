@@ -33,6 +33,15 @@ fn five_languages_skip_literals_and_comments_keep_utf16_locations() {
             vec!["Fake"],
         ),
     ] {
+        let (facts, partial) = extract_symbols("fn r#raw(){}", &r.profiles[1]);
+        assert!(partial);
+        assert!(facts.is_empty());
+        assert!(
+            extract_symbols("val x = object : Parent() {}", &r.profiles[3])
+                .0
+                .iter()
+                .all(|f| f.name != "Parent")
+        );
         let (facts, _) = extract_symbols(text, &r.profiles[index]);
         let names: Vec<_> = facts.iter().map(|f| f.name.as_str()).collect();
         for name in yes {

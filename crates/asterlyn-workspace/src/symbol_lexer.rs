@@ -87,6 +87,21 @@ fn lex<'a>(text: &'a str, p: &SymbolProfile) -> (Vec<Token<'a>>, bool) {
                     .bytes()
                     .take_while(|b| *b == raw.marker.as_bytes()[0])
                     .count();
+                if count > 0
+                    && count <= 16
+                    && remain[count..].chars().next().is_some_and(identifier)
+                {
+                    // An unsupported prefixed identifier must not turn its prefix into a declaration.
+                    c.advance(raw.prefix.len() + count);
+                    while let Some(next) = c.rest().chars().next() {
+                        if !identifier(next) {
+                            break;
+                        }
+                        c.advance(next.len_utf8());
+                    }
+                    partial = true;
+                    continue 'source;
+                }
                 if count <= 16 && remain[count..].starts_with(&raw.quote) {
                     let end = format!("{}{}", raw.quote, raw.marker.repeat(count));
                     c.advance(raw.prefix.len() + count + raw.quote.len());
@@ -289,7 +304,10 @@ pub(super) fn extract(text: &str, p: &SymbolProfile) -> (Vec<SymbolFact>, bool) 
             let mut name = None;
             let mut angle = 0;
             for (j, next) in t.iter().enumerate().skip(i + 1).take(96) {
-                if matches!(next.text, "{" | "}" | ";" | "=") {
+                if matches!(next.text, "{" | "}" | ";" | "=")
+                    || matches!(rule.name_mode, NameMode::NextIdentifier)
+                        && matches!(next.text, ":" | "#")
+                {
                     break;
                 }
                 if next.text == "<" {
