@@ -73,3 +73,14 @@ LSP 插件保持旧包不可变，新增 0.3.13：归档 4,667,101 字节，比 
 最终整包签名、覆盖安装、两次图标重开及真实客户端模型 / 查询 / 恢复回执待补；锁屏期间不将离线和组件验证冒充原生验收。
 
 O7 复核补充：遇到规则不支持的前缀标识符和匿名声明，保守省略并标记部分，避免将前缀 / 父类误当声明；打开文件后的编辑器快照再次核对符号文本，覆盖原生复验与文件打开之间的来源变动。新增定向回归，脚本总数 1438。
+
+
+## 最终构建检查点（原生交付待解锁）
+
+O7 产品提交 `703ca26`、保守提取 / 打开后文本复验 `d9edb7d`；独立 LSP 产品 `ceb3ecc`。1438 项脚本测试通过；最终 Chromium / WebKit 手势及符号弹窗回归通过。符号 20 次开关最新 JS 堆增量 80,428 字节；导航菜单 209,952 字节。最终每浏览器 30 样本：反馈帧 P95 Chromium 6.9 ms / WebKit 17 ms，响应到结果帧 P95 14.7 / 14 ms。均为组件与明确数据口径，不代替私有 Android 服务延迟。
+
+在干净产品提交 `d9edb7d5640db3715640aa018a5b99f7342b4790` 上重新封包；buildId `d9edb7d5640db3715640aa018a5b99f7342b4790-clean-1793710757151`。完整 `.app` 重新 ad-hoc 签名，`codesign --verify --deep --strict` 通过，标识 `dev.asterlyn.desktop`，Sealed Resources version=2 / rules=13 / files=6。源码包可执行文件 41,050,064 字节，SHA-256 `578bba21c0d9cf808aa39a0505227bcfad962bb06912584f668816634300a7ec`，比 P0 可执行文件增加 635,024 字节；无新解析器 / 运行时依赖。源包位于 `target/release/bundle/macos/Asterlyn.app`，只读预安装回执 `/tmp/asterlyn-p1-preinstall.json`。
+
+两次原生检查均报告 macOS 锁屏。按照 AGENTS.md / 本地构建流程，尚未停止旧客户端、启动新插件健康检查、归档、覆盖安装或执行书签重开；不得据此标记 P1 原生验收通过。当前 `/Applications/Asterlyn.app` 仍为已验收 P0：SHA-256 `dd292c8ccd15e9b98c8cbc08db6d35d4379d7ba6aea45309e66995a08783bd4f`，根目录 dev/inode `16777234 / 203606126`。
+
+解锁后直接续做：正常退出旧客户端 → 使用 `/tmp/asterlyn-p1-expected-plugins.json` 对精确 0.6.3 / 0.3.13 运行 `verify-plugin-startup.mjs` 并等待真实健康检查点 → 复核签名 / ZIP 归档 → 用 canonical installer 写入 `/tmp/asterlyn-p1-final-install.json`（保留根 inode、校验 ZIP 备份与两次图标书签启动）→ 从实际日志验收 boostCleaner 的工具链角色 / 模型、符号查询与来源打开、语义导航和故障恢复，再补最终回执。现阶段无远端推送 / 标签 / 发布，Windows/Linux 仍待 CI。
