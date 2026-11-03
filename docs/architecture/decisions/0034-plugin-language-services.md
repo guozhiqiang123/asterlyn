@@ -206,3 +206,14 @@ explicit invalidation, failure or closure invalidates its callbacks. A failed Ko
 its retry budget outside the two-JVM LRU; another click cannot bypass it, and Java remains available.
 Resource classification retains no more than a private 128-character stderr tail and emits fixed
 codes only. Detailed attempt/generation tracing remains opt-in and metadata-only.
+## P1 application service boundary
+
+Language supervision and durable project approval now live in
+`crates/asterlyn-language-service/src/application`. The desktop boundary retains workspace/package/tool
+admission, the OS approval-store path, event delivery and the adapter for model resource leases. The
+existing subject, approved package, bounded profile/cache path and callback contracts remain the
+only input authorities; transport/error/event payloads and persisted grant fingerprints do not change.
+There is one review/session owner, no Tauri dependency in the core, and no forwarding manager shell.
+
+Process fixtures are explicit features with required executable/package/model inputs. The core CI
+executes the EOF, cancellation and internal-generation actor fixtures without booting a desktop.

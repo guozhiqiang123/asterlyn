@@ -1,5 +1,5 @@
 //! Data-only source previews. Content-addressed LSP results never grant filesystem access.
-use asterlyn_language_service::{TextPosition, utf16_offset};
+use crate::{TextPosition, utf16_offset};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 const MAX_SOURCE: usize = 512 * 1024;

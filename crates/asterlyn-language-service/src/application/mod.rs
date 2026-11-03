@@ -1,16 +1,18 @@
 //! Window/workspace-bound language actors. No manager lock is held while performing server I/O.
-#[path = "language_service_actor.rs"]
+#[path = "actor.rs"]
 mod actor_runtime;
+pub mod consent;
+mod progress;
 use actor_runtime::actor;
-#[path = "language_service_diagnostics.rs"]
+#[path = "diagnostics.rs"]
 mod diagnostics;
-#[path = "language_service_cache.rs"]
+#[path = "cache.rs"]
 mod persistent_cache;
-#[path = "language_service_sources.rs"]
+#[path = "sources.rs"]
 mod sources;
-#[path = "language_service_trace.rs"]
+#[path = "trace.rs"]
 mod trace;
-use asterlyn_language_service::{
+use crate::{
     DocumentIdentity, DocumentState, JsonRpcId, JsonRpcMessage, LanguageServiceProcess,
     PackagedServerProfile, RustServerProfile, ServerEvent, TextChange, TextPosition,
     TypeScriptServerProfile, terminate_process_tree, utf16_offset,
@@ -37,13 +39,13 @@ const MAX_REQUESTS: usize = 64;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct LanguageSubject {
+pub struct LanguageSubject {
     pub owner: String,
     pub root: PathBuf,
     pub activation: u64,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct LanguagePackage {
+pub struct LanguagePackage {
     pub version: String,
     pub digest: String,
     pub content_digest: String,
@@ -78,7 +80,7 @@ struct Session {
     profile: String,
 }
 #[derive(Default)]
-pub(crate) struct LanguageServiceManager {
+pub struct LanguageServiceManager {
     tracing: Arc<AtomicBool>,
     sessions: Mutex<HashMap<String, Session>>,
     reviews: Mutex<HashMap<String, Review>>,
@@ -89,7 +91,7 @@ pub(crate) struct LanguageServiceManager {
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LanguageServiceEvent {
+pub struct LanguageServiceEvent {
     pub session_id: String,
     pub kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -107,21 +109,21 @@ pub(crate) struct LanguageServiceEvent {
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LanguageServiceResult {
+pub struct LanguageServiceResult {
     pub session_id: String,
     pub uri: String,
     pub version: i64,
     pub result: Value,
 }
-pub(crate) trait ModelResource: Send {
+pub trait ModelResource: Send {
     fn is_current(&self) -> bool;
     fn generation(&self) -> u64;
 }
-pub(crate) struct ModelReply {
+pub struct ModelReply {
     pub value: Value,
     pub resource: Box<dyn ModelResource>,
 }
-pub(crate) type ModelAccess =
+pub type ModelAccess =
     Arc<dyn Fn(Arc<AtomicBool>, bool) -> Result<ModelReply, String> + Send + Sync>;
 pub(super) struct ActorServices {
     pub tracing: Arc<AtomicBool>,
@@ -129,7 +131,7 @@ pub(super) struct ActorServices {
     model_access: Option<ModelAccess>,
 }
 
-pub(crate) type ActorReply = mpsc::Sender<Result<Value, String>>;
+pub type ActorReply = mpsc::Sender<Result<Value, String>>;
 enum ActorCommand {
     Open {
         uri: String,
@@ -180,13 +182,13 @@ struct Pending {
 }
 
 impl LanguageServiceManager {
-    pub(crate) fn debug_enabled(&self) -> bool {
+    pub fn debug_enabled(&self) -> bool {
         self.tracing.load(Ordering::Relaxed)
     }
-    pub(crate) fn set_debug(&self, enabled: bool) {
+    pub fn set_debug(&self, enabled: bool) {
         self.tracing.store(enabled, Ordering::Relaxed);
     }
-    pub(crate) fn prepare(
+    pub fn prepare(
         &self,
         subject: LanguageSubject,
         package: LanguagePackage,
@@ -215,7 +217,7 @@ impl LanguageServiceManager {
         );
         Ok(id)
     }
-    pub(crate) fn consume(
+    pub fn consume(
         &self,
         id: &str,
         subject: &LanguageSubject,
@@ -243,7 +245,7 @@ impl LanguageServiceManager {
         Ok(authority)
     }
     #[cfg(test)]
-    pub(crate) fn start(
+    pub fn start(
         &self,
         subject: LanguageSubject,
         package: LanguagePackage,
@@ -253,7 +255,7 @@ impl LanguageServiceManager {
     ) -> Result<String, String> {
         self.start_with_models(subject, package, authority, allowed, emit, None)
     }
-    pub(crate) fn start_with_models(
+    pub fn start_with_models(
         &self,
         subject: LanguageSubject,
         package: LanguagePackage,
@@ -335,7 +337,7 @@ impl LanguageServiceManager {
         let persistent_identity = package
             .packaged
             .as_ref()
-            .map(|_| super::language_consent::cache_identity(&subject.root, &package))
+            .map(|_| consent::cache_identity(&subject.root, &package))
             .transpose()?;
         let mut cache = None;
         let mut process = if let Some(mut profile) = package.packaged {
@@ -438,7 +440,7 @@ impl LanguageServiceManager {
             .try_send(command)
             .map_err(|_| "language service command queue unavailable".into())
     }
-    pub(crate) fn open(
+    pub fn open(
         &self,
         id: &str,
         subject: &LanguageSubject,
@@ -461,7 +463,7 @@ impl LanguageServiceManager {
         )?;
         Ok(rx)
     }
-    pub(crate) fn change(
+    pub fn change(
         &self,
         id: &str,
         subject: &LanguageSubject,
@@ -482,7 +484,7 @@ impl LanguageServiceManager {
         )?;
         Ok(rx)
     }
-    pub(crate) fn close(
+    pub fn close(
         &self,
         id: &str,
         subject: &LanguageSubject,
@@ -493,7 +495,7 @@ impl LanguageServiceManager {
         Ok(rx)
     }
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn request(
+    pub fn request(
         &self,
         id: &str,
         subject: &LanguageSubject,
@@ -518,7 +520,7 @@ impl LanguageServiceManager {
         )?;
         Ok(rx)
     }
-    pub(crate) fn cancel(
+    pub fn cancel(
         &self,
         id: &str,
         subject: &LanguageSubject,
@@ -528,7 +530,7 @@ impl LanguageServiceManager {
         self.send(id, subject, ActorCommand::Cancel { request_id, reply })?;
         Ok(rx)
     }
-    pub(crate) fn stop(&self, id: &str, subject: &LanguageSubject) -> Result<bool, String> {
+    pub fn stop(&self, id: &str, subject: &LanguageSubject) -> Result<bool, String> {
         let mut sessions = self
             .sessions
             .lock()
@@ -544,7 +546,7 @@ impl LanguageServiceManager {
         terminate_process_tree(session.pid);
         Ok(true)
     }
-    pub(crate) fn cancel_owner(&self, owner: &str) {
+    pub fn cancel_owner(&self, owner: &str) {
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.retain(|_, session| {
                 if session.subject.owner != owner {
@@ -559,7 +561,7 @@ impl LanguageServiceManager {
             reviews.retain(|_, review| review.subject.owner != owner);
         }
     }
-    pub(crate) fn cancel_workspace(&self, root: &std::path::Path) {
+    pub fn cancel_workspace(&self, root: &std::path::Path) {
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.retain(|_, session| {
                 if session.subject.root != root {
@@ -574,12 +576,12 @@ impl LanguageServiceManager {
             reviews.retain(|_, review| review.subject.root != root);
         }
     }
-    pub(crate) fn finished(&self, id: &str) {
+    pub fn finished(&self, id: &str) {
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.remove(id);
         }
     }
-    pub(crate) fn stop_sessions(&self) {
+    pub fn stop_sessions(&self) {
         self.authority.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut sessions) = self.sessions.lock() {
             for (_, session) in sessions.drain() {
@@ -591,7 +593,7 @@ impl LanguageServiceManager {
             reviews.clear();
         }
     }
-    pub(crate) fn cancel_all(&self) {
+    pub fn cancel_all(&self) {
         self.closing.store(true, Ordering::SeqCst);
         if let Ok(mut sessions) = self.sessions.lock() {
             for (_, session) in sessions.drain() {
@@ -609,15 +611,15 @@ impl Drop for LanguageServiceManager {
         self.cancel_all();
     }
 }
-fn safe_error(error: asterlyn_language_service::SessionError) -> String {
-    if error == asterlyn_language_service::SessionError::Closed {
+fn safe_error(error: crate::SessionError) -> String {
+    if error == crate::SessionError::Closed {
         return "language-start-backend-exited".into();
     }
     format!("language service transport failed: {error:?}")
 }
 
 /// Canonical file identities only: symlinks leaving this workspace and URL aliases are rejected.
-pub(crate) fn document_path(root: &Path, uri: &str) -> Result<PathBuf, String> {
+pub fn document_path(root: &Path, uri: &str) -> Result<PathBuf, String> {
     if uri.len() > 16384 {
         return Err("document URI exceeds bound".into());
     }
@@ -654,7 +656,7 @@ mod tests {
     use super::*;
     #[test]
     fn startup_eof_is_classified_without_retrying_protocol_or_spawn_errors() {
-        use asterlyn_language_service::SessionError;
+        use crate::SessionError;
         assert_eq!(
             safe_error(SessionError::Closed),
             "language-start-backend-exited"
@@ -668,12 +670,11 @@ mod tests {
             assert_ne!(safe_error(error), "language-start-backend-exited");
         }
     }
+    #[cfg(feature = "process-fixtures")]
     #[test]
     fn real_actor_eof_and_malformed_frames_are_distinct_and_new_sessions_get_new_ids() {
-        let Ok(node) = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE") else {
-            eprintln!("actor exit fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
-            return;
-        };
+        let node = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE")
+            .expect("explicit fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
         for (mode, expected) in [("eof", "backend-exited"), ("protocol", "transport-failed")] {
             let package = tempfile::tempdir().unwrap();
             let servers = package.path().join("servers/typescript");
@@ -822,12 +823,11 @@ mod tests {
             authority
         );
     }
+    #[cfg(feature = "process-fixtures")]
     #[test]
     fn actor_cancellation_bypasses_a_stalled_request_and_rejects_foreign_owners() {
-        let Ok(node) = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE") else {
-            eprintln!("actor cancellation fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
-            return;
-        };
+        let node = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE")
+            .expect("explicit fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
         let package = tempfile::tempdir().unwrap();
         let servers = package.path().join("servers/typescript");
         std::fs::create_dir_all(servers.join("typescript/lib")).unwrap();
@@ -934,14 +934,13 @@ mod tests {
         );
         manager.stop(&id, &owner).unwrap();
     }
+    #[cfg(feature = "typescript-fixtures")]
     #[test]
     fn actual_actor_orders_unsaved_diagnostics_requests_and_cleanup() {
-        let Ok(package_root) = std::env::var("ASTERLYN_LSP_PACKAGE_ROOT") else {
-            eprintln!("real language actor fixture requires ASTERLYN_LSP_PACKAGE_ROOT");
-            return;
-        };
+        let package_root = std::env::var("ASTERLYN_LSP_PACKAGE_ROOT")
+            .expect("explicit fixture requires ASTERLYN_LSP_PACKAGE_ROOT");
         let node = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE")
-            .unwrap_or_else(|_| "/opt/homebrew/bin/node".into());
+            .expect("explicit fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path().canonicalize().unwrap();
         let file = root.join("sample.ts");
@@ -1156,9 +1155,9 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "language_service_rust_tests.rs"]
+#[path = "rust_tests.rs"]
 mod rust_tests;
 
-#[cfg(test)]
-#[path = "language_service_packaged_tests.rs"]
+#[cfg(all(test, feature = "process-fixtures"))]
+#[path = "packaged_tests.rs"]
 mod packaged_tests;

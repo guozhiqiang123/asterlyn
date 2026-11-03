@@ -2,11 +2,11 @@
 mod inputs;
 mod tools;
 use super::*;
-use crate::application::language_service::{
-    LanguagePackage, LanguageSubject, ModelAccess, ModelReply, ModelResource,
-};
 use crate::application::{ActiveWorkspaces, DiagnosticsLog};
 use asterlyn_language_service::PackagedServerProfile;
+use asterlyn_language_service::application::{
+    LanguagePackage, LanguageSubject, ModelAccess, ModelReply, ModelResource,
+};
 use asterlyn_plugin_analysis::{AdmittedProgram, AnalysisRuntime, AuthoritySnapshot, ModelHandle};
 use asterlyn_plugin_models::{ModelGrant, ModelKey, PackageIdentity, ProvidedService, Scope};
 use asterlyn_plugin_package::{
@@ -189,12 +189,13 @@ pub(super) fn installed(
         }),
     })
 }
-impl ModelResource for ModelHandle {
+struct LanguageModelResource(ModelHandle);
+impl ModelResource for LanguageModelResource {
     fn is_current(&self) -> bool {
-        self.is_current()
+        self.0.is_current()
     }
     fn generation(&self) -> u64 {
-        self.reference.generation()
+        self.0.reference.generation()
     }
 }
 fn current(
@@ -403,7 +404,7 @@ pub(super) fn model_access(
                     }
                 })?;
             let debug = app
-                .state::<crate::application::language_service::LanguageServiceManager>()
+                .state::<asterlyn_language_service::application::LanguageServiceManager>()
                 .debug_enabled();
             let input = json!({"protocolVersion":1,"workspaceRoot":owner.root,"state":state,"tools":admitted_resources["tools"],"components":admitted_resources["components"],"inputDigest":fingerprint,"debugTrace":debug});
             let mut environment = BTreeMap::new();
@@ -490,7 +491,7 @@ pub(super) fn model_access(
                 }
                 let mut fields = json!({"window":window,"workspaceHash":workspace_hash,"serviceId":service,"stage":progress.stage,"count":progress.count,"durationMs":progress.duration_ms,"code":progress.error_code,"causeClass":progress.cause_class});
                 if progress_app
-                    .state::<crate::application::language_service::LanguageServiceManager>()
+                    .state::<asterlyn_language_service::application::LanguageServiceManager>()
                     .debug_enabled()
                 {
                     fields["causeChain"] = json!(progress.cause_chain);
@@ -531,7 +532,7 @@ pub(super) fn model_access(
             let value = json!({"path":handle.artifact.path(),"digest":handle.reference.digest(),"bytes":handle.reference.bytes(),"generation":handle.reference.generation(),"schema":handle.reference.schema()});
             Ok(ModelReply {
                 value,
-                resource: Box::new(handle),
+                resource: Box::new(LanguageModelResource(handle)),
             })
         })();
         if let Err(error) = &result {

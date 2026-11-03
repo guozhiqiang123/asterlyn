@@ -1,5 +1,5 @@
 //! Fixed host-owned diagnostic profiles; no renderer/plugin command or executable authority.
-use asterlyn_language_service::{TextPosition, utf16_offset};
+use crate::{TextPosition, utf16_offset};
 use serde_json::{Value, json};
 use std::path::Path;
 

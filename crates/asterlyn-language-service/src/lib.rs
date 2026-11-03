@@ -1,8 +1,10 @@
-//! Host-owned language-service transport primitives.
+//! Host-owned language transport and application lifecycle services.
 //!
 //! This crate deliberately contains no editor or Tauri dependencies.  The transport is a
 //! bounded Content-Length JSON-RPC stream suitable for a supervised stdio child; callers own
 //! the child process and must perform approval/resource checks before constructing a session.
+//! `application` owns reviews, actors, document generations, diagnostics and scoped approval
+//! persistence. Desktop adapters supply admitted identities, cache paths, model access and events.
 
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
@@ -14,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+pub mod application;
 mod inbox;
 mod rust_profile;
 use inbox::{EventBuffer, EventReceiver, EventSender};

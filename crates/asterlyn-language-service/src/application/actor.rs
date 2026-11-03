@@ -23,7 +23,7 @@ pub(super) fn actor(
     }
     let _alive = Alive(alive.clone());
     let (model_sender, model_receiver) = mpsc::sync_channel::<Result<ModelReply, String>>(1);
-    let mut model_pending: Option<asterlyn_language_service::JsonRpcRequest> = None;
+    let mut model_pending: Option<crate::JsonRpcRequest> = None;
     let mut model_resource: Option<Box<dyn ModelResource>> = None;
     let mut model_generation = 0;
     let mut last_diagnostic_refresh = Instant::now() - Duration::from_secs(1);
@@ -361,7 +361,7 @@ pub(super) fn actor(
                             }
                         }
                         emit(LanguageServiceEvent {
-                            progress: super::super::language_progress::progress(params),
+                            progress: super::progress::progress(params),
                             details: None,
                             session_id: id.clone(),
                             kind: if health == "error" {
@@ -414,7 +414,7 @@ pub(super) fn actor(
                     termination = "transport-failed";
                     break 'session;
                 }
-                Err(asterlyn_language_service::SessionError::LimitExceeded(reason)) => {
+                Err(crate::SessionError::LimitExceeded(reason)) => {
                     trace.record("resource-limit", None, None, || json!({"reason":reason}));
                     termination = "resource-limit";
                     break 'session;

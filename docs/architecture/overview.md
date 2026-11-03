@@ -20,6 +20,8 @@ Tauri is a shell/transport adapter, not the domain center.
 
 ## Initial repository layout
 
+- `crates/asterlyn-language-service`: UI-free stdio transport plus the language application owner for reviews, sessions, actor scheduling, diagnostic/result generations, private cache and project approval. Native commands admit workspaces/packages/tools, resolve OS directories and bridge model resources/events. No duplicate Tauri-side session manager remains; model/resource leases enter through explicit callbacks and traits.
+
 - `crates/asterlyn-git`: pure Rust models, parsers, and safe system-Git invocation. It has no Tauri dependency.
 - `crates/asterlyn-workspace`: pure Rust bounded text-file reads, revision checks, and durable replacement. It has no Git, Tauri, DOM, or CodeMirror dependency.
 - `crates/asterlyn-desktop`: narrow operating-system adapters for the system file manager and recoverable trash. It depends on workspace path/error models, but has no Tauri, Git, DOM, or UI dependency.

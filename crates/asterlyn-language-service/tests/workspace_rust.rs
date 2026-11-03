@@ -1,3 +1,4 @@
+#![cfg(feature = "rust-fixtures")]
 //! Opt-in real toolchain acceptance. Does not change the workspace on disk.
 use asterlyn_language_service::{
     JsonRpcMessage, LanguageServiceProcess, RustServerProfile, ServerEvent,
@@ -39,12 +40,10 @@ fn ready(process: &mut LanguageServiceProcess) {
 }
 #[test]
 fn real_rust_workspace_navigation_unsaved_buffers_and_diagnostics() {
-    let (Ok(root), Ok(sysroot)) = (
-        env::var("ASTERLYN_RUST_WORKSPACE"),
-        env::var("ASTERLYN_RUST_SYSROOT"),
-    ) else {
-        return;
-    };
+    let root =
+        env::var("ASTERLYN_RUST_WORKSPACE").expect("rust fixture requires ASTERLYN_RUST_WORKSPACE");
+    let sysroot =
+        env::var("ASTERLYN_RUST_SYSROOT").expect("rust fixture requires ASTERLYN_RUST_SYSROOT");
     let root = PathBuf::from(root).canonicalize().unwrap();
     let sysroot = PathBuf::from(sysroot).canonicalize().unwrap();
     let bin = sysroot.join("bin");
@@ -57,7 +56,7 @@ fn real_rust_workspace_navigation_unsaved_buffers_and_diagnostics() {
         workspace: root.clone(),
     })
     .unwrap();
-    let file = root.join("src-tauri/src/application/language_service.rs");
+    let file = root.join("crates/asterlyn-language-service/src/application/mod.rs");
     let target = root.join("crates/asterlyn-language-service/src/lib.rs");
     let original = fs::read_to_string(&file).unwrap();
     let target_original = fs::read_to_string(&target).unwrap();

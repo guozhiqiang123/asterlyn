@@ -7,8 +7,6 @@ pub(crate) mod gradle_task_runtime;
 mod history_page_cache;
 pub(crate) mod java_installations;
 pub(crate) mod language_consent;
-mod language_progress;
-pub(crate) mod language_service;
 mod operation_supervisor;
 mod plugin_marketplace;
 mod plugin_process_query;
@@ -28,6 +26,7 @@ mod workspace_search_index;
 mod workspace_session;
 mod workspace_watch;
 
+pub(crate) use asterlyn_language_service::application::LanguageServiceManager;
 pub(crate) use commit_file_restore::{
     CommitFileRestorePreview, CommitFileRestoreRegistry, execute_commit_file_restore_plan,
     finalize_commit_file_restore, list_commit_file_restore_recoveries,
@@ -36,7 +35,6 @@ pub(crate) use commit_file_restore::{
 pub(crate) use diagnostics::DiagnosticsLog;
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use history_page_cache::HistoryPageCacheRegistry;
-pub(crate) use language_service::LanguageServiceManager;
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use plugin_marketplace::{PendingPluginAdmission, PluginMarketplaceCoordinator};
 pub(crate) use plugin_process_query::{

@@ -125,3 +125,14 @@ fixtures measure component rendering, not real project startup or semantic laten
 backend goals remain explicit private-project measurements with the O0 model/cache/tool identities
 and process/RSS evidence. Never substitute fixture timings for those results or infer full WebView
 physical memory from a JavaScript heap sample.
+
+The runner also executes the application actor fixtures with `process-fixtures` and verifies their
+individual passing names. Real external servers are separate opt-ins on `asterlyn-language-service`:
+`typescript-fixtures` requires `ASTERLYN_LANGUAGE_SERVICE_NODE` and `ASTERLYN_LSP_PACKAGE_ROOT`;
+`rust-fixtures` additionally requires `ASTERLYN_RUST_WORKSPACE` and `ASTERLYN_RUST_SYSROOT`;
+`android-fixtures` requires `ASTERLYN_ANDROID_MODEL`, `ASTERLYN_ANDROID_LSP_ROOT`,
+`ASTERLYN_JDT_COMPONENT` and `ASTERLYN_JAVA25_HOME`. Missing mandatory inputs fail, rather than skip.
+Private fixture values are never defaults in public CI.
+`workspace-fixtures` additionally requires `ASTERLYN_LSP_WORKSPACE_ROOT`; it is separate from the
+standalone TypeScript fixture so selecting a packaged server test does not silently select a private
+workspace. `ASTERLYN_LSP_WORKSPACE_FILE` can choose the authorized representative source file.

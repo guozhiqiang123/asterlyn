@@ -10,7 +10,7 @@ const root = process.env.ASTERLYN_RUST_WORKSPACE, sysroot = process.env.ASTERLYN
 assert.ok(root && sysroot, "set the explicit Rust workspace and reviewed sysroot for this opt-in acceptance");
 const built = spawnSync("cargo", ["build", "--locked", "-p", "asterlyn-language-service", "--example", "rust_editor_probe"], { encoding: "utf8" });
 assert.equal(built.status, 0, built.stderr);
-const paths = ["src-tauri/src/application/language_service.rs", "crates/asterlyn-language-service/src/lib.rs"];
+const paths = ["crates/asterlyn-language-service/src/application/mod.rs", "crates/asterlyn-language-service/src/lib.rs"];
 const data = { root, files: await Promise.all(paths.map(async (path) => ({ path, text: await readFile(resolve(root, path), "utf8") }))) };
 const evidence = [];
 for (const [name, engine] of [["Chromium", chromium], ["WebKit", webkit]]) {

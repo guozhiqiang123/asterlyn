@@ -1,3 +1,4 @@
+#![cfg(feature = "typescript-fixtures")]
 use std::env;
 use std::time::Duration;
 use std::time::Instant;
@@ -25,27 +26,18 @@ fn tsserver_diagnostics(process: &mut LanguageServiceProcess, file: &str, comman
 /// metadata-only coverage is an operational language-service test.
 #[test]
 fn real_typescript_hover_uses_unsaved_unicode_crlf_buffer() {
-    let Some(root) = env::var_os("ASTERLYN_LSP_PACKAGE_ROOT") else {
-        eprintln!("skipping real TypeScript server test: ASTERLYN_LSP_PACKAGE_ROOT is not set");
-        return;
-    };
-    let root = root.into_string().expect("UTF-8 package root");
-    let node = env::var_os("ASTERLYN_LANGUAGE_SERVICE_NODE")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::current_exe()
-                .expect("current executable")
-                .parent()
-                .expect("node parent")
-                .join("node")
-        });
-    if !node.is_file() {
-        eprintln!(
-            "skipping real TypeScript server test: trusted Node path is missing: {}",
-            node.display()
-        );
-        return;
-    }
+    let root = env::var_os("ASTERLYN_LSP_PACKAGE_ROOT")
+        .expect("TypeScript fixture requires ASTERLYN_LSP_PACKAGE_ROOT")
+        .into_string()
+        .expect("UTF-8 package root");
+    let node = std::path::PathBuf::from(
+        env::var_os("ASTERLYN_LANGUAGE_SERVICE_NODE")
+            .expect("TypeScript fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE"),
+    );
+    assert!(
+        node.is_absolute() && node.is_file(),
+        "trusted Node path is missing"
+    );
     let profile = TypeScriptServerProfile {
         package_root: root.into(),
         node,

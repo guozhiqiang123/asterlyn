@@ -1,10 +1,10 @@
 //! Opt-in real Android adapter acceptance through the production native actor.
 use super::*;
+#[cfg(feature = "process-fixtures")]
 #[test]
 fn internal_backend_recovery_invalidates_pending_results_without_reopening_documents() {
-    let Ok(node) = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE") else {
-        return;
-    };
+    let node = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE")
+        .expect("explicit fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
     let package = tempfile::tempdir().unwrap();
     let workspace = tempfile::tempdir().unwrap();
     let cache = tempfile::tempdir().unwrap();
@@ -99,16 +99,17 @@ fn internal_backend_recovery_invalidates_pending_results_without_reopening_docum
     assert_eq!(ask("fresh").unwrap().as_array().unwrap().len(), 1);
     manager.stop(&id, &subject).unwrap();
 }
+#[cfg(feature = "android-fixtures")]
 #[test]
 fn actual_packaged_java_keeps_documents_responsive_during_model_work() {
-    let (Ok(model), Ok(package), Ok(component), Ok(java)) = (
-        std::env::var("ASTERLYN_ANDROID_MODEL"),
-        std::env::var("ASTERLYN_ANDROID_LSP_ROOT"),
-        std::env::var("ASTERLYN_JDT_COMPONENT"),
-        std::env::var("ASTERLYN_JAVA25_HOME"),
-    ) else {
-        return;
-    };
+    let model = std::env::var("ASTERLYN_ANDROID_MODEL")
+        .expect("android fixture requires ASTERLYN_ANDROID_MODEL");
+    let package = std::env::var("ASTERLYN_ANDROID_LSP_ROOT")
+        .expect("android fixture requires ASTERLYN_ANDROID_LSP_ROOT");
+    let component = std::env::var("ASTERLYN_JDT_COMPONENT")
+        .expect("android fixture requires ASTERLYN_JDT_COMPONENT");
+    let java = std::env::var("ASTERLYN_JAVA25_HOME")
+        .expect("android fixture requires ASTERLYN_JAVA25_HOME");
     let bytes = std::fs::read(&model).unwrap();
     let data: Value = serde_json::from_slice(&bytes).unwrap();
     let root = PathBuf::from(data["buildRoot"].as_str().unwrap())

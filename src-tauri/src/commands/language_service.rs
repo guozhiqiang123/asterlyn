@@ -1,10 +1,10 @@
-use crate::application::language_service::{
-    LanguagePackage, LanguageServiceResult, LanguageSubject,
-};
 use crate::application::{ActiveWorkspaces, DiagnosticsLog, LanguageServiceManager};
 use crate::commands::{
     admission_context, installation_store, installed_package_root, select_installed_plugin,
     verify_installed_package_archive,
+};
+use asterlyn_language_service::application::{
+    LanguagePackage, LanguageServiceResult, LanguageSubject,
 };
 use asterlyn_language_service::{TextChange, TextPosition, TextRange};
 use asterlyn_plugin_package::inspect_extracted_package;
@@ -251,7 +251,7 @@ pub(crate) async fn prepare_language_service(
         let package = installed_package(&app, &owner.root, &server_id)?;
         let store = crate::application::language_consent::app_store_path(&app)?;
         let remembered =
-            crate::application::language_consent::matches(&store, &owner.root, &package)
+            asterlyn_language_service::application::consent::matches(&store, &owner.root, &package)
                 .unwrap_or(false);
         let toolchains = package
             .packaged
@@ -311,7 +311,7 @@ pub(crate) async fn start_language_service(
         let authority = app.state::<LanguageServiceManager>()
             .consume(&review_id, &owner, &package)?;
         if remember == Some(true) {
-            crate::application::language_consent::remember(
+            asterlyn_language_service::application::consent::remember(
                 &crate::application::language_consent::app_store_path(&app)?, &owner.root, &package)?;
         }
         let permitted_app = app.clone();
@@ -344,7 +344,7 @@ pub(crate) async fn start_language_service(
         let event_app = app.clone();
         let label = owner.owner.clone();
         let workspace_hash=app.state::<DiagnosticsLog>().hash_identifier(owner.root.to_string_lossy().as_bytes());
-        let emit = Arc::new(move |event: crate::application::language_service::LanguageServiceEvent| {
+        let emit = Arc::new(move |event: asterlyn_language_service::application::LanguageServiceEvent| {
             let log=event_app.state::<DiagnosticsLog>();
             let manager=event_app.state::<LanguageServiceManager>();
             if event.kind == "terminated" { manager.finished(&event.session_id); }
@@ -391,7 +391,7 @@ pub(crate) async fn forget_language_service_consent(
 ) -> Result<(), String> {
     let owner = subject(&active, &window, &workspace_root)?;
     tauri::async_runtime::spawn_blocking(move || {
-        crate::application::language_consent::forget(
+        asterlyn_language_service::application::consent::forget(
             &crate::application::language_consent::app_store_path(&app)?,
             &owner.root,
         )?;

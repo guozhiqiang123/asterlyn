@@ -1,15 +1,15 @@
 //! Opt-in acceptance of the production multi-profile actor, separate from the rendered transport probe.
 use super::*;
 
+#[cfg(feature = "rust-fixtures")]
 #[test]
 fn actual_rust_and_typescript_keep_independent_sessions() {
-    let (Ok(root), Ok(sysroot), Ok(package_root)) = (
-        std::env::var("ASTERLYN_RUST_WORKSPACE"),
-        std::env::var("ASTERLYN_RUST_SYSROOT"),
-        std::env::var("ASTERLYN_LSP_PACKAGE_ROOT"),
-    ) else {
-        return;
-    };
+    let root = std::env::var("ASTERLYN_RUST_WORKSPACE")
+        .expect("rust fixture requires ASTERLYN_RUST_WORKSPACE");
+    let sysroot = std::env::var("ASTERLYN_RUST_SYSROOT")
+        .expect("rust fixture requires ASTERLYN_RUST_SYSROOT");
+    let package_root = std::env::var("ASTERLYN_LSP_PACKAGE_ROOT")
+        .expect("rust fixture requires ASTERLYN_LSP_PACKAGE_ROOT");
     let root = PathBuf::from(root).canonicalize().unwrap();
     let sysroot = PathBuf::from(sysroot).canonicalize().unwrap();
     let bin = sysroot.join("bin");
@@ -27,7 +27,7 @@ fn actual_rust_and_typescript_keep_independent_sessions() {
         content_digest: "fixture".into(),
         root: package_root.into(),
         node: std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE")
-            .unwrap_or_else(|_| "/opt/homebrew/bin/node".into())
+            .expect("explicit fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE")
             .into(),
         node_digest: "fixture".into(),
         rust: None,
@@ -72,7 +72,7 @@ fn actual_rust_and_typescript_keep_independent_sessions() {
     let wait = |rx: Receiver<Result<Value, String>>| {
         rx.recv_timeout(Duration::from_secs(32)).unwrap().unwrap()
     };
-    let path = root.join("src-tauri/src/application/language_service.rs");
+    let path = root.join("crates/asterlyn-language-service/src/application/mod.rs");
     let uri = url::Url::from_file_path(&path).unwrap().to_string();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(

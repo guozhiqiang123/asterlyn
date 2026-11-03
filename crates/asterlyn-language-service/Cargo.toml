@@ -7,11 +7,15 @@ rust-version.workspace = true
 
 [features]
 process-fixtures = []
-
-[dev-dependencies]
-tempfile.workspace = true
+typescript-fixtures = ["process-fixtures"]
+workspace-fixtures = ["typescript-fixtures"]
+rust-fixtures = ["typescript-fixtures"]
+android-fixtures = ["process-fixtures"]
 
 [dependencies]
+tempfile.workspace = true
+sha2.workspace = true
+url = "=2.5.8"
 asterlyn-process = { path = "../asterlyn-process" }
 serde.workspace = true
 serde_json.workspace = true

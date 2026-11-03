@@ -64,7 +64,7 @@ try {
   languages = createLanguageServicesRuntime({ registry, workspace: () => workspace, document: (handle) => ({ workspacePath: handle.path, loadEpoch: 1, readOnly: false }), bind: (factory) => { binding = factory; }, navigate: () => {}, reportError: (error) => { throw error; },
     native: { subscribe: () => () => {}, prepare: async (_root, _plugin, serverId) => { reviewed.push(serverId); return { reviewId: "fixture", pluginId: activation.pluginId, serverId, pluginVersion: "0.3.12", packageDigest: digest, resourceDigest: "fixture", executableIdentity: "fixture", expiresAt: Date.now() + 60000 }; }, confirm: async () => false } });
   languages.refresh();
-  for (const path of ["src/app.ts", "src-tauri/src/application/language_service.rs", "app/src/main/java/Example.java"]) {
+  for (const path of ["src/app.ts", "crates/asterlyn-language-service/src/application/mod.rs", "app/src/main/java/Example.java"]) {
     const handle = { tabId: path, path, loadEpoch: 1 }; const port = binding(handle); assert.ok(port);
     port.open(handle, { version: 1, text: "// unsaved buffer\n" }); await new Promise((resolve) => setTimeout(resolve, 50));
   }

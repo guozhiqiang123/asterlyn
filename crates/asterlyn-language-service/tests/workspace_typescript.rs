@@ -1,3 +1,4 @@
+#![cfg(feature = "workspace-fixtures")]
 //! Opt-in read-only acceptance against a real workspace, rather than a tiny synthetic project.
 use asterlyn_language_service::{LanguageServiceProcess, TypeScriptServerProfile};
 use serde_json::{Value, json};
@@ -9,16 +10,12 @@ use std::{
 
 #[test]
 fn actual_workspace_unsaved_diagnostics_hover_definition_and_completion() {
-    let (Ok(workspace), Ok(package), Ok(node)) = (
-        env::var("ASTERLYN_LSP_WORKSPACE_ROOT"),
-        env::var("ASTERLYN_LSP_PACKAGE_ROOT"),
-        env::var("ASTERLYN_LANGUAGE_SERVICE_NODE"),
-    ) else {
-        eprintln!(
-            "real workspace acceptance requires explicit workspace/package/Node environment paths"
-        );
-        return;
-    };
+    let workspace = env::var("ASTERLYN_LSP_WORKSPACE_ROOT")
+        .expect("workspace fixture requires ASTERLYN_LSP_WORKSPACE_ROOT");
+    let package = env::var("ASTERLYN_LSP_PACKAGE_ROOT")
+        .expect("workspace fixture requires ASTERLYN_LSP_PACKAGE_ROOT");
+    let node = env::var("ASTERLYN_LANGUAGE_SERVICE_NODE")
+        .expect("workspace fixture requires ASTERLYN_LANGUAGE_SERVICE_NODE");
     let workspace = PathBuf::from(workspace).canonicalize().unwrap();
     // Relative path can be selected for another TS workspace. The test never saves this overlay.
     let relative = env::var("ASTERLYN_LSP_WORKSPACE_FILE")
