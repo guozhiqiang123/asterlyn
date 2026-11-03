@@ -670,14 +670,15 @@
     ]
   },
   "validation": {
-    "frontendScriptTests": 1427,
+    "frontendScriptTests": 1428,
     "nativePassed": 192,
     "nativeExistingIgnored": 3,
     "pluginTests": 29,
     "nativeInspector": true,
     "isolatedActivation": true,
     "reproduciblePackage": true,
-    "clippyWarningsDenied": true
+    "clippyWarningsDenied": true,
+    "startupBundlePolicy": "unchanged 500000-byte generated application chunk gate; approval presenter lazy"
   },
   "limits": [
     "macOS acceptance only",

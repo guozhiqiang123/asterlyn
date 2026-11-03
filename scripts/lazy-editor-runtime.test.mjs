@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+test("language execution review presentation loads only when an exact review is requested",async()=>{
+  const app=await readFile(new URL("../src/app.ts",import.meta.url),"utf8");
+  const runtime=await readFile(new URL("../src/composition/language-services-runtime.ts",import.meta.url),"utf8");
+  assert.match(app,/import\("\.\/composition\/language-execution-confirmation\.ts"\)/u);
+  assert.doesNotMatch(app,/import\s*\{[^}]*languageExecutionConfirmation[^}]*\}\s*from/u);
+  assert.doesNotMatch(runtime,/from\s+["']\.\/language-execution-confirmation/u);
+});
+
 test("the startup graph reaches CodeMirror editors only through dynamic imports", async () => {
   const app = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
   const runtime = await readFile(

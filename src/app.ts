@@ -2,7 +2,7 @@ import { createFindLanguageResultsPorts, createLanguageDefinitionNavigator } fro
 import { createEditorNavigationRuntime, applyEditorSearchNavigation } from "./composition/editor-navigation-runtime.ts";
 import type { EditorNavigationHistory } from "./features/files-editor/editor-navigation-history.ts";
 import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
-import { createLanguageServicesRuntime, languageExecutionConfirmation, languageWorkspaceForWindow, workspaceFileUri } from "./composition/language-services-runtime.ts";
+import { createLanguageServicesRuntime, languageWorkspaceForWindow, workspaceFileUri } from "./composition/language-services-runtime.ts";
 import { createTauriLanguageServiceBridge } from "./adapters/tauri/tauri-language-service-bridge.ts";
 import { bridge } from "./bridge";
 import { diagnostics } from "./application/diagnostics.ts";
@@ -679,7 +679,7 @@ export class AsterlynApp {
       host: root, copy: () => this.localization.catalog.editor.languageService, registerCommand: command => this.shortcuts.registerPluginCommand(command),
       registry: this.pluginTasksRuntime.contributionRegistry,
       diagnostic: (fields) => diagnostics.report("info", "language.provider.changed", `providers=${fields.providerCount};generation=${fields.workspaceGeneration ?? "none"}`),
-      native: createTauriLanguageServiceBridge((review) => this.dialogRuntime.confirm(languageExecutionConfirmation(review, this.localization.catalog.locale === "zh-CN"))),
+      native: createTauriLanguageServiceBridge(async review=>{const {languageExecutionConfirmation}=await import("./composition/language-execution-confirmation.ts");return this.dialogRuntime.confirm(languageExecutionConfirmation(review,this.localization.catalog.locale==="zh-CN"));}),
       workspace: languageWorkspace, readReferenceSource:locationSources.readLocationSource,
       document: (handle) => { const tab = textTab(this.editorState.session, handle.tabId); return tab?.status === "ready" && tab.document.repositoryRoot === this.windowSession.workspace.state.root ? { workspacePath: tab.document.workspacePath, readOnly: tab.document.readOnly === true || this.state.loading, loadEpoch: tab.loadEpoch } : null; },
       bind: (factory) => this.editorSurface.setLanguageServices(factory), reportError: (error) => this.showError(error),
