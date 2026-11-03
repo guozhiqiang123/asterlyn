@@ -1,5 +1,7 @@
 # Architecture refactoring plan
 
+> **Planned follow-on (2026-11-03):** The [OpenIDEA-informed evolution plan](2026-11-03-openidea-inspired-evolution-plan.md) stages language-service reliability, toolchains, portable application services, protocol models and optional symbol indexing. It preserves accepted migrations and existing authority boundaries; implementation has not started.
+
 > **Current continuation (2026-09-19):** The accepted R1–R5 migrations established the intended
 > capability boundaries, but the post-CM4 audit found remaining enforceability, startup, and
 > ownership debt. Unrelated capability expansion is paused under the

@@ -58,6 +58,8 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Delivery
 
+- [`engineering/2026-11-03-openidea-inspired-evolution-plan.md`](engineering/2026-11-03-openidea-inspired-evolution-plan.md) — planned language-service recovery, provider selection, toolchains, portable services, protocol models, optional symbol indexing and later editing/plugin capabilities informed by the OpenIDEA comparison.
+
 - [`engineering/2026-11-03-gradle-task-java-runtime-plan.md`](engineering/2026-11-03-gradle-task-java-runtime-plan.md) — reviewed Gradle task JDK selection, compatibility, cache identity, diagnostics and boostCleaner recovery.
 
 - [`engineering/2026-10-26-language-definition-navigation-plan.md`](engineering/2026-10-26-language-definition-navigation-plan.md) — Ctrl/Command-click definition navigation, target identity, feedback and real gesture acceptance.
