@@ -4,6 +4,7 @@ import { icon } from "../../icons.ts";
 import { renderHierarchicalCollectionToolbar } from "../../presentation/hierarchical-collection-toolbar.ts";
 import type { LocaleCatalog } from "../../localization/catalog.ts";
 import { EN_US } from "../../localization/en-US.ts";
+import type { NavigationCopy } from "../../localization/navigation-copy.ts";
 import { projectTreeRows } from "./project-files-view.ts";
 import type { FindFileResultsSnapshot, FindResultsState } from "./find-results-controller.ts";
 import { findFileTree, sortedFindFiles } from "./find-results-controller.ts";
@@ -15,7 +16,7 @@ import {
 export function renderFindResults(
   state: Readonly<FindResultsState>,
   catalog: LocaleCatalog = EN_US,
-  previews:ReadonlyMap<number,FindLocationPreview>=new Map(),
+  previews:ReadonlyMap<number,FindLocationPreview|null>=new Map(),
 ): string {
   const snapshot = state.snapshot;
   if (!snapshot) {
@@ -106,16 +107,23 @@ export function locationPreviewLine(source:string|undefined,from:number,to:numbe
   if(splitsPair(from))return null;
   let start=Math.max(0,from-80),highlightEnd=Math.min(source.length,to,from+160),end=Math.min(source.length,highlightEnd+200);
   if(splitsPair(start))start--;if(splitsPair(highlightEnd))highlightEnd--;if(splitsPair(end))end++;
-  return {before:source.slice(start,from),found:source.slice(from,highlightEnd),after:source.slice(highlightEnd,end),leading:start>0,trailing:end<source.length};
+  // Engines may keep an entire source file alive through a tiny sliced string.
+  // Materialize only the bounded preview's UTF-16 units before caching it.
+  const copy=(a:number,b:number)=>source.slice(a,b).split("").join("");
+  return {before:copy(start,from),found:copy(from,highlightEnd),after:copy(highlightEnd,end),leading:start>0,trailing:end<source.length};
 }
-function renderResultTreeRow(row:FindResultRow,state:Readonly<FindResultsState>,catalog:LocaleCatalog,previews:ReadonlyMap<number,FindLocationPreview>,tree:boolean,visibleIndex:number):string {
+export function renderFindLocationPreview(preview:FindLocationPreview|null|undefined,copy:NavigationCopy):string {
+  if(!preview)return `<span class="find-preview-status">${escapeHtml(preview===null?copy.findPreviewUnavailable:copy.findPreviewLoading)}</span>`;
+  return `${preview.leading?"…":""}${escapeHtml(preview.before)}<mark class="command-result-match">${escapeHtml(preview.found)}</mark>${escapeHtml(preview.after)}${preview.trailing?"…":""}`;
+}
+function renderResultTreeRow(row:FindResultRow,state:Readonly<FindResultsState>,catalog:LocaleCatalog,previews:ReadonlyMap<number,FindLocationPreview|null>,tree:boolean,visibleIndex:number):string {
   const selected=row.id===state.resultSelection;
   const common=`id="find-tree-row-${visibleIndex}" role="${tree?"treeitem":"option"}" ${tree?`aria-level="${row.depth+1}"`:""} aria-selected="${selected}" style="--tree-depth:${row.depth}"`;
   if(row.node){const expanded=state.expandedDirectories.has(row.id);return `<button class="find-file-row find-group-row ${row.node.kind} ${selected?"selected":""}" type="button" tabindex="-1" ${common} aria-expanded="${expanded}" data-find-node="${escapeAttribute(row.id)}" title="${escapeAttribute(row.node.path)}"><span class="tree-chevron ${expanded?"expanded":""}">${icon("chevron",12)}</span><span class="find-file-glyph">${row.node.kind==="directory"?icon("folder",15):fileTypeIcon(row.node.path)}</span><span class="find-file-name">${escapeHtml(row.label)}</span><small>${row.node.count}</small></button>`;}
   const entry=row.entry!,snapshot=state.snapshot!;let content="";
   if(snapshot.kind==="workspace")content=renderWorkspaceSearchMatchContent(snapshot.report.matches[entry.index]!,catalog.navigation,tree?`${entry.line}:${entry.column}`:undefined);
   else if(snapshot.kind==="locations"){
-    const preview=previews.get(entry.index),snippet=preview?`${preview.leading?"…":""}${escapeHtml(preview.before)}<mark class="command-result-match">${escapeHtml(preview.found)}</mark>${escapeHtml(preview.after)}${preview.trailing?"…":""}`:"";
+    const snippet=renderFindLocationPreview(previews.get(entry.index),catalog.navigation);
     content=`<span class="search-result-location" title="${escapeAttribute(`${entry.path}:${entry.line}:${entry.column}`)}">${escapeHtml(tree?`${entry.line}:${entry.column}`:`${basename(entry.path)}:${entry.line}`)}</span><code>${snippet}</code>`;
   }
   return `<button class="workspace-search-result find-result find-match-row ${selected?"selected":""}" type="button" tabindex="-1" ${common} data-find-result="${entry.index}">${content}</button>`;

@@ -21,6 +21,8 @@ export interface NavigationCopy {
   open: string;
   resultCount(mode: "files" | "recent" | "workspace" | "commands", count: number): string; openInWindow: string; findWindow: string; hideFindWindow: string; findResultsAria: string; noFindResults: string; noFindResultsDetail: string;
   workspaceSearchOptions: string;
+  findPreviewLoading: string;
+  findPreviewUnavailable: string;
   include: string;
   includeAria: string;
   exclude: string;

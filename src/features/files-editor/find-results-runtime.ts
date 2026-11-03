@@ -6,7 +6,9 @@ import type { SearchCommandAction } from "../../application/commands/search-comm
 import type { ProjectFile, WorkspaceTextSearchMatch, WorkspaceTextSearchReport } from "../../models.ts";
 import type { NavigationMode } from "./navigation.ts";
 import { FindResultsController } from "./find-results-controller.ts";
-import { locationPreviewLine, type FindLocationPreview, renderFindHeaderActions, renderFindResults } from "./find-results-view.ts";
+import { FindLocationPreviews } from "./find-location-previews.ts";
+import { diagnostics } from "../../application/diagnostics.ts";
+import { renderFindLocationPreview, renderFindHeaderActions, renderFindResults } from "./find-results-view.ts";
 
 interface FindResultsSource {
   readonly mode: NavigationMode | null;
@@ -37,8 +39,10 @@ export interface FindResultsRuntimeOptions {
 }
 
 export class FindResultsRuntime {
-  private epoch=0;
-  private readonly previews=new Map<number,FindLocationPreview>();
+  private readonly previews: FindLocationPreviews;
+  private previewObserver: ResizeObserver | null = null;
+  private previewFrame: number | null = null;
+  private previewTrace = "";
   private readonly controller = new FindResultsController();
   private readonly root: HTMLElement;
   private readonly options: FindResultsRuntimeOptions;
@@ -49,6 +53,14 @@ export class FindResultsRuntime {
   ) {
     this.root = root;
     this.options = options;
+    this.previews = new FindLocationPreviews({
+      current: (snapshot) => this.locationsCurrent(snapshot),
+      read: async (root, location) => await options.readLocationSource?.(root, location) ?? null,
+      changed: (indices) => this.patchPreviews(indices),
+      idle: (summary) => diagnostics.report("info", "find.preview.completed",
+        `files=${summary.files};loaded=${summary.loaded};ready=${summary.ready};unavailable=${summary.unavailable}`,
+        { traceId: this.previewTrace }),
+    });
   }
 
   bindCommandSurface(): void {
@@ -57,15 +69,18 @@ export class FindResultsRuntime {
   }
 
   clear(): void {
-    this.epoch++;this.previews.clear();
+    this.stopPreviewViewport();
+    this.previews.reset(null);
     this.controller.clear();
   }
 
   render(): void {
     const host = this.query<HTMLElement>("#find-tool-host");
-    host.innerHTML = renderFindResults(this.controller.state, this.options.copy(),this.previews);
+    this.stopPreviewViewport();
+    host.innerHTML = renderFindResults(this.controller.state, this.options.copy(),this.previews.values);
     this.renderHeaderActions();
     this.bindResults(host);
+    this.observePreviewViewport(host);
   }
 
   commandAvailability(action: SearchCommandAction): CommandAvailability {
@@ -106,7 +121,7 @@ export class FindResultsRuntime {
       installed = this.controller.install(repositoryRoot, source.query, source.report);
     }
     if (!installed) return;
-    this.epoch++;this.previews.clear();
+    this.previews.reset(null);
     this.options.openPanel();
     queueMicrotask(() => this.focusSelection());
   }
@@ -114,24 +129,55 @@ export class FindResultsRuntime {
   openLocations(publication:EditorLanguageLocationsPublication):void {
     if(publication.workspaceRoot!==this.options.activeRepositoryRoot()||publication.workspaceGeneration!==this.options.activeWorkspaceGeneration?.())return;
     if(!this.controller.installLocations(publication))return;
-    this.epoch++;this.previews.clear();this.options.openPanel();queueMicrotask(()=>this.focusSelection());
-    const snapshot=this.controller.state.snapshot;if(snapshot?.kind==="locations")void this.loadPreviews(snapshot,this.epoch);
+    const snapshot=this.controller.state.snapshot;
+    this.previews.reset(snapshot?.kind==="locations"?snapshot:null);
+    this.previewTrace=diagnostics.newTrace();
+    this.options.openPanel();queueMicrotask(()=>this.focusSelection());
   }
-  private locationsCurrent(snapshot:FindLocationResultsSnapshot,epoch:number):boolean{return epoch===this.epoch&&this.controller.state.snapshot===snapshot&&this.options.activeRepositoryRoot()===snapshot.repositoryRoot&&this.options.activeWorkspaceGeneration?.()===snapshot.workspaceGeneration;}
-  private async loadPreviews(snapshot:FindLocationResultsSnapshot,epoch:number):Promise<void>{
-    const groups=new Map<string,number[]>();snapshot.locations.forEach((item,index)=>{const list=groups.get(item.uri)??[];list.push(index);groups.set(item.uri,list);});
-    const files=[...groups.values()].slice(0,32);let next=0;
-    await Promise.all(Array.from({length:Math.min(3,files.length)},async()=>{while(next<files.length){const indices=files[next++]!;if(!this.locationsCurrent(snapshot,epoch))return;
-      const location=snapshot.locations[indices[0]!]!;let text:string|null=null;
-      try{text=location.readonlySource?.text??await this.options.readLocationSource?.(snapshot.repositoryRoot,location)??null;}catch{/* Optional previews do not affect navigation. */}
-      if(!this.locationsCurrent(snapshot,epoch))return;if(text===null||text.length>512*1024)continue;const lines=text.split("\n");
-      for(const index of indices){const target=snapshot.locations[index]!,preview=locationPreviewLine(lines[target.range.start.line],target.range.start.character,target.range.start.line===target.range.end.line?target.range.end.character:lines[target.range.start.line]?.length??0);if(preview)this.previews.set(index,preview);}
-    }}));
-    if(this.locationsCurrent(snapshot,epoch)&&this.options.visible())this.renderPreservingResultState();
+  private locationsCurrent(snapshot:FindLocationResultsSnapshot):boolean{return this.controller.state.snapshot===snapshot&&this.options.activeRepositoryRoot()===snapshot.repositoryRoot&&this.options.activeWorkspaceGeneration?.()===snapshot.workspaceGeneration;}
+
+  private stopPreviewViewport(): void {
+    this.previewObserver?.disconnect();
+    this.previewObserver=null;
+    if(this.previewFrame!==null)this.root.ownerDocument.defaultView?.cancelAnimationFrame(this.previewFrame);
+    this.previewFrame=null;
   }
-  private renderPreservingResultState():void {
-    const list=this.root.querySelector<HTMLElement>(".find-results-list"),scroll=[list?.scrollTop??0,list?.scrollLeft??0],focused=!!list?.contains(this.root.ownerDocument.activeElement);
-    this.render();const next=this.root.querySelector<HTMLElement>(".find-results-list");if(next){next.scrollTop=scroll[0]!;next.scrollLeft=scroll[1]!;}if(focused)this.resultRow(this.controller.state.resultSelection)?.focus({preventScroll:true});
+
+  private observePreviewViewport(host: HTMLElement): void {
+    if(this.controller.state.snapshot?.kind!=="locations")return;
+    const list=host.querySelector<HTMLElement>(".find-results-list");
+    if(!list)return;
+    list.addEventListener("scroll",()=>this.schedulePreviewViewport(),{passive:true});
+    this.previewObserver=new ResizeObserver(()=>this.schedulePreviewViewport());
+    this.previewObserver.observe(list);
+    this.schedulePreviewViewport();
+  }
+
+  private schedulePreviewViewport(): void {
+    const view=this.root.ownerDocument.defaultView;
+    if(this.previewFrame!==null||!view)return;
+    this.previewFrame=view.requestAnimationFrame(()=>{
+      this.previewFrame=null;
+      const snapshot=this.controller.state.snapshot,list=this.root.querySelector<HTMLElement>(".find-results-list");
+      if(snapshot?.kind!=="locations"||!this.locationsCurrent(snapshot)||!this.options.visible()||!list?.clientHeight)return;
+      const viewport=list.getBoundingClientRect(),indices:number[]=[];
+      for(const row of list.querySelectorAll<HTMLElement>("[data-find-result]")){
+        const bounds=row.getBoundingClientRect();
+        if(bounds.bottom>=viewport.top-160&&bounds.top<=viewport.bottom+160)indices.push(Number(row.dataset.findResult));
+      }
+      this.previews.request(indices);
+    });
+  }
+
+  private patchPreviews(indices: readonly number[]): void {
+    // Patch source text only. Replacing the tree here loses focus and the scroll anchor.
+    const changed=new Set(indices),copy=this.options.copy().navigation;
+    for(const row of this.root.querySelectorAll<HTMLElement>(".find-results-list [data-find-result]")){
+      const index=Number(row.dataset.findResult);
+      if(!changed.has(index))continue;
+      const code=row.querySelector("code");
+      if(code)code.innerHTML=renderFindLocationPreview(this.previews.values.get(index),copy);
+    }
   }
 
   private renderHeaderActions(): void {

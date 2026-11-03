@@ -225,6 +225,7 @@ export const EN_US: LocaleCatalog = {
     searchOptions: "Search options", newLine: "Insert line break", matchCase: "Match case", words: "Whole words",
     filterIgnoredFiles: "Filter Git-ignored files", navigate: "Navigate", open: "Open",
     resultCount: (mode, count) => mode === "workspace" ? `${count} ${count === 1 ? "match" : "matches"}` : `${count} matching ${mode === "commands" ? (count === 1 ? "command" : "commands") : (count === 1 ? "file" : "files")}`, openInWindow: EN_OPEN_IN_WINDOW, findWindow: "Find", hideFindWindow: "Hide Find", findResultsAria: "Find results", noFindResults: "No saved Find results", noFindResultsDetail: "Open file, text, or language results in this window.",
+    findPreviewLoading: "Loading preview…", findPreviewUnavailable: "Preview unavailable",
     workspaceSearchOptions: "Workspace search options", include: "Include",
     includeAria: "Files to include, comma-separated full-path globs", exclude: "Exclude",
     excludeAria: "Files to exclude, comma-separated full-path globs", context: "Context", contextLines: "Context lines",

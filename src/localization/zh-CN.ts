@@ -133,6 +133,7 @@ export const ZH_CN = {
     openInWindow: ZH_OPEN_IN_WINDOW, findWindow: "查找", hideFindWindow: "隐藏查找窗口",
     findResultsAria: "查找结果", noFindResults: "没有已保存的查找结果",
     noFindResultsDetail: "将文件搜索、文本搜索或语言服务结果打开到此窗口。",
+    findPreviewLoading: "正在加载预览…", findPreviewUnavailable: "无法预览此位置",
     workspaceSearchOptions: "工作区搜索选项", include: "包含", includeAria: "要包含的文件，以逗号分隔的完整路径 glob",
     exclude: "排除", excludeAria: "要排除的文件，以逗号分隔的完整路径 glob", context: "上下文", contextLines: "上下文行数",
     replace: "替换", replacementText: "替换文本", previewReplace: "预览替换",

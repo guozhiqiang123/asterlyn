@@ -639,3 +639,4 @@
 .find-match-row:hover,.find-match-row:focus-visible{background:var(--compact-file-tree-hover);outline:0;}
 .find-match-row.selected{background:var(--selection-bg);color:var(--selection-text);}
 .find-result-tree.flat .find-match-row{grid-template-columns:minmax(100px,180px) minmax(0,1fr);}
+.find-preview-status{color:var(--text-muted);font-family:inherit;font-style:italic;}
