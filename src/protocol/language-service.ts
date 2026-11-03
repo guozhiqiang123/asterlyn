@@ -1,5 +1,6 @@
 import type { EditorLanguageServiceDiagnostic } from "./editor-language-service.ts";
 export interface LanguageServiceReview {
+  readonly toolchains?: readonly import("./toolchain.ts").JavaToolchainSnapshot[];
   readonly reviewId: string; readonly pluginId: string; readonly serverId: string;
   readonly pluginVersion: string; readonly packageDigest: string; readonly resourceDigest: string;
   readonly executableIdentity: string; readonly expiresAt: number;

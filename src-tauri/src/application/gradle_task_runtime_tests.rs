@@ -85,6 +85,15 @@ fn incompatible_environment_falls_back_deterministically_without_executing_java(
         "replaced-incompatible-environment"
     );
     assert!(runtime.metadata().get("home").is_none());
+    assert_eq!(runtime.metadata()["toolchainRole"], "build-runtime");
+    assert_eq!(runtime.toolchain.requirement.minimum_major, 8);
+    assert_eq!(runtime.toolchain.source, ToolchainSource::Installed);
+    assert!(
+        !runtime
+            .metadata()
+            .to_string()
+            .contains(&runtime.home.to_string_lossy().to_string())
+    );
 }
 
 #[test]

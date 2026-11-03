@@ -15,6 +15,7 @@ export interface LanguageServiceStatus {
   scope: LanguageConsentScope; sessionId: string | null;
   choices?:readonly {id:string;label:string}[]; selectionKey?:string; selectedProvider?:string;
   recovery?:LanguageRecoveryAttempt;
+  toolchains?:readonly import("../../protocol/toolchain.ts").JavaToolchainSnapshot[];
   state: "recovering" | "provider-selected" | "conflict" | "partial" | "preparing" | "awaiting-approval" | "declined" | "indexing" | "ready" | "failed" | "stopped";
   progress?: LanguageServiceProgress; code?: string; startedAt: number;
 }
@@ -100,6 +101,7 @@ export function createEditorLanguageServicePort(resolve: (handle: EditorLanguage
   return factory;
 }
 class Session {
+  private toolchains:readonly import("../../protocol/toolchain.ts").JavaToolchainSnapshot[]=[];
   private readonly recoveryPolicy=new LanguageRecoveryPolicy();
   private recovery:LanguageRecoveryAttempt|null=null;
   private recoveryTimer:ReturnType<typeof setTimeout>|null=null;
@@ -136,7 +138,7 @@ class Session {
     const working=["recovering","preparing","awaiting-approval","indexing"].includes(state)||((state==="ready"||state==="partial")&&progress!==undefined&&!["ready","failed"].includes(progress.phase));
     if(working&&(!this.working||(this.lastState==="awaiting-approval"&&state!=="awaiting-approval")))this.startedAt=Date.now();
     this.working=working;this.lastState=state;
-    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,recovery:this.recovery??undefined,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
+    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,toolchains:this.toolchains,recovery:this.recovery??undefined,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
   }
   async warm():Promise<void>{this.warmed=true;try{await this.ensure();}catch{/* ensure owns classification and finite recovery. */}}
   private failureCode(error:unknown):string {
@@ -228,6 +230,7 @@ class Session {
     this.status(automatic?"recovering":"preparing");
     this.starting = (async () => {
       let review = await this.native.prepare(this.info.workspaceRoot, this.info.pluginId, this.info.serverId ?? "typescript");
+      this.toolchains=review.toolchains??[];
       let explicitlyApproved=false;
       if (review.serverId !== (this.info.serverId ?? "typescript")) throw Error("Language execution profile changed");
       const identity = JSON.stringify([review.pluginId, review.serverId, review.pluginVersion, review.packageDigest, review.resourceDigest, review.executableIdentity]);

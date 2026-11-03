@@ -82,6 +82,7 @@ dependencies = [
  "asterlyn-plugin-package",
  "asterlyn-plugin-runtime",
  "asterlyn-plugin-runtime-protocol",
+ "asterlyn-process",
  "asterlyn-task",
  "asterlyn-terminal",
  "asterlyn-workspace",
@@ -225,6 +226,9 @@ name = "asterlyn-process"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "serde",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]

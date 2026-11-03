@@ -1,6 +1,7 @@
 import type { LanguageServiceResultEnvelope, LanguageServiceReview, LanguageServiceWorkspaceState, LanguageServiceProgress } from "./language-service.ts";
 import type { DesktopCommandName } from "./generated-desktop-protocol.ts";
 import { assert, record } from "./desktop-result-validation-primitives.ts";
+import {assertToolchains} from "./validate-toolchain.ts";
 
 const MAX_ID = 128;
 const MAX_DIGEST = 256;
@@ -21,6 +22,7 @@ export function assertLanguageServiceReview(value: unknown, command: DesktopComm
   assert(boundedString(item.executableIdentity, MAX_DIGEST), command, "executableIdentity must be a bounded string");
   assert(Number.isSafeInteger(item.expiresAt) && Number(item.expiresAt) > 0, command, "expiresAt must be a positive integer");
   assert(item.remembered === undefined || typeof item.remembered === "boolean",command,"remembered must be a boolean");
+  if(item.toolchains!==undefined)assertToolchains(item.toolchains,command);
 }
 export function assertLanguageServiceWorkspaceState(value: unknown, command: DesktopCommandName = "language_service_workspace_state"): asserts value is LanguageServiceWorkspaceState {
   const item=record(value,command);

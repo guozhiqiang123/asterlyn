@@ -1,3 +1,4 @@
+import {toolchainDescription} from "../../localization/toolchain-copy.ts";
 import type { LanguageServiceStatus } from "./language-service-client.ts";
 import type { LanguageServiceCopy } from "../../localization/language-service-copy.ts";
 
@@ -75,6 +76,10 @@ export class LanguageServiceStatusView {
       if(!states.length)this.list.textContent=copy.empty;
       for(const state of states){const row=this.host.ownerDocument.createElement("section"),label=this.host.ownerDocument.createElement("strong"),stage=this.host.ownerDocument.createElement("span");label.textContent=state.label;stage.textContent=this.stage(state);row.append(label,stage);
         if(state.state==="failed"||((state.state==="ready"||state.state==="partial")&&state.code)){const detail=this.host.ownerDocument.createElement("small");detail.textContent=state.state==="failed"||state.progress?.phase==="failed"?copy.failure:copy.partial;row.append(detail);if(debug&&state.code){const code=this.host.ownerDocument.createElement("code");code.textContent=state.code;row.append(code);}}
+        if(state.toolchains?.length){
+          const details=this.host.ownerDocument.createElement("details"),summary=this.host.ownerDocument.createElement("summary");summary.textContent=copy.toolchains.title;details.className="language-toolchains";details.append(summary);
+          for(const tool of state.toolchains){const description=this.host.ownerDocument.createElement("p");description.textContent=toolchainDescription(tool,copy.toolchains);details.append(description);}row.append(details);
+        }
         if(state.choices&&state.selectionKey){
           const hint=this.host.ownerDocument.createElement("small"),select=this.host.ownerDocument.createElement("select");hint.textContent=copy.providerConflict;select.setAttribute("aria-label",`${copy.chooseProvider}: ${state.selectionKey}`);
           const placeholder=this.host.ownerDocument.createElement("option");placeholder.value="";placeholder.textContent=copy.chooseProvider;select.append(placeholder);

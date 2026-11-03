@@ -1,8 +1,11 @@
 //! Native adapter for root Gradle wrappers; no subprocess/version probing or SDK changes.
 use super::java_installations;
+use asterlyn_process::toolchain::{
+    JavaRequirement, ToolchainRole, ToolchainSnapshot, ToolchainSource, inspect_jdk,
+};
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, File},
+    fs,
     io::Read,
     path::{Path, PathBuf},
 };
@@ -16,12 +19,15 @@ pub(crate) struct GradleTaskRuntime {
     pub(crate) gradle_version: String,
     pub(crate) selection_reason: &'static str,
     pub(crate) digest: String,
+    pub(crate) toolchain: ToolchainSnapshot,
 }
 
 impl GradleTaskRuntime {
     pub(crate) fn metadata(&self) -> serde_json::Value {
         serde_json::json!({"gradleVersion": self.gradle_version, "javaMajor": self.java_major,
-            "selectionReason": self.selection_reason, "runtimeDigest": self.digest})
+            "selectionReason": self.selection_reason, "runtimeDigest": self.digest,
+            "toolchainRole": self.toolchain.role, "javaVersion": self.toolchain.version,
+            "selectionSource": self.toolchain.source, "javaRequirement": self.toolchain.requirement})
     }
 }
 
@@ -66,7 +72,7 @@ fn resolve_with(
     environment: Environment,
 ) -> Result<Option<GradleTaskRuntime>, String> {
     let mut identity = Sha256::new();
-    identity.update(b"gradle-task-java-v1\0");
+    identity.update(b"gradle-task-java-v2\0");
     let wrapper = read_config(
         &root.join("gradle/wrapper/gradle-wrapper.properties"),
         Some(root),
@@ -140,7 +146,7 @@ fn resolve_with(
     }
     let compatible = |major| major >= minimum && major <= maximum;
     let (home, java_major, selection_reason) = if let Some((home, reason)) = explicit {
-        let (home, major) = inspect(&home, root).ok_or("gradle.runtime.javaMissing: The configured Gradle Java home is not an available standalone JDK outside this project.")?;
+        let (home, major) = inspect(&home, root).ok_or("gradle.runtime.javaMissing: The configured Gradle Java home is not an available standalone JDK installation outside this project.")?;
         if !compatible(major) {
             return Err(format!(
                 "gradle.runtime.javaIncompatible: Configured JDK {major} cannot run Gradle {gradle_version}. Select JDK {minimum}–{maximum} in org.gradle.java.home."
@@ -169,7 +175,7 @@ fn resolve_with(
                 &b.0,
             ))
         });
-        let (home, major) = available.into_iter().next().ok_or_else(|| format!("gradle.runtime.javaMissing: No installed standalone JDK {minimum}–{maximum} can run Gradle {gradle_version}. Install a compatible JDK or configure org.gradle.java.home."))?;
+        let (home, major) = available.into_iter().next().ok_or_else(|| format!("gradle.runtime.javaMissing: No compatible standalone JDK installation with Java {minimum}–{maximum} can run Gradle {gradle_version}. Install a compatible JDK or configure org.gradle.java.home."))?;
         (
             home,
             major,
@@ -181,89 +187,46 @@ fn resolve_with(
         )
     };
     feed(&mut identity, home.to_string_lossy().as_bytes());
-    for relative in [
-        "release",
-        if cfg!(windows) {
-            "bin/java.exe"
-        } else {
-            "bin/java"
-        },
-        if cfg!(windows) {
-            "bin/javac.exe"
-        } else {
-            "bin/javac"
-        },
-    ] {
-        let path = home.join(relative).canonicalize().map_err(
-            |_| "gradle.runtime.javaChanged: Selected Java installation changed; retry discovery.",
-        )?;
-        if !path.starts_with(&home) {
-            return Err("gradle.runtime.javaMissing: Selected Java files must remain inside their installation.".into());
-        }
-        let mut file = File::open(path).map_err(
-            |_| "gradle.runtime.javaMissing: Cannot inspect the selected Java installation.",
-        )?;
-        let mut bytes = Vec::new();
-        file.by_ref()
-            .take(64 * 1024 * 1024 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(
-                |_| "gradle.runtime.javaMissing: Cannot read the selected Java installation.",
-            )?;
-        if bytes.len() > 64 * 1024 * 1024 {
-            return Err("gradle.runtime.javaMissing: Selected Java executable exceeds the inspection limit.".into());
-        }
-        feed(&mut identity, &bytes);
-    }
+    let source = match selection_reason {
+        "command-line" => ToolchainSource::CommandLine,
+        "user-properties" => ToolchainSource::User,
+        "project-properties" => ToolchainSource::Project,
+        "compatible-environment" => ToolchainSource::Environment,
+        _ => ToolchainSource::Installed,
+    };
+    let toolchain = inspect_jdk(&home, root)
+        .and_then(|jdk| {
+            jdk.snapshot(
+                "gradle",
+                ToolchainRole::BuildRuntime,
+                JavaRequirement {
+                    minimum_major: minimum,
+                    maximum_major_exclusive: Some(maximum + 1),
+                },
+                source,
+                selection_reason,
+            )
+        })
+        .map_err(|failure| {
+            format!(
+                "gradle.runtime.javaChanged: {}. Retry discovery.",
+                failure.code()
+            )
+        })?;
+    feed(&mut identity, toolchain.identity.as_bytes());
     Ok(Some(GradleTaskRuntime {
         home,
         java_major,
         gradle_version,
         selection_reason,
         digest: format!("{:x}", identity.finalize()),
+        toolchain,
     }))
 }
 
 fn inspect(home: &Path, workspace: &Path) -> Option<(PathBuf, u16)> {
-    if !home.is_absolute() {
-        return None;
-    }
-    let home = home.canonicalize().ok()?;
-    if home.starts_with(workspace) {
-        return None;
-    }
-    let release = home.join("release").canonicalize().ok()?;
-    if !release.starts_with(&home) || fs::metadata(&release).ok()?.len() > CONFIG_LIMIT {
-        return None;
-    }
-    let mut bytes = Vec::new();
-    File::open(release)
-        .ok()?
-        .take(CONFIG_LIMIT + 1)
-        .read_to_end(&mut bytes)
-        .ok()?;
-    if bytes.len() as u64 > CONFIG_LIMIT {
-        return None;
-    }
-    let major = java_installations::major(std::str::from_utf8(&bytes).ok()?)?;
-    if !home
-        .join(if cfg!(windows) {
-            "bin/java.exe"
-        } else {
-            "bin/java"
-        })
-        .is_file()
-        || !home
-            .join(if cfg!(windows) {
-                "bin/javac.exe"
-            } else {
-                "bin/javac"
-            })
-            .is_file()
-    {
-        return None;
-    }
-    Some((home, major))
+    let jdk = inspect_jdk(home, workspace).ok()?;
+    Some((jdk.home, jdk.major))
 }
 
 fn feed(hash: &mut Sha256, bytes: &[u8]) {

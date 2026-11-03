@@ -93,8 +93,9 @@ fn resources(
     app: &AppHandle,
     workspace: &Path,
     declaration: &AnalysisProgram,
+    role: asterlyn_process::toolchain::ToolchainRole,
 ) -> Result<(Value, String), String> {
-    let tools = tools::resolve(workspace, &declaration.tools)?;
+    let tools = tools::resolve(workspace, &declaration.tools, role)?;
     let base = app
         .path()
         .app_data_dir()
@@ -131,7 +132,12 @@ pub(super) fn installed(
         .iter()
         .find(|server| server.id == id)
         .ok_or("unsupported language profile")?;
-    let (mut analysis, server_resources) = resources(app, workspace, &declaration.program)?;
+    let (mut analysis, server_resources) = resources(
+        app,
+        workspace,
+        &declaration.program,
+        asterlyn_process::toolchain::ToolchainRole::LanguageServer,
+    )?;
     let mut identity_parts = vec![
         identity.content_digest.clone(),
         node_digest.clone(),
@@ -145,13 +151,18 @@ pub(super) fn installed(
             .iter()
             .find(|service| service.id == binding.service_id && service.schema == binding.schema)
             .ok_or("required workspace model is unavailable")?;
-        let (_, tool_digest) = resources(app, workspace, &provider.program)?;
+        let (model_resources, tool_digest) = resources(
+            app,
+            workspace,
+            &provider.program,
+            asterlyn_process::toolchain::ToolchainRole::BuildModel,
+        )?;
         identity_parts.extend([
             producer_identity.archive_digest.clone(),
             producer_identity.content_digest.clone(),
             tool_digest,
         ]);
-        analysis["model"] = json!({"producer":binding.plugin_id,"service":binding.service_id,"schema":binding.schema,"packageDigest":producer_identity.archive_digest,"version":producer_identity.version});
+        analysis["model"] = json!({"producer":binding.plugin_id,"service":binding.service_id,"schema":binding.schema,"packageDigest":producer_identity.archive_digest,"version":producer_identity.version,"tools":model_resources["tools"]});
     }
     let chain_digest =
         digest(&serde_json::to_vec(&identity_parts).map_err(|_| "invalid analysis identity")?);
@@ -323,7 +334,12 @@ pub(super) fn model_access(
         .cloned()
         .ok_or("workspace model provider is unavailable")?;
     let runtime_entry = report.runtime_entry.clone();
-    let (admitted_resources, tool_digest) = resources(app, &owner.root, &provider.program)?;
+    let (admitted_resources, tool_digest) = resources(
+        app,
+        &owner.root,
+        &provider.program,
+        asterlyn_process::toolchain::ToolchainRole::BuildModel,
+    )?;
     let app = app.clone();
     let owner = owner.clone();
     let node = language.node.clone();
@@ -441,8 +457,12 @@ pub(super) fn model_access(
                     if current_provider != &guard_provider {
                         return Err("analysis provider declaration changed".into());
                     }
-                    let (_, current_tool_digest) =
-                        resources(&guard_app, &guard_root, &guard_provider.program)?;
+                    let (_, current_tool_digest) = resources(
+                        &guard_app,
+                        &guard_root,
+                        &guard_provider.program,
+                        asterlyn_process::toolchain::ToolchainRole::BuildModel,
+                    )?;
                     if current_tool_digest != guard_tool_digest {
                         return Err("analysis tool identity changed".into());
                     }

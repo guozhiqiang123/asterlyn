@@ -45,16 +45,7 @@ pub(crate) fn candidates() -> Vec<PathBuf> {
     homes.into_iter().collect()
 }
 
+#[cfg(test)]
 pub(crate) fn major(release: &str) -> Option<u16> {
-    let value = release
-        .lines()
-        .find_map(|line| line.strip_prefix("JAVA_VERSION="))?
-        .trim_matches('"');
-    let mut parts = value.split(['.', '-', '+']);
-    let first: u16 = parts.next()?.parse().ok()?;
-    if first == 1 {
-        parts.next()?.parse().ok()
-    } else {
-        Some(first)
-    }
+    asterlyn_process::toolchain::java_version(release).map(|(_, major)| major)
 }

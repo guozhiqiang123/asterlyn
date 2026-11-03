@@ -35,6 +35,7 @@ pub(crate) struct LanguageServiceReview {
     pub executable_identity: String,
     pub expires_at: u64,
     pub remembered: bool,
+    pub toolchains: Vec<asterlyn_process::toolchain::ToolchainSnapshot>,
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -252,12 +253,28 @@ pub(crate) async fn prepare_language_service(
         let remembered =
             crate::application::language_consent::matches(&store, &owner.root, &package)
                 .unwrap_or(false);
+        let toolchains = package
+            .packaged
+            .as_ref()
+            .map(|profile| {
+                let analysis = &profile.initialization_options["analysis"];
+                [&analysis["tools"], &analysis["model"]["tools"]]
+                    .into_iter()
+                    .filter_map(Value::as_object)
+                    .flat_map(|tools| tools.values())
+                    .map(|tool| serde_json::from_value(tool["context"].clone()))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()
+            .map_err(|_| "language toolchain context is invalid")?
+            .unwrap_or_default();
         let review_id = app
             .state::<LanguageServiceManager>()
             .prepare(owner, package.clone())?;
         Ok(LanguageServiceReview {
             review_id,
             remembered,
+            toolchains,
             plugin_id,
             server_id: package.server_id().into(),
             plugin_version: package.version,
