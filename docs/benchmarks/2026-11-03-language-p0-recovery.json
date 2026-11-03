@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "automated acceptance passed; installed delivery pending",
+  "status": "automated, packaged fault, installed delivery and native recovery acceptance passed; user acceptance pending",
   "pluginCommit": "a2b7453",
   "package": {
     "asset": "dev.asterlyn.lsp-0.3.12.asterlyn-plugin.tgz",
@@ -670,7 +670,7 @@
     ]
   },
   "validation": {
-    "frontendScriptTests": 1428,
+    "frontendScriptTests": 1429,
     "nativePassed": 192,
     "nativeExistingIgnored": 3,
     "pluginTests": 29,
@@ -678,12 +678,176 @@
     "isolatedActivation": true,
     "reproduciblePackage": true,
     "clippyWarningsDenied": true,
-    "startupBundlePolicy": "unchanged 500000-byte generated application chunk gate; approval presenter lazy"
+    "startupBundlePolicy": "unchanged 500000-byte generated application chunk gate; approval presenter lazy",
+    "bootstrapContributionRefreshRegression": true
   },
   "limits": [
     "macOS acceptance only",
     "legacy result coverage remains unknown",
     "desktop signature, installation and bookmark launches pending",
-    "no new manual acceptance recorded"
-  ]
+    "no new manual acceptance recorded",
+    "Native startup also recorded existing recent-project invalidPath/io failures; not language-service failures. Bootstrap refresh does not add a general contribution-update protocol for later project-structure changes."
+  ],
+  "hostProductCommit": "065295db07c8fbc876c4c94aaa4441a68f234e78",
+  "installedDelivery": {
+    "version": "0.1.25",
+    "artifact": {
+      "archive": "Asterlyn-0.1.25-language-p0-final-macos.app.zip",
+      "bytes": 25359730,
+      "sha256": "09065209a1fda5e3e1c1c3be8cd138cf04f304f9b4f22572172b4e1dff39d806",
+      "executableSha256": "dd292c8ccd15e9b98c8cbc08db6d35d4379d7ba6aea45309e66995a08783bd4f"
+    },
+    "rootIdentity": {
+      "rootIdentityPreserved": true,
+      "inode": "203606126",
+      "device": "16777234"
+    },
+    "firstLaunch": {
+      "pid": 34568,
+      "session": "session-1793699192316-34568-0",
+      "buildId": "065295db07c8fbc876c4c94aaa4441a68f234e78-dirty-1793699086164",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark"
+    },
+    "reopen": {
+      "pid": 34601,
+      "session": "session-1793699194070-34601-0",
+      "buildId": "065295db07c8fbc876c4c94aaa4441a68f234e78-dirty-1793699086164",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark"
+    },
+    "strictWholeBundleSignature": true,
+    "nativeRenderedSmoke": true,
+    "backup": {
+      "archiveName": "Asterlyn-1793699186541-01204d53-d78a-4ef9-8e04-1a0fe7cf9885.app.zip",
+      "sha256": "962ae2fc1867ede4df9d4b3bd8be233069e0448b212cb1b79014b3f48791980c"
+    },
+    "plugins": [
+      {
+        "id": "dev.asterlyn.android-gradle",
+        "version": "0.6.3",
+        "digest": "sha256:e389dcef3bec99ce45dd521fc27f50a00ebd9a5c3b287a0562525cf85634652d"
+      },
+      {
+        "id": "dev.asterlyn.lsp",
+        "version": "0.3.12",
+        "digest": "sha256:8ce50f891a8a9b62caa08939e89b8a37f609fcabdfb5b547ebca32ffbdc121b7"
+      }
+    ]
+  },
+  "installedNativeRecovery": {
+    "schema": 1,
+    "installedSession": "session-1793699194070-34601-0",
+    "sourceHashBefore": "abbf6ca2633d0bc9fdf965836adf818dedbb02082e853e73b488d889d70f5890",
+    "passed": true,
+    "oldSession": "language-session-34601-1",
+    "oldPid": 34926,
+    "oldProcessGroup": 34926,
+    "oldGroupProcesses": [
+      34926,
+      37055,
+      37062,
+      37066
+    ],
+    "initialReadyEpochMs": 1793699563077,
+    "approvalRequestsBefore": 1,
+    "newSession": "language-session-34601-3",
+    "restartObservedMs": 7179,
+    "readyAgainEpochMs": 1793699622283,
+    "readyAgainMs": 59522,
+    "approvalRequestsAfter": 1,
+    "oldGroupResidualProcesses": [],
+    "sourceUnchanged": true,
+    "eventsAfterFault": [
+      {
+        "sequence": 148,
+        "event": "session.terminated",
+        "fields": {
+          "code": "backend-exited",
+          "sessionId": "language-session-34601-1",
+          "window": "main",
+          "workspaceHash": "f68529dba00844ea"
+        }
+      },
+      {
+        "sequence": 150,
+        "event": "language.approval",
+        "fields": {
+          "bridgeFailures": 0,
+          "message": "outcome=reused;reason=none",
+          "suppressed": 0,
+          "window": "main"
+        }
+      },
+      {
+        "sequence": 151,
+        "event": "session.started",
+        "fields": {
+          "providerId": "dev.asterlyn.lsp",
+          "serverId": "android-jvm",
+          "sessionId": "language-session-34601-3"
+        }
+      },
+      {
+        "sequence": 157,
+        "event": "model.acquired",
+        "fields": {
+          "bytes": 228341,
+          "durationMs": 21281,
+          "generation": 3,
+          "serviceId": "android-gradle-model"
+        }
+      },
+      {
+        "sequence": 184,
+        "event": "workspace.indexing",
+        "fields": {
+          "progress": {
+            "completed": 25,
+            "phase": "sources",
+            "total": 25,
+            "unit": "modules"
+          },
+          "sessionId": "language-session-34601-3",
+          "window": "main",
+          "workspaceHash": "f68529dba00844ea"
+        }
+      },
+      {
+        "sequence": 191,
+        "event": "diagnostics.completed",
+        "fields": {
+          "diagnosticCount": 0,
+          "documentHash": "23b8fad669478e71",
+          "sessionId": "language-session-34601-3",
+          "version": 1,
+          "window": "main",
+          "workspaceHash": "f68529dba00844ea"
+        }
+      },
+      {
+        "sequence": 193,
+        "event": "workspace.ready",
+        "fields": {
+          "progress": {
+            "phase": "ready"
+          },
+          "sessionId": "language-session-34601-3",
+          "window": "main",
+          "workspaceHash": "f68529dba00844ea"
+        }
+      }
+    ],
+    "initialReadyMs": 332471,
+    "recoveredNavigation": {
+      "trigger": "F12 on Kotlin declaration after automatic adapter restart",
+      "rawTargets": 69,
+      "files": 15,
+      "excludedImports": 15,
+      "visibleTargets": 54,
+      "classificationLogSequence": 196,
+      "coverage": "unknown",
+      "sourceUnchangedAfterNavigation": true
+    }
+  }
 }

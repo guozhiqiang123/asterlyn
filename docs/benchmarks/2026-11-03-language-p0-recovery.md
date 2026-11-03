@@ -1,6 +1,6 @@
 # P0 O2：有限恢复与原生交付
 
-日期：2026-11-03。状态：**源码及最终插件包自动验收通过，本地客户端交付进行中**。没有本轮人工验收。
+日期：2026-11-03。状态：**源码、最终插件包、真实故障与本地安装验收通过**。没有本轮人工验收。
 
 计划：[O0–O2](../engineering/2026-11-03-openidea-inspired-evolution-plan.md)。
 永久元数据：[自动回执](2026-11-03-language-p0-recovery.json)。[前置基线](2026-11-03-language-p0-baseline.md)与[状态回执](2026-11-03-language-p0-status.md)分开记录。
@@ -40,7 +40,7 @@
 
 ## 自动门禁
 
-- 宿主：类型检查、构建、1428 项脚本测试通过。
+- 宿主：类型检查、构建、1429 项脚本测试通过（含目录证据初始化交接回归）。
 - 原生：192 项通过、3 项既有忽略；真实 Node actor EOF / 异常帧、原生内部恢复期间旧请求失效、新会话 ID、撤销边界及真实 TS 会话使用显式 Node / 包路径执行。既有条件式 Android / Rust 探针未配置时会空返回，不能从测试名称推导它们已运行；真实 Android 证据使用上面的独立最终包探针。
 - 核心语言传输、Git 回归及 `clippy --all-targets -- -D warnings` 通过。
 - 插件：29 项测试、类型、发行策略、原生包检查、可复现打包及隔离激活通过。
@@ -49,10 +49,42 @@
 
 ## 本地交付
 
-待追加新原生包严格签名、固定插件健康、标准安装器、可执行文件摘要、保留根 inode 和两次保存图标书签重开的回执。授权 / 索引日志与浏览器回归分别记录，完成前不标记安装验收通过。
+最终产品代码提交 `065295d`，宿主仍为 0.1.25。完成完整 `.app` ad-hoc 签名、严格验签、原生渲染 smoke 与标准安装器覆盖。根 device / inode 保留为 `16777234 / 203606126`，旧版本存为校验过的 ZIP 备份；未创建展开的备份应用。
+
+| 证据 | 结果 |
+| --- | --- |
+| 最终可执行文件 SHA-256 | `dd292c8ccd15e9b98c8cbc08db6d35d4379d7ba6aea45309e66995a08783bd4f` |
+| 最终签名 ZIP | `Asterlyn-0.1.25-language-p0-final-macos.app.zip`，25,359,730 字节，CRC 通过 |
+| ZIP SHA-256 | `09065209a1fda5e3e1c1c3be8cd138cf04f304f9b4f22572172b4e1dff39d806` |
+| 第一次保存图标书签启动 | PID 34568，`session-1793699192316-34568-0`，frontend ready |
+| 退出后同一书签重开 | PID 34601，`session-1793699194070-34601-0`，frontend ready |
+| 安装身份 | 安装文件与验收文件摘要一致，内置 Android Gradle 0.6.3 / LSP 0.3.12 均为固定验收摘要 |
+
+原生初始化验收发现并修复另一条故障链：LSP 在空目录证据下已贡献 TS/Rust，旧保留策略跳过了完整目录到达后的再次激活。宿主现在仅在首次完整非空目录到达时刷新初始化贡献，普通文件变化保留会话，项目身份不允许跨越。修复前回归失败、修复后通过；最终已安装日志确认 `contributionCount: 2 → 3`、`providers=3`，boostCleaner 自动进入 25 模块分析。
+
+完整证据：`/tmp/asterlyn-p0-final-install.json`、`/tmp/asterlyn-p0-final-artifact.json`、`/tmp/asterlyn-p0-bootstrap-startup.json`、`/tmp/asterlyn-p0-bootstrap-native-rendered.log`。构建 ID 后缀 `dirty` 来自保留的用户未跟踪 `.openidea/`，未将其提交。原生启动仍记录既有 recent-project `invalidPath` / `io`，不是语言服务失败；不宣称原生日志零错误。
+
+## 已安装客户端的实际恢复
+
+在 PID 34601 的正式客户端打开 boostCleaner，自动完成 25 模块准备与后端索引。打开真实 `common/src/main/java/com/swiftcleaner/lib/storage/GlobalConfigNew.kt` 后，只终止经过父 PID、程序路径、精确包摘要、独立进程组复验的 Android 适配器 PID 34926。未终止用户 Gradle daemon、其他 IDE 或应用进程。
+
+| 证据 | 结果 |
+| --- | --- |
+| 故障分类 | 日志 `session.terminated`，`code=backend-exited`，seq 148 |
+| 批准沿用 | `outcome=reused`，seq 150；授权请求次数保持 1 |
+| 新会话 | `language-session-34601-1 → language-session-34601-3`，约 7.2 秒观察到新会话 |
+| 模型重新获取 | `model.acquired`，seq 157，generation 3，25 模块；模型请求耗时约 21.3 秒 |
+| 再次就绪 | seq 193，`progress.phase=ready`，故障注入至就绪约 59.5 秒 |
+| 打开文档恢复 | 新会话 version 1 的诊断完成；恢复后对声明执行 F12，实际引用选择器可用 |
+| 结果筛选 | `language.imports.classified`：69 个目标、15 个文件、15 条 import；默认排除后弹窗显示 54 项 |
+| 回收 / 数据 | 旧进程组存活进程为零，真实来源文件摘要未变；未重放故障前导航 |
+
+该回执使用应用日志关联实际会话、阶段、模型及授权，UI 仅验证最后引用选择器；详细调试没有开启。首次从原生会话启动到 ready 约 332.5 秒，包含真实模型获取与全模块准备；它与 O0 的独立后端探针分开保存，不混用缓存 / 负载口径，也不宣称首次索引已达到优化目标。私有证据：`/tmp/asterlyn-p0-native-recovery.json`、`/tmp/asterlyn-p0-native-recovery-check.log`。元数据摘要已保存在本目录 JSON 回执，未保存源码 / 原始 RPC / stderr。
 
 ## 限制
 
 本轮没有更换语言服务器或补齐全项目语义覆盖，旧响应仍标记 unknown；首次冷分析、JVM 恢复和热导航分别计时。真实原生与性能测量仅 macOS。没有远端推送、Tag / Release 或新的人工验收；后续 P1/P2 尚未实施。
+
+目录交接只解决初始化缺失贡献，后续项目结构改变需要重新匹配的通用贡献更新协议尚未扩展。初始化交接完成后，常规新增 / 编辑文件不会因此触发全插件重启。
 
 构建补充：原生打包曾触发 500,000 字节启动代码门禁，未安装该失败产物。授权展示移为动态模块后，原有门禁与构建通过；不调整预算。失败日志 `/tmp/asterlyn-p0-native-build.log`、修正验证 `/tmp/asterlyn-p0-lazy-approval-build.log` 分开保留。
