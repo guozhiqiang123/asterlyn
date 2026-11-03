@@ -26,6 +26,45 @@ export type NativeLanguageServiceReview = {
   readonly "toolchains": ReadonlyArray<ToolchainSnapshot>;
 };
 
+export type SymbolCandidate = {
+  readonly "extractorId": string;
+  readonly "kind": SymbolKind;
+  readonly "name": string;
+  readonly "overlay": boolean;
+  readonly "range": SymbolRange;
+  readonly "revision": string;
+  readonly "workspacePath": string;
+};
+
+export type SymbolKind = "class" | "interface" | "enum" | "struct" | "object" | "function" | "constant" | "variable" | "module" | "type";
+
+export type SymbolOverlay = {
+  readonly "text"?: string | null;
+  readonly "workspacePath": string;
+};
+
+export type SymbolPosition = {
+  readonly "character": number;
+  readonly "line": number;
+};
+
+export type SymbolQueryReport = {
+  readonly "filesScanned": number;
+  readonly "filesTotal": number;
+  readonly "identity": string;
+  readonly "matches": ReadonlyArray<SymbolCandidate>;
+  readonly "partial": boolean;
+  readonly "reasons": ReadonlyArray<string>;
+  readonly "reusedFiles": number;
+  readonly "scopeToken"?: string | null;
+  readonly "skippedFiles": number;
+};
+
+export type SymbolRange = {
+  readonly "end": SymbolPosition;
+  readonly "start": SymbolPosition;
+};
+
 export type ToolchainRole = "build-runtime" | "build-model" | "language-server";
 
 export type ToolchainSnapshot = {

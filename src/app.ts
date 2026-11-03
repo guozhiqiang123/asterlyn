@@ -1,3 +1,5 @@
+import {sameCommitFileChanges} from "./application/commands/commit-file-changes.ts";
+import { projectSymbolsRuntime } from "./composition/project-symbols-runtime.ts";
 import { createFindLanguageResultsPorts, createLanguageDefinitionNavigator } from "./composition/language-definition-navigation.ts";
 import { createEditorNavigationRuntime, applyEditorSearchNavigation } from "./composition/editor-navigation-runtime.ts";
 import type { EditorNavigationHistory } from "./features/files-editor/editor-navigation-history.ts";
@@ -410,6 +412,7 @@ export class AsterlynApp {
   private readonly pushDiffEditor: LazyDiffEditor;
   private readonly editorSurface: EditorSurface;
   private readonly editorNavigation: EditorNavigationHistory;
+  private readonly projectSymbols: ReturnType<typeof projectSymbolsRuntime>;
   private readonly languageServices: ReturnType<typeof createLanguageServicesRuntime> | null;
   private readonly contextMenuHost: LazyContextMenuHost;
   private readonly stashRuntime: StashRuntime;
@@ -632,6 +635,7 @@ export class AsterlynApp {
       refreshAvailable: () => this.windowSession.workspace.state.root !== null && !this.state.loading,
       navigationHistory: { available: direction => !this.state.loading && this.editorNavigation.available(direction),
         navigate: direction => this.editorNavigation.navigate(direction) },
+      openProjectSymbols: "__TAURI_INTERNALS__" in window ? () => this.projectSymbols.open() : undefined,
       openCommandSurface: (mode) => this.openCommandSurface(mode),
       openRepository: async () => { await this.chooseRepository(); },
       openEditorFind: () => this.editorSurface.openFindReplace(),
@@ -674,6 +678,12 @@ export class AsterlynApp {
       activeUri: () => { const active = this.activeDocument(); return active.kind === "language-source" ? active.uri : active.kind === "project-file" ? workspaceFileUri(active.repositoryRoot, active.workspacePath) : null; },
       content: () => { this.captureMountedTextEditor();const active=this.activeDocument();return active.kind==="language-source"?active.content:activeTextTab(this.editorState.session)?.content ?? null; }, select: (from, to) => this.editorSurface.selectRange(from, to),
       copy: () => this.localization.catalog.editor.languageService, status: (message, kind) => this.setStatus(message, kind === "warning" ? "warning" : "normal") });
+    this.projectSymbols=projectSymbolsRuntime(root,{
+      workspace:languageWorkspace,chinese:()=>this.localization.catalog.locale==="zh-CN",
+      origin:()=>{const active=this.activeDocument();return active.kind==="project-file"?active.workspacePath:null;},
+      overlays:()=>{this.captureMountedTextEditor();return dirtyTextTabs(this.editorState.session).filter(tab=>tab.document.repositoryRoot===this.windowSession.workspace.state.root).map(tab=>({workspacePath:tab.document.workspacePath,text:new TextEncoder().encode(tab.content).length<=256*1024?tab.content:null}));},
+      navigate:async(workspaceRoot,candidate)=>{const uri=workspaceFileUri(workspaceRoot,candidate.workspacePath);if(uri)await definitionNavigator({uri,range:candidate.range});},
+    });
     const locationSources=createFindLanguageResultsPorts({workspace:languageWorkspace,files:()=>this.filesState.files,buffers:()=>this.editorState.session.textTabs,capture:()=>this.captureMountedTextEditor(),navigate:definitionNavigator,read:(root,file)=>bridge.readTextFile(root,file.repositoryId,file.path)});
     this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({
       host: root, copy: () => this.localization.catalog.editor.languageService, registerCommand: command => this.shortcuts.registerPluginCommand(command),
@@ -2077,6 +2087,7 @@ export class AsterlynApp {
     if (this.disposed) return;
     this.disposed = true;
     this.languageServices?.dispose();
+    this.projectSymbols.dispose();
     this.editorSurface.setNavigationObserver(null);
     this.editorNavigation.reset(null);
     this.shellEventBinding.dispose();
@@ -8698,21 +8709,6 @@ export class AsterlynApp {
     if (!element) throw new Error(`Missing application element: ${selector}`);
     return element;
   }
-}
-
-function sameCommitFileChanges(
-  left: readonly CommitFileChange[],
-  right: readonly CommitFileChange[],
-): boolean {
-  return left.length === right.length && left.every((file, index) => {
-    const candidate = right[index];
-    return Boolean(
-      candidate &&
-      file.path === candidate.path &&
-      file.originalPath === candidate.originalPath &&
-      file.status === candidate.status,
-    );
-  });
 }
 
 function loadChangeFileView(storage: Pick<Storage, "getItem">): ChangeFileView {

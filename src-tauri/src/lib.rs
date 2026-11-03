@@ -300,6 +300,7 @@ pub fn run() {
         .manage(PluginMarketplaceCoordinator::default())
         .manage(PluginProcessQueryManager::default())
         .manage(LanguageServiceManager::default())
+        .manage(commands::SymbolQueries::default())
         .manage(commands::packaged_analysis::AnalysisManager::default())
         .setup(|app| {
             let diagnostics = app
@@ -366,6 +367,9 @@ pub fn run() {
                     .state::<PendingRepositoryWindows>()
                     .remove(window.label());
                 window
+                    .state::<commands::SymbolQueries>()
+                    .remove_window(window.label());
+                window
                     .state::<WorkspaceSearchRegistry>()
                     .remove_window(window.label());
                 window
@@ -408,6 +412,9 @@ pub fn run() {
             invoke_installed_plugin_callback,
             deactivate_installed_plugin_runtime,
             read_installed_plugin_runtime_diagnostics,
+            query_project_symbols,
+            cancel_project_symbols,
+            validate_project_symbol,
             prepare_language_service,
             language_service_workspace_state,
             set_language_service_debug,

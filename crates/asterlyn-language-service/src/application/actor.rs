@@ -501,6 +501,22 @@ pub(super) fn actor(
         };
         trace.command(&command);
         match command {
+            ActorCommand::SourceScope {
+                projection,
+                origin,
+                reply,
+            } => {
+                let value = if !allowed() {
+                    Err("symbol-model-authority-changed".into())
+                } else {
+                    model_resource
+                        .as_mut()
+                        .filter(|resource| resource.is_current())
+                        .ok_or_else(|| "symbol-model-unavailable".to_string())
+                        .and_then(|resource| resource.source_scope(&projection, origin.as_deref()))
+                };
+                let _ = reply.send(value);
+            }
             ActorCommand::Stop => {
                 termination = "requested-stop";
                 break;

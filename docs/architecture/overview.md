@@ -257,3 +257,5 @@ and tab activation follow the stable-view rules in ADR-0004 and ADR-0009.
 
 The accompanying functional evidence and residual limits are recorded in
 [`Architecture/editor reliability acceptance`](../benchmarks/2026-09-13-architecture-editor-reliability.md).
+
+On-demand syntax candidates follow [ADR-0037](decisions/0037-plugin-owned-syntax-candidates.md). The language plugin supplies bounded lexical data; the workspace core owns derivation and caching, the approved language model lease constrains JVM module scope, and the desktop adapter owns catalog admission and lazy presentation. This path never substitutes for semantic LSP navigation.

@@ -7,7 +7,7 @@ const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof va
 export function isNativeLanguageModel(name:keyof typeof NATIVE_LANGUAGE_SCHEMAS,value:unknown,optionalFields:readonly string[]=[]):boolean {
  let nodes=0;
  const check=(schema:Schema,value:unknown,depth:number,optional:readonly string[]=[]):boolean=>{
-  if(++nodes>16384||depth>32)return false;
+  if(++nodes>32768||depth>32)return false;
   if(typeof schema.$ref==="string"){const target=models[schema.$ref.split("/").at(-1)!];return !!target&&check(target,value,depth+1);}
   if(Array.isArray(schema.enum))return schema.enum.includes(value);
   if(Array.isArray(schema.anyOf))return schema.anyOf.some(item=>record(item)&&check(item,value,depth+1));

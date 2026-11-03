@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+bindings = ["dep:schemars"]
+
 [dependencies]
 base64.workspace = true
 glob.workspace = true
@@ -14,6 +17,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
+schemars = { version = "=0.8.22", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

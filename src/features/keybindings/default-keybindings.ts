@@ -1,10 +1,11 @@
 import { WORKBENCH_FOCUS_SCOPES } from "../../application/commands/command-service.ts";
 import { WORKBENCH_COMMANDS } from "../../application/commands/workbench-command-ids.ts";
-import { primarySequence } from "./keybinding-normalizer.ts";
+import { primarySequence, keySequence } from "./keybinding-normalizer.ts";
 import type { DefaultKeybindingRule } from "./keybinding-model.ts";
 import { ANDROID_STUDIO_MACOS_KEYBINDINGS } from "./android-studio-macos-keybindings.ts";
 
 export const DEFAULT_KEYBINDINGS: readonly DefaultKeybindingRule[] = [
+  {id:"workspace.symbols.primary",commandId:WORKBENCH_COMMANDS.projectSymbols,sequence:keySequence("o",{primary:true,alt:true}),scopes:WORKBENCH_FOCUS_SCOPES},
   {
     id: "workbench.command-palette.primary",
     commandId: WORKBENCH_COMMANDS.commandPalette,

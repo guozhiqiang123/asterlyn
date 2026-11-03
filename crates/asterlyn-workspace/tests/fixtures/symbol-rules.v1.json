@@ -1,0 +1,368 @@
+{
+  "schema": 1,
+  "engine": "tokens-v1",
+  "profiles": [
+    {
+      "id": "typescript-javascript-v1",
+      "serverId": "typescript",
+      "extensions": [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".mts",
+        ".cts"
+      ],
+      "comments": [
+        [
+          "//",
+          "\n"
+        ],
+        [
+          "/*",
+          "*/"
+        ]
+      ],
+      "strings": [
+        "`",
+        "\"",
+        "'"
+      ],
+      "declarations": [
+        {
+          "keyword": "class",
+          "kind": "class",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "interface",
+          "kind": "interface",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "enum",
+          "kind": "enum",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "function",
+          "kind": "function",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "const",
+          "kind": "constant",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "let",
+          "kind": "variable",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "var",
+          "kind": "variable",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "type",
+          "kind": "type",
+          "nameMode": "next-identifier",
+          "opensType": false
+        }
+      ],
+      "regexLiterals": true,
+      "regexStartAfter": [
+        "=",
+        "(",
+        "[",
+        ",",
+        ":",
+        "return",
+        "=>"
+      ],
+      "compoundTokens": [
+        "=>"
+      ],
+      "excludedNames": [
+        "function"
+      ],
+      "methods": true,
+      "rejectedMethodPrefixes": [
+        "=",
+        ".",
+        "new",
+        "@"
+      ],
+      "methodTailMarkers": [
+        ":"
+      ]
+    },
+    {
+      "id": "rust-v1",
+      "serverId": "rust-analyzer",
+      "extensions": [
+        ".rs"
+      ],
+      "comments": [
+        [
+          "//",
+          "\n"
+        ],
+        [
+          "/*",
+          "*/"
+        ]
+      ],
+      "strings": [
+        "\""
+      ],
+      "declarations": [
+        {
+          "keyword": "struct",
+          "kind": "struct",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "enum",
+          "kind": "enum",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "trait",
+          "kind": "interface",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "fn",
+          "kind": "function",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "const",
+          "kind": "constant",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "static",
+          "kind": "variable",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "type",
+          "kind": "type",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "mod",
+          "kind": "module",
+          "nameMode": "next-identifier",
+          "opensType": false
+        }
+      ],
+      "nestedComments": true,
+      "rawStrings": [
+        {
+          "prefix": "r",
+          "marker": "#",
+          "quote": "\""
+        },
+        {
+          "prefix": "br",
+          "marker": "#",
+          "quote": "\""
+        }
+      ],
+      "excludedNames": [
+        "fn",
+        "mut"
+      ],
+      "characterLiterals": true
+    },
+    {
+      "id": "java-v1",
+      "serverId": "android-jvm",
+      "extensions": [
+        ".java"
+      ],
+      "comments": [
+        [
+          "//",
+          "\n"
+        ],
+        [
+          "/*",
+          "*/"
+        ]
+      ],
+      "strings": [
+        "\"\"\"",
+        "\"",
+        "'"
+      ],
+      "declarations": [
+        {
+          "keyword": "class",
+          "kind": "class",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "interface",
+          "kind": "interface",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "enum",
+          "kind": "enum",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "record",
+          "kind": "class",
+          "nameMode": "next-identifier",
+          "opensType": true
+        }
+      ],
+      "methods": true,
+      "excludedNames": [
+        "if",
+        "for",
+        "while",
+        "switch",
+        "catch",
+        "new",
+        "this",
+        "super",
+        "synchronized"
+      ],
+      "rejectedMethodPrefixes": [
+        "=",
+        ".",
+        "new",
+        "@",
+        "return"
+      ],
+      "modelScope": {
+        "rootPointer": "/buildRoot",
+        "modulesPointer": "/modules",
+        "idPointer": "/module",
+        "rootsPointers": [
+          "/sources",
+          "/generatedSources"
+        ],
+        "dependenciesPointer": "/projectDependencies",
+        "dependencyIdPointer": "/module"
+      },
+      "methodTailMarkers": [
+        "throws"
+      ]
+    },
+    {
+      "id": "kotlin-v1",
+      "serverId": "android-jvm",
+      "extensions": [
+        ".kt",
+        ".kts"
+      ],
+      "comments": [
+        [
+          "//",
+          "\n"
+        ],
+        [
+          "/*",
+          "*/"
+        ]
+      ],
+      "strings": [
+        "\"\"\"",
+        "\"",
+        "'"
+      ],
+      "declarations": [
+        {
+          "keyword": "class",
+          "kind": "class",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "interface",
+          "kind": "interface",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "object",
+          "kind": "object",
+          "nameMode": "next-identifier",
+          "opensType": true
+        },
+        {
+          "keyword": "fun",
+          "kind": "function",
+          "nameMode": "before-parameters",
+          "opensType": false
+        },
+        {
+          "keyword": "val",
+          "kind": "variable",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "var",
+          "kind": "variable",
+          "nameMode": "next-identifier",
+          "opensType": false
+        },
+        {
+          "keyword": "typealias",
+          "kind": "type",
+          "nameMode": "next-identifier",
+          "opensType": false
+        }
+      ],
+      "nestedComments": true,
+      "quotedIdentifiers": [
+        "`"
+      ],
+      "excludedNames": [
+        "object",
+        "class",
+        "val",
+        "var"
+      ],
+      "modelScope": {
+        "rootPointer": "/buildRoot",
+        "modulesPointer": "/modules",
+        "idPointer": "/module",
+        "rootsPointers": [
+          "/sources",
+          "/generatedSources"
+        ],
+        "dependenciesPointer": "/projectDependencies",
+        "dependencyIdPointer": "/module"
+      }
+    }
+  ]
+}

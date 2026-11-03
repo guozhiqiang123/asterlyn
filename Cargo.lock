@@ -126,6 +126,7 @@ name = "asterlyn-language-service"
 version = "0.1.0"
 dependencies = [
  "asterlyn-process",
+ "asterlyn-workspace",
  "libc",
  "schemars 0.8.22",
  "serde",
@@ -262,6 +263,7 @@ dependencies = [
  "libc",
  "memchr",
  "regex",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "sha2",

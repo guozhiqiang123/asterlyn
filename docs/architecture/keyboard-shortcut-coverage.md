@@ -100,6 +100,7 @@ platform-resolution and conflict gates. Never infer a shortcut from an action na
 | Open command palette | navigation | `workbench.commandPalette.open` | **Default:** Primary+Shift+P |
 | Open project | navigation | `workspace.repository.open` | **Default:** Primary+O |
 | Open project menu / recent projects | navigation | `workspace.repository.menu.toggle` | **Custom** |
+| Find project symbols | navigation | `workspace.symbols.open` | **Default:** Primary+Option/Alt+O; lazy syntax candidates, current catalog and model scope, Arrow/Enter/Escape |
 | Go to file | navigation | `workspace.quickOpen.open` | **Default:** Primary+P |
 | Open recent files | navigation | `workspace.recentFiles.open` | **Default:** Primary+E |
 | Find in files / reviewed replace | navigation | `workspace.search.open` | **Default:** Primary+Shift+F |

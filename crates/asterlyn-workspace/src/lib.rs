@@ -929,3 +929,4 @@ mod tests {
         assert!(!temporary_path.expect("temporary path captured").exists());
     }
 }
+pub mod symbols;

@@ -26,6 +26,7 @@ export interface WorkbenchCommandRuntimeOptions {
   readonly saveAvailable: () => boolean;
   readonly refreshAvailable: () => boolean;
   readonly openCommandSurface: (mode: "files" | "recent" | "workspace" | "commands") => void;
+  readonly openProjectSymbols?: () => void;
   readonly openRepository: () => void | Promise<void>;
   readonly openEditorFind: () => void;
   readonly focusHistoryFilter: () => void;
@@ -74,6 +75,10 @@ export function registerWorkbenchCommands(
     execute,
   });
   const descriptors: CommandDescriptor[] = [
+    {id:WORKBENCH_COMMANDS.projectSymbols,category:"workspace",userBindingScopes:WORKBENCH_FOCUS_SCOPES,
+     title:()=>options.catalog().locale==="zh-CN"?"查找项目符号":"Find Project Symbols",
+     detail:()=>options.catalog().locale==="zh-CN"?"按需查找声明语法候选":"Find declaration syntax candidates on demand",
+     keywords:()=>"symbols declaration class function 符号 声明",availability:()=>options.openProjectSymbols?workspace():{enabled:false},execute:()=>options.openProjectSymbols?.()},
     ...([-1, 1] as const).map(direction => navigation(
       direction < 0 ? WORKBENCH_COMMANDS.navigateBack : WORKBENCH_COMMANDS.navigateForward,
       direction < 0 ? "navigate-back" : "navigate-forward", "workbench",

@@ -227,3 +227,7 @@ permits older review fields to be absent and future output fields to be ignored,
 refinements and safe-integer checks remain mandatory. The actual native bridge uses this shared path.
 Existing command version/error strings and event codes remain; optional failure metadata cannot
 grant execution or bypass the finite restart owner.
+
+## P1 syntax candidate resource
+
+[ADR-0037](0037-plugin-owned-syntax-candidates.md) adds the optional integrity-covered `servers/symbol-index.v1.json` pure data resource in plugin 0.3.13. Existing semantic operations, SDK and permission declarations are unchanged. Model scope is read through the current approved actor/model lease; no new execution authority or background project scan is introduced.

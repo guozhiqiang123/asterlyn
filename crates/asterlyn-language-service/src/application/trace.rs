@@ -61,6 +61,7 @@ impl LanguageTrace {
             ActorCommand::Close{uri,..}=>self.record("document.close",Some(uri),None,||json!({})),
             ActorCommand::Request{uri,version,request_id,feature,position,..}=>self.record("request.started",Some(uri),Some(*version),||json!({"requestId":safe_id(request_id),"feature":if["hover","definition","completion","references"].contains(&feature.as_str()){feature.as_str()}else{"unsupported"},"line":position.line,"character":position.character})),
             ActorCommand::Cancel{request_id,..}=>self.record("request.cancelled",None,None,||json!({"requestId":safe_id(request_id)})),
+            ActorCommand::SourceScope{..}=>self.record("model.source-scope",None,None,||json!({})),
             ActorCommand::Stop=>self.record("session.stop",None,None,||json!({})),
         }
     }

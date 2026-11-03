@@ -27,5 +27,6 @@ try{
  await gate("core",["test","--locked","-p","asterlyn-process","-p","asterlyn-language-service","-p","asterlyn-task","-p","asterlyn-plugin-models","-p","asterlyn-plugin-dependencies","--","--test-threads=2"],1);
  await gate("portable-process",["test","--locked","-p","asterlyn-language-service","--features","process-fixtures","--test","process_lifecycle","--","--test-threads=1"],3);
  await gate("portable-actors",["test","--locked","-p","asterlyn-language-service","--features","process-fixtures","--lib","--","--test-threads=2"],3,["real_actor_eof_and_malformed_frames_are_distinct_and_new_sessions_get_new_ids","actor_cancellation_bypasses_a_stalled_request_and_rejects_foreign_owners","internal_backend_recovery_invalidates_pending_results_without_reopening_documents"]);
+ await gate("workspace-symbols",["test","--locked","-p","asterlyn-workspace","--test","symbols"],5);
  await gate("native-bindings",["scripts/generate-native-language-contract.mjs","--check"],0,[],process.execPath);
 }finally{process.removeListener("SIGINT",interrupted);process.removeListener("SIGTERM",interrupted);await writeFile(join(output,"summary.json"),JSON.stringify({schema:1,platform:process.platform,arch:process.arch,node:process.version,results},null,2)+"\n");}

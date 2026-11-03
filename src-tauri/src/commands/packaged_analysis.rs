@@ -189,13 +189,55 @@ pub(super) fn installed(
         }),
     })
 }
-struct LanguageModelResource(ModelHandle);
+struct LanguageModelResource {
+    handle: ModelHandle,
+    root: std::path::PathBuf,
+    graphs: std::collections::HashMap<String, asterlyn_workspace::symbols::ModuleSourceGraph>,
+}
 impl ModelResource for LanguageModelResource {
     fn is_current(&self) -> bool {
-        self.0.is_current()
+        self.handle.is_current()
     }
     fn generation(&self) -> u64 {
-        self.0.reference.generation()
+        self.handle.reference.generation()
+    }
+    fn source_scope(&mut self, projection: &Value, origin: Option<&str>) -> Result<Value, String> {
+        use asterlyn_workspace::symbols::{ModelScopeProjection, ModuleSourceGraph};
+        if !self.handle.is_current() {
+            return Err("symbol-model-stale".into());
+        }
+        let key = serde_json::to_string(projection).map_err(|_| "symbol-model-projection")?;
+        if !self.graphs.contains_key(&key) {
+            if self.graphs.len() >= 4 {
+                return Err("symbol-model-projection-limit".into());
+            }
+            self.handle
+                .artifact
+                .verify()
+                .map_err(|_| "symbol-model-integrity")?;
+            if self.handle.reference.bytes() > 32 * 1024 * 1024 {
+                return Err("symbol-model-limit".into());
+            }
+            let bytes =
+                std::fs::read(self.handle.artifact.path()).map_err(|_| "symbol-model-read")?;
+            if bytes.len() > 32 * 1024 * 1024 {
+                return Err("symbol-model-limit".into());
+            }
+            let value: Value = serde_json::from_slice(&bytes).map_err(|_| "symbol-model-parse")?;
+            let p: ModelScopeProjection = serde_json::from_value(projection.clone())
+                .map_err(|_| "symbol-model-projection")?;
+            self.graphs.insert(
+                key.clone(),
+                ModuleSourceGraph::project(&value, &self.root, &p)?,
+            );
+        }
+        let (roots, partial) = self.graphs[&key].roots_for(origin);
+        if !self.handle.is_current() {
+            return Err("symbol-model-stale".into());
+        }
+        Ok(
+            json!({"roots":roots,"partial":partial,"token":format!("{}:{}",self.handle.reference.digest(),self.handle.reference.generation())}),
+        )
     }
 }
 fn current(
@@ -532,7 +574,11 @@ pub(super) fn model_access(
             let value = json!({"path":handle.artifact.path(),"digest":handle.reference.digest(),"bytes":handle.reference.bytes(),"generation":handle.reference.generation(),"schema":handle.reference.schema()});
             Ok(ModelReply {
                 value,
-                resource: Box::new(LanguageModelResource(handle)),
+                resource: Box::new(LanguageModelResource {
+                    handle,
+                    root: owner.root.clone(),
+                    graphs: Default::default(),
+                }),
             })
         })();
         if let Err(error) = &result {

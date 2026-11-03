@@ -45,8 +45,9 @@ export function validateDesktopResult<Command extends DesktopCommandName>(
   if (validateTaskExecutionDesktopResult(validator, value, command)) return value as DesktopCommandMap[Command]["result"];
   if (validateLanguageServiceDesktopResult(validator, value, command)) return value as DesktopCommandMap[Command]["result"];
   switch (validator) {
+    case "featureScoped":
     case "pluginProcessQueryResult":
-      throw new Error(`${command}: process query results require the feature-scoped validator.`);
+      throw new Error(`${command}: results require the feature-scoped validator.`);
     case "pluginToolOperationResult":
       throw new Error(`${command}: plugin tool-operation results require the feature-scoped validator.`);
     case "void":

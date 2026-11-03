@@ -4,6 +4,7 @@ export const WORKBENCH_COMMANDS = {
   commandPalette: commandId("workbench.commandPalette.open"),
   openRepository: commandId("workspace.repository.open"),
   toggleRepositoryMenu: commandId("workspace.repository.menu.toggle"),
+  projectSymbols: commandId("workspace.symbols.open"),
   quickOpen: commandId("workspace.quickOpen.open"),
   recentFiles: commandId("workspace.recentFiles.open"),
   navigateBack: commandId("workbench.navigation.back"),

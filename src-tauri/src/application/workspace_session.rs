@@ -312,6 +312,35 @@ impl ActiveWorkspaces {
         Ok(active.0)
     }
 
+    pub(crate) fn symbol_catalog(
+        &self,
+        window: &str,
+        token: u64,
+        root: &Path,
+    ) -> Result<Vec<String>, WorkspaceError> {
+        let activations = self
+            .activations
+            .lock()
+            .map_err(|_| activation_lock_error())?;
+        if activations.get(window) != Some(&token) {
+            return Err(stale_activation());
+        }
+        let roots = self.roots.lock().map_err(|_| activation_lock_error())?;
+        let active = roots
+            .get(window)
+            .filter(|a| a.root == root)
+            .ok_or_else(stale_activation)?;
+        let mut paths: Vec<_> = active
+            .catalog
+            .values()
+            .flat_map(|repo| repo.values())
+            .filter(|f| !f.ignored)
+            .map(|f| f.workspace_path.clone())
+            .collect();
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
     pub(crate) fn install_catalog(
         &self,
         window_label: &str,

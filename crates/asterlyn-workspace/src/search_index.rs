@@ -46,7 +46,7 @@ struct SearchContentIndexEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct SearchFileIdentity {
+pub(crate) struct SearchFileIdentity {
     #[serde(rename = "l")]
     length: u64,
     #[serde(rename = "m", default, skip_serializing_if = "Option::is_none")]
@@ -243,7 +243,10 @@ pub(crate) fn index_query(effective_query: &str, mode: SearchMode) -> Option<Sea
 }
 
 impl SearchFileIdentity {
-    fn from_metadata(metadata: &Metadata) -> Self {
+    pub(crate) fn may_reuse_symbols(&self) -> bool {
+        cfg!(unix) && self.unix_change_nanos.is_some_and(|nanos| nanos > 0)
+    }
+    pub(crate) fn from_metadata(metadata: &Metadata) -> Self {
         let modified_nanos = metadata
             .modified()
             .ok()

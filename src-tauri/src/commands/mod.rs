@@ -110,3 +110,8 @@ pub(crate) use workspace::{
     save_text_file, search_workspace_text,
 };
 pub(crate) use workspace_watch::{start_workspace_watch, stop_workspace_watch};
+
+mod symbols;
+pub(crate) use symbols::{
+    SymbolQueries, cancel_project_symbols, query_project_symbols, validate_project_symbol,
+};

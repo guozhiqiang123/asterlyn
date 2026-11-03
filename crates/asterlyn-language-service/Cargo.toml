@@ -6,7 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-bindings = ["dep:schemars", "asterlyn-process/bindings"]
+bindings = ["dep:schemars", "asterlyn-process/bindings", "dep:asterlyn-workspace", "asterlyn-workspace/bindings"]
 process-fixtures = []
 typescript-fixtures = ["process-fixtures"]
 workspace-fixtures = ["typescript-fixtures"]
@@ -14,6 +14,7 @@ rust-fixtures = ["typescript-fixtures"]
 android-fixtures = ["process-fixtures"]
 
 [dependencies]
+asterlyn-workspace = { path = "../asterlyn-workspace", optional = true }
 tempfile.workspace = true
 sha2.workspace = true
 url = "=2.5.8"

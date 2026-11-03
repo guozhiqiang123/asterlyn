@@ -118,6 +118,13 @@ pub struct LanguageServiceResult {
 pub trait ModelResource: Send {
     fn is_current(&self) -> bool;
     fn generation(&self) -> u64;
+    fn source_scope(
+        &mut self,
+        _projection: &Value,
+        _origin: Option<&str>,
+    ) -> Result<Value, String> {
+        Err("symbol-model-unavailable".into())
+    }
 }
 pub struct ModelReply {
     pub value: Value,
@@ -133,6 +140,11 @@ pub(super) struct ActorServices {
 
 pub type ActorReply = mpsc::Sender<Result<Value, String>>;
 enum ActorCommand {
+    SourceScope {
+        projection: Value,
+        origin: Option<String>,
+        reply: ActorReply,
+    },
     Open {
         uri: String,
         language: String,
@@ -439,6 +451,32 @@ impl LanguageServiceManager {
             .control
             .try_send(command)
             .map_err(|_| "language service command queue unavailable".into())
+    }
+    pub fn source_scope(
+        &self,
+        subject: &LanguageSubject,
+        profile: &str,
+        projection: Value,
+        origin: Option<String>,
+    ) -> Result<Receiver<Result<Value, String>>, String> {
+        let (reply, rx) = mpsc::channel();
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| "language session lock unavailable")?;
+        let session = sessions
+            .values()
+            .find(|s| s.subject == *subject && s.profile == profile)
+            .ok_or("symbol-model-unavailable")?;
+        session
+            .control
+            .try_send(ActorCommand::SourceScope {
+                projection,
+                origin,
+                reply,
+            })
+            .map_err(|_| "symbol-model-busy")?;
+        Ok(rx)
     }
     pub fn open(
         &self,

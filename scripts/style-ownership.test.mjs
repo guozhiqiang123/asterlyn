@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 const ownedStyles = [
+  ["features/project-symbols/project-symbols.css", "features/project-symbols/entry.ts"],
   ["styles.css", "bootstrap.ts"],
   ["startup-failure.css", "bootstrap.ts"],
   ["shared/layout.css", "main.ts"],
