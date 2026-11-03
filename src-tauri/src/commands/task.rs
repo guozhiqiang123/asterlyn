@@ -70,7 +70,7 @@ pub(crate) fn prepare_task_execution(
             "argumentCount": request.args.len(),
         }),
     );
-    let result = (|| {
+    let result: Result<PreparedTask, String> = (|| {
         let root = active
             .resolve(window.label(), &workspace_root)
             .map_err(|e| e.to_string())?;
@@ -89,6 +89,7 @@ pub(crate) fn prepare_task_execution(
                 "durationMs": elapsed_millis(started),
                 "reviewId": &review.review_id,
                 "trust": format!("{:?}", review.trust).to_lowercase(),
+                "runtime": tasks.runtime_metadata(&review.review_id),
             }),
         ),
         Err(error) => diagnostics.error(
@@ -98,6 +99,7 @@ pub(crate) fn prepare_task_execution(
             json!({
                 "durationMs": elapsed_millis(started),
                 "error": diagnostics.safe_message(error),
+                "failureCategory": crate::application::gradle_task_runtime::failure_category(error),
             }),
         ),
     }
@@ -154,7 +156,7 @@ pub(crate) fn start_task_execution(
             "rememberConfirmation": remember_confirmation,
         }),
     );
-    let result = (|| {
+    let result: Result<TaskStarted, String> = (|| {
         let root = active
             .resolve(window.label(), &workspace_root)
             .map_err(|e| e.to_string())?;
@@ -175,6 +177,14 @@ pub(crate) fn start_task_execution(
             record_task_event(&event_diagnostics, &event_trace_id, &event_state, &event);
             let _ = event_window.emit(EVENT, event);
         });
+        if let Some(runtime) = tasks.runtime_metadata(&review_id) {
+            diagnostics.info(
+                "task.execution",
+                "runtime.selected",
+                Some(&trace_id),
+                json!({"reviewId": review_id, "runtime": runtime}),
+            );
+        }
         let run_id = tasks.start(window.label(), &root, token, &review_id, state, sink)?;
         Ok(TaskStarted {
             protocol_version: PROTOCOL_VERSION,
@@ -202,6 +212,7 @@ pub(crate) fn start_task_execution(
                 "durationMs": elapsed_millis(started),
                 "reviewId": &review_id,
                 "error": diagnostics.safe_message(error),
+                "failureCategory": crate::application::gradle_task_runtime::failure_category(error),
             }),
         ),
     }
@@ -342,6 +353,7 @@ fn record_task_event(
                     "durationMs": elapsed_millis(state.started),
                     "exitCode": exit_code,
                     "message": message.as_ref().map(|value| diagnostics.safe_message(value)),
+                    "failureCategory": message.as_deref().map(crate::application::gradle_task_runtime::failure_category),
                     "outputEvents": state.output_events,
                     "stdoutBytes": state.stdout_bytes,
                     "stderrBytes": state.stderr_bytes,

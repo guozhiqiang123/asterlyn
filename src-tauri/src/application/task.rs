@@ -19,6 +19,7 @@ struct Review {
     request: TaskRequest,
     executable: PathBuf,
     identity: FileIdentity,
+    runtime: Option<super::gradle_task_runtime::GradleTaskRuntime>,
     created: Instant,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,6 +89,8 @@ impl TaskManager {
             return Err("executable must remain inside the workspace".into());
         }
         let identity = identity(&canonical)?;
+        let runtime =
+            super::gradle_task_runtime::resolve(root, &request.executable_path, &request.args)?;
         let review_id = format!(
             "review-{}",
             self.inner.sequence.fetch_add(1, Ordering::Relaxed) + 1
@@ -106,6 +109,7 @@ impl TaskManager {
                 request: request.clone(),
                 executable: canonical.clone(),
                 identity,
+                runtime,
                 created: Instant::now(),
             },
         );
@@ -153,6 +157,7 @@ impl TaskManager {
         if identity(&review.executable)? != review.identity {
             return Err("task executable changed after review".into());
         }
+        validate_runtime(&review)?;
         {
             let mut running = self.inner.workspace_runs.lock().map_err(lock_error)?;
             if running.contains_key(root) {
@@ -194,10 +199,17 @@ impl TaskManager {
                         exit_code: None,
                     },
                 );
-                let result = collect(child, cancelled, &run, &root, sink.clone());
+                let result = collect(
+                    child,
+                    cancelled,
+                    &run,
+                    &root,
+                    sink.clone(),
+                    review.runtime.is_some(),
+                );
                 manager.finish(&root, &run);
                 let (status, message, exit_code) = match result {
-                    Ok((status, exit_code)) => (status, None, exit_code),
+                    Ok((status, exit_code, message)) => (status, message, exit_code),
                     Err(message) => (asterlyn_task::TaskStatus::Crashed, Some(message), None),
                 };
                 emit(
@@ -238,6 +250,7 @@ impl TaskManager {
         if identity(&review.executable)? != review.identity {
             return Err("task executable changed after review".into());
         }
+        validate_runtime(review)?;
         Ok(TaskAuthorizationScope {
             root: review.root.clone(),
             plugin_id: review.request.plugin_id.clone(),
@@ -263,6 +276,16 @@ impl TaskManager {
             let _ = child.kill();
         }
         Ok(())
+    }
+    pub(crate) fn runtime_metadata(&self, review_id: &str) -> Option<serde_json::Value> {
+        self.inner
+            .reviews
+            .lock()
+            .ok()?
+            .get(review_id)?
+            .runtime
+            .as_ref()
+            .map(|runtime| runtime.metadata())
     }
     pub(crate) fn cancel_workspace(&self, root: &Path) {
         let run = self
@@ -388,6 +411,14 @@ fn spawn(review: &Review, root: &Path, _run_id: &str) -> Result<Child, String> {
             command.env(name, value);
         }
     }
+    if let Some(runtime) = &review.runtime {
+        command.env("JAVA_HOME", &runtime.home);
+        // Pin both wrapper client and daemon, including project/user property overrides.
+        command.arg(format!(
+            "-Dorg.gradle.java.home={}",
+            runtime.home.to_string_lossy()
+        ));
+    }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -441,7 +472,22 @@ fn task_authorization_fingerprint(review: &Review) -> String {
         hasher.update((argument.len() as u64).to_be_bytes());
         hasher.update(argument.as_bytes());
     }
+    if let Some(runtime) = &review.runtime {
+        hasher.update(b"\0gradle-java-runtime\0");
+        hasher.update(runtime.digest.as_bytes());
+    }
     format!("{:x}", hasher.finalize())
+}
+fn validate_runtime(review: &Review) -> Result<(), String> {
+    let current = super::gradle_task_runtime::resolve(
+        &review.root,
+        &review.request.executable_path,
+        &review.request.args,
+    )?;
+    if current != review.runtime {
+        return Err("gradle.runtime.javaChanged: Gradle Java or project configuration changed after review. Review the task again.".into());
+    }
+    Ok(())
 }
 fn emit(sink: &SerialSink, mut event: TaskSessionEvent) {
     let Ok(mut sequence) = sink.sequence.lock() else {
@@ -463,7 +509,8 @@ fn collect(
     run_id: &str,
     root: &Path,
     sink: Arc<SerialSink>,
-) -> Result<(asterlyn_task::TaskStatus, Option<i32>), String> {
+    gradle: bool,
+) -> Result<(asterlyn_task::TaskStatus, Option<i32>, Option<String>), String> {
     let (stdout, stderr) = {
         let mut child_value = child.lock().map_err(lock_error)?;
         let value = child_value
@@ -473,10 +520,16 @@ fn collect(
     };
     let mut handles = Vec::new();
     let output_budget = Arc::new(AtomicUsize::new(MAX_OUTPUT_BYTES));
+    let failure = gradle.then(|| {
+        Arc::new(Mutex::new(
+            super::gradle_task_failure::GradleTaskFailure::default(),
+        ))
+    });
     if let Some(pipe) = stdout {
         handles.push(std::thread::spawn({
             let sink = sink.clone();
             let output_budget = output_budget.clone();
+            let failure = failure.clone();
             let id = run_id.to_string();
             let workspace_root = root.to_string_lossy().into_owned();
             move || {
@@ -487,6 +540,7 @@ fn collect(
                     workspace_root,
                     sink,
                     output_budget,
+                    failure,
                 )
             }
         }));
@@ -495,6 +549,7 @@ fn collect(
         handles.push(std::thread::spawn({
             let sink = sink.clone();
             let output_budget = output_budget.clone();
+            let failure = failure.clone();
             let id = run_id.to_string();
             let workspace_root = root.to_string_lossy().into_owned();
             move || {
@@ -505,6 +560,7 @@ fn collect(
                     workspace_root,
                     sink,
                     output_budget,
+                    failure,
                 )
             }
         }));
@@ -536,7 +592,12 @@ fn collect(
     } else {
         asterlyn_task::TaskStatus::Failed
     };
-    Ok((terminal, status.code()))
+    let message = if terminal == asterlyn_task::TaskStatus::Failed {
+        failure.and_then(|failure| failure.lock().ok().map(|failure| failure.message()))
+    } else {
+        None
+    };
+    Ok((terminal, status.code(), message))
 }
 
 fn kill_pid(pid: u32) {
@@ -568,6 +629,7 @@ fn collect_output<R: Read + Send + 'static>(
     workspace_root: String,
     sink: Arc<SerialSink>,
     output_budget: Arc<AtomicUsize>,
+    failure: Option<Arc<Mutex<super::gradle_task_failure::GradleTaskFailure>>>,
 ) -> Result<(), String> {
     let mut omitted = 0u64;
     let mut buf = [0u8; 64 * 1024];
@@ -577,6 +639,11 @@ fn collect_output<R: Read + Send + 'static>(
             Ok(n) => n,
             Err(error) => return Err(format!("read task output: {error}")),
         };
+        if let Some(failure) = &failure
+            && let Ok(mut failure) = failure.lock()
+        {
+            failure.observe(&stream, &buf[..n]);
+        }
         let allowed = claim_output_budget(&output_budget, n);
         if allowed > 0 {
             emit(
@@ -739,6 +806,84 @@ mod tests {
                 TrustState::Trusted,
             )
             .unwrap()
+    }
+
+    #[test]
+    fn wrapper_runtime_is_scoped_to_child_and_bound_to_review_and_authorization() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = fs::canonicalize(directory.path()).unwrap();
+        let root = base.join("project");
+        let home = base.join("jdk17");
+        fs::create_dir_all(root.join("gradle/wrapper")).unwrap();
+        fs::create_dir_all(home.join("bin")).unwrap();
+        fs::write(
+            root.join("gradle/wrapper/gradle-wrapper.properties"),
+            "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip\n",
+        )
+        .unwrap();
+        fs::write(home.join("release"), "JAVA_VERSION=\"17.0.1\"\n").unwrap();
+        fs::write(home.join("bin/java"), "java fixture").unwrap();
+        fs::write(home.join("bin/javac"), "javac fixture").unwrap();
+        write_executable(&root, "gradlew", "printf '%s' \"$JAVA_HOME\"");
+        let args = vec![format!("-Dorg.gradle.java.home={}", home.display())];
+        let manager = TaskManager::default();
+        let review = prepare(&manager, "window-a", &root, 1, "gradlew", args.clone());
+        let scope = manager
+            .authorization_scope("window-a", &root, 1, &review.review_id)
+            .unwrap();
+        assert_eq!(
+            manager.runtime_metadata(&review.review_id).unwrap()["javaMajor"],
+            17
+        );
+        let (sink, events) = event_sink();
+        manager
+            .start(
+                "window-a",
+                &root,
+                1,
+                &review.review_id,
+                TrustState::Trusted,
+                sink,
+            )
+            .unwrap();
+        assert!(matches!(
+            wait_for_terminal(&events),
+            TaskSessionEvent::Status {
+                status: TaskStatus::Succeeded,
+                ..
+            }
+        ));
+        assert_eq!(wait_for_stdout(&events), home.to_string_lossy().as_bytes());
+        let stale = prepare(&manager, "window-a", &root, 1, "gradlew", args.clone());
+        fs::write(home.join("release"), "JAVA_VERSION=\"17.0.2\"\n").unwrap();
+        assert!(
+            manager
+                .authorization_scope("window-a", &root, 1, &stale.review_id)
+                .unwrap_err()
+                .contains("javaChanged")
+        );
+        let (sink, _) = event_sink();
+        assert!(
+            manager
+                .start(
+                    "window-a",
+                    &root,
+                    1,
+                    &stale.review_id,
+                    TrustState::Trusted,
+                    sink
+                )
+                .unwrap_err()
+                .contains("javaChanged")
+        );
+        let fresh = prepare(&manager, "window-a", &root, 1, "gradlew", args);
+        assert_ne!(
+            scope.fingerprint,
+            manager
+                .authorization_scope("window-a", &root, 1, &fresh.review_id)
+                .unwrap()
+                .fingerprint
+        );
     }
 
     #[test]

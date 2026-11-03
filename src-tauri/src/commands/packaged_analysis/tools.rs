@@ -1,47 +1,8 @@
+use crate::application::java_installations::{candidates, major};
 use asterlyn_plugin_package::AnalysisTool;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::{Path, PathBuf},
-};
-fn candidates() -> Vec<PathBuf> {
-    let mut roots = vec![
-        PathBuf::from("/Library/Java/JavaVirtualMachines"),
-        PathBuf::from("/usr/lib/jvm"),
-    ];
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        roots.extend([
-            home.join("Library/Java/JavaVirtualMachines"),
-            home.join(".sdkman/candidates/java"),
-        ]);
-    }
-    let mut homes = BTreeSet::new();
-    for root in roots {
-        if let Ok(entries) = fs::read_dir(root) {
-            for entry in entries.take(128).flatten() {
-                let path = entry.path();
-                homes.insert(if path.join("Contents/Home").is_dir() {
-                    path.join("Contents/Home")
-                } else {
-                    path
-                });
-            }
-        }
-    }
-    if let Some(home) = std::env::var_os("JAVA_HOME") {
-        homes.insert(home.into());
-    }
-    homes.into_iter().collect()
-}
-fn major(release: &str) -> Option<u16> {
-    let value = release
-        .lines()
-        .find_map(|line| line.strip_prefix("JAVA_VERSION="))?
-        .trim_matches('"');
-    value.split(['.', '-', '+']).next()?.parse().ok()
-}
+use std::{collections::BTreeMap, fs, path::Path};
 pub(super) fn resolve(
     workspace: &Path,
     requirements: &[AnalysisTool],

@@ -260,9 +260,13 @@ pub(crate) fn compute_fingerprint(root: &Path, paths: &[String]) -> FingerprintR
     aggregate.update([0]);
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
-    let java_home_digest = std::env::var("JAVA_HOME")
-        .ok()
-        .map(|value| hex_digest(&Sha256::digest(value.as_bytes())));
+    let java_home_digest = match super::gradle_task_runtime::cache_identity(&canonical_root) {
+        Ok(Some(digest)) => Some(digest),
+        Ok(None) => std::env::var("JAVA_HOME")
+            .ok()
+            .map(|value| hex_digest(&Sha256::digest(value.as_bytes()))),
+        Err(error) => return fingerprint_failure(&canonical_root, "unavailable", error),
+    };
     aggregate.update(os.as_bytes());
     aggregate.update([0]);
     aggregate.update(arch.as_bytes());
