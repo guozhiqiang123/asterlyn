@@ -1,3 +1,4 @@
+import {languageResultCoverage, type LanguageResultCoverage} from "../../protocol/language-result-coverage.ts";
 import {buildFindResultTree,findResultBranches,findResultRows,type FindResultNode,type FindTreeEntry} from "./find-result-tree.ts";
 import {normalizeDefinitionTargets} from "../../application/language-services/definition-targets.ts";
 import type {EditorLanguageLocationsPublication,EditorLanguageServiceLocation,EditorReferenceAnalysis} from "../../protocol/editor-language-service.ts";
@@ -27,7 +28,7 @@ export interface FindFileResultsSnapshot {
   readonly files: readonly ProjectFile[];
 }
 
-export interface FindLocationResultsSnapshot {readonly referenceAnalysis?:EditorReferenceAnalysis;readonly kind:"locations";readonly repositoryRoot:string;readonly workspaceGeneration:number;readonly query:string;readonly intent:"definition"|"references";readonly locations:readonly EditorLanguageServiceLocation[];readonly limited:boolean;}
+export interface FindLocationResultsSnapshot {readonly coverage:LanguageResultCoverage;readonly referenceAnalysis?:EditorReferenceAnalysis;readonly kind:"locations";readonly repositoryRoot:string;readonly workspaceGeneration:number;readonly query:string;readonly intent:"definition"|"references";readonly locations:readonly EditorLanguageServiceLocation[];readonly limited:boolean;}
 export type FindResultsSnapshot = FindTextResultsSnapshot | FindFileResultsSnapshot | FindLocationResultsSnapshot;
 
 export interface FindResultsState {
@@ -63,7 +64,7 @@ export class FindResultsController {
     const normalized=normalizeDefinitionTargets(publication.locations,publication.kind);
     if(!publication.workspaceRoot||!normalized.locations.length||normalized.invalid)return false;
     const locations=normalized.locations;
-    const snapshot:FindLocationResultsSnapshot={referenceAnalysis:publication.referenceAnalysis,kind:"locations",repositoryRoot:publication.workspaceRoot,workspaceGeneration:publication.workspaceGeneration,query:publication.query,intent:publication.kind,locations,limited:publication.limited||normalized.limited};
+    const snapshot:FindLocationResultsSnapshot={coverage:languageResultCoverage(publication.coverage),referenceAnalysis:publication.referenceAnalysis,kind:"locations",repositoryRoot:publication.workspaceRoot,workspaceGeneration:publication.workspaceGeneration,query:publication.query,intent:publication.kind,locations,limited:publication.limited||normalized.limited};
     this.locationEntries=locations.map((location,index)=>{
       const url=new URL(location.uri),absolute=decodeURIComponent(url.pathname),prefix=publication.workspaceRoot.replace(/\\/gu,"/").replace(/\/$/u,"")+"/";
       const path=location.readonlySource?.path??(absolute.startsWith(prefix)?absolute.slice(prefix.length):absolute.replace(/^\/+/,""));

@@ -1,3 +1,4 @@
+import type {LanguageResultCoverage} from "../../protocol/language-result-coverage.ts";
 import type { EditorLanguageServiceLocation } from "../../protocol/editor-language-service.ts";
 import type { LanguageServiceCopy } from "../../localization/language-service-copy.ts";
 
@@ -8,7 +9,7 @@ export class LanguageLocationPicker {
   close(restoreFocus = true): void { const release = this.release; this.release = null; release?.(); if (restoreFocus) this.restore?.(); this.restore = null; }
   private restore: (() => void) | null = null;
   open(document: Document, anchor: { x: number; y: number }, locations: readonly EditorLanguageServiceLocation[], options: {
-    referenceImports?:readonly number[];excludeImports?:boolean;
+    coverage?:LanguageResultCoverage;referenceImports?:readonly number[];excludeImports?:boolean;
     openInWindow?(selected:EditorLanguageServiceLocation|null,excludeImports:boolean):void; title: string; limited: boolean; copy: LanguageServiceCopy; current(): boolean;
     select(location: EditorLanguageServiceLocation): void; dismissed(): void; restoreFocus(): void;
   }): void {
@@ -44,7 +45,7 @@ export class LanguageLocationPicker {
         path.textContent = choice.path.slice(-260); button.append(name, path); button.addEventListener("click", () => choose(index));
         button.addEventListener("pointermove", () => { if (selected !== index) { selected = index; highlight(); } }); buttons.push(button); fragment.append(button);
       }
-      list.replaceChildren(fragment); status.textContent = !filtered.length ? options.copy.noMatchingLocations : options.limited ? options.copy.limitedLocations.replace("{count}", String(locations.length)) : "";
+      list.replaceChildren(fragment); status.textContent = [!filtered.length?options.copy.noMatchingLocations:"",options.limited?options.copy.limitedLocations.replace("{count}",String(locations.length)):"",options.coverage?.state!=="complete"?options.copy.coverage[options.coverage?.state??"unknown"]:""].filter(Boolean).join(" · ");
       highlight();
     };
     this.release = () => { controller.abort(); root.remove(); options.dismissed(); };

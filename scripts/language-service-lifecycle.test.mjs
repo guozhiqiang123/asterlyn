@@ -5,19 +5,19 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,5));
 async function until(check){for(let n=0;n<200&&!check();n++)await tick();assert.ok(check(),"lifecycle did not settle");}
 const provider={kind:"language-service",qualifiedId:"dev.asterlyn.lsp:android",pluginId:"dev.asterlyn.lsp",pluginVersion:"0.3.7",serverId:"android-jvm",label:"Java / Kotlin",languageIds:["java","kotlin"],extensions:[".java",".kt"]};
 const handle={tabId:"editor",path:"src/Main.kt",loadEpoch:1};
-function harness(){
+function harness({providers=[provider],storage}={}){
   let scope={root:"/repo",generation:1},factory,next=0;const calls=[],statuses=[],listeners=new Set();let held=null;
   const native={
     workspace:async root=>{calls.push(["workspace",root]);return{startupProfiles:[{pluginId:provider.pluginId,serverId:provider.serverId}],debugTracing:false};},
-    prepare:async(root,pluginId,serverId)=>{calls.push(["prepare",root]);if(held)await held;return{reviewId:`r${++next}`,pluginId,serverId,pluginVersion:provider.pluginVersion,packageDigest:"package",resourceDigest:"resource",executableIdentity:"node",expiresAt:Date.now()+60000,remembered:true};},
+    prepare:async(root,pluginId,serverId)=>{calls.push(["prepare",root,pluginId,serverId]);if(held)await held;return{reviewId:`r${++next}`,pluginId,serverId,pluginVersion:provider.pluginVersion,packageDigest:"package",resourceDigest:"resource",executableIdentity:"node",expiresAt:Date.now()+60000,remembered:true};},
     confirm:async()=>{calls.push(["confirm"]);return true;},
     start:async(root,_review,_server,_remember,refreshModel)=>{const id=`session-${++next}`;calls.push(["start",root,id,refreshModel]);for(const listener of listeners)listener({sessionId:id,kind:"ready",progress:{phase:"ready"}});return id;},
     open:async(...args)=>calls.push(["open",...args]),change:async(...args)=>calls.push(["change",...args]),close:async(...args)=>calls.push(["close",...args]),stop:async(...args)=>calls.push(["stop",...args]),cancel:async()=>{},
     request:async(root,sessionId,uri,version)=>({sessionId,uri,version,result:[]}),subscribe:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
     forget:async root=>calls.push(["forget",root]),setDebug:async enabled=>calls.push(["debug",enabled]),
   };
-  const runtime=createLanguageServicesRuntime({registry:{list:()=>[provider],subscribe:()=>()=>{}},native,workspace:()=>scope,document:h=>({workspacePath:h.path,loadEpoch:h.loadEpoch,readOnly:false}),bind:value=>{factory=value;},navigate(){},reportError:error=>{throw error;},status:state=>statuses.push(state)});
-  return{native,runtime,calls,statuses,listeners,get factory(){return factory;},set scope(value){scope=value;},hold(){let release;held=new Promise(resolve=>{release=resolve;});return()=>{held=null;release();};},emit(event){for(const l of listeners)l(event);},count:name=>calls.filter(call=>call[0]===name).length};
+  const runtime=createLanguageServicesRuntime({providerStorage:storage,registry:{list:()=>providers,subscribe:()=>()=>{}},native,workspace:()=>scope,document:h=>({workspacePath:h.path,loadEpoch:h.loadEpoch,readOnly:false}),bind:value=>{factory=value;},navigate(){},reportError:error=>{throw error;},status:state=>statuses.push(state)});
+  return{native,runtime,calls,statuses,listeners,set providers(value){providers=value;},get factory(){return factory;},set scope(value){scope=value;},hold(){let release;held=new Promise(resolve=>{release=resolve;});return()=>{held=null;release();};},emit(event){for(const l of listeners)l(event);},count:name=>calls.filter(call=>call[0]===name).length};
 }
 test("model-backed services start without a document and share the transport with later source opens",async()=>{
   const h=harness();try{
@@ -68,4 +68,29 @@ test("an expired approval cannot authorize a different language tool identity",a
 test("progress elapsed time restarts for new background work rather than counting hours of ready time",async()=>{
  const original=Date.now;let now=100000;Date.now=()=>now;const h=harness();
  try{h.runtime.refresh();await until(()=>h.count("start")===1);await tick();const id=h.calls.find(call=>call[0]==="start")[2];now+=3600000;h.emit({sessionId:id,kind:"ready",progress:{phase:"backend"}});assert.equal(h.statuses.at(-1).startedAt,now);const started=now;now+=2000;h.emit({sessionId:id,kind:"ready",progress:{phase:"indexing"}});assert.equal(h.statuses.at(-1).startedAt,started);}finally{h.runtime.dispose();Date.now=original;}
+});
+
+
+test("conflicting providers stay visible and idle until a project-scoped choice is made",async()=>{
+ const other={...provider,qualifiedId:"dev.asterlyn.lsp:alternative",serverId:"android-alt",label:"Alternative"};
+ const data=new Map(),storage={getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value)};
+ const h=harness({providers:[provider,other],storage});
+ try{
+  h.runtime.refresh();await tick();assert.equal(h.factory(handle),null);assert.equal(h.count("prepare"),0);assert.equal(h.statuses.length,0);
+  h.runtime.selectProvider("kotlin",other.qualifiedId);await tick();
+  const port=h.factory(handle);assert.ok(port);port.open(handle,{version:1,text:"class Main"});await until(()=>h.count("prepare")>0);
+  assert.equal(h.calls.find(c=>c[0]==="prepare")[3],"android-alt");await until(()=>h.count("start")===1);
+  h.providers=[provider];h.runtime.refresh();await tick();assert.equal(h.factory(handle),null,"a removed explicit selection must not silently switch providers");
+  h.runtime.selectProvider("kotlin",provider.qualifiedId);await until(()=>h.count("start")===2);
+ }finally{h.runtime.dispose();}
+ const next=harness({providers:[provider,other],storage});
+ try{next.runtime.refresh();assert.ok(next.factory(handle));next.scope={root:"/other",generation:2};next.runtime.refresh();assert.equal(next.factory(handle),null,"another project needs its own choice");}finally{next.runtime.dispose();}
+});
+
+test("a partial native profile remains distinct from an unavailable service",async()=>{
+ const h=harness();try{h.runtime.refresh();await until(()=>h.count("start")===1);const id=h.calls.find(c=>c[0]==="start")[2];
+  h.emit({sessionId:id,kind:"ready",code:"java-analysis-awaiting-kotlin",progress:{phase:"backend"}});
+  assert.equal(h.statuses.at(-1).state,"partial");
+  h.emit({sessionId:id,kind:"ready",progress:{phase:"ready"}});assert.equal(h.statuses.at(-1).state,"ready");
+ }finally{h.runtime.dispose();}
 });

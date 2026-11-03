@@ -121,14 +121,14 @@ class DefinitionGesture {
     const missingDefinition = kind === "definition" && !result.locations.length && !result.invalid && !result.limited;
     // Servers can return no definition when the pointer is already on its declaration.
     // Ask the semantic service for usages before reporting an unresolved symbol.
-    if (kind === "definition" && !result.invalid && !result.limited && (missingDefinition || (result.locations.length === 1 && isCurrentSymbolDefinition(result.locations[0]!, uri, symbol)))) {
+    if (kind === "definition" && result.coverage.state!=="partial" && !result.invalid && !result.limited && (missingDefinition || (result.locations.length === 1 && isCurrentSymbolDefinition(result.locations[0]!, uri, symbol)))) {
       kind = "references"; response = await request(); if (failed()) return;
       if (!this.current(token, version)) { trace("discarded"); return; }
       result = normalizeDefinitionTargets(response, kind);
     }
     if (!result.locations.length) {
       trace(result.invalid ? "invalid" : "empty");
-      ui?.status(result.invalid ? ui.copy().invalidDefinition : missingDefinition ? ui.copy().noDefinition : kind === "references" ? ui.copy().noReferences : ui.copy().noDefinition, "warning"); return;
+      ui?.status(result.invalid ? ui.copy().invalidDefinition : result.coverage.state!=="complete" ? ui.copy().incompleteEmpty : missingDefinition ? ui.copy().noDefinition : kind === "references" ? ui.copy().noReferences : ui.copy().noDefinition, "warning"); return;
     }
     const referenceAnalysis=kind==="references"?await this.context.port.analyzeReferences?.(result.locations,version).catch(()=>null)??undefined:undefined;
     if(!this.current(token,version)){trace("discarded");return;}
@@ -137,7 +137,7 @@ class DefinitionGesture {
       trace("selected", result.locations.length);
       this.context.port.navigate?.(location);
     };
-    if (result.locations.length === 1 && !result.limited && intent !== "references"&&!referenceAnalysis?.imports.includes(0)) { navigate(result.locations[0]!); return; }
+    if (result.locations.length === 1 && result.coverage.state!=="partial" && !result.limited && intent !== "references"&&!referenceAnalysis?.imports.includes(0)) { navigate(result.locations[0]!); return; }
     trace("choices", result.locations.length);
     if (!ui) return;
     if(!this.picker){const {LanguageLocationPicker}=await import("./language-location-picker.ts");if(!this.current(token,version)){trace("discarded");return;}this.picker=new LanguageLocationPicker();}
@@ -147,8 +147,8 @@ class DefinitionGesture {
     const caret = this.view.coordsAtPos(pos);
     this.picker.open(this.document, anchor ?? { x: caret?.left ?? 0, y: caret?.bottom ?? 0 }, result.locations, {
       referenceImports:kind==="references"?referenceAnalysis?.imports??[]:undefined,
-      openInWindow:this.context.port.openInWindow?(selected,excludeImports)=>{if(this.current(token,version))this.context.port.openInWindow?.({referenceAnalysis,excludeImports,selectedIndex:selected?result.locations.indexOf(selected):0,kind,query:word?this.view.state.doc.sliceString(word.from,word.to).slice(0,256):"",locations:result.locations,limited:result.limited},version);}:undefined,
-      title, limited: result.limited, copy: ui.copy(), current: () => this.current(token, version), select: navigate,
+      openInWindow:this.context.port.openInWindow?(selected,excludeImports)=>{if(this.current(token,version))this.context.port.openInWindow?.({referenceAnalysis,excludeImports,selectedIndex:selected?result.locations.indexOf(selected):0,kind,query:word?this.view.state.doc.sliceString(word.from,word.to).slice(0,256):"",locations:result.locations,limited:result.limited,coverage:result.coverage},version);}:undefined,
+      title, coverage:result.coverage, limited: result.limited, copy: ui.copy(), current: () => this.current(token, version), select: navigate,
       dismissed: () => { this.choosing = false; }, restoreFocus: () => { if (this.context.active()) this.view.focus(); },
     });
   }

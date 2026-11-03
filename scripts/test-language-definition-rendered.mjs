@@ -56,7 +56,7 @@ try {
     await page.keyboard.press("Escape");
    }
    await reset("emptyDefinitionNoReferences"); await click();
-   await page.waitForFunction(() => window.definitionFixture.state.statuses.some(status => status.message === "No definition was returned. Check that language services are enabled."));
+   await page.waitForFunction(() => window.definitionFixture.state.statuses.some(status => status.message === "No locations returned; analysis coverage is incomplete or unconfirmed."));
    assert.equal((await snap()).active, "source.ts"); assert.equal((await snap()).requests.length, 2);
    await reset("invalidDefinition"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some(status => status.kind === "warning"));
    assert.equal((await snap()).requests.length, 1, `${name}: malformed definition results must not trigger reference fallback`);
@@ -66,7 +66,7 @@ try {
    await page.keyboard.press('Escape');
    await reset("oneReference"); await page.locator(".cm-content").click(); await page.keyboard.press("Shift+F12"); await page.waitForSelector('.language-location-picker'); assert.equal(await page.getByRole("option").count(), 1); assert.equal((await snap()).requests[0].method, "textDocument/references"); await page.keyboard.press("Escape");
    await reset("oneReference"); await page.locator(".cm-content").click(); await page.keyboard.press("Alt+F7"); await page.waitForSelector('.language-location-picker'); assert.equal((await snap()).requests[0].method, "textDocument/references"); await page.keyboard.press("Escape");
-   await reset("noReferences"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message === "No references were found.")); assert.equal((await snap()).active, "source.ts");
+   await reset("noReferences"); await click(); await page.waitForFunction(() => window.definitionFixture.state.statuses.some((status) => status.message === "No locations returned; analysis coverage is incomplete or unconfirmed.")); assert.equal((await snap()).active, "source.ts");
    await reset("manyReferences"); await page.locator(".cm-content").click(); await page.keyboard.press("Shift+F12"); await page.waitForSelector('.language-location-picker'); assert.equal(await page.getByRole("option").count(), 512); assert.match(await page.getByRole("status").innerText(), /first 512/u);
    const pickerBounds = await page.locator('.language-location-picker').boundingBox(), viewport = page.viewportSize(); assert.ok(pickerBounds.x >= 0 && pickerBounds.y >= 0 && pickerBounds.x + pickerBounds.width <= viewport.width && pickerBounds.y + pickerBounds.height <= viewport.height, `${name}: picker must fit in the viewport`);
    await page.keyboard.press("End"); assert.equal(await page.getByRole("option").last().getAttribute("aria-selected"), "true");

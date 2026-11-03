@@ -1,3 +1,4 @@
+import type {LanguageResultCoverage} from "./language-result-coverage.ts";
 /** Framework-neutral bridge between an editable CodeMirror document and the host LSP session. */
 export interface EditorLanguageServiceHandle {
   readonly tabId: string;
@@ -24,7 +25,7 @@ export interface EditorLanguageServiceLocation { readonly readonlySource?:Editor
 export interface EditorLocationPreview {readonly before:string;readonly found:string;readonly after:string;readonly leading:boolean;readonly trailing:boolean;}
 /** Host presentation metadata, never sent to a language server or plugin. */
 export interface EditorReferenceAnalysis {readonly imports:readonly number[];readonly previews:readonly {readonly index:number;readonly preview:EditorLocationPreview|null}[];}
-export interface EditorLanguageLocationResults {readonly referenceAnalysis?:EditorReferenceAnalysis;readonly excludeImports?:boolean;readonly selectedIndex?:number;readonly kind:"definition"|"references";readonly query:string;readonly locations:readonly EditorLanguageServiceLocation[];readonly limited:boolean;}
+export interface EditorLanguageLocationResults {readonly coverage?:LanguageResultCoverage;readonly referenceAnalysis?:EditorReferenceAnalysis;readonly excludeImports?:boolean;readonly selectedIndex?:number;readonly kind:"definition"|"references";readonly query:string;readonly locations:readonly EditorLanguageServiceLocation[];readonly limited:boolean;}
 export interface EditorLanguageLocationsPublication extends EditorLanguageLocationResults {readonly workspaceRoot:string;readonly workspaceGeneration:number;}
 export interface EditorLanguageServiceCompletionItem { readonly label: string; readonly detail?: string; readonly kind?: number; readonly insertText?: string; readonly textEdit?: { readonly range: { readonly start: EditorLanguageServicePosition; readonly end: EditorLanguageServicePosition }; readonly newText: string }; readonly insertReplaceEdit?: unknown; readonly additionalTextEdits?: readonly unknown[]; readonly command?: unknown; readonly insertTextFormat?: number; }
 

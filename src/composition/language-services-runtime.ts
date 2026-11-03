@@ -1,3 +1,5 @@
+import type {RegisteredPluginContribution} from "../application/plugins/plugin-types.ts";
+import {LanguageProviderPreferences,selectLanguageProvider,type ProviderPreferenceStorage} from "../application/language-services/provider-selection.ts";
 import {workspaceFileUri} from "../application/language-services/workspace-file-uri.ts";
 export {workspaceFileUri} from "../application/language-services/workspace-file-uri.ts";
 import type { PluginContributionRegistry } from "../application/plugins/index.ts";
@@ -17,6 +19,7 @@ export function languageWorkspaceForWindow(session: Pick<WindowSession, "workspa
 }
 
 export interface LanguageServicesRuntimeOptions {
+  readonly providerStorage?:ProviderPreferenceStorage;
   readonly host?: HTMLElement;
   readonly copy?: ()=>LanguageServiceCopy;
   readonly registerCommand?: (command:CommandDescriptor)=>()=>void;
@@ -36,6 +39,11 @@ export interface LanguageServicesRuntimeOptions {
 }
 const LANGUAGES: Readonly<Record<string, string>> = { java:"java", kt:"kotlin", kts:"kotlin", groovy:"groovy", gradle:"groovy", rs: "rust", ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascriptreact" };
 export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOptions) {
+  let storage=options.providerStorage;
+  try{storage??=typeof localStorage!=="undefined"?localStorage:undefined;}catch{/* Persistence is optional. */}
+  const preferences=new LanguageProviderPreferences(storage);
+  const providersFor=(languageId:string)=>options.registry.list().filter((item):item is Extract<RegisteredPluginContribution,{kind:"language-service"}>=>item.kind==="language-service"&&item.languageIds.includes(languageId));
+  const providerFor=(languageId:string)=>{const workspace=options.workspace();return selectLanguageProvider(providersFor(languageId),workspace?preferences.get(workspace.root,languageId):null).provider;};
   let disposed=false,epoch=0,suspended:string|null=null,key="";
   const projectKey=()=>JSON.stringify(options.workspace());
   const states=new Map<string,LanguageServiceStatus>();
@@ -54,21 +62,21 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     const extension = document.workspacePath.match(/\.([^.\/]+)$/u)?.[1];
     const languageId = extension ? LANGUAGES[extension] : undefined;
     const providers = options.registry.list().filter((entry) => entry.kind === "language-service" && languageId && entry.languageIds.includes(languageId) && entry.extensions.includes(`.${extension}`));
-    if (providers.length !== 1 || !languageId) return null;
-    const provider = providers[0]!; if (provider.kind !== "language-service") return null; const uri = workspaceFileUri(workspace.root, document.workspacePath);
+    if (!languageId) return null;
+    const provider = providerFor(languageId);if(!provider||!providers.some(item=>item.qualifiedId===provider.qualifiedId))return null; if (provider.kind !== "language-service") return null; const uri = workspaceFileUri(workspace.root, document.workspacePath);
     return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion, serverId: provider.serverId } : null;
   }, options.native, options.reportError, options.navigate, event=>{if(debugTracing)options.definitionDiagnostic?.(event);}, options.approvalDiagnostic,publish,options.openInWindow,options.readReferenceSource);
   const view=options.host&&options.copy?new LanguageServiceStatusView(options.host,options.copy,{
-    retry:()=>{void retry().catch(options.reportError);},forget:()=>{void forget();},debug:enabled=>{void setDebug(enabled);},error:options.reportError,
+    selectProvider:(language,id)=>{selectProvider(language,id);},retry:()=>{void retry().catch(options.reportError);},forget:()=>{void forget();},debug:enabled=>{void setDebug(enabled);},error:options.reportError,
   }):null;
-  function providerLabel(state:LanguageServiceStatus):string{const provider=options.registry.list().find(item=>item.kind==="language-service"&&item.pluginId===state.scope.pluginId&&item.serverId===(state.scope.serverId??"typescript"));return provider?.kind==="language-service"?provider.label:state.scope.serverId??"Language services";}
+  function providerLabel(state:LanguageServiceStatus):string{if(state.selectionKey)return state.selectionKey;const provider=options.registry.list().find(item=>item.kind==="language-service"&&item.pluginId===state.scope.pluginId&&item.serverId===(state.scope.serverId??"typescript"));return provider?.kind==="language-service"?provider.label:state.scope.serverId??"Language services";}
   function renderStatus(){view?.update([...states.values()].map(state=>({ ...state,label:providerLabel(state)})),debugTracing);}
   const scopeCurrent=(scope:import("../features/language-services/language-service-client.ts").LanguageConsentScope)=>{
-    const workspace=options.workspace();return workspace?.root===scope.workspaceRoot&&workspace.generation===scope.workspaceGeneration&&options.registry.list().some(item=>item.kind==="language-service"&&item.pluginId===scope.pluginId&&item.pluginVersion===scope.providerVersion&&item.serverId===(scope.serverId??"typescript"));
+    const workspace=options.workspace();return workspace?.root===scope.workspaceRoot&&workspace.generation===scope.workspaceGeneration&&options.registry.list().some(item=>item.kind==="language-service"&&item.pluginId===scope.pluginId&&item.pluginVersion===scope.providerVersion&&item.serverId===(scope.serverId??"typescript")&&item.languageIds.some(language=>providerFor(language)?.qualifiedId===item.qualifiedId));
   };
   async function warm(token:number){
     const workspace=options.workspace();if(!workspace||!options.native.workspace||suspended===projectKey())return;
-    const providers=options.registry.list().filter(item=>item.kind==="language-service"&&item.serverId!=="typescript"&&item.serverId!=="rust-analyzer");
+    const providers=options.registry.list().filter(item=>item.kind==="language-service"&&item.serverId!=="typescript"&&item.serverId!=="rust-analyzer"&&item.languageIds.some(language=>providerFor(language)?.qualifiedId===item.qualifiedId));
     if(!options.registry.list().some(item=>item.kind==="language-service"))return;
     try{
       const state=await options.native.workspace(workspace.root);
@@ -87,9 +95,17 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   const refresh = () => {
     const workspace = options.workspace();
     if(shownProject!==projectKey()){shownProject=projectKey();states.clear();suspended=null;}
-    for(const [id,state] of states)if(!scopeCurrent(state.scope))states.delete(id);
+    for(const [id,state] of states)if(id.startsWith("provider:")||!scopeCurrent(state.scope))states.delete(id);
+    if(workspace){
+      const languages=new Set(options.registry.list().flatMap(item=>item.kind==="language-service"?item.languageIds:[]));
+      for(const language of languages){const candidates=providersFor(language),selection=selectLanguageProvider(candidates,preferences.get(workspace.root,language));
+        if(selection.conflict||candidates.length>1){const first=selection.provider??candidates[0];if(first?.kind!=="language-service")continue;
+          states.set(`provider:${language}`,{scope:{workspaceRoot:workspace.root,workspaceGeneration:workspace.generation,pluginId:first.pluginId,providerVersion:first.pluginVersion,serverId:first.serverId},sessionId:null,state:selection.provider?"provider-selected":"conflict",code:selection.provider?undefined:"language-provider-conflict",startedAt:Date.now(),selectionKey:language,choices:candidates.map(item=>({id:item.qualifiedId,label:item.label})),selectedProvider:preferences.get(workspace.root,language)??""});
+        }
+      }
+    }
     renderStatus();
-    const next = JSON.stringify([workspace, options.registry.list().filter((item) => item.kind === "language-service").map((item) => [item.qualifiedId, item.pluginVersion, item.serverId])]);
+    const next = JSON.stringify([workspace, options.registry.list().filter((item) => item.kind === "language-service").map((item) => [item.qualifiedId, item.pluginVersion, item.serverId,item.languageIds.map(language=>workspace?preferences.get(workspace.root,language):null)])]);
     if (key === next) return;
     key = next; factory.reconcile((info) => workspace?.root === info.workspaceRoot && workspace.generation === info.workspaceGeneration
       && !options.registry.list().some((item) => item.kind === "language-service" && item.pluginId === info.pluginId && item.pluginVersion !== info.providerVersion),scopeCurrent);
@@ -98,6 +114,10 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     options.bind((handle) => factory(handle));
     void warm(++epoch);
   };
+  function selectProvider(language:string,id:string){
+    const workspace=options.workspace();if(!workspace||!providersFor(language).some(item=>item.qualifiedId===id))return;
+    preferences.set(workspace.root,language,id);key="";factory.reconcile(scopeCurrent,scopeCurrent);refresh();
+  }
   async function retry(){
     const project=projectKey();++epoch;suspended=null;await factory.restart();
     if(disposed||project!==projectKey())return;states.clear();key="";refresh();
@@ -118,7 +138,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   ] as const).map(([id,title,execute])=>options.registerCommand!({id:commandId(id),category:"workbench",userBindingScopes:WORKBENCH_FOCUS_SCOPES,detail:()=>"",title:()=>options.copy!().workspaceStatus[title],availability:()=>({enabled:options.workspace()!==null}),execute:async()=>{await execute();}})):[];
   const releaseDebug=options.native.subscribeDebug?.(enabled=>{debugTracing=enabled;renderStatus();});
   const release = options.registry.subscribe(refresh);
-  return { refresh,retry,forget,setDebug,revoke: (pluginId: string) => { factory.revoke(pluginId); }, dispose: () => { disposed=true;++epoch;release();releaseDebug?.();commandReleases.forEach(release=>release());view?.dispose();options.bind(null); factory.dispose(); } };
+  return { refresh,retry,forget,setDebug,selectProvider,revoke: (pluginId: string) => { factory.revoke(pluginId); }, dispose: () => { disposed=true;++epoch;release();releaseDebug?.();commandReleases.forEach(release=>release());view?.dispose();options.bind(null); factory.dispose(); } };
 }
 export function languageExecutionConfirmation(review: Parameters<NativeLanguageServiceBridge["confirm"]>[0], chinese: boolean): ApplicationConfirmationRequest {
   if (!["typescript", "rust-analyzer"].includes(review.serverId)) return chinese ? {

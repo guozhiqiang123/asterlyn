@@ -13,3 +13,6 @@
 .language-service-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 12px; }
 .language-service-details label { display: flex; gap: 7px; align-items: center; margin-block: 8px; }
 .language-service-details progress { width: 100%; }
+
+.language-service-status[data-state="conflict"] { border-bottom: 1px solid var(--danger); }
+.language-service-list select { width: 100%; min-width: 0; font: inherit; color: inherit; background: var(--bg-panel); }

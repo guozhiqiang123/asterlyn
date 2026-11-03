@@ -1,3 +1,4 @@
+import {languageResultCoverage, type LanguageResultCoverage} from "../../protocol/language-result-coverage.ts";
 import type { EditorLanguageServiceLocation, EditorLanguageServicePosition } from "../../protocol/editor-language-service.ts";
 export const MAX_DEFINITION_TARGETS = 16;
 /** File identity comparison for catalog lookup; only the catalog file is ever opened. */
@@ -16,11 +17,14 @@ function point(value: unknown): EditorLanguageServicePosition | null {
   const p = value as Partial<EditorLanguageServicePosition> | null;
   return p && Number.isSafeInteger(p.line) && Number.isSafeInteger(p.character) && Number(p.line) >= 0 && Number(p.character) >= 0 && Number(p.line) <= 0xffff_ffff && Number(p.character) <= 0xffff_ffff ? { line: p.line!, character: p.character! } : null;
 }
-export function normalizeDefinitionTargets(value: unknown, kind: "definition" | "references" = "definition"): { locations: readonly EditorLanguageServiceLocation[]; limited: boolean; invalid: boolean } {
+export function normalizeDefinitionTargets(value: unknown, kind: "definition" | "references" = "definition"): { locations: readonly EditorLanguageServiceLocation[]; limited: boolean; invalid: boolean; coverage:LanguageResultCoverage } {
   const maxTargets = kind === "references" ? 512 : MAX_DEFINITION_TARGETS, maxScan = kind === "references" ? 512 : 128;
+  const wrapped=value&&typeof value==="object"&&!Array.isArray(value)&&"locations" in value?value as {locations:unknown;coverage?:unknown;limited?:unknown}:null;
+  const coverage=languageResultCoverage(wrapped?.coverage);
+  value=wrapped?wrapped.locations:value;
   const raw = value === null || value === undefined ? [] : Array.isArray(value) ? value : [value];
   const locations: EditorLanguageServiceLocation[] = [], seen = new Set<string>();
-  let invalid = false, limited = raw.length > maxScan;
+  let invalid = !!wrapped&&!Array.isArray(value), limited = raw.length > maxScan || wrapped?.limited===true;
   for (const item of raw.slice(0, maxScan)) {
     if (!item || typeof item !== "object") { invalid = true; continue; }
     const uri = "targetUri" in item ? item.targetUri : item.uri;
@@ -36,7 +40,7 @@ export function normalizeDefinitionTargets(value: unknown, kind: "definition" | 
     if (locations.length === maxTargets) { limited = true; continue; }
     locations.push({ uri: new URL(uri).href, range: { start, end }, ...(virtual?{readonlySource:{text:source.text,path:source.path,languageId:source.languageId}}:{}) });
   }
-  return { locations, limited, invalid };
+  return { locations, limited, invalid, coverage:invalid?{state:"partial",reasons:["invalid-results"]}:coverage };
 }
 export function isCurrentSymbolDefinition(location: EditorLanguageServiceLocation, uri: string | undefined, symbol: EditorLanguageServiceLocation["range"] | null): boolean {
   if (!uri || !symbol || definitionFileKey(location.uri) !== definitionFileKey(uri)) return false;

@@ -28,7 +28,7 @@ test("definition targets reject malformed ranges and authority-bearing URIs and 
   }
   const result = normalizeDefinitionTargets(Array.from({ length: 200 }, (_, i) => location(`file:///repo/${i}.ts`)));
   assert.equal(result.locations.length, 16); assert.equal(result.limited, true);
-  assert.deepEqual(normalizeDefinitionTargets(null), { locations: [], limited: false, invalid: false });
+  assert.deepEqual(normalizeDefinitionTargets(null), { locations: [], limited: false, invalid: false,coverage:{state:"unknown",reasons:["provider-not-reported"]} });
   assert.equal(definitionFileKey("file:///c:/x%20y.ts"), "/C:/x y.ts");
 });
 test("UTF-16 target positions preserve BOM/CRLF and reject split surrogates/out-of-range offsets", () => {

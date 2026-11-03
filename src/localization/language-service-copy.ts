@@ -1,6 +1,7 @@
 import {EN_OPEN_IN_WINDOW,ZH_OPEN_IN_WINDOW} from "./result-window-copy.ts";
 import { EN_LANGUAGE_STATUS, ZH_LANGUAGE_STATUS, type LanguageServiceStatusCopy } from "./language-service-status-copy.ts";
 export interface LanguageServiceCopy {
+  coverage:Record<"complete"|"partial"|"unknown",string>;incompleteEmpty:string;
   excludeImports:string;
   openInWindow:string;referencesTitle:string;definitionsTitle:string;
   workspaceStatus:LanguageServiceStatusCopy;
@@ -11,6 +12,7 @@ export interface LanguageServiceCopy {
   findingReferences: string; chooseReference: string; noReferences: string; filterLocations: string; noMatchingLocations: string; limitedLocations: string;
 }
 export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  coverage:{complete:"Analysis coverage confirmed",partial:"Results cover part of the project",unknown:"The provider has not confirmed analysis coverage"},incompleteEmpty:"No locations returned; analysis coverage is incomplete or unconfirmed.",
   excludeImports:"Exclude imports",
   openInWindow:EN_OPEN_IN_WINDOW,referencesTitle:"References",definitionsTitle:"Definitions",
   workspaceStatus:EN_LANGUAGE_STATUS,
@@ -27,6 +29,7 @@ export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
   filterLocations: "Filter by file or path", noMatchingLocations: "No matching locations.", limitedLocations: "Showing the first {count} locations",
 };
 export const ZH_CN_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  coverage:{complete:"已确认分析覆盖范围",partial:"结果仅覆盖部分项目",unknown:"提供者尚未确认分析覆盖范围"},incompleteEmpty:"本次未返回位置；分析范围尚不完整或未确认。",
   excludeImports:"排除 import",
   openInWindow:ZH_OPEN_IN_WINDOW,referencesTitle:"引用",definitionsTitle:"定义",
   workspaceStatus:ZH_LANGUAGE_STATUS,

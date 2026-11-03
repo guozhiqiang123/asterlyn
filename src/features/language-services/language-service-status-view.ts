@@ -2,7 +2,7 @@ import type { LanguageServiceStatus } from "./language-service-client.ts";
 import type { LanguageServiceCopy } from "../../localization/language-service-copy.ts";
 
 type Status=LanguageServiceStatus & {label:string};
-const busy=(state:Status)=>["preparing","awaiting-approval","indexing"].includes(state.state)||(state.state==="ready"&&state.progress!==undefined&&!["ready","failed"].includes(state.progress.phase));
+const busy=(state:Status)=>["preparing","awaiting-approval","indexing"].includes(state.state)||((state.state==="ready"||state.state==="partial")&&state.progress!==undefined&&!["ready","failed"].includes(state.progress.phase));
 
 /** One persistent footer control; phase announcements exclude the once-per-second timer. */
 export class LanguageServiceStatusView {
@@ -26,8 +26,9 @@ export class LanguageServiceStatusView {
   private key="";
   private disposed=false;
   private returnFocus:HTMLElement|null=null;
-  constructor(host:HTMLElement,copy:()=>LanguageServiceCopy,actions:{retry():void;forget():void;debug(enabled:boolean):void;error(error:unknown):void}){
-    this.host=host;this.copy=copy;
+  private readonly actions:{selectProvider?(language:string,id:string):void};
+  constructor(host:HTMLElement,copy:()=>LanguageServiceCopy,actions:{selectProvider?(language:string,id:string):void;retry():void;forget():void;debug(enabled:boolean):void;error(error:unknown):void}){
+    this.actions=actions;this.host=host;this.copy=copy;
     const doc=host.ownerDocument;
     this.button=doc.createElement("button");this.button.id="language-service-status";this.button.type="button";this.button.hidden=true;this.button.className="language-service-status";this.button.setAttribute("aria-haspopup","dialog");this.button.setAttribute("aria-controls","language-service-details");this.button.setAttribute("aria-expanded","false");
     this.caption=doc.createElement("span");this.caption.setAttribute("role","status");this.caption.setAttribute("aria-live","polite");
@@ -53,9 +54,9 @@ export class LanguageServiceStatusView {
   }
   private stage(state:Status):string {
     const copy=this.copy().workspaceStatus;
-    const stage=(state.state==="indexing"||state.state==="ready")&&state.progress?state.progress.phase:state.state;
+    const stage=(state.state==="indexing"||state.state==="ready"||state.state==="partial")&&state.progress?state.progress.phase:state.state;
     const counts=state.progress?.completed===undefined?"":` · ${state.progress.completed}${state.progress.total===undefined?"":`/${state.progress.total}`} ${copy.units[state.progress.unit??"items"]}`;
-    const label=state.state==="ready"&&state.code&&(!state.progress||["ready","failed"].includes(state.progress.phase))?copy.partiallyReady:copy.stages[stage];
+    const label=(state.state==="ready"||state.state==="partial")&&state.code&&(!state.progress||["ready","failed"].includes(state.progress.phase))?copy.partiallyReady:copy.stages[stage];
     return `${label}${counts}`;
   }
   update(states:readonly Status[],debug:boolean):void{
@@ -64,7 +65,7 @@ export class LanguageServiceStatusView {
     if(!this.panel.isConnected)this.host.append(this.panel);
     const copy=this.copy().workspaceStatus;this.button.hidden=!states.length;this.button.title=copy.statusCommand;
     this.title.textContent=copy.title;this.closeButton.setAttribute("aria-label",copy.close);this.retryButton.textContent=copy.retry;this.forgetButton.textContent=copy.forget;this.debugLabel.textContent=copy.debug;this.debugHint.textContent=copy.debugHint;this.debug.checked=debug;
-    const primary=states.find(state=>state.state==="failed")??states.find(busy)??states[0];
+    const primary=states.find(state=>state.state==="failed"||state.state==="conflict")??states.find(busy)??states[0];
     const text=primary?`${copy.title}: ${this.stage(primary)}`:copy.empty;
     if(this.caption.textContent!==text)this.caption.textContent=text;
     this.button.dataset.state=primary?.state??"stopped";
@@ -73,7 +74,13 @@ export class LanguageServiceStatusView {
     if(this.key!==key){this.key=key;this.list.replaceChildren();
       if(!states.length)this.list.textContent=copy.empty;
       for(const state of states){const row=this.host.ownerDocument.createElement("section"),label=this.host.ownerDocument.createElement("strong"),stage=this.host.ownerDocument.createElement("span");label.textContent=state.label;stage.textContent=this.stage(state);row.append(label,stage);
-        if(state.state==="failed"||(state.state==="ready"&&state.code)){const detail=this.host.ownerDocument.createElement("small");detail.textContent=state.state==="failed"||state.progress?.phase==="failed"?copy.failure:copy.partial;row.append(detail);if(debug&&state.code){const code=this.host.ownerDocument.createElement("code");code.textContent=state.code;row.append(code);}}
+        if(state.state==="failed"||((state.state==="ready"||state.state==="partial")&&state.code)){const detail=this.host.ownerDocument.createElement("small");detail.textContent=state.state==="failed"||state.progress?.phase==="failed"?copy.failure:copy.partial;row.append(detail);if(debug&&state.code){const code=this.host.ownerDocument.createElement("code");code.textContent=state.code;row.append(code);}}
+        if(state.choices&&state.selectionKey){
+          const hint=this.host.ownerDocument.createElement("small"),select=this.host.ownerDocument.createElement("select");hint.textContent=copy.providerConflict;select.setAttribute("aria-label",`${copy.chooseProvider}: ${state.selectionKey}`);
+          const placeholder=this.host.ownerDocument.createElement("option");placeholder.value="";placeholder.textContent=copy.chooseProvider;select.append(placeholder);
+          for(const choice of state.choices){const option=this.host.ownerDocument.createElement("option");option.value=choice.id;option.textContent=choice.label;select.append(option);}
+          select.value=state.selectedProvider??"";select.addEventListener("change",()=>{this.actions.selectProvider?.(state.selectionKey!,select.value);if(!select.isConnected&&!this.panel.hidden)this.closeButton.focus();});row.append(hint,select);
+        }
         if(state.progress?.total!==undefined&&state.progress.completed!==undefined){const progress=this.host.ownerDocument.createElement("progress");progress.max=state.progress.total;progress.value=state.progress.completed;progress.setAttribute("aria-label",this.stage(state));row.append(progress);}this.list.append(row);
       }
     }

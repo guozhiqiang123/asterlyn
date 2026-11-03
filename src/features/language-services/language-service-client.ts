@@ -12,7 +12,8 @@ import type { LanguageServiceProgress } from "../../protocol/language-service.ts
 export type LanguageConsentScope = Pick<LanguageDocumentIdentity, "workspaceRoot" | "workspaceGeneration" | "pluginId" | "providerVersion" | "serverId">;
 export interface LanguageServiceStatus {
   scope: LanguageConsentScope; sessionId: string | null;
-  state: "preparing" | "awaiting-approval" | "declined" | "indexing" | "ready" | "failed" | "stopped";
+  choices?:readonly {id:string;label:string}[]; selectionKey?:string; selectedProvider?:string;
+  state: "provider-selected" | "conflict" | "partial" | "preparing" | "awaiting-approval" | "declined" | "indexing" | "ready" | "failed" | "stopped";
   progress?: LanguageServiceProgress; code?: string; startedAt: number;
 }
 export type LanguageServiceFactory = EditorLanguageServicePortFactory & { dispose(): void; reconcile(retainConsent?: (identity: LanguageConsentScope) => boolean, retainBackground?: (identity: LanguageConsentScope) => boolean): void; revoke(pluginId: string): void; warm(scope: LanguageConsentScope): Promise<void>; restart(): Promise<void> };
@@ -124,7 +125,7 @@ class Session {
   referenceCurrent(handle:EditorLanguageServiceHandle,version:number):boolean {const doc=this.docs.get(handleKey(handle));return !!doc&&this.current(doc)&&doc.latest.version===version;}
   private live():boolean{return !this.dead && (this.warmed || [...this.docs.values()].some(doc=>this.current(doc)));}
   private status(state:LanguageServiceStatus["state"],code?:string,progress?:LanguageServiceProgress):void {
-    const working=["preparing","awaiting-approval","indexing"].includes(state)||(state==="ready"&&progress!==undefined&&!["ready","failed"].includes(progress.phase));
+    const working=["preparing","awaiting-approval","indexing"].includes(state)||((state==="ready"||state==="partial")&&progress!==undefined&&!["ready","failed"].includes(progress.phase));
     if(working&&(!this.working||(this.lastState==="awaiting-approval"&&state!=="awaiting-approval")))this.startedAt=Date.now();
     this.working=working;this.lastState=state;
     try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
@@ -264,7 +265,7 @@ class Session {
       if(this.starting && !this.sessionId && event.kind!=="diagnostics"){if(this.earlyEvents.size>=16)this.earlyEvents.clear();this.earlyEvents.set(event.sessionId,event);}
       return;
     }
-    if(event.kind!=="diagnostics")this.status(event.kind==="terminated"||event.kind==="degraded"?"failed":event.kind,event.code,event.progress);
+    if(event.kind!=="diagnostics")this.status(event.kind==="terminated"||event.kind==="degraded"?"failed":event.kind==="ready"&&event.code?"partial":event.kind,event.code,event.progress);
     if (event.kind === "terminated") { this.sessionId = null; this.failed = true; for (const doc of this.docs.values()) this.publish(doc, []); return; }
     for (const doc of this.docs.values()) if (this.current(doc) && event.uri === doc.info.uri && event.version === doc.latest.version && event.diagnostics) this.publish(doc, event.diagnostics);
   }

@@ -159,3 +159,24 @@ pointer-triggered async work. This is a short local sample, not a long-running m
 The signed native bundle passed exact-plugin startup checks and replaced `/Applications/Asterlyn.app`
 with its root inode preserved. Both saved-icon launches reached frontend readiness; the installed
 executable matched the accepted bundle. Receipt: `/tmp/asterlyn-hover-install/installation.json`.
+
+
+## P0 lifecycle and result projections (2026-11-03)
+
+Language profile status distinguishes partially available and provider-selection-required from
+unavailable. The current contribution contract exposes a profile's supported languages as one
+feature bundle; project preferences select an admitted profile per language. No preference grants
+execution authority, and an absent explicit selection never silently falls back. Conflict resolution
+uses the existing status command and a keyboard-accessible selector. Feature-specific selection can
+be added only when a negotiated descriptor actually advertises different feature sets.
+
+Location normalization separates display quantity limits from semantic coverage (`complete`,
+`partial`, `unknown`) and fixed reason codes. Legacy LSP arrays carry unknown coverage. A supported
+location wrapper can report coverage; malformed metadata becomes unknown, and discarded invalid
+locations cannot retain a complete claim. The chooser and Find preserve the same coverage while
+filtering imports or paths and switching tree/flat projections. Empty unconfirmed results are not
+reported as a confirmed absence of references. No existing plugin package changes its wire response
+in this milestone; standard TS/JS/Rust and older Android responses remain accepted as unknown.
+
+See the [evolution plan](../../engineering/2026-11-03-openidea-inspired-evolution-plan.md) for the
+separate adapter/backend recovery owners and delivery evidence.

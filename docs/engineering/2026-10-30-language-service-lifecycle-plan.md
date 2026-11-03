@@ -108,3 +108,16 @@ Gradle worker 的失败只输出安全原因分类和异常类型链，不回传
 ### 最终收尾
 
 正式安装 PID 73172 的两项精确包均健康；boostCleaner 未打开任何源码的情况下完成 25 模块预热并达到 ready。该会话记录 `outcome=reused`，详细追踪为 0；最终 1366 项脚本回归全部通过。客户端保留运行，后续可直接人工验收。
+
+
+## P0 follow-up (2026-11-03)
+
+The [OpenIDEA-informed plan](2026-11-03-openidea-inspired-evolution-plan.md) extends the existing
+progress model with partial availability and visible provider conflicts. Selection is remembered per
+project/language, does not grant authority, and stops old bindings before rebind. The current plugin
+contract exposes all language features together; this does not invent per-feature plugin metadata.
+
+Location coverage is kept separate from display truncation. Legacy providers remain unknown, and
+empty unknown/partial results no longer imply confirmed absence. Both chooser and Find retain that
+metadata through import/path filters and projections. Detailed recovery and package acceptance are
+recorded separately after O2; these frontend checks alone do not claim installed runtime acceptance.

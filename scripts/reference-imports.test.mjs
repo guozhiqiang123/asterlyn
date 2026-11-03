@@ -54,7 +54,7 @@ test('unknown sources remain in the full result, late classification cannot repl
 test('Find filters original indices and counts, restores import-only files and retains full snapshots',()=>{
  const locations=['import.ts','usage.ts','usage.ts'].map((file,i)=>({uri:'file:///repo/'+file,range:{start:{line:i,character:0},end:{line:i,character:6}}}));
  const c=new FindResultsController();c.installLocations({workspaceRoot:'/repo',workspaceGeneration:1,kind:'references',query:'Target',locations,limited:false,referenceAnalysis:{imports:[0,1],previews:[]}});
- assert.equal(c.state.snapshot.locations.length,3);assert.equal(c.selectedLocation().range.start.line,2);assert.equal(c.state.resultTree.length,1);assert.match(renderFindResults(c.state),/1 match</);assert.equal(c.select(0),false);
+ assert.equal(c.state.snapshot.locations.length,3);assert.equal(c.selectedLocation().range.start.line,2);assert.equal(c.state.resultTree.length,1);assert.match(renderFindResults(c.state),/1 match(?: ·|<)/);assert.equal(c.select(0),false);
  c.setExcludeImports(false);assert.equal(c.state.resultTree.length,2);assert.equal(c.select(0),true);c.setExcludeImports(true);assert.equal(c.state.selectedIndex,2);
  c.setReferenceAnalysis({imports:[0,1,2],previews:[]});assert.equal(c.state.resultTree.length,0);assert.equal(c.selectedLocation(),null);assert.match(renderFindResults(c.state),/No matching locations/);assert.match(renderFindResults(c.state),/data-find-exclude-imports checked/);
  c.setExcludeImports(false);assert.equal(c.state.resultTree.length,2);assert.equal(c.state.snapshot.locations.length,3);

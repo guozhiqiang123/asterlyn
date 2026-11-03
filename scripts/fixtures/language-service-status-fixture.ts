@@ -11,7 +11,7 @@ let debug=false,view:LanguageServiceStatusView;
 let runtime:ReturnType<typeof createLanguageServicesRuntime>|null=null,providerChanged=()=>{},providerEnabled=true,starts=0;
 const scope={workspaceRoot:"/repo",workspaceGeneration:1,pluginId:"dev.asterlyn.lsp",providerVersion:"0.3.8",serverId:"android-jvm"};
 let state:any={scope,sessionId:"session-1",label:"Java / Kotlin",state:"indexing",startedAt:Date.now()-2000,progress:{phase:"model"}};
-const mount=()=>{view=new LanguageServiceStatusView(document.querySelector("footer")!,()=>EN_US_LANGUAGE_SERVICE_COPY,{retry:()=>actions.push("retry"),forget:()=>actions.push("forget"),debug:value=>{debug=value;actions.push(`debug:${value}`);view.update([state],debug);},error:error=>{throw error;}});view.update([state],debug);};
+const mount=()=>{view=new LanguageServiceStatusView(document.querySelector("footer")!,()=>EN_US_LANGUAGE_SERVICE_COPY,{selectProvider:(language,id)=>actions.push(`provider:${language}:${id}`),retry:()=>actions.push("retry"),forget:()=>actions.push("forget"),debug:value=>{debug=value;actions.push(`debug:${value}`);view.update([state],debug);},error:error=>{throw error;}});view.update([state],debug);};
 mount();
 (window as any).languageStatusFixture={
  update(value:any){state={...state,...value};view.update([state],debug);},

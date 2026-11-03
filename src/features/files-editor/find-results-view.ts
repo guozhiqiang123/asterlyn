@@ -35,7 +35,7 @@ export function renderFindResults(
   const filter=snapshot.kind==="locations"&&snapshot.intent==="references"?`<label class="language-exclude-imports"><input type="checkbox" data-find-exclude-imports ${state.excludeImports?"checked":""}>${escapeHtml(catalog.editor.languageService.excludeImports)}</label>`:"";
   const selected=entries.findIndex(row=>row.id===state.resultSelection);
   return `<section class="find-results-panel find-location-results" aria-label="${escapeAttribute(catalog.navigation.findWindow)}">
-    ${findSummary(title,detail,filter)}
+    ${findSummary(title,detail+(snapshot.kind==="locations"&&snapshot.coverage.state!=="complete"?` · ${catalog.editor.languageService.coverage[snapshot.coverage.state]}`:""),filter)}
     <div class="find-results-list find-result-tree compact-file-tree ${tree?"tree":"flat"}" role="${tree?"tree":"listbox"}" tabindex="0" aria-label="${escapeAttribute(catalog.navigation.findResultsAria)}"${selected>=0?` aria-activedescendant="find-tree-row-${selected}"`:""}>${html||escapeHtml(catalog.editor.languageService.noMatchingLocations)}</div>
   </section>`;
 
