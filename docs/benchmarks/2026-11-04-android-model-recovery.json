@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-04T07:00:22.381651+00:00",
+  "hostProductCommit": "f8ed53327c135b471a57612fbab720b2c4d58024",
+  "additionalConcurrentFiles": {
+    "src/features/files-editor/editor-gutter.ts": "3881d73925c8ee71e8361432ed0ac616dbb83bbcb80ad84ba9e92f83b819593b",
+    "scripts/test-git-blame-rendered.mjs": "3c41f481007e9716dbd865e10e0cc5e051b41533730a3deae0764a81656b6232",
+    "docs/engineering/compact-git-blame-presentation-plan.md": "b37dda864af0948e338ace340f79e30b5303ba04618d122bb138fcf39af5b958"
+  },
+  "ownership": "Concurrent Git blame edits preserved in installed artifact and excluded from LSP commits; dirty build suffix includes those files and a dependency symlink.",
+  "packages": [
+    {
+      "id": "dev.asterlyn.android-gradle",
+      "version": "0.6.4",
+      "digest": "sha256:5897de800ced074eecedbc8f4ecf7ad8dcb7f82a983d4fa0dbb7485efc01f054"
+    },
+    {
+      "id": "dev.asterlyn.lsp",
+      "version": "0.3.14",
+      "digest": "sha256:51760a635e03a265f12820cd127c7e3d696c7b48544591ea67765eccf2c81c56"
+    }
+  ],
+  "checks": {
+    "hostScripts": 1441,
+    "hostNativeLibraryPassed": 173,
+    "hostNativeLibraryIgnored": 3,
+    "languageProcessFixturesPassed": 37,
+    "nativeActualAdapterTransientRetryPassed": 1,
+    "androidGradleTestsPassed": 79,
+    "lspTestsPassed": 32,
+    "canonicalAdmission": true,
+    "reproduciblePluginArchives": true,
+    "chromiumAndWebkitGutterRegression": true
+  },
+  "adapterRecovery": {
+    "checks": {
+      "selectedVariantFailure": true,
+      "noTerminalRetryLoop": true,
+      "inputDrivenRecovery": true,
+      "unsavedOverlaySurvives": true,
+      "crossModuleDefinition": true,
+      "sourceFilesUnchanged": true,
+      "cleanAdapterShutdown": true
+    },
+    "modelRequests": 2,
+    "moduleCount": 25,
+    "recoveryReadyMs": 215617,
+    "referenceCount": 69,
+    "peakRssKiB": 1879088,
+    "totalMs": 219733
+  },
+  "measurementScope": "Adapter cold preparation after supplied model; excludes separate Gradle import and desktop/WebKit. Sampled descendant RSS is not physical memory or a leak/soak measurement.",
+  "native": {
+    "receipt": {
+      "version": "0.1.25",
+      "executableSha256": "0f0f70f337b91f3cea566460f52d51f8144bacb9410c19f43e52219e8500db00",
+      "replacement": {
+        "rootIdentityPreserved": true,
+        "inode": "203606126",
+        "device": "16777234"
+      },
+      "firstLaunch": {
+        "pid": 59826,
+        "session": "session-1793774759895-59826-0",
+        "buildId": "f8ed53327c135b471a57612fbab720b2c4d58024-dirty-1793774573321",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      },
+      "reopen": {
+        "pid": 59929,
+        "session": "session-1793774761859-59929-0",
+        "buildId": "f8ed53327c135b471a57612fbab720b2c4d58024-dirty-1793774573321",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      }
+    },
+    "startup": {
+      "pid": 59455,
+      "session": "session-1793774686175-59455-0",
+      "buildId": "f8ed53327c135b471a57612fbab720b2c4d58024-dirty-1793774573321",
+      "frontendReady": true,
+      "healthyPackages": [
+        {
+          "id": "dev.asterlyn.android-gradle",
+          "version": "0.6.4",
+          "digest": "sha256:5897de800ced074eecedbc8f4ecf7ad8dcb7f82a983d4fa0dbb7485efc01f054"
+        },
+        {
+          "id": "dev.asterlyn.lsp",
+          "version": "0.3.14",
+          "digest": "sha256:51760a635e03a265f12820cd127c7e3d696c7b48544591ea67765eccf2c81c56"
+        }
+      ],
+      "errors": [
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        },
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        }
+      ]
+    },
+    "modelAcquisition": {
+      "attempt": 1,
+      "durationMs": 18880,
+      "generation": 1,
+      "bytes": 228341
+    },
+    "taskRefresh": {
+      "durationMs": 11126,
+      "status": "succeeded",
+      "exitCode": 0
+    },
+    "taskCount": 13676,
+    "selection": "android-run::app:installCleanx103Debug",
+    "modelAcquisitionsThroughRepeatedNavigationAndRefresh": 1,
+    "terminalDegradedEvents": 0,
+    "nativeKeyboardReferencePicker": {
+      "beforeTaskRefresh": 54,
+      "afterTaskRefresh": 54,
+      "excludeImports": true
+    },
+    "importClassification": [
+      {
+        "durationMs": 110,
+        "summary": "targets=69;files=15;imports=15"
+      },
+      {
+        "durationMs": 109,
+        "summary": "targets=69;files=15;imports=15"
+      },
+      {
+        "durationMs": 95,
+        "summary": "targets=69;files=15;imports=15"
+      }
+    ]
+  },
+  "archive": {
+    "path": "target/release/bundle/macos/Asterlyn-0.1.25-model-recovery-f8ed533-macos.app.zip",
+    "bytes": 25613792,
+    "sha256": "7f9d2a0be803757bcb11bb9436e370157e43c223de679ab9c895964c7de430fd"
+  },
+  "limits": [
+    "macOS arm64 local acceptance only; no Windows/Linux runtime claim",
+    "Cold preparation remains slow; no indexing speed improvement claimed",
+    "Unchanged terminal/environment errors require changed model inputs or explicit restart",
+    "Known stale recent-project directory validation errors remain outside this repair",
+    "No remote tag, push or Release publication"
+  ],
+  "machine": {
+    "os": "macOS-15.6.1-arm64-arm-64bit",
+    "architecture": "arm64",
+    "node": "v26.8.1",
+    "cpu": "Apple M2 Pro",
+    "memoryBytes": 17179869184
+  }
+}
