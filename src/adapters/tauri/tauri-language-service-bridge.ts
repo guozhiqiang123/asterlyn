@@ -1,3 +1,4 @@
+import {isNativeLanguageModel} from "../../protocol/native-language-validation.ts";
 import {validateLanguageReview,eventValue} from "./language-service-values.ts";
 import { languageServiceFailure,isLanguageServiceIndexingFailure } from "./language-service-failure.ts";
 import { invokeDesktopCommandUnvalidated as invoke } from "./desktop-command-adapter.ts";
@@ -23,6 +24,7 @@ export function createTauriLanguageServiceBridge(confirm: NativeLanguageServiceB
   const hash=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)))).map(byte=>byte.toString(16).padStart(2,"0")).join("").slice(0,16);
   return {
     workspace:async(workspaceRoot)=>{await Promise.all([ready,debugReady]);const value=await invoke("language_service_workspace_state",{workspaceRoot});assertLanguageServiceWorkspaceState(value);debugTracing=value.debugTracing;return value;},
+    setResources:async(workspaceRoot,compilerMaxMib)=>{const value=await invoke("set_language_service_resources",{workspaceRoot,compilerMaxMib});if(!isNativeLanguageModel("LanguageResourcePolicy",value))throw Error("Invalid resource policy");return value as import("../../protocol/generated-native-language-types.ts").LanguageResourcePolicy;},
     setDebug:async(enabled)=>{await invoke("set_language_service_debug",{enabled});debugTracing=enabled;},
     subscribeDebug:listener=>{debugSubscribers.add(listener);return()=>debugSubscribers.delete(listener);},
     forget:async(workspaceRoot)=>{await invoke("forget_language_service_consent",{workspaceRoot});},

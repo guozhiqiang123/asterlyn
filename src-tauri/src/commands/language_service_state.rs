@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 pub(crate) struct LanguageWorkspaceState {
     startup_profiles: Vec<LanguageStartupProfile>,
     debug_tracing: bool,
+    resources: asterlyn_language_service::application::resources::ResourcePolicy,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,7 +24,7 @@ pub(crate) async fn language_service_workspace_state(
     window: WebviewWindow,
     active: State<'_, ActiveWorkspaces>,
 ) -> Result<LanguageWorkspaceState, String> {
-    active
+    let root=active
         .resolve(window.label(), &workspace_root)
         .map_err(|_| "workspace is no longer active")?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -36,6 +37,7 @@ pub(crate) async fn language_service_workspace_state(
             .collect();
         Ok(LanguageWorkspaceState {
             startup_profiles,
+            resources: app.state::<LanguageServiceManager>().resource_policy(asterlyn_language_service::application::resources::preference(&resource_store(&app)?, &root)?)?,
             debug_tracing: app.state::<LanguageServiceManager>().debug_enabled(),
         })
     })
@@ -61,4 +63,17 @@ pub(crate) fn set_language_service_debug(
         serde_json::json!({"enabled":enabled}),
     )
     .map_err(|_| "language trace change could not be broadcast".into())
+}
+
+pub(super) fn resource_store(app:&AppHandle)->Result<std::path::PathBuf,String>{
+    Ok(crate::application::language_consent::app_store_path(app)?.with_file_name("language-resource-settings-v1.json"))
+}
+#[tauri::command]
+pub(crate) async fn set_language_service_resources(workspace_root:String,compiler_max_mib:Option<u32>,app:AppHandle,window:WebviewWindow,active:State<'_,ActiveWorkspaces>)->Result<asterlyn_language_service::application::resources::ResourcePolicy,String>{
+    let root=active.resolve(window.label(),&workspace_root).map_err(|_|"workspace is no longer active")?;
+    tauri::async_runtime::spawn_blocking(move||{
+        let policy=app.state::<LanguageServiceManager>().resource_policy(compiler_max_mib)?;
+        asterlyn_language_service::application::resources::remember(&resource_store(&app)?,&root,compiler_max_mib)?;
+        Ok(policy)
+    }).await.map_err(|_|"analysis resource settings failed")?
 }

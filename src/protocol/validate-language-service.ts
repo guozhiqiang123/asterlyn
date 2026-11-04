@@ -28,6 +28,7 @@ export function assertLanguageServiceReview(value: unknown, command: DesktopComm
 }
 export function assertLanguageServiceWorkspaceState(value: unknown, command: DesktopCommandName = "language_service_workspace_state"): asserts value is LanguageServiceWorkspaceState {
   const item=record(value,command);
+  if(item.resources!==undefined)assert(isNativeLanguageModel("LanguageResourcePolicy",item.resources),command,"invalid resource policy");
   assert(typeof item.debugTracing === "boolean",command,"debugTracing must be a boolean");
   assert(Array.isArray(item.startupProfiles)&&item.startupProfiles.length<=16,command,"invalid startup profiles");
   for(const entry of item.startupProfiles){const profile=record(entry,command);assert(profile.pluginId==="dev.asterlyn.lsp"&&typeof profile.serverId==="string"&&/^[a-z][a-z0-9.-]{0,127}$/u.test(profile.serverId),command,"invalid startup profile identity");}
@@ -35,7 +36,7 @@ export function assertLanguageServiceWorkspaceState(value: unknown, command: Des
 export function languageServiceProgress(value: unknown):LanguageServiceProgress|undefined {
   if(!value || typeof value!=="object" || Array.isArray(value))return undefined;
   const p=value as Record<string,unknown>;
-  if(Object.keys(p).some(key=>!["phase","completed","total","unit"].includes(key)) || !["model","sources","backend","indexing","refreshing","ready","failed"].includes(String(p.phase)))return undefined;
+  if(Object.keys(p).some(key=>!["phase","completed","total","unit"].includes(key)) || !["waiting","model","sources","backend","indexing","refreshing","ready","failed"].includes(String(p.phase)))return undefined;
   for(const key of ["completed","total"])if(p[key]!==undefined && (!Number.isSafeInteger(p[key])||Number(p[key])<0||Number(p[key])>1_000_000||(key==="total"&&p[key]===0)))return undefined;
   if(p.completed!==undefined&&p.total!==undefined&&Number(p.completed)>Number(p.total))return undefined;
   if(p.unit!==undefined&&!["modules","files","items"].includes(String(p.unit)))return undefined;
@@ -55,6 +56,7 @@ export function assertLanguageServiceResultEnvelope(value: unknown, command: Des
 
 
 export function validateLanguageServiceDesktopResult(validator: string, value: unknown, command: DesktopCommandName): boolean {
+  if (validator === "languageResourcePolicy") { assert(isNativeLanguageModel("LanguageResourcePolicy",value),command,"invalid resource policy");return true; }
   if (validator === "languageServiceWorkspaceState") { assertLanguageServiceWorkspaceState(value,command);return true; }
   if (validator === "languageServiceReview") { assertLanguageServiceReview(value, command); return true; }
   if (validator === "languageServiceResultEnvelope") { assertLanguageServiceResultEnvelope(value, command); return true; }

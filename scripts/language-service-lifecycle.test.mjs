@@ -6,7 +6,7 @@ async function until(check){for(let n=0;n<200&&!check();n++)await tick();assert.
 const provider={kind:"language-service",qualifiedId:"dev.asterlyn.lsp:android",pluginId:"dev.asterlyn.lsp",pluginVersion:"0.3.7",serverId:"android-jvm",label:"Java / Kotlin",languageIds:["java","kotlin"],extensions:[".java",".kt"]};
 const handle={tabId:"editor",path:"src/Main.kt",loadEpoch:1};
 function harness({providers=[provider],storage}={}){
-  let scope={root:"/repo",generation:1},factory,next=0;const calls=[],statuses=[],listeners=new Set();let held=null;
+  let scope={root:"/repo",generation:1},factory,next=0;const calls=[],statuses=[],notifications=[],listeners=new Set();let held=null;
   const native={
     workspace:async root=>{calls.push(["workspace",root]);return{startupProfiles:[{pluginId:provider.pluginId,serverId:provider.serverId}],debugTracing:false};},
     prepare:async(root,pluginId,serverId)=>{calls.push(["prepare",root,pluginId,serverId]);if(held)await held;return{reviewId:`r${++next}`,pluginId,serverId,pluginVersion:provider.pluginVersion,packageDigest:"package",resourceDigest:"resource",executableIdentity:"node",expiresAt:Date.now()+60000,remembered:true};},
@@ -16,8 +16,8 @@ function harness({providers=[provider],storage}={}){
     request:async(root,sessionId,uri,version)=>({sessionId,uri,version,result:[]}),subscribe:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
     forget:async root=>calls.push(["forget",root]),setDebug:async enabled=>calls.push(["debug",enabled]),
   };
-  const runtime=createLanguageServicesRuntime({providerStorage:storage,registry:{list:()=>providers,subscribe:()=>()=>{}},native,workspace:()=>scope,document:h=>({workspacePath:h.path,loadEpoch:h.loadEpoch,readOnly:false}),bind:value=>{factory=value;},navigate(){},reportError:error=>{throw error;},status:state=>statuses.push(state)});
-  return{native,runtime,calls,statuses,listeners,set providers(value){providers=value;},get factory(){return factory;},set scope(value){scope=value;},hold(){let release;held=new Promise(resolve=>{release=resolve;});return()=>{held=null;release();};},emit(event){for(const l of listeners)l(event);},count:name=>calls.filter(call=>call[0]===name).length};
+  const runtime=createLanguageServicesRuntime({notificationPublisher:{publish:request=>{notifications.push(request);return "test";}},providerStorage:storage,registry:{list:()=>providers,subscribe:()=>()=>{}},native,workspace:()=>scope,document:h=>({workspacePath:h.path,loadEpoch:h.loadEpoch,readOnly:false}),bind:value=>{factory=value;},navigate(){},reportError:error=>{throw error;},status:state=>statuses.push(state)});
+  return{native,runtime,calls,statuses,notifications,listeners,set providers(value){providers=value;},get factory(){return factory;},set scope(value){scope=value;},hold(){let release;held=new Promise(resolve=>{release=resolve;});return()=>{held=null;release();};},emit(event){for(const l of listeners)l(event);},count:name=>calls.filter(call=>call[0]===name).length};
 }
 test("model-backed services start without a document and share the transport with later source opens",async()=>{
   const h=harness();try{
@@ -93,4 +93,42 @@ test("a partial native profile remains distinct from an unavailable service",asy
   assert.equal(h.statuses.at(-1).state,"partial");
   h.emit({sessionId:id,kind:"ready",progress:{phase:"ready"}});assert.equal(h.statuses.at(-1).state,"ready");
  }finally{h.runtime.dispose();}
+});
+
+test("confirmed project failures notify once per episode and reject obsolete workspace events",async()=>{
+ const h=harness();const project={kind:"dependency-offline",module:":feature-push",dependency:"org.example:library:1.2.3",remaining:0};
+ const failure={code:"model-unavailable",retryable:false,message:"raw exception is never copy",requestId:null,project};
+ try{
+  h.runtime.refresh();await until(()=>h.count("start")===1);await tick();let id=h.calls.find(c=>c[0]==="start")[2];
+  for(let n=0;n<3;n++)h.emit({sessionId:id,kind:"degraded",code:"dependency-offline",failure,progress:{phase:"failed"}});
+  await until(()=>h.notifications.length===1);assert.equal(h.notifications[0].kind,"error");assert.match(h.notifications[0].message,/:feature-push/u);assert.match(h.notifications[0].message,/org.example:library:1.2.3/u);assert.ok(!h.notifications[0].message.includes("raw exception"));
+  h.emit({sessionId:id,kind:"degraded",code:"dependency-offline",failure});await tick();assert.equal(h.notifications.length,1);
+  await h.runtime.retry();await until(()=>h.count("start")===2);await tick();id=h.calls.filter(c=>c[0]==="start").at(-1)[2];
+  h.emit({sessionId:id,kind:"degraded",code:"dependency-offline",failure});await until(()=>h.notifications.length===2);
+  h.emit({sessionId:id,kind:"ready",progress:{phase:"ready"}});h.emit({sessionId:id,kind:"degraded",code:"dependency-offline",failure});await until(()=>h.notifications.length===3);
+  h.scope={root:"/other",generation:2};h.runtime.refresh();h.emit({sessionId:id,kind:"degraded",code:"dependency-offline",failure});await tick();assert.equal(h.notifications.length,3,"obsolete native session events cannot notify in a replacement project");
+ }finally{h.runtime.dispose();}
+});
+test("ordinary cancellation and unknown service failures do not become project error tips",async()=>{
+ const h=harness();try{h.runtime.refresh();await until(()=>h.count("start")===1);await tick();const id=h.calls.find(c=>c[0]==="start")[2];
+  h.emit({sessionId:id,kind:"degraded",code:"model-unavailable"});await tick();assert.equal(h.notifications.length,0);
+  h.emit({sessionId:id,kind:"terminated",code:"requested-stop"});await tick();assert.equal(h.notifications.length,0);
+ }finally{h.runtime.dispose();}
+});
+
+test("a delayed first notification import is discarded after switching projects",async()=>{
+ const h=harness();try{h.runtime.refresh();await until(()=>h.count("start")===1);await tick();const id=h.calls.find(c=>c[0]==="start")[2];
+  h.emit({sessionId:id,kind:"degraded",code:"dependency-offline",failure:{code:"model-unavailable",retryable:false,message:"fixed",requestId:null,project:{kind:"dependency-offline",remaining:0}}});
+  h.scope={root:"/other",generation:2};h.runtime.refresh();await tick();assert.equal(h.notifications.length,0);
+ }finally{h.runtime.dispose();}
+});
+
+test("settled partial compiler exhaustion shows one actionable memory tip and healthy recovery resets it",async()=>{
+  const h=harness();try{
+    h.runtime.refresh();await until(()=>h.count("start")===1);const id=h.calls.find(call=>call[0]==="start")[2];
+    const failure={sessionId:id,kind:"ready",code:"kotlin-compiler-resource-limit",progress:{phase:"failed"},failure:{code:"resource-limit",retryable:false,message:"fixed category",requestId:null}};
+    h.emit(failure);h.emit(failure);await until(()=>h.notifications.length===1);
+    assert.equal(h.statuses.at(-1).state,"partial");assert.match(h.notifications[0].message,/Increase compiler memory/u);assert.equal(h.notifications[0].kind,"error");
+    h.emit({sessionId:id,kind:"ready",progress:{phase:"ready"}});h.emit(failure);await until(()=>h.notifications.length===2);
+  }finally{h.runtime.dispose();}
 });

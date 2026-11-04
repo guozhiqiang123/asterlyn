@@ -1,29 +1,35 @@
 import {EN_TOOLCHAINS,ZH_TOOLCHAINS,type ToolchainCopy} from "./toolchain-copy.ts";
 export interface LanguageServiceStatusCopy {
+  locale: "en" | "zh-CN";
   toolchains:ToolchainCopy;
+  resources:string;resourceAuto:string;resourceHint:string;
   chooseProvider:string;providerConflict:string;
   title:string; statusCommand:string; retry:string; forget:string; debugOn:string; debugOff:string;
   debug:string; debugHint:string; close:string; empty:string; elapsed(seconds:number):string;
-  stages:Record<"recovering"|"provider-selected"|"conflict"|"partial"|"preparing"|"awaiting-approval"|"declined"|"indexing"|"ready"|"failed"|"stopped"|"model"|"sources"|"backend"|"refreshing",string>;
+  stages:Record<"waiting"|"recovering"|"provider-selected"|"conflict"|"partial"|"preparing"|"awaiting-approval"|"declined"|"indexing"|"ready"|"failed"|"stopped"|"model"|"sources"|"backend"|"refreshing",string>;
   failureReasons:Record<import("../protocol/generated-native-language-types.ts").LanguageFailureCode,string>;
   failure:string; partial:string;partiallyReady:string;units:Record<"modules"|"files"|"items",string>;
 }
 export const EN_LANGUAGE_STATUS:LanguageServiceStatusCopy={
+  locale: "en",
+  resources:"Compiler memory for this project",resourceAuto:"Automatic",resourceHint:"Maximum per compiler, not reserved up front. Changing it restarts this project's language services. Large jobs may wait for memory.",
   toolchains:EN_TOOLCHAINS,
-  failureReasons:{"backend-exited":"The language process exited unexpectedly.","protocol-failed":"The language transport stopped safely.","resource-limit":"The language service reached its resource limit.","authority-revoked":"Project approval or tool identity changed.","model-unavailable":"A current project model is unavailable.","toolchain-unavailable":"A compatible toolchain is unavailable.",cancelled:"The language operation was cancelled.",unavailable:"Language services are unavailable."},
+  failureReasons:{"backend-exited":"The language process exited unexpectedly.","protocol-failed":"The language transport stopped safely.","resource-limit":"Analysis ran out of memory or exceeded its budget. Increase compiler memory in this panel or close other projects, then retry.","authority-revoked":"Project approval or tool identity changed.","model-unavailable":"A current project model is unavailable.","toolchain-unavailable":"A compatible toolchain is unavailable.",cancelled:"The language operation was cancelled.",unavailable:"Language services are unavailable."},
   chooseProvider:"Choose a language provider",providerConflict:"Choose a provider to enable this language. Execution still requires project approval.",
   units:{modules:"modules",files:"files",items:"items"},title:"Language services",statusCommand:"Show language service progress",retry:"Retry language services",
   forget:"Clear this project's approval and stop services",debugOn:"Enable language service debug tracing",debugOff:"Disable language service debug tracing",
   debug:"Debug tracing",debugHint:"Only for this app session. Records operation metadata, never source text or raw server traffic. Enable it before retrying a failed project import.",close:"Close language service status",empty:"No language service is running for this project.",elapsed:seconds=>`${seconds}s`,
-  stages:{recovering:"Recovering language services","provider-selected":"Provider selected",conflict:"Language provider selection required",partial:"Partially available",preparing:"Preparing language services", "awaiting-approval":"Waiting for project approval",declined:"Not enabled for this session",indexing:"Indexing code",ready:"Ready",failed:"Language services unavailable",stopped:"Stopped",model:"Loading project model",sources:"Preparing source model",backend:"Starting language backend",refreshing:"Updating code index"},
+  stages:{waiting:"Waiting for analysis memory",recovering:"Recovering language services","provider-selected":"Provider selected",conflict:"Language provider selection required",partial:"Partially available",preparing:"Preparing language services", "awaiting-approval":"Waiting for project approval",declined:"Not enabled for this session",indexing:"Indexing code",ready:"Ready",failed:"Language services unavailable",stopped:"Stopped",model:"Loading project model",sources:"Preparing source model",backend:"Starting language backend",refreshing:"Updating code index"},
   partiallyReady:"Partially available",failure:"Check the project model or logs, then retry.",partial:"Some language features are still being prepared.",
 };
 export const ZH_LANGUAGE_STATUS:LanguageServiceStatusCopy={
+  locale: "zh-CN",
+  resources:"此项目的编译器内存",resourceAuto:"自动",resourceHint:"每个编译器的堆上限，不会提前全部占用。修改后会重启此项目的语言服务；大任务可能排队等待内存。",
   toolchains:ZH_TOOLCHAINS,
-  failureReasons:{"backend-exited":"语言进程意外退出。","protocol-failed":"语言服务通信已安全停止。","resource-limit":"语言服务达到资源上限。","authority-revoked":"项目授权或工具身份已变化。","model-unavailable":"当前项目模型不可用。","toolchain-unavailable":"缺少可用的兼容工具链。",cancelled:"语言操作已取消。",unavailable:"语言服务暂不可用。"},
+  failureReasons:{"backend-exited":"语言进程意外退出。","protocol-failed":"语言服务通信已安全停止。","resource-limit":"分析内存不足或超过预算。请在此面板提高编译器内存，或关闭其他项目后重试。","authority-revoked":"项目授权或工具身份已变化。","model-unavailable":"当前项目模型不可用。","toolchain-unavailable":"缺少可用的兼容工具链。",cancelled:"语言操作已取消。",unavailable:"语言服务暂不可用。"},
   chooseProvider:"选择语言服务提供者",providerConflict:"请选择此语言的提供者；运行仍需项目授权。",
   units:{modules:"个模块",files:"个文件",items:"项"},title:"语言服务",statusCommand:"查看语言服务进度",retry:"重试语言服务",forget:"清除此项目授权并停止服务",
   debugOn:"开启语言服务调试追踪",debugOff:"关闭语言服务调试追踪",debug:"调试追踪",debugHint:"仅当前应用会话生效。记录操作元数据，不记录源码或原始服务通信。排查项目导入失败时，请先开启再重试。",close:"关闭语言服务状态",empty:"此项目尚无运行中的语言服务。",elapsed:seconds=>`${seconds} 秒`,
-  stages:{recovering:"正在恢复语言服务","provider-selected":"已选择提供者",conflict:"需要选择语言服务提供者",partial:"部分功能可用",preparing:"准备语言服务", "awaiting-approval":"等待项目授权",declined:"本次会话未启用",indexing:"正在索引代码",ready:"已就绪",failed:"语言服务不可用",stopped:"已停止",model:"加载项目模型",sources:"准备源码模型",backend:"启动语言后端",refreshing:"更新代码索引"},
+  stages:{waiting:"\u7b49\u5f85\u5206\u6790\u5185\u5b58",recovering:"正在恢复语言服务","provider-selected":"已选择提供者",conflict:"需要选择语言服务提供者",partial:"部分功能可用",preparing:"准备语言服务", "awaiting-approval":"等待项目授权",declined:"本次会话未启用",indexing:"正在索引代码",ready:"已就绪",failed:"语言服务不可用",stopped:"已停止",model:"加载项目模型",sources:"准备源码模型",backend:"启动语言后端",refreshing:"更新代码索引"},
   partiallyReady:"部分功能尚未就绪",failure:"请检查项目模型或日志，然后重试。",partial:"部分语言功能仍在准备中。",
 };

@@ -15,7 +15,7 @@
 .language-service-details progress { width: 100%; }
 
 .language-service-status[data-state="conflict"] { border-bottom: 1px solid var(--danger); }
-.language-service-list select { width: 100%; min-width: 0; font: inherit; color: inherit; background: var(--bg-panel); }
+.language-service-details select { width: 100%; min-width: 0; font: inherit; color: inherit; background: var(--bg-panel); }
 .language-toolchains { grid-column: 1 / -1; min-width: 0; }
 .language-toolchains summary { cursor: pointer; }
 .language-toolchains p { white-space: pre-wrap; overflow-wrap: anywhere; margin: .5rem 0; font-size: .9em; }

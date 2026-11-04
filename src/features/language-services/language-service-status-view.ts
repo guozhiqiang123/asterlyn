@@ -20,6 +20,9 @@ export class LanguageServiceStatusView {
   private readonly forgetButton:HTMLButtonElement;
   private readonly debug:HTMLInputElement;
   private readonly debugLabel:HTMLSpanElement;
+  private readonly resourceSelect:HTMLSelectElement;
+  private readonly resourceLabel:HTMLSpanElement;
+  private readonly resourceHint:HTMLElement;
   private readonly debugHint:HTMLElement;
   private readonly abort=new AbortController();
   private timer:ReturnType<typeof setInterval>|null=null;
@@ -28,7 +31,7 @@ export class LanguageServiceStatusView {
   private disposed=false;
   private returnFocus:HTMLElement|null=null;
   private readonly actions:{selectProvider?(language:string,id:string):void};
-  constructor(host:HTMLElement,copy:()=>LanguageServiceCopy,actions:{selectProvider?(language:string,id:string):void;retry():void;forget():void;debug(enabled:boolean):void;error(error:unknown):void}){
+  constructor(host:HTMLElement,copy:()=>LanguageServiceCopy,actions:{resources?(value:number|null):void|Promise<void>;selectProvider?(language:string,id:string):void;retry():void;forget():void;debug(enabled:boolean):void;error(error:unknown):void}){
     this.actions=actions;this.host=host;this.copy=copy;
     const doc=host.ownerDocument;
     this.button=doc.createElement("button");this.button.id="language-service-status";this.button.type="button";this.button.hidden=true;this.button.className="language-service-status";this.button.setAttribute("aria-haspopup","dialog");this.button.setAttribute("aria-controls","language-service-details");this.button.setAttribute("aria-expanded","false");
@@ -43,7 +46,9 @@ export class LanguageServiceStatusView {
     this.forgetButton=doc.createElement("button");this.forgetButton.type="button";
     const controls=doc.createElement("div");controls.className="language-service-actions";controls.append(this.retryButton,this.forgetButton);
     const debugLabel=doc.createElement("label");this.debug=doc.createElement("input");this.debug.type="checkbox";this.debug.dataset.action="debug";this.debugLabel=doc.createElement("span");debugLabel.append(this.debug,this.debugLabel);
-    this.debugHint=doc.createElement("small");this.panel.append(header,this.list,controls,debugLabel,this.debugHint);host.append(this.panel);
+    const resourceLabel=doc.createElement("label");this.resourceLabel=doc.createElement("span");this.resourceSelect=doc.createElement("select");this.resourceSelect.dataset.action="resources";resourceLabel.append(this.resourceLabel,this.resourceSelect);this.resourceHint=doc.createElement("small");
+    this.resourceSelect.addEventListener("change",()=>{const value=this.resourceSelect.value==="auto"?null:Number(this.resourceSelect.value);this.resourceSelect.disabled=true;void Promise.resolve(actions.resources?.(value)).catch(actions.error).finally(()=>{if(!this.disposed)this.resourceSelect.disabled=this.resourceSelect.dataset.available!=="true";});},{signal:this.abort.signal});
+    this.debugHint=doc.createElement("small");this.panel.append(header,this.list,controls,resourceLabel,this.resourceHint,debugLabel,this.debugHint);host.append(this.panel);
     const signal=this.abort.signal;
     this.button.addEventListener("click",()=>this.panel.hidden?this.open():this.close(true),{signal});
     this.closeButton.addEventListener("click",()=>this.close(true),{signal});
@@ -60,11 +65,14 @@ export class LanguageServiceStatusView {
     const label=(state.state==="ready"||state.state==="partial")&&state.code&&(!state.progress||["ready","failed"].includes(state.progress.phase))?copy.partiallyReady:copy.stages[stage];
     return `${label}${counts}${state.state==="recovering"&&state.recovery?` (${state.recovery.attempt}/${state.recovery.maximum})`:""}`;
   }
-  update(states:readonly Status[],debug:boolean):void{
+  update(states:readonly Status[],debug:boolean,resources?:import("../../protocol/generated-native-language-types.ts").LanguageResourcePolicy):void{
     if(this.disposed)return;this.states=states;
     if(!this.button.isConnected)this.host.querySelector("#status-message")?.after(this.button);
     if(!this.panel.isConnected)this.host.append(this.panel);
-    const copy=this.copy().workspaceStatus;this.button.hidden=!states.length;this.button.title=copy.statusCommand;
+    const copy=this.copy().workspaceStatus;
+    this.resourceLabel.textContent=copy.resources;this.resourceSelect.setAttribute("aria-label",copy.resources);this.resourceHint.textContent=copy.resourceHint;this.resourceSelect.dataset.available=String(!!resources);this.resourceSelect.disabled=!resources;
+    const resourceKey=JSON.stringify([resources,copy.resourceAuto]);if(this.resourceSelect.dataset.policy!==resourceKey){this.resourceSelect.dataset.policy=resourceKey;this.resourceSelect.replaceChildren();for(const value of [null,...(resources?.choicesMiB??[])]){const option=this.host.ownerDocument.createElement("option");option.value=value===null?"auto":String(value);option.textContent=value===null?copy.resourceAuto:`${value/1024} GiB`;this.resourceSelect.append(option);}}this.resourceSelect.value=String(resources?.compilerMaxMiB??"auto");
+    this.button.hidden=!states.length;this.button.title=copy.statusCommand;
     this.title.textContent=copy.title;this.closeButton.setAttribute("aria-label",copy.close);this.retryButton.textContent=copy.retry;this.forgetButton.textContent=copy.forget;this.debugLabel.textContent=copy.debug;this.debugHint.textContent=copy.debugHint;this.debug.checked=debug;
     const primary=states.find(state=>state.state==="failed"||state.state==="conflict")??states.find(busy)??states[0];
     const text=primary?`${copy.title}: ${this.stage(primary)}`:copy.empty;
@@ -75,7 +83,7 @@ export class LanguageServiceStatusView {
     if(this.key!==key){this.key=key;this.list.replaceChildren();
       if(!states.length)this.list.textContent=copy.empty;
       for(const state of states){const row=this.host.ownerDocument.createElement("section"),label=this.host.ownerDocument.createElement("strong"),stage=this.host.ownerDocument.createElement("span");label.textContent=state.label;stage.textContent=this.stage(state);row.append(label,stage);
-        if(state.state==="failed"||((state.state==="ready"||state.state==="partial")&&state.code)){const detail=this.host.ownerDocument.createElement("small");detail.textContent=state.state==="failed"||state.progress?.phase==="failed"?(state.failure?copy.failureReasons[state.failure.code]:copy.failure):copy.partial;row.append(detail);if(debug&&state.code){const code=this.host.ownerDocument.createElement("code");code.textContent=state.code;row.append(code);}}
+        if(state.state==="failed"||((state.state==="ready"||state.state==="partial")&&state.code)){const detail=this.host.ownerDocument.createElement("small");detail.textContent=state.state==="failed"||state.progress?.phase==="failed"?(state.failure?copy.failureReasons[state.failure.code]:copy.failure):copy.partial;row.append(detail);if(state.failure?.project)void import("../../localization/project-language-failure-copy.ts").then(({projectLanguageFailureMessage})=>{if(!this.disposed&&this.key===key&&detail.isConnected)detail.textContent=projectLanguageFailureMessage(state.failure?.project,copy.locale)??detail.textContent;}).catch(()=>{});if(debug&&state.code){const code=this.host.ownerDocument.createElement("code");code.textContent=state.code;row.append(code);}}
         if(state.toolchains?.length){
           const details=this.host.ownerDocument.createElement("details"),summary=this.host.ownerDocument.createElement("summary");summary.textContent=copy.toolchains.title;details.className="language-toolchains";details.append(summary);
           for(const tool of state.toolchains){const description=this.host.ownerDocument.createElement("p");description.textContent=toolchainDescription(tool,copy.toolchains);details.append(description);}row.append(details);

@@ -390,6 +390,8 @@ pub(super) fn model_access(
     let runtime = app.state::<AnalysisManager>().runtime(&cache(&app)?)?;
     let seen_generation = std::sync::atomic::AtomicU64::new(0);
     let failure_log = Mutex::new(None::<(String, Instant)>);
+    let last_project_failure = Arc::new(Mutex::new(None::<asterlyn_language_service::project_failure::ProjectFailure>));
+    let failure_reader = last_project_failure.clone();
     let model_attempt = std::sync::atomic::AtomicU64::new(0);
     let watch_app = app.clone();
     let watch_owner = owner.clone();
@@ -405,6 +407,7 @@ pub(super) fn model_access(
     });
     Ok(Some(ModelAccess::new(Arc::new(move |alive, refresh| {
         let began = Instant::now();
+        if let Ok(mut detail) = last_project_failure.lock() { *detail = None; }
         let attempt = model_attempt.fetch_add(1, Ordering::Relaxed) + 1;
         let result: Result<ModelReply, String> = (|| {
             let authority_app = app.clone();
@@ -535,6 +538,7 @@ pub(super) fn model_access(
             let service = provider.id.clone();
             let error_code = Arc::new(Mutex::new(None::<String>));
             let worker_error = error_code.clone();
+            let worker_project_failure = last_project_failure.clone();
             let workspace_hash = app
                 .state::<DiagnosticsLog>()
                 .hash_identifier(owner.root.to_string_lossy().as_bytes());
@@ -545,6 +549,9 @@ pub(super) fn model_access(
                 {
                     *code = progress.error_code.clone();
                 }
+                if progress.stage == "error" && let Ok(mut detail) = worker_project_failure.lock() {
+                    *detail = progress.project_failure.clone().and_then(|value| serde_json::from_value::<asterlyn_language_service::project_failure::ProjectFailure>(value).ok()).and_then(|value| value.validated());
+                }
                 let mut fields = json!({"window":window,"workspaceHash":workspace_hash,"serviceId":service,"attempt":attempt,"stage":progress.stage,"count":progress.count,"durationMs":progress.duration_ms,"code":progress.error_code,"causeClass":progress.cause_class});
                 if progress_app
                     .state::<asterlyn_language_service::application::LanguageServiceManager>()
@@ -554,6 +561,7 @@ pub(super) fn model_access(
                     fields["sourceFile"] = json!(progress.source_file);
                     fields["sourceLine"] = json!(progress.source_line);
                     fields["context"] = json!(progress.context);
+                    fields["projectFailure"] = json!(progress.project_failure);
                 }
                 progress_app.state::<DiagnosticsLog>().info(
                     "language.model",
@@ -628,5 +636,5 @@ pub(super) fn model_access(
             return Err(code.into());
         }
         result
-    })).with_observer(observe)))
+    })).with_observer(observe).with_failure_detail(Arc::new(move || failure_reader.lock().ok().and_then(|detail|detail.clone())))))
 }

@@ -349,12 +349,13 @@ pub(crate) async fn start_language_service(
                 return;
             }
             log.info("language.service",match event.kind {"terminated"=>"session.terminated","indexing"=>"workspace.indexing","ready"=>"workspace.ready","degraded"=>"workspace.degraded",_=>"diagnostics.completed"},Some(&event.session_id),fields);
-            let failure=matches!(event.kind,"terminated"|"degraded").then(||LanguageServiceFailure::from_code(event.code.as_deref().unwrap_or("session-ended")));
+            let failure=event.failure.clone().or_else(||matches!(event.kind,"terminated"|"degraded").then(||LanguageServiceFailure::from_code(event.code.as_deref().unwrap_or("session-ended"))));
             let _=event_app.emit_to(&label,EVENT,PublicLanguageServiceEvent{event:&event,failure});
         });
         let models=super::packaged_analysis::model_access(&app,&owner,&package)?;
         let mut package=package;
-        if let Some(profile)=package.packaged.as_mut(){profile.initialization_options["analysis"]["refreshModel"]=serde_json::json!(refresh_model.unwrap_or(false));profile.initialization_options["analysis"]["modelInputMonitoring"]=serde_json::json!(models.is_some());}
+        let selected_heap=asterlyn_language_service::application::resources::preference(&super::language_service_state::resource_store(&app)?,&owner.root)?;
+        if let Some(profile)=package.packaged.as_mut(){profile.initialization_options["analysis"]["compilerMaxMiB"]=serde_json::json!(selected_heap);profile.initialization_options["analysis"]["refreshModel"]=serde_json::json!(refresh_model.unwrap_or(false));profile.initialization_options["analysis"]["modelInputMonitoring"]=serde_json::json!(models.is_some());}
         let session = app
             .state::<LanguageServiceManager>()
             .start_with_models(owner, package, authority, allowed, emit, models)?;

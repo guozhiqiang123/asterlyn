@@ -686,6 +686,7 @@ export class AsterlynApp {
     });
     const locationSources=createFindLanguageResultsPorts({workspace:languageWorkspace,files:()=>this.filesState.files,buffers:()=>this.editorState.session.textTabs,capture:()=>this.captureMountedTextEditor(),navigate:definitionNavigator,read:(root,file)=>bridge.readTextFile(root,file.repositoryId,file.path)});
     this.languageServices = "__TAURI_INTERNALS__" in window ? createLanguageServicesRuntime({
+      notificationPublisher: this.notificationCenter,
       host: root, copy: () => this.localization.catalog.editor.languageService, registerCommand: command => this.shortcuts.registerPluginCommand(command),
       registry: this.pluginTasksRuntime.contributionRegistry,
       diagnostic: (fields) => diagnostics.report("info", "language.provider.changed", `providers=${fields.providerCount};generation=${fields.workspaceGeneration ?? "none"}`),

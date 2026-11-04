@@ -10,7 +10,7 @@ import type { LanguageServiceStatus } from "../features/language-services/langua
 import type { CommandDescriptor } from "../application/commands/command-service.ts";
 import { commandId, WORKBENCH_FOCUS_SCOPES } from "../application/commands/command-service.ts";
 import type { LanguageServiceCopy } from "../localization/language-service-copy.ts";
-import { LanguageServiceStatusView } from "../features/language-services/language-service-status-view.ts";
+import type { LanguageServiceStatusView } from "../features/language-services/language-service-status-view.ts";
 
 /** One callback supplies both language services and target navigation with their workspace scope. */
 export function languageWorkspaceForWindow(session: Pick<WindowSession, "workspace">) {
@@ -18,6 +18,7 @@ export function languageWorkspaceForWindow(session: Pick<WindowSession, "workspa
 }
 
 export interface LanguageServicesRuntimeOptions {
+  readonly notificationPublisher?: import("../application/notifications/notification-center.ts").HostNotificationPublisher;
   readonly providerStorage?:ProviderPreferenceStorage;
   readonly host?: HTMLElement;
   readonly copy?: ()=>LanguageServiceCopy;
@@ -46,15 +47,29 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   let disposed=false,epoch=0,suspended:string|null=null,key="";
   const projectKey=()=>JSON.stringify(options.workspace());
   const states=new Map<string,LanguageServiceStatus>();
+  let tipEpoch=0;
+  let tips:import("../features/language-services/project-failure-notifications.ts").LanguageProjectFailureNotifications|null=null;
+  let tipsLoading:Promise<import("../features/language-services/project-failure-notifications.ts").LanguageProjectFailureNotifications>|null=null;
+  const notifyProjectFailure=(id:string,status:LanguageServiceStatus)=>{
+    if(tips){tips.observe(id,status);return;}
+    if((status.state!=="failed"&&status.progress?.phase!=="failed")||(!status.failure?.project&&status.failure?.code!=="resource-limit")||!options.notificationPublisher)return;
+    const token=tipEpoch;
+    tipsLoading??=import("../features/language-services/project-failure-notifications.ts").then(({LanguageProjectFailureNotifications})=>tips=new LanguageProjectFailureNotifications(options.notificationPublisher!,()=>options.copy?.().workspaceStatus.locale??"en"));
+    void tipsLoading.then(observer=>{const current=states.get(id);if(!disposed&&token===tipEpoch&&current&&scopeCurrent(current.scope))observer.observe(id,current);}).catch(options.reportError);
+  };
   const publish=(status:LanguageServiceStatus)=>{
     const workspace=options.workspace();
     if(disposed || workspace?.root!==status.scope.workspaceRoot || workspace.generation!==status.scope.workspaceGeneration)return;
     const provider=options.registry.list().find(item=>item.kind==="language-service"&&item.pluginId===status.scope.pluginId&&item.serverId===(status.scope.serverId??"typescript")&&item.pluginVersion===status.scope.providerVersion);
     if(!provider)return;
-    states.set(`${status.scope.pluginId}:${status.scope.serverId??"typescript"}`,status);
+    const id=`${status.scope.pluginId}:${status.scope.serverId??"typescript"}`;
+    states.set(id,status);
+    notifyProjectFailure(id,status);
     options.status?.(status);renderStatus();
   };
+  let resourcePolicy:import("../protocol/generated-native-language-types.ts").LanguageResourcePolicy|undefined;
   let debugTracing=false,shownProject=projectKey();
+  let view:LanguageServiceStatusView|null=null,viewLoading:Promise<LanguageServiceStatusView|null>|null=null;
   const factory = createEditorLanguageServicePort((handle) => {
     const workspace = options.workspace(); const document = options.document(handle);
     if (!workspace || suspended===projectKey() || !document || document.readOnly || document.loadEpoch !== handle.loadEpoch) return null;
@@ -65,11 +80,22 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     const provider = providerFor(languageId);if(!provider||!providers.some(item=>item.qualifiedId===provider.qualifiedId))return null; if (provider.kind !== "language-service") return null; const uri = workspaceFileUri(workspace.root, document.workspacePath);
     return uri ? { workspaceRoot: workspace.root, workspaceGeneration: workspace.generation, uri, languageId, pluginId: provider.pluginId, providerVersion: provider.pluginVersion, serverId: provider.serverId } : null;
   }, options.native, options.reportError, options.navigate, event=>{if(debugTracing)options.definitionDiagnostic?.(event);}, options.approvalDiagnostic,publish,options.openInWindow,options.readReferenceSource);
-  const view=options.host&&options.copy?new LanguageServiceStatusView(options.host,options.copy,{
-    selectProvider:(language,id)=>{selectProvider(language,id);},retry:()=>{void retry().catch(options.reportError);},forget:()=>{void forget();},debug:enabled=>{void setDebug(enabled);},error:options.reportError,
-  }):null;
+  function ensureStatusView():Promise<LanguageServiceStatusView|null>{
+    if(disposed)return Promise.resolve(null);
+    if(view)return Promise.resolve(view);
+    const {host,copy}=options;if(!host||!copy)return Promise.resolve(null);
+    return viewLoading??=import("../features/language-services/language-service-status-view.ts").then(({LanguageServiceStatusView})=>{
+      if(disposed)return null;
+      view=new LanguageServiceStatusView(host,copy,{
+        resources:async value=>{const workspace=options.workspace();if(!workspace||!options.native.setResources)return;const token=epoch;try{const policy=await options.native.setResources(workspace.root,value);if(disposed||epoch!==token||options.workspace()?.root!==workspace.root)return;resourcePolicy=policy;await retry();}catch(error){renderStatus();options.reportError(error);}},
+        selectProvider:(language,id)=>{selectProvider(language,id);},retry:()=>{void retry().catch(options.reportError);},forget:()=>{void forget();},debug:enabled=>{void setDebug(enabled);},error:options.reportError,
+      });
+      renderStatus();return view;
+    }).catch(error=>{viewLoading=null;if(!disposed)options.reportError(error);return null;});
+  }
+  async function openStatus(){const current=await ensureStatusView();if(!disposed)current?.open();}
   function providerLabel(state:LanguageServiceStatus):string{if(state.selectionKey)return state.selectionKey;const provider=options.registry.list().find(item=>item.kind==="language-service"&&item.pluginId===state.scope.pluginId&&item.serverId===(state.scope.serverId??"typescript"));return provider?.kind==="language-service"?provider.label:state.scope.serverId??"Language services";}
-  function renderStatus(){view?.update([...states.values()].map(state=>({ ...state,label:providerLabel(state)})),debugTracing);}
+  function renderStatus(){if(!view){if(states.size)void ensureStatusView();return;}view.update([...states.values()].map(state=>({ ...state,label:providerLabel(state)})),debugTracing,resourcePolicy);}
   const scopeCurrent=(scope:import("../features/language-services/language-service-client.ts").LanguageConsentScope)=>{
     const workspace=options.workspace();return workspace?.root===scope.workspaceRoot&&workspace.generation===scope.workspaceGeneration&&options.registry.list().some(item=>item.kind==="language-service"&&item.pluginId===scope.pluginId&&item.pluginVersion===scope.providerVersion&&item.serverId===(scope.serverId??"typescript")&&item.languageIds.some(language=>providerFor(language)?.qualifiedId===item.qualifiedId));
   };
@@ -80,7 +106,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     try{
       const state=await options.native.workspace(workspace.root);
       if(disposed||token!==epoch||suspended===projectKey())return;
-      debugTracing=state.debugTracing;renderStatus();
+      resourcePolicy=state.resources;debugTracing=state.debugTracing;renderStatus();
       for(const profile of state.startupProfiles){
         const provider=providers.find(item=>item.pluginId===profile.pluginId&&item.kind==="language-service"&&item.serverId===profile.serverId);
         if(!provider||disposed||token!==epoch)return;
@@ -93,8 +119,8 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   }
   const refresh = () => {
     const workspace = options.workspace();
-    if(shownProject!==projectKey()){shownProject=projectKey();states.clear();suspended=null;}
-    for(const [id,state] of states)if(id.startsWith("provider:")||!scopeCurrent(state.scope))states.delete(id);
+    if(shownProject!==projectKey()){shownProject=projectKey();resourcePolicy=undefined;states.clear();tips?.reset();++tipEpoch;suspended=null;}
+    for(const [id,state] of states)if(id.startsWith("provider:")||!scopeCurrent(state.scope)){states.delete(id);tips?.forget(id);}
     if(workspace){
       const languages=new Set(options.registry.list().flatMap(item=>item.kind==="language-service"?item.languageIds:[]));
       for(const language of languages){const candidates=providersFor(language),selection=selectLanguageProvider(candidates,preferences.get(workspace.root,language));
@@ -118,7 +144,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     preferences.set(workspace.root,language,id);key="";factory.reconcile(scopeCurrent,scopeCurrent);refresh();
   }
   async function retry(){
-    const project=projectKey();++epoch;suspended=null;await factory.restart();
+    const project=projectKey();++epoch;suspended=null;tips?.reset();++tipEpoch;await factory.restart();
     if(disposed||project!==projectKey())return;states.clear();key="";refresh();
   }
   async function forget(){
@@ -129,7 +155,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   }
   async function setDebug(enabled:boolean){try{await options.native.setDebug?.(enabled);debugTracing=enabled;renderStatus();}catch(error){options.reportError(error);}}
   const commandReleases=options.registerCommand&&options.copy?([
-    ["languageServices.status","statusCommand",()=>view?.open()],
+    ["languageServices.status","statusCommand",openStatus],
     ["languageServices.retry","retry",retry],
     ["languageServices.debug.enable","debugOn",()=>setDebug(true)],
     ["languageServices.debug.disable","debugOff",()=>setDebug(false)],
@@ -137,5 +163,5 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   ] as const).map(([id,title,execute])=>options.registerCommand!({id:commandId(id),category:"workbench",userBindingScopes:WORKBENCH_FOCUS_SCOPES,detail:()=>"",title:()=>options.copy!().workspaceStatus[title],availability:()=>({enabled:options.workspace()!==null}),execute:async()=>{await execute();}})):[];
   const releaseDebug=options.native.subscribeDebug?.(enabled=>{debugTracing=enabled;renderStatus();});
   const release = options.registry.subscribe(refresh);
-  return { refresh,retry,forget,setDebug,selectProvider,revoke: (pluginId: string) => { factory.revoke(pluginId); }, dispose: () => { disposed=true;++epoch;release();releaseDebug?.();commandReleases.forEach(release=>release());view?.dispose();options.bind(null); factory.dispose(); } };
+  return { refresh,retry,forget,setDebug,selectProvider,revoke: (pluginId: string) => { factory.revoke(pluginId); }, dispose: () => { disposed=true;++epoch;++tipEpoch;tips?.reset();release();releaseDebug?.();commandReleases.forEach(release=>release());view?.dispose();options.bind(null); factory.dispose(); } };
 }

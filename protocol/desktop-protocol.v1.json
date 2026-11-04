@@ -21,6 +21,7 @@
     "PluginRuntimeTheme": "./plugin-runtime",
     "PluginRuntimeValue": "./plugin-runtime"
     ,"LanguageServiceWorkspaceState": "./language-service"
+    ,"LanguageResourcePolicy": "./generated-native-language-types"
     ,"LanguageServiceReview": "./language-service"
     ,"LanguageServiceTextChange": "./language-service"
     ,"LanguageServiceResultEnvelope": "./language-service"
@@ -56,6 +57,7 @@
     { "name": "deactivate_installed_plugin_runtime", "args": { "pluginId": "string" }, "result": "void", "validator": "void" },
     { "name": "read_installed_plugin_runtime_diagnostics", "args": { "pluginId": "string" }, "result": "InstalledPluginRuntimeDiagnostics", "validator": "installedPluginRuntimeDiagnostics" },
     { "name": "language_service_workspace_state", "args": { "workspaceRoot": "string" }, "result": "LanguageServiceWorkspaceState", "validator": "languageServiceWorkspaceState" },
+    { "name": "set_language_service_resources", "args": { "workspaceRoot": "string", "compilerMaxMib": "nullable:number" }, "result": "LanguageResourcePolicy", "validator": "languageResourcePolicy" },
     { "name": "set_language_service_debug", "args": { "enabled": "boolean" }, "result": "void", "validator": "void" },
     { "name": "prepare_language_service", "args": { "workspaceRoot": "string", "pluginId": "string", "serverId?": "string" }, "result": "LanguageServiceReview", "validator": "languageServiceReview" },
     { "name": "forget_language_service_consent", "args": { "workspaceRoot": "string" }, "result": "void", "validator": "void" },

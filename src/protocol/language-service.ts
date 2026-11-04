@@ -16,10 +16,11 @@ export interface LanguageServiceEvent {
   readonly code?: string; readonly progress?: LanguageServiceProgress; readonly failure?:NativeLanguageServiceFailure;
 }
 export interface LanguageServiceProgress {
-  readonly phase: "model" | "sources" | "backend" | "indexing" | "refreshing" | "ready" | "failed";
+  readonly phase: "waiting" | "model" | "sources" | "backend" | "indexing" | "refreshing" | "ready" | "failed";
   readonly completed?: number; readonly total?: number; readonly unit?: "modules" | "files" | "items";
 }
 export interface LanguageServiceWorkspaceState {
+  readonly resources?: import("./generated-native-language-types.ts").LanguageResourcePolicy;
   readonly startupProfiles: readonly {pluginId:string;serverId:string}[];
   readonly debugTracing: boolean;
 }
@@ -32,6 +33,7 @@ export interface LanguageServiceTrace {
 }
 export interface NativeLanguageServiceBridge {
   workspace?(root: string): Promise<LanguageServiceWorkspaceState>;
+  setResources?(root:string,compilerMaxMiB:number|null):Promise<import("./generated-native-language-types.ts").LanguageResourcePolicy>;
   setDebug?(enabled:boolean): Promise<void>;
   subscribeDebug?(listener:(enabled:boolean)=>void):()=>void;
   forget?(root:string): Promise<void>;

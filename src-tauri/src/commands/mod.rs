@@ -7,7 +7,7 @@ mod language_rust;
 mod language_service;
 mod language_service_state;
 pub(crate) use language_service_state::{
-    language_service_workspace_state, set_language_service_debug,
+    language_service_workspace_state, set_language_service_resources, set_language_service_debug,
 };
 pub(crate) mod packaged_analysis;
 mod plugin_cache;
