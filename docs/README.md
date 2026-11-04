@@ -143,6 +143,8 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-11-04-picker-host-styles.md`](benchmarks/2026-11-04-picker-host-styles.md) — shared host / portal search-field, focus and list-selection presentation with computed-style regression and native acceptance.
+
 - [`benchmarks/2026-10-16-workspace-matched-plugin-surfaces.md`](benchmarks/2026-10-16-workspace-matched-plugin-surfaces.md) — plugin-owned root-wrapper matching, contribution-backed Tasks visibility, cross-repository artifact identity, and recoverable local installation.
 - [`benchmarks/2026-10-21-plugin-authority-and-content-binding.md`](benchmarks/2026-10-21-plugin-authority-and-content-binding.md) — fail-closed external process authority, exact Android compatibility mapping, canonical extracted-content binding, migration behavior, and local validation evidence.
 - [`benchmarks/2026-10-15-host-notification-and-plugin-feedback.md`](benchmarks/2026-10-15-host-notification-and-plugin-feedback.md) — bounded host tips, optional localized plugin notifications, terminal task-failure feedback, FilesRecovery evidence, and recoverable local installation.
@@ -270,3 +272,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0037-plugin-owned-syntax-candidates.md`](architecture/decisions/0037-plugin-owned-syntax-candidates.md) — on-demand plugin data rules, derived symbols cache and current model scope.
 
 - [`benchmarks/2026-11-04-foundation-p1-native.json`](benchmarks/2026-11-04-foundation-p1-native.json) — P1 精确包 / 书签安装、真实 Gradle / LSP、符号缓存与故障恢复的原生回执。
+
+- [`benchmarks/2026-11-04-portal-typography.md`](benchmarks/2026-11-04-portal-typography.md) — 引用 / 符号弹窗字号继承、WebKit 搜索框字体、渲染断言及本地安装回执。

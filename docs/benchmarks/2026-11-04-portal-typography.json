@@ -1,0 +1,495 @@
+{
+  "schema": 1,
+  "acceptedOn": "2026-11-04",
+  "baseHead": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb",
+  "sourceUncommitted": true,
+  "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793758430296",
+  "sourceCssSha256": {
+    "src/styles.css": "cdf26c68039616a5116ddf6301d2b7c4abffa20952f3e2aca90769343f4d37fe",
+    "src/features/files-editor/language-location-picker.css": "21cb7e704656ff65a03743c520ea9d364228abd00ac70e2b81e89734595310e3",
+    "src/features/project-symbols/project-symbols.css": "764251a0c99edfad037cc4efc61b4f98ae5edfb98f510ce9b6f32eaed9032a40"
+  },
+  "typographyCases": [
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "13px",
+        "secondary": "10.8333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "15px",
+        "secondary": "12px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "16px",
+        "secondary": "13.3333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "18px",
+        "secondary": "15px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "11px",
+        "secondary": "9.16667px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "13px",
+        "secondary": "10px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "13px",
+        "secondary": "10.8333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "15px",
+        "secondary": "12px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "16px",
+        "secondary": "13.3333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "18px",
+        "secondary": "15px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "11px",
+        "secondary": "9.16667px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "13px",
+        "secondary": "10px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "13px",
+        "secondary": "10.833333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "15px",
+        "secondary": "12px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "16px",
+        "secondary": "13.333333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "18px",
+        "secondary": "15px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "11px",
+        "secondary": "9.166666px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "13px",
+        "secondary": "10px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "13px",
+        "secondary": "10.833333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "computed": {
+        "body": "13px",
+        "shell": "13px",
+        "root": "13px",
+        "input": "13px",
+        "option": "13px",
+        "control": "13px",
+        "heading": "15px",
+        "secondary": "12px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "16px",
+        "secondary": "13.333333px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "computed": {
+        "body": "16px",
+        "shell": "16px",
+        "root": "16px",
+        "input": "16px",
+        "option": "16px",
+        "control": "16px",
+        "heading": "18px",
+        "secondary": "15px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "11px",
+        "secondary": "9.166666px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "computed": {
+        "body": "11px",
+        "shell": "11px",
+        "root": "11px",
+        "input": "11px",
+        "option": "11px",
+        "control": "11px",
+        "heading": "13px",
+        "secondary": "10px",
+        "editor": "20px"
+      },
+      "remWidth": 16
+    }
+  ],
+  "productionShellFontDifferences": 0,
+  "scriptTestsPassed": 1438,
+  "native": {
+    "executableSha256": "3c11bdcb31b574135ee89e57d1cdc2465a8e0444b8137e57af89887dba2a17da",
+    "strictBundleVerified": true,
+    "rootIdentity": {
+      "rootIdentityPreserved": true,
+      "inode": "203606126",
+      "device": "16777234"
+    },
+    "firstLaunch": {
+      "pid": 82803,
+      "session": "session-1793758584209-82803-0",
+      "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793758430296",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark"
+    },
+    "reopen": {
+      "pid": 82903,
+      "session": "session-1793758586117-82903-0",
+      "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793758430296",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark"
+    },
+    "artifact": {
+      "file": "Asterlyn-0.1.25-portal-font-fix-macos.app.zip",
+      "bytes": 25600128,
+      "sha256": "48567e335e1b0c719d61843e9c0acd1a7bc3d0127d462caf8b3a72b94b1e38db"
+    },
+    "backupZipSha256": "63483955f0f1983a4cfe6627d692721f2287c34b33887975146125a6bdacad86",
+    "symbolsObserved": {
+      "query": "GlobalConfigNew",
+      "candidates": 2,
+      "reusedFiles": 822,
+      "files": 822
+    },
+    "referencesObserved": {
+      "visible": 54,
+      "excludeImports": true
+    },
+    "visualFontParityObserved": true,
+    "editorSourceEdited": false
+  },
+  "manualAcceptance": {
+    "status": "passed",
+    "date": "2026-11-04",
+    "scope": "Final integrated installed build, with line and column before trimmed previews",
+    "submission": "User authorized logical commits"
+  }
+}

@@ -1,10 +1,8 @@
 .project-symbols { width:min(800px,calc(100vw - 48px)); max-height: min(680px,calc(100vh - 48px)); padding:16px; border:1px solid var(--border-strong);border-radius:9px;background:var(--bg-panel);color:var(--text);box-shadow:0 12px 40px var(--shadow-dialog); }
 .project-symbols::backdrop {background:color-mix(in srgb, var(--shadow-dialog) 25%, transparent);}
 .project-symbols header {display:flex;align-items:center;gap:16px;justify-content:space-between;}
-.project-symbols h2 {font-size:18px;margin:0 0 12px;}
-.project-symbols input {width:100%;box-sizing:border-box;}
-.project-symbols [role=status],.project-symbols small {font-size:12px;line-height:1.5;color:var(--text-muted);}
+.project-symbols h2 {font-size:calc(var(--ui-font-size, 13px) + 2px);margin:0 0 12px;}
+.project-symbols [role=status],.project-symbols small {font-size:max(10px, calc(var(--ui-font-size, 13px) - 1px));line-height:1.5;color:var(--text-muted);}
 .project-symbols-list {max-height:420px;overflow:auto;margin-block:10px;}
-.project-symbols [role=option] {padding:9px 10px;cursor:pointer;border-radius:4px;}
-.project-symbols [role=option][aria-selected=true] {background:var(--selection-bg);}
-.project-symbols [role=option] span {display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);}
+.project-symbols [role=option] {padding:9px 10px;}
+.project-symbols [role=option] span {display:block;font-size:max(10px, calc(var(--ui-font-size, 13px) - 1px));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

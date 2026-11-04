@@ -647,15 +647,7 @@
   gap: 6px;
   margin: 6px 7px 4px;
   padding: 0 0 0 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: var(--bg-deep);
   color: var(--text-faint);
-}
-
-.command-surface-input:focus-within {
-  border-color: var(--focus-ring);
-  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 .command-surface-input textarea {
@@ -701,21 +693,7 @@
   gap: 5px;
   padding: 3px 8px;
   border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-soft);
-  cursor: default;
   text-align: left;
-}
-
-.command-result.selected {
-  background: var(--selection-bg);
-  color: var(--selection-text);
-}
-
-.command-result:hover:not(.selected) {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 
 .command-result:disabled {
@@ -748,12 +726,7 @@
 }
 
 .command-result-copy small {
-  color: var(--text-faint);
   font-size: max(10px, calc(var(--ui-font-size, 13px) - 2px));
-}
-
-.command-result.selected .command-result-copy small {
-  color: var(--info-text);
 }
 
 .command-surface-empty {

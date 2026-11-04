@@ -26,16 +26,16 @@ test("Files and Recent visibly mark matched filename and directory characters", 
     files: [file("config/app/config.kt")],
   }));
   assert.match(files, /<strong><mark class="command-result-match">config<\/mark>\.kt<\/strong>/);
-  assert.match(files, /<small>config\/app<\/small>/);
+  assert.match(files, /<small class="host-search-secondary">config\/app<\/small>/);
   const recent = renderCommandSurfaceResults("recent", 0, model("recent", "config", {
     files: [file("src/config/File.kt")],
   }));
   assert.match(recent, /<strong>File\.kt<\/strong>/);
-  assert.match(recent, /<small>src\/<mark class="command-result-match">config<\/mark><\/small>/);
+  assert.match(recent, /<small class="host-search-secondary">src\/<mark class="command-result-match">config<\/mark><\/small>/);
   const separator = renderCommandSurfaceResults("files", 0, model("files", "src/app", {
     files: [file("src/app.ts")],
   }));
-  assert.match(separator, /<small><mark class="command-result-match">src\/<\/mark><\/small>/);
+  assert.match(separator, /<small class="host-search-secondary"><mark class="command-result-match">src\/<\/mark><\/small>/);
   assert.match(separator, /<strong><mark class="command-result-match">app<\/mark>\.ts<\/strong>/);
 });
 
@@ -92,15 +92,15 @@ test("Commands mark visible text and reveal a hidden alias when it caused the ma
   const detail = renderCommandSurfaceResults("commands", 0, model("commands", "project", {
     commands: [command],
   }));
-  assert.match(detail, /<small>Search <mark class="command-result-match">project<\/mark> text<\/small>/);
+  assert.match(detail, /<small class="host-search-secondary">Search <mark class="command-result-match">project<\/mark> text<\/small>/);
   const alias = renderCommandSurfaceResults("commands", 0, model("commands", "replace", {
     commands: [command],
   }));
-  assert.match(alias, /class="command-result-alias">workspace <mark class="command-result-match">replace<\/mark>/);
+  assert.match(alias, /class="command-result-alias host-search-secondary">workspace <mark class="command-result-match">replace<\/mark>/);
   const id = renderCommandSurfaceResults("commands", 0, model("commands", "find-workspace", {
     commands: [command],
   }));
-  assert.match(id, /class="command-result-alias"><mark class="command-result-match">find-workspace<\/mark>/);
+  assert.match(id, /class="command-result-alias host-search-secondary"><mark class="command-result-match">find-workspace<\/mark>/);
 });
 
 test("Text keeps the exact preview range and zero-width marker highlighted", () => {

@@ -1,6 +1,7 @@
 import { LanguageServiceIndexingError } from "../../src/protocol/editor-language-service.ts";
 import {analyzeReferenceLocations} from "../../src/application/language-services/reference-imports.ts";
 import "../../src/styles.css";
+import "../../src/shared/controls.css";
 import "../../src/features/files-editor/language-location-picker.css";
 import { TextEditor } from "../../src/text-editor.ts";
 import { DEFAULT_APP_PREFERENCES } from "../../src/preferences.ts";

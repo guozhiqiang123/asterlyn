@@ -171,3 +171,56 @@
 .replacement-file.selected {
   border-color: var(--info-border);
 }
+
+/* Host search surfaces: shared by quick-open and body-mounted language pickers. */
+.host-search-field {
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-deep);
+  color: var(--text);
+  caret-color: var(--text);
+}
+.host-search-field:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+  outline: none;
+}
+.host-search-input {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  font: inherit;
+  line-height: calc(var(--ui-font-size, 13px) + 6px);
+}
+.host-search-field::placeholder,
+.host-search-field textarea::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+.host-search-field::selection,
+.host-search-field textarea::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+.host-search-result {
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.host-search-result.selected,
+.host-search-result[aria-selected="true"] {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+.host-search-result:hover:not(.selected):not([aria-selected="true"]) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.host-search-secondary { color: var(--text-faint); }
+.host-search-result.selected .host-search-secondary,
+.host-search-result[aria-selected="true"] .host-search-secondary { color: var(--info-text); }

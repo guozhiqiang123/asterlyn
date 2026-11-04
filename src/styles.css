@@ -298,6 +298,12 @@ body,
   color: var(--text);
 }
 
+/* Portals are mounted under body, outside .app-shell. Keep their inherited UI font in sync
+ * without changing html/rem geometry or the editor's explicitly configured font. */
+body {
+  font-size: var(--ui-font-size, 13px);
+}
+
 button,
 input,
 select,

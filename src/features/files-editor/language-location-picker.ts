@@ -19,7 +19,7 @@ export class LanguageLocationPicker {
     root.setAttribute("role", "dialog"); root.setAttribute("aria-label", options.title);
     const title = document.createElement("strong"), input = document.createElement("input"), list = document.createElement("div"), status = document.createElement("div");
     title.textContent = `${options.title} (${locations.length}${options.limited ? "+" : ""})`;
-    input.type = "search"; input.placeholder = options.copy.filterLocations; input.setAttribute("aria-label", options.copy.filterLocations);
+    input.className = "host-search-field host-search-input"; input.type = "search"; input.placeholder = options.copy.filterLocations; input.setAttribute("aria-label", options.copy.filterLocations);
     input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list"); input.setAttribute("aria-expanded", "true"); input.setAttribute("aria-controls", id);
     list.id = id; list.className = "language-location-results"; list.setAttribute("role", "listbox"); list.setAttribute("aria-label", options.title);
     status.setAttribute("role", "status");
@@ -40,7 +40,7 @@ export class LanguageLocationPicker {
       const fragment = document.createDocumentFragment(); buttons = [];
       for (const [index, choice] of filtered.entries()) {
         const button = document.createElement("button"), name = document.createElement("span"), path = document.createElement("small");
-        button.type = "button"; button.tabIndex = -1; button.id = `${id}-${index}`; button.setAttribute("role", "option");
+        button.className = "host-search-result"; path.className = "host-search-secondary"; button.type = "button"; button.tabIndex = -1; button.id = `${id}-${index}`; button.setAttribute("role", "option");
         name.textContent = `${choice.path.split("/").at(-1)?.slice(0, 128)}:${choice.location.range.start.line + 1}:${choice.location.range.start.character + 1}`;
         path.textContent = choice.path.slice(-260); button.append(name, path); button.addEventListener("click", () => choose(index));
         button.addEventListener("pointermove", () => { if (selected !== index) { selected = index; highlight(); } }); buttons.push(button); fragment.append(button);

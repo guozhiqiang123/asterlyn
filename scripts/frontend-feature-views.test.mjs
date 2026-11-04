@@ -950,13 +950,13 @@ test("workspace navigation and replacement previews are feature-owned", () => {
   assert.match(commandHtml, /data-search-insert="new-line"[^>]*>↵</);
   assert.match(commandHtml, /<textarea id="command-surface-input"[^>]*rows="1"/);
   const inputRow = commandHtml.slice(
-    commandHtml.indexOf('class="command-surface-input"'),
+    commandHtml.indexOf('class="command-surface-input host-search-field"'),
     commandHtml.indexOf('class="command-surface-results"'),
   );
   assert.doesNotMatch(inputRow, /<kbd>/);
   assert.doesNotMatch(commandHtml, /Enter to search/);
   assert.match(commandHtml, /app\.ts/);
-  assert.match(commandHtml, /<small>src<\/small>/);
+  assert.match(commandHtml, /<small class="host-search-secondary">src<\/small>/);
   assert.match(commandHtml, /1 matching file/);
   assert.match(commandHtml, /id="command-surface-open-find"/);
   assert.match(commandHtml, /data-command-mode="files"[^>]*>[^]*data-command-shortcut hidden/);

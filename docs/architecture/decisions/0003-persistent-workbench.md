@@ -102,3 +102,17 @@ Each sequence point is a local rollback boundary. Remote publication and packagi
 - Tool-window relocation, floating windows, or multiple application windows become planned work.
 - Patch-derived Diff cannot satisfy measured review workflows and full-file content reads are introduced.
 - Pointer or keyboard resizing cannot meet accessibility requirements on a supported webview.
+
+
+### Body-mounted portal typography (2026-11-04)
+
+Application typography is inherited from `body` using `--ui-font-size` (13px fallback), as well as from the shell. Portals appended directly to body, including language reference and project-symbol dialogs, must use the same UI family and size. Keep the html font size unchanged so UI preferences do not change rem geometry or configured code fonts. Headings and secondary text in the symbol dialog derive from the UI size. Native WebKit searchfield appearance can replace an inherited font with the platform control font; these two custom popup search inputs therefore disable native appearance and inherit the UI font explicitly. Keyboard, search semantics and filtering remain intact.
+
+The rendered typography gate exercises both real popup owners outside `.app-shell`, light/dark themes and UI sizes 11/13/16 in Chromium and WebKit, with a separate 20px editor and 1rem probe. It checks computed fonts, not only CSS source declarations. Evidence and native delivery are recorded in `docs/benchmarks/2026-11-04-portal-typography.md`.
+
+
+### Host search presentation shared by portals (2026-11-04)
+
+Quick-open / command search, language-location choices and project-symbol choices use the shared `host-search-*` primitives in `src/shared/controls.css`. Feature CSS owns layout and text sizing; shared CSS owns the neutral 1px border, 5px field radius, inset background, focus ring, placeholder, caret and input text-selection colors, plus list hover, 4px row radius and selected primary / secondary colors. Standalone inputs also opt out of native searchfield appearance. Do not use accent-soft as a substitute for selection-bg or leave portal controls to browser-default inset borders. List labels are not selectable text; the search input remains editable and keyboard selection retains focus there. Input selection rules are scoped to these search surfaces and must not style code-editor selections.
+
+The portal rendered gate compares computed styles with the actual `renderCommandSurface` output, across both supported web engines and themes / UI sizes, including focus, hover, keyboard movement and text-range selection. See `docs/benchmarks/2026-11-04-picker-host-styles.md` for regression and native delivery evidence.

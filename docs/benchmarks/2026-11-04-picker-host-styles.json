@@ -1,0 +1,1333 @@
+{
+  "schema": 1,
+  "acceptedOn": "2026-11-04",
+  "sourceUncommitted": true,
+  "baseHead": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb",
+  "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793759495300",
+  "sourceSha256": {
+    "src/styles.css": "cdf26c68039616a5116ddf6301d2b7c4abffa20952f3e2aca90769343f4d37fe",
+    "src/shared/controls.css": "980a61b5435b31dfec1172eab98f0ad94162ee1b09cd980ad456dce6101a0191",
+    "src/shell/shell.css": "22cd16d33dc8593d911d490ab6cb76bb041247eae8f64ef39a5aa431b00f6404",
+    "src/features/files-editor/workspace-navigation-view.ts": "aefa2e556c86e81c3a277bae622ebe1b666c395fb957b71d62caac12fd524fe0",
+    "src/features/files-editor/language-location-picker.css": "a73ef047f930136b4a44f40a47c9a8e07fa30d0731ce050fb7d1fdccb6a6815e",
+    "src/features/files-editor/language-location-picker.ts": "e67021f8b49162fbe58a898c4308511d07d7d53c89006b227e6e1fbbb5fdbb1d",
+    "src/features/project-symbols/project-symbols.css": "82c97cece2e05791985ff7c3e0d8f9baa7e9fed95f69954aec9da0e402f83a42",
+    "src/features/project-symbols/project-symbols.ts": "0860353fd2e3f4053c50ee67babb063cbbf2ae8ea1d5bde754fe1e6949e610ae"
+  },
+  "renderedCases": [
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "light",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "light",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 13,
+      "fontSize": "13px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 16,
+      "fontSize": "16px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "dark",
+      "uiSizePx": 11,
+      "fontSize": "11px",
+      "hostComputedStylesEqual": true,
+      "keyboardAndPointerPass": true
+    }
+  ],
+  "computedSamples": [
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "light",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      }
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "light",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      }
+    },
+    {
+      "engine": "Chromium",
+      "kind": "references",
+      "theme": "dark",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      }
+    },
+    {
+      "engine": "Chromium",
+      "kind": "symbols",
+      "theme": "dark",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      }
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "light",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      }
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "light",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(184, 189, 198)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(40, 100, 220)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(244, 245, 247)",
+          "boxShadow": "rgb(40, 100, 220) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(36, 38, 43)"
+        },
+        "placeholder": {
+          "color": "rgb(133, 139, 149)"
+        },
+        "textSelection": {
+          "color": "rgb(23, 62, 118)",
+          "backgroundColor": "rgb(217, 230, 251)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(72, 76, 84)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(133, 139, 149)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(217, 230, 251)",
+          "color": "rgb(23, 62, 118)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(23, 79, 155)"
+        },
+        "tokens": {
+          "selection": "#d9e6fb",
+          "foreground": "#173e76"
+        }
+      }
+    },
+    {
+      "engine": "WebKit",
+      "kind": "references",
+      "theme": "dark",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      }
+    },
+    {
+      "engine": "WebKit",
+      "kind": "symbols",
+      "theme": "dark",
+      "size": 13,
+      "styles": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      },
+      "host": {
+        "normal": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(78, 81, 87)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "none",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "focused": {
+          "borderTopStyle": "solid",
+          "borderTopWidth": "1px",
+          "borderTopColor": "rgb(107, 155, 250)",
+          "borderRadius": "5px",
+          "backgroundColor": "rgb(30, 31, 34)",
+          "boxShadow": "rgb(107, 155, 250) 0px 0px 0px 1px",
+          "outlineStyle": "none",
+          "outlineWidth": "3px"
+        },
+        "caret": {
+          "caretColor": "rgb(223, 225, 229)"
+        },
+        "placeholder": {
+          "color": "rgb(111, 115, 123)"
+        },
+        "textSelection": {
+          "color": "rgb(240, 245, 255)",
+          "backgroundColor": "rgb(33, 66, 131)"
+        },
+        "unselected": {
+          "row": {
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(181, 184, 191)",
+            "borderRadius": "4px",
+            "cursor": "default"
+          },
+          "secondary": {
+            "color": "rgb(111, 115, 123)"
+          }
+        },
+        "selected": {
+          "backgroundColor": "rgb(33, 66, 131)",
+          "color": "rgb(240, 245, 255)",
+          "borderRadius": "4px",
+          "cursor": "default",
+          "userSelect": "none"
+        },
+        "secondary": {
+          "color": "rgb(168, 199, 250)"
+        },
+        "tokens": {
+          "selection": "#214283",
+          "foreground": "#f0f5ff"
+        }
+      }
+    }
+  ],
+  "validation": {
+    "typeCheck": true,
+    "scriptTests": {
+      "passed": 1438,
+      "failed": 0
+    },
+    "productionBuild": true,
+    "definitionAndReferenceGestures": true,
+    "symbolKeyboardStaleAndCleanup": true,
+    "findTree512Results": true,
+    "renderedCases": 24,
+    "codeFontPx": 20,
+    "remPx": 16
+  },
+  "nativeSourceStartup": {
+    "pid": 96298,
+    "session": "session-1793759578877-96298-0",
+    "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793759495300",
+    "frontendReady": true,
+    "healthyPackages": [
+      {
+        "id": "dev.asterlyn.android-gradle",
+        "version": "0.6.3",
+        "digest": "sha256:e389dcef3bec99ce45dd521fc27f50a00ebd9a5c3b287a0562525cf85634652d"
+      },
+      {
+        "id": "dev.asterlyn.lsp",
+        "version": "0.3.13",
+        "digest": "sha256:3e921172d7ed0e2d385202bd2760003d3eef91c2a47af681b4f0b9d43f2647df"
+      }
+    ],
+    "errors": [
+      {
+        "event": "command.failed",
+        "command": "existing_project_directories"
+      },
+      {
+        "event": "command.failed",
+        "command": "existing_project_directories"
+      }
+    ]
+  },
+  "artifact": {
+    "executableSha256": "ded4b82092fc389244b5d306b73277ba6d8a7864cf927bd642a129d85f055509",
+    "archivePath": "/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn-0.1.25-picker-host-styles-macos.app.zip",
+    "archiveBytes": 25600553,
+    "archiveSha256": "b8339e23ea3de69756c06d5e90c29bce8830a8e8ec9b935c899b02319bdd20d5",
+    "installedRootBefore": {
+      "inode": 203606126,
+      "device": 16777234
+    }
+  },
+  "nativeInstalledAcceptance": {
+    "installer": {
+      "source": "/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn.app",
+      "destination": "/Applications/Asterlyn.app",
+      "version": "0.1.25",
+      "executableSha256": "ded4b82092fc389244b5d306b73277ba6d8a7864cf927bd642a129d85f055509",
+      "backup": {
+        "archive": "/Users/gzq/Library/Application Support/Asterlyn/archived-install-backups/Asterlyn-1793759609169-d546f632-a8d1-483e-8cc5-9173d5023d3a.app.zip",
+        "sha256": "f847c1064f235d893a224bf0a2bf3ddd0dc6965c42fa7f70e1cd47ec1767dd95",
+        "executableSha256": "3c11bdcb31b574135ee89e57d1cdc2465a8e0444b8137e57af89887dba2a17da"
+      },
+      "replacement": {
+        "rootIdentityPreserved": true,
+        "inode": "203606126",
+        "device": "16777234"
+      },
+      "sourceRegistration": {
+        "alreadyUnregistered": false
+      },
+      "launchpad": {
+        "database": "/var/folders/kh/gf56wykj16qf_dqdqqkn08g00000gp/0/com.apple.dock.launchpad/db/db",
+        "backup": "/Users/gzq/Library/Application Support/Asterlyn/archived-install-backups/launchpad-1793759612925-d8deadfc-e029-48e8-8656-4bde64db9f51.sqlite",
+        "keepId": 145,
+        "removeIds": [],
+        "staleIds": [],
+        "unrelatedEntriesPreserved": 90
+      },
+      "firstLaunch": {
+        "pid": 96499,
+        "session": "session-1793759614190-96499-0",
+        "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793759495300",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      },
+      "reopen": {
+        "pid": 96605,
+        "session": "session-1793759616148-96605-0",
+        "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793759495300",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      }
+    },
+    "realWorkspace": "/Users/gzq/AndroidStudioProjects/boostCleaner",
+    "referenceSymbol": "GlobalConfigNew",
+    "referenceTargets": 69,
+    "importTargets": 15,
+    "visibleReferences": 54,
+    "excludeImportsDefault": true,
+    "searchFocusAndBorderVisualPass": true,
+    "selectedForegroundAndSecondaryVisualPass": true,
+    "keyboardSelectionObserved": true,
+    "escapeCloses": true,
+    "returnedTab": "common/src/main/java/com/swiftcleaner/lib/utils/AppListManager.java",
+    "returnedTabSaved": true,
+    "sourceEditedByAcceptance": false,
+    "nativeSymbols": {
+      "query": "GlobalConfigNew",
+      "matches": 1,
+      "filesScanned": 60,
+      "reusedFiles": 60
+    },
+    "quantitativeStyleEvidence": "computed-style fixtures in Chromium and WebKit; native screenshot is supplemental"
+  },
+  "installedExecutableSha256": "ded4b82092fc389244b5d306b73277ba6d8a7864cf927bd642a129d85f055509",
+  "installedRootAfter": {
+    "inode": 203606126,
+    "device": 16777234
+  },
+  "nativeLogKnownErrors": [
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    },
+    {
+      "event": "command.failed",
+      "command": "existing_project_directories"
+    }
+  ],
+  "manualAcceptance": {
+    "status": "passed",
+    "date": "2026-11-04",
+    "scope": "Final integrated installed build, with line and column before trimmed previews",
+    "submission": "User authorized logical commits"
+  }
+}

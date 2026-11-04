@@ -1,3 +1,5 @@
+import "../../src/styles.css";
+import "../../src/shared/controls.css";
 import {ProjectSymbols} from "../../src/features/project-symbols/project-symbols.ts";
 import "../../src/features/project-symbols/project-symbols.css";
 let workspace:{root:string;generation:number}|null={root:"/project",generation:1},dirty=false,delay=0,valid=true,navigations=0,cancels=0,queries=0;

@@ -1,3 +1,4 @@
+import "../../src/shared/controls.css";
 import "../../src/features/files-editor/workspace-search.css";
 import "../../src/features/files-editor/language-location-picker.css";
 import {FindResultsRuntime} from "../../src/features/files-editor/find-results-runtime.ts";

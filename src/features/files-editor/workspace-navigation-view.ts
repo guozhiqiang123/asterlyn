@@ -87,7 +87,7 @@ export function renderCommandSurface(model: CommandSurfaceViewModel): string {
       <label class="command-surface-ignore-filter"><input id="command-surface-exclude-ignored" type="checkbox" ${model.workspaceSearchControls.excludeIgnored ? "checked" : ""} /><span>${escapeHtml(copy.filterIgnoredFiles)}</span></label>
       <button class="icon-button command-surface-close" type="button" data-command-surface-close aria-label="${escapeAttribute(copy.close)}">${icon("close", 15)}</button>
     </div>
-    <div class="command-surface-input">
+    <div class="command-surface-input host-search-field">
       ${icon("search", 17)}
       <textarea id="command-surface-input" rows="1" placeholder="${escapeAttribute(title)}" autocomplete="off" spellcheck="false" aria-label="${escapeAttribute(title)}" aria-controls="command-surface-results" aria-activedescendant="${resultCount > 0 ? `command-result-${selected}` : ""}">${textAreaValue(model.commandSurface.query)}</textarea>
       ${queryOptions ? `<span class="search-option-strip" role="group" aria-label="${escapeAttribute(copy.searchOptions)}">
@@ -330,9 +330,9 @@ function renderFileNavigationResult(
     range.from <= directory.length && range.to > directory.length
   );
   const directoryLabel = directory ? `${directory}${separatorMatched ? "/" : ""}` : "/";
-  return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
+  return `<button class="command-result host-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">
     <span class="command-result-icon">${icon("file", 15)}</span>
-    <span class="command-result-copy"><strong>${renderHighlightedText(name, clipHighlightRanges(ranges, nameStart, path.length))}</strong><small>${renderHighlightedText(directoryLabel, clipHighlightRanges(ranges, 0, separatorMatched ? directory.length + 1 : directory.length))}</small></span>
+    <span class="command-result-copy"><strong>${renderHighlightedText(name, clipHighlightRanges(ranges, nameStart, path.length))}</strong><small class="host-search-secondary">${renderHighlightedText(directoryLabel, clipHighlightRanges(ranges, 0, separatorMatched ? directory.length + 1 : directory.length))}</small></span>
     ${file.repositoryId === "." ? "" : `<span class="scope-pill">${escapeHtml(file.repositoryId)}</span>`}
   </button>`;
 }
@@ -346,9 +346,9 @@ function renderCommandResult(command: NavigationCommand, index: number, selected
   const ariaShortcuts = command.ariaShortcuts?.length
     ? ` aria-keyshortcuts="${escapeAttribute(command.ariaShortcuts.join(" "))}"`
     : "";
-  return `<button class="command-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}"${ariaShortcuts} ${command.enabled ? "" : "disabled"}>
+  return `<button class="command-result host-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}"${ariaShortcuts} ${command.enabled ? "" : "disabled"}>
     <span class="command-result-icon">${icon("search", 15)}</span>
-    <span class="command-result-copy"><strong>${renderHighlightedText(command.label, ranges.label)}</strong><small>${renderHighlightedText(command.detail, ranges.detail)}</small>${hidden ? `<small class="command-result-alias">${hidden}</small>` : ""}</span>
+    <span class="command-result-copy"><strong>${renderHighlightedText(command.label, ranges.label)}</strong><small class="host-search-secondary">${renderHighlightedText(command.detail, ranges.detail)}</small>${hidden ? `<small class="command-result-alias host-search-secondary">${hidden}</small>` : ""}</span>
     ${command.shortcut ? `<kbd>${escapeHtml(command.shortcut)}</kbd>` : ""}
   </button>`;
 }
@@ -359,7 +359,7 @@ function renderWorkspaceSearchResult(
   selected: number,
   copy: NavigationCopy,
 ): string {
-  return `<button class="command-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">${renderWorkspaceSearchMatchContent(match, copy)}</button>`;
+  return `<button class="command-result host-search-result workspace-search-result ${index === selected ? "selected" : ""}" id="command-result-${index}" type="button" role="option" aria-selected="${index === selected}" data-command-result="${index}">${renderWorkspaceSearchMatchContent(match, copy)}</button>`;
 }
 
 export function renderWorkspaceSearchMatchContent(
