@@ -53,7 +53,7 @@ else if(m.method==='textDocument/definition')send({id:m.id,result:opened===1?[{u
         let until = Instant::now() + Duration::from_secs(8);
         while Instant::now() < until {
             if let Ok(event) = events.recv_timeout(Duration::from_millis(100)) {
-                if event.kind == kind { return; }
+                if event.kind == kind { return event; }
             }
         }
         panic!("missing {kind} event");
@@ -71,4 +71,43 @@ else if(m.method==='textDocument/definition')send({id:m.id,result:opened===1?[{u
     assert_eq!(result.as_array().unwrap().len(), 1, "open documents survived recovery exactly once");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     manager.stop(&id, &subject).unwrap();
+}
+
+#[cfg(feature = "android-fixtures")]
+#[test]
+fn native_model_error_codes_drive_real_adapter_retry_without_an_input_notification() {
+    let node = std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE").expect("explicit Node fixture");
+    let package = PathBuf::from(std::env::var("ASTERLYN_ANDROID_LSP_ROOT").expect("explicit admitted adapter"));
+    let workspace = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let subject = LanguageSubject { owner:"native-model-retry".into(), root:workspace.path().canonicalize().unwrap(), activation:1 };
+    let language = LanguagePackage {
+        version:"test".into(), digest:"test".into(), content_digest:"test".into(), root:package.clone(),
+        node:node.clone().into(), node_digest:"test".into(), rust:None,
+        packaged:Some(PackagedServerProfile { id:"android-jvm".into(), node:node.into(), package_root:package,
+            entry:"server-programs/android-server.mjs".into(), initialization_options:json!({"analysis":{"stateDirectory":state.path(),"modelInputMonitoring":true}}),
+            selectors:vec![("kotlin".into(),vec![".kt".into()])], cache_parent:cache.path().into() }),
+    };
+    let calls = Arc::new(AtomicU64::new(0)); let loads = calls.clone();
+    let access = ModelAccess::new(Arc::new(move |_,_| {
+        Err(if loads.fetch_add(1,Ordering::SeqCst)==0 { "model-inputs-changed" } else { "model-selected-variant-missing" }.into())
+    }));
+    let manager = LanguageServiceManager::default();
+    let (sender,events) = mpsc::channel();
+    let id = manager.start_with_models(subject.clone(),language,0,Arc::new(||true),
+        Arc::new(move|event|{let _=sender.send(event);}),Some(access)).unwrap();
+    let until = Instant::now()+Duration::from_secs(8);
+    let mut terminal = false;
+    while Instant::now()<until {
+        if let Ok(event)=events.recv_timeout(Duration::from_millis(100)) {
+            if event.kind=="degraded" {
+                assert_eq!(event.code.as_deref(),Some("model-selected-variant-missing"));
+                terminal=true;break;
+            }
+        }
+    }
+    assert!(terminal,"actual packaged adapter must retry a stale model response then report the precise terminal category");
+    assert_eq!(calls.load(Ordering::SeqCst),2,"no observer or explicit invalidation supplied the retry");
+    manager.stop(&id,&subject).unwrap();
 }

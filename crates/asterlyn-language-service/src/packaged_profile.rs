@@ -96,8 +96,8 @@ impl LanguageServiceProcess {
     ) -> Result<(), SessionError> {
         let reply = match result {
             Ok(value) => serde_json::json!({"jsonrpc":"2.0","id":id,"result":value}),
-            Err(_) => {
-                serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"The reviewed workspace model could not be prepared."}})
+            Err(code) => {
+                serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":model_failure_message(&code)}})
             }
         };
         let bytes = serde_json::to_vec(&reply)
@@ -109,5 +109,37 @@ impl LanguageServiceProcess {
         }
         write_frame(self.session.writer_mut(), &bytes)
             .map_err(|_| SessionError::Process("language model reply failed".into()))
+    }
+}
+
+// Only fixed protocol categories cross back into the adapter. Never forward an error message
+// from the filesystem, tooling process or arbitrary provider, even when it resembles a token.
+fn model_failure_message(code: &str) -> &str {
+    match code {
+        "model-obsolete" | "model-inputs-changed" | "model-busy" |
+        "model-selected-variant-missing" | "model-dependency-variant-missing" |
+        "model-dependency-variant-ambiguous" | "model-selection-unavailable" |
+        "selection-unavailable" | "inputs-unavailable" | "authority-revoked" | "identity-invalid" |
+        "android-sdk-missing" | "repository-credentials-missing" | "dependency-unavailable" |
+        "dependency-tls" | "dependency-dns" | "gradle-model-incompatible" |
+        "gradle-version-incompatible" | "gradle-toolchain-incompatible" |
+        "project-configuration-failed" | "project-script-failed" | "model-artifact-missing" |
+        "model-path-missing" | "model-invalid" | "model-json-invalid" | "model-unavailable" |
+        "program-failed" | "program-timeout" | "cancelled" | "output-bound" |
+        "request-schema" | "unsupported-run-configuration" => code,
+        _ => "The reviewed workspace model could not be prepared.",
+    }
+}
+
+#[cfg(test)]
+mod model_failure_tests {
+    #[test]
+    fn fixed_recovery_categories_survive_but_raw_or_unrecognized_errors_do_not() {
+        for code in ["model-inputs-changed", "model-obsolete", "model-busy", "model-selected-variant-missing", "repository-credentials-missing"] {
+            assert_eq!(super::model_failure_message(code), code);
+        }
+        for error in ["/private/source.kt: secret", "password-secret", "model-stolen-source", "model-inputs-changed\nsource"] {
+            assert_eq!(super::model_failure_message(error), "The reviewed workspace model could not be prepared.");
+        }
     }
 }
