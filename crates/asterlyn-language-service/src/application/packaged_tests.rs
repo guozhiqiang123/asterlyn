@@ -152,7 +152,7 @@ fn actual_packaged_java_keeps_documents_responsive_during_model_work() {
     }
     use sha2::{Digest, Sha256};
     let reference = json!({"path":PathBuf::from(model).canonicalize().unwrap(),"bytes":bytes.len(),"digest":format!("sha256:{:x}",Sha256::digest(&bytes)),"generation":1,"schema":1});
-    let access: ModelAccess = Arc::new(move |alive, _| {
+    let access = ModelAccess::new(Arc::new(move |alive, _| {
         eprintln!("model access called");
         std::thread::sleep(Duration::from_millis(750));
         if !alive.load(Ordering::SeqCst) {
@@ -162,7 +162,7 @@ fn actual_packaged_java_keeps_documents_responsive_during_model_work() {
             value: reference.clone(),
             resource: Box::new(Lease),
         })
-    });
+    }));
     let manager = LanguageServiceManager::default();
     let (tx, events) = mpsc::channel();
     let emit = Arc::new(move |event: LanguageServiceEvent| {

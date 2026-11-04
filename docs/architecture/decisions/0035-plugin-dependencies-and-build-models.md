@@ -31,3 +31,7 @@ automatically repair quarantined packages, or enable packages the user disabled.
 unchanged healthy/pending bundle is idempotent. Failed batch admission leaves the installation
 snapshot unchanged. If the existing graph is valid, the host opens with it and logs a deferred
 upgrade instead of aborting the application setup hook.
+
+## Failed-model input observation (2026-11-04)
+
+A successful model lease is not required to observe subsequent input/selection changes. Each native language actor may own one generic, bounded, background identity probe at a two-second interval, supplied by its admitted model provider. It hashes declared input globs and contribution state bindings; it never executes the analysis program. Changed or newly available inputs revoke old-generation results and notify that actor, including after model failure. Unchanged terminal failures do not retry. Probes stop with actor ownership and never block editor I/O. Build-system selection stays plugin-owned.

@@ -32,3 +32,7 @@ Prefer deterministic fixtures for deliberate invalid selections and configuratio
 ## Acceptance record
 
 Implementation and evidence will be appended per step. Do not mark native or real-project acceptance complete based only on unit tests or task-discovery success.
+
+- M0: plans committed in all three repositories before implementation (`fbcbc0c`, `627f986`, `4221f81`).
+- M1: Android Gradle `ee4dd75`; 77 tests, type check and build passed. Fresh discovery reconciles the durable preference; async restore/write races are serialized.
+- M2: host adds an optional generic model-input observer, one outstanding background probe per actor at a two-second interval. It compares bounded input/declared-selection identities even without a successful model lease. Changes revoke old results and notify only that actor; unchanged failures never execute analysis. `cargo test -p asterlyn-language-service`, `cargo check -p asterlyn`, and a production-actor Node fixture (failure → changed selection → ready → navigation with one document open) passed. Local native/package acceptance remains M5.

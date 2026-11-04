@@ -25,6 +25,9 @@ pub(super) fn actor(
     let (model_sender, model_receiver) = mpsc::sync_channel::<Result<ModelReply, String>>(1);
     let mut model_pending: Option<crate::JsonRpcRequest> = None;
     let mut model_resource: Option<Box<dyn ModelResource>> = None;
+    let mut model_watch = super::model_watch::ModelWatch::new(model_access.as_ref().and_then(|access| access.observe.clone()));
+    let mut input_revision = 0u64;
+    let mut pending_input_revision = 0u64;
     let mut model_generation = 0;
     let mut last_diagnostic_refresh = Instant::now() - Duration::from_secs(1);
     let mut last_model_request = Instant::now() - Duration::from_secs(1);
@@ -67,15 +70,19 @@ pub(super) fn actor(
                 termination = "authority-revoked";
                 break;
             }
-            if model_resource
+            let changed = model_watch.poll(&alive, Instant::now());
+            if changed.is_some() || model_resource
                 .as_ref()
                 .is_some_and(|resource| !resource.is_current())
             {
                 model_resource = None;
                 model_generation += 1;
                 rust_ready = false;
+                if changed.is_some() { input_revision += 1; }
+                let reason = changed.unwrap_or("model-revoked");
+                trace.record("model.invalidated", None, None, || json!({"reason":reason,"revision":input_revision,"generation":model_generation}));
                 if process
-                    .notify("asterlyn/modelInvalidated", Some(json!({})))
+                    .notify("asterlyn/modelInvalidated", Some(json!({"reason":reason,"revision":input_revision})))
                     .is_err()
                 {
                     break;
@@ -93,7 +100,7 @@ pub(super) fn actor(
                 || json!({"outcome":if result.is_ok(){"completed"}else{"failed"}}),
             );
             let value = match result {
-                Ok(reply) if reply.resource.is_current() => {
+                Ok(reply) if pending_input_revision == input_revision && reply.resource.is_current() => {
                     if model_resource
                         .as_ref()
                         .is_none_or(|old| old.generation() != reply.resource.generation())
@@ -252,10 +259,11 @@ pub(super) fn actor(
                             .unwrap_or(false);
                         last_model_request = Instant::now();
                         model_pending = Some(request);
+                        pending_input_revision = input_revision;
                         std::thread::spawn(move || {
                             let result =
                                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                    access(lifetime, refresh)
+                                    (access.load)(lifetime, refresh)
                                 }))
                                 .unwrap_or_else(|_| Err("model work failed".into()));
                             let _ = sender.send(result);

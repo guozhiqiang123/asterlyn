@@ -3,6 +3,9 @@
 mod actor_runtime;
 pub mod consent;
 mod progress;
+mod model_watch;
+#[cfg(all(test, feature = "process-fixtures"))]
+mod model_recovery_tests;
 use actor_runtime::actor;
 #[path = "diagnostics.rs"]
 mod diagnostics;
@@ -130,8 +133,23 @@ pub struct ModelReply {
     pub value: Value,
     pub resource: Box<dyn ModelResource>,
 }
-pub type ModelAccess =
+pub type ModelLoader =
     Arc<dyn Fn(Arc<AtomicBool>, bool) -> Result<ModelReply, String> + Send + Sync>;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelInputs {
+    pub inputs: String,
+    pub selection: String,
+}
+pub type ModelObserver = Arc<dyn Fn() -> Result<ModelInputs, String> + Send + Sync>;
+#[derive(Clone)]
+pub struct ModelAccess {
+    load: ModelLoader,
+    observe: Option<ModelObserver>,
+}
+impl ModelAccess {
+    pub fn new(load: ModelLoader) -> Self { Self { load, observe: None } }
+    pub fn with_observer(mut self, observe: ModelObserver) -> Self { self.observe = Some(observe); self }
+}
 pub(super) struct ActorServices {
     pub tracing: Arc<AtomicBool>,
     selectors: Option<Vec<(String, Vec<String>)>>,

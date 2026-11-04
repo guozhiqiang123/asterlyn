@@ -354,7 +354,7 @@ pub(crate) async fn start_language_service(
         });
         let models=super::packaged_analysis::model_access(&app,&owner,&package)?;
         let mut package=package;
-        if let Some(profile)=package.packaged.as_mut(){profile.initialization_options["analysis"]["refreshModel"]=serde_json::json!(refresh_model.unwrap_or(false));}
+        if let Some(profile)=package.packaged.as_mut(){profile.initialization_options["analysis"]["refreshModel"]=serde_json::json!(refresh_model.unwrap_or(false));profile.initialization_options["analysis"]["modelInputMonitoring"]=serde_json::json!(models.is_some());}
         let session = app
             .state::<LanguageServiceManager>()
             .start_with_models(owner, package, authority, allowed, emit, models)?;
