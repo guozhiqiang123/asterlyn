@@ -157,7 +157,7 @@
 .search-result-location {
   overflow: hidden;
   color: var(--info-text);
-  font-size: 9px;
+  font-size: max(9px, calc(var(--ui-font-size, 13px) - 4px));
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;

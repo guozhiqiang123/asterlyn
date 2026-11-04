@@ -12,7 +12,7 @@ import type { FindFileResultsSnapshot, FindResultsState } from "./find-results-c
 import { findFileTree, sortedFindFiles } from "./find-results-controller.ts";
 import {
   formatLocalizedWorkspaceSearchCoverage,
-  renderWorkspaceSearchMatchContent,
+  renderWorkspaceSearchPreview,
 } from "./workspace-navigation-view.ts";
 
 export function renderFindResults(
@@ -103,18 +103,19 @@ function renderFindFileRow(
 
 export function renderFindLocationPreview(preview:FindLocationPreview|null|undefined,copy:NavigationCopy):string {
   if(!preview)return `<span class="find-preview-status">${escapeHtml(preview===null?copy.findPreviewUnavailable:copy.findPreviewLoading)}</span>`;
-  return `${preview.leading?"…":""}${escapeHtml(preview.before)}<mark class="command-result-match">${escapeHtml(preview.found)}</mark>${escapeHtml(preview.after)}${preview.trailing?"…":""}`;
+  return `${preview.leading?"…":""}${escapeHtml(preview.before.trimStart())}<mark class="command-result-match">${escapeHtml(preview.found)}</mark>${escapeHtml(preview.after)}${preview.trailing?"…":""}`;
 }
 function renderResultTreeRow(row:FindResultRow,state:Readonly<FindResultsState>,catalog:LocaleCatalog,previews:ReadonlyMap<number,FindLocationPreview|null>,tree:boolean,visibleIndex:number):string {
   const selected=row.id===state.resultSelection;
   const common=`id="find-tree-row-${visibleIndex}" role="${tree?"treeitem":"option"}" ${tree?`aria-level="${row.depth+1}"`:""} aria-selected="${selected}" style="--tree-depth:${row.depth}"`;
-  if(row.node){const expanded=state.expandedDirectories.has(row.id);return `<button class="find-file-row find-group-row ${row.node.kind} ${selected?"selected":""}" type="button" tabindex="-1" ${common} aria-expanded="${expanded}" data-find-node="${escapeAttribute(row.id)}" title="${escapeAttribute(row.node.path)}"><span class="tree-chevron ${expanded?"expanded":""}">${icon("chevron",12)}</span><span class="find-file-glyph">${row.node.kind==="directory"?icon("folder",15):fileTypeIcon(row.node.path)}</span><span class="find-file-name">${escapeHtml(row.label)}</span><small>${row.node.count}</small></button>`;}
-  const entry=row.entry!,snapshot=state.snapshot!;let content="";
-  if(snapshot.kind==="workspace")content=renderWorkspaceSearchMatchContent(snapshot.report.matches[entry.index]!,catalog.navigation,tree?`${entry.line}:${entry.column}`:undefined);
-  else if(snapshot.kind==="locations"){
-    const snippet=renderFindLocationPreview(previews.get(entry.index),catalog.navigation);
-    content=`<span class="search-result-location" title="${escapeAttribute(`${entry.path}:${entry.line}:${entry.column}`)}">${escapeHtml(tree?`${entry.line}:${entry.column}`:`${basename(entry.path)}:${entry.line}`)}</span><code>${snippet}</code>`;
-  }
+  if(row.node){const expanded=state.expandedDirectories.has(row.id);return `<button class="find-file-row find-group-row ${row.node.kind} ${selected?"selected":""}" type="button" tabindex="-1" ${common} aria-expanded="${expanded}" data-find-node="${escapeAttribute(row.id)}" title="${escapeAttribute(row.node.path)}"><span class="tree-chevron ${expanded?"expanded":""}">${icon("chevron",12)}</span><span class="find-file-glyph">${row.node.kind==="directory"?icon("folder",15):fileTypeIcon(row.node.path)}</span><span class="find-file-name">${escapeHtml(row.label)}</span><small class="compact-file-tree-count">${row.node.count}</small></button>`;}
+  const entry=row.entry!,snapshot=state.snapshot!;
+  const snippet=snapshot.kind==="workspace"
+    ? renderWorkspaceSearchPreview(snapshot.report.matches[entry.index]!,catalog.navigation,true)
+    : renderFindLocationPreview(previews.get(entry.index),catalog.navigation);
+  const position=escapeHtml(`${entry.line}:${entry.column}`);
+  const label=tree?position:`<span class="find-match-file">${escapeHtml(basename(entry.path))}</span><span>:${position}</span>`;
+  const content=`<span class="search-result-location" title="${escapeAttribute(`${entry.path}:${entry.line}:${entry.column}`)}">${label}</span><code>${snippet}</code>`;
   return `<button class="workspace-search-result find-result find-match-row ${selected?"selected":""}" type="button" tabindex="-1" ${common} data-find-result="${entry.index}">${content}</button>`;
 }
 

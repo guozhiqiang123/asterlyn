@@ -1,0 +1,4506 @@
+{
+  "schema": 1,
+  "date": "2026-11-04",
+  "sourceUncommitted": true,
+  "baseHead": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb",
+  "sourceSha256": {
+    "src/features/files-editor/workspace-search.css": "988bed6bed4619dda44293fa729e89e5d0ee84bee87c2b701dce1cb0c631fdd2",
+    "src/features/files-editor/find-results-view.ts": "89dc1ae957d0169947293755fb2e33dfe797d08dc940146bd38e33b887b9494a",
+    "src/shared/controls.css": "bc4350bfed0f8121d9fbc91d43ab80d4b57a936fd1ff1317fc47da4195ac70b2"
+  },
+  "regressionBefore": {
+    "uiSizePx": 13,
+    "findPreviewPx": 13,
+    "hostSearchPreviewPx": 11,
+    "findFileWeight": 600,
+    "hostTreeFileWeight": 400
+  },
+  "caseCount": 48,
+  "cases": [
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "11px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "10px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "10px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "11px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "9px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "directory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "count": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "actual": {
+        "code": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "mark": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "line": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "700",
+          "lineHeight": "normal"
+        },
+        "summary": {
+          "size": "14px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "checkbox": null,
+        "hostCode": {
+          "size": "14px",
+          "family": "ui-monospace, monospace",
+          "weight": "400",
+          "lineHeight": "15px"
+        },
+        "hostLine": {
+          "size": "12px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "600",
+          "lineHeight": "normal"
+        },
+        "hostFile": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostDirectory": {
+          "size": "16px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "hostCount": {
+          "size": "13px",
+          "family": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "weight": "500",
+          "lineHeight": "normal"
+        },
+        "editor": {
+          "size": "20px",
+          "family": "monospace",
+          "weight": "400",
+          "lineHeight": "normal"
+        },
+        "remWidth": 16,
+        "htmlSize": "16px"
+      }
+    }
+  ],
+  "validation": {
+    "typeCheck": true,
+    "productionBuild": true,
+    "scriptTestsPassed": 1438,
+    "findBehaviorRegression": true,
+    "portalStyleCasesPassed": 24,
+    "editorFontPx": 20,
+    "htmlAndRemPx": 16
+  },
+  "nativeDelivery": {
+    "sourceStartup": {
+      "pid": 4051,
+      "session": "session-1793760436291-4051-0",
+      "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793760340644",
+      "frontendReady": true,
+      "healthyPackages": [
+        {
+          "id": "dev.asterlyn.android-gradle",
+          "version": "0.6.3",
+          "digest": "sha256:e389dcef3bec99ce45dd521fc27f50a00ebd9a5c3b287a0562525cf85634652d"
+        },
+        {
+          "id": "dev.asterlyn.lsp",
+          "version": "0.3.13",
+          "digest": "sha256:3e921172d7ed0e2d385202bd2760003d3eef91c2a47af681b4f0b9d43f2647df"
+        }
+      ],
+      "errors": [
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        },
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        }
+      ]
+    },
+    "artifact": {
+      "executableSha256": "9f77238441469038963dfdc48d6c4bb890fa21f92634e0ec5cc6e67fd394d33c",
+      "archivePath": "/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn-0.1.25-find-typography-macos.app.zip",
+      "archiveSha256": "a93321f0dccd23be341944fde86f21a00953c3bbebff0c31168870f047f2c94d",
+      "archiveBytes": 25600729,
+      "archiveCrcVerified": true,
+      "strictSignatureVerified": true
+    },
+    "installer": {
+      "source": "/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn.app",
+      "destination": "/Applications/Asterlyn.app",
+      "version": "0.1.25",
+      "executableSha256": "9f77238441469038963dfdc48d6c4bb890fa21f92634e0ec5cc6e67fd394d33c",
+      "backup": {
+        "archive": "/Users/gzq/Library/Application Support/Asterlyn/archived-install-backups/Asterlyn-1793760469007-86f7af7a-e6ee-43eb-be92-4052e897d77e.app.zip",
+        "sha256": "19bf747e79ddc94ab5c4da2fb75f7921bdc5be84df37ddbe947ccf0b18c84b3b",
+        "executableSha256": "ded4b82092fc389244b5d306b73277ba6d8a7864cf927bd642a129d85f055509"
+      },
+      "replacement": {
+        "rootIdentityPreserved": true,
+        "inode": "203606126",
+        "device": "16777234"
+      },
+      "sourceRegistration": {
+        "alreadyUnregistered": false
+      },
+      "launchpad": {
+        "database": "/var/folders/kh/gf56wykj16qf_dqdqqkn08g00000gp/0/com.apple.dock.launchpad/db/db",
+        "backup": "/Users/gzq/Library/Application Support/Asterlyn/archived-install-backups/launchpad-1793760472756-9f4a78b1-b688-4d7d-8d5e-45c465d6db22.sqlite",
+        "keepId": 145,
+        "removeIds": [],
+        "staleIds": [],
+        "unrelatedEntriesPreserved": 90
+      },
+      "firstLaunch": {
+        "pid": 4275,
+        "session": "session-1793760474043-4275-0",
+        "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793760340644",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      },
+      "reopen": {
+        "pid": 4372,
+        "session": "session-1793760475932-4372-0",
+        "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793760340644",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      }
+    },
+    "realFindAcceptance": {
+      "workspace": "/Users/gzq/AndroidStudioProjects/boostCleaner",
+      "symbol": "GlobalConfigNew",
+      "visibleReferences": 54,
+      "rawReferenceTargets": 69,
+      "importTargets": 15,
+      "openedVia": "reference picker Open in Window",
+      "previewAndTreeTypographyVisualPass": true,
+      "selectedRowAndPreviewHighlightPass": true,
+      "returnedTab": "feature-base/src/main/java/com/newclean/clean/ui/api/CleanSdk.kt",
+      "returnedTabSaved": true,
+      "sourceEditedByAcceptance": false,
+      "events": [
+        {
+          "event": "language.imports.classified",
+          "message": "targets=69;files=15;imports=15",
+          "durationMs": 104
+        }
+      ],
+      "quantitativeTypographySource": "Chromium and WebKit computed-style gate; native screenshot is supplemental"
+    },
+    "installedExecutableSha256": "9f77238441469038963dfdc48d6c4bb890fa21f92634e0ec5cc6e67fd394d33c",
+    "installedRootInode": 203606126
+  },
+  "manualAcceptance": {
+    "status": "passed",
+    "date": "2026-11-04",
+    "scope": "Final integrated installed build, with line and column before trimmed previews",
+    "submission": "User authorized logical commits"
+  }
+}

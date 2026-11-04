@@ -1,0 +1,1536 @@
+{
+  "schema": 2,
+  "date": "2026-11-04",
+  "sourceUncommitted": true,
+  "baseHead": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb",
+  "finalLayout": "leading line/column followed by preview; trim display indentation only",
+  "sourceSha256": {
+    "src/features/files-editor/find-results-view.ts": "47e10bf3df714bb17e97974a8cf886de892e10112fa769b5c0faecc44161c9f4",
+    "src/features/files-editor/workspace-navigation-view.ts": "97c52cacb63b26b42def65d4711ab160f76aa3ecd27c1e0e98d37bc87e6ac085",
+    "src/features/files-editor/workspace-search.css": "0e425ed1ff8c2be17b592eca7c6b49b39876a70a35dcf69d1d6a234f833bb3d1"
+  },
+  "validation": {
+    "typeCheck": true,
+    "productionBuild": true,
+    "scriptTestsPassed": 1441,
+    "utf16AndRevisionPreserved": true,
+    "internalAndMatchedWhitespacePreserved": true,
+    "findBehaviorRegression": true,
+    "portalStyleCasesPassed": 24,
+    "narrowPanelPx": 360,
+    "longCodeClippedWithPositionVisible": true,
+    "layoutAndTypographyCases": 48
+  },
+  "cases": [
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "Chromium",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "light",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": "13px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": "13px",
+        "directory": "13px",
+        "count": "10px",
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 13,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "11px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "13px",
+        "summary": "11px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": "11px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": "11px",
+        "directory": "11px",
+        "count": "9px",
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 11,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "10px",
+        "line": "9px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "11px",
+        "summary": "10px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "references",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": "16px"
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const value = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "shared.ts:3:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "tree",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": "16px",
+        "directory": "16px",
+        "count": "13px",
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 116,
+        "codeRight": 886,
+        "positionLeft": 38,
+        "positionRight": 108,
+        "rowRight": 894,
+        "fileLeft": 61,
+        "position": "1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    },
+    {
+      "engine": "WebKit",
+      "theme": "dark",
+      "size": 16,
+      "kind": "text",
+      "view": "flat",
+      "fonts": {
+        "code": "14px",
+        "line": "12px",
+        "file": null,
+        "directory": null,
+        "count": null,
+        "title": "16px",
+        "summary": "14px",
+        "checkbox": null
+      },
+      "geometry": {
+        "first": "search-result-location",
+        "last": "CODE",
+        "text": "const needle = 1;",
+        "codeLeft": 202,
+        "codeRight": 886,
+        "positionLeft": 14,
+        "positionRight": 194,
+        "rowRight": 894,
+        "position": "a.ts:1:11"
+      },
+      "hostTypographyComparisonPassed": true
+    }
+  ],
+  "nativeDelivery": {
+    "artifact": {
+      "executableSha256": "6798993da43151a8cad10d8483548643608febbfce03d00a50d91f4f082d19ec",
+      "archivePath": "/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn-0.1.25-find-leading-position-macos.app.zip",
+      "archiveSha256": "f4b20b510fbe6e484a9d49a4f04c425f22994c3d259b5299c1402088cf83891b",
+      "archiveBytes": 25601092,
+      "archiveCrcVerified": true,
+      "strictSignatureVerified": true
+    },
+    "installer": {
+      "source": "/Users/gzq/PrivateProjects/asterlyn/target/release/bundle/macos/Asterlyn.app",
+      "destination": "/Applications/Asterlyn.app",
+      "version": "0.1.25",
+      "executableSha256": "6798993da43151a8cad10d8483548643608febbfce03d00a50d91f4f082d19ec",
+      "backup": {
+        "archive": "/Users/gzq/Library/Application Support/Asterlyn/archived-install-backups/Asterlyn-1793762223961-c97502b5-ce45-4815-a876-74d05ff35be6.app.zip",
+        "sha256": "709aa956e54c0ce417d721169cff53394961d32bca62ad6748f9624af4522e8e",
+        "executableSha256": "c555d93d8f13fe58847acb822c899c06de8fe56d46a3f729d3cf27fa7864be27"
+      },
+      "replacement": {
+        "rootIdentityPreserved": true,
+        "inode": "203606126",
+        "device": "16777234"
+      },
+      "sourceRegistration": {
+        "alreadyUnregistered": false
+      },
+      "launchpad": {
+        "database": "/var/folders/kh/gf56wykj16qf_dqdqqkn08g00000gp/0/com.apple.dock.launchpad/db/db",
+        "backup": "/Users/gzq/Library/Application Support/Asterlyn/archived-install-backups/launchpad-1793762227521-06352eb8-41b8-4582-92cf-9b053950967a.sqlite",
+        "keepId": 145,
+        "removeIds": [],
+        "staleIds": [],
+        "unrelatedEntriesPreserved": 90
+      },
+      "firstLaunch": {
+        "pid": 16174,
+        "session": "session-1793762228775-16174-0",
+        "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793761973143",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      },
+      "reopen": {
+        "pid": 16269,
+        "session": "session-1793762230786-16269-0",
+        "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793761973143",
+        "frontendReady": true,
+        "launchVia": "icon-bookmark"
+      }
+    },
+    "sourceStartup": {
+      "pid": 15975,
+      "session": "session-1793762177556-15975-0",
+      "buildId": "1215b5c903ac1e14787d06a5c47d6c97934d1ffb-dirty-1793761973143",
+      "frontendReady": true,
+      "healthyPackages": [
+        {
+          "id": "dev.asterlyn.android-gradle",
+          "version": "0.6.3",
+          "digest": "sha256:e389dcef3bec99ce45dd521fc27f50a00ebd9a5c3b287a0562525cf85634652d"
+        },
+        {
+          "id": "dev.asterlyn.lsp",
+          "version": "0.3.13",
+          "digest": "sha256:3e921172d7ed0e2d385202bd2760003d3eef91c2a47af681b4f0b9d43f2647df"
+        }
+      ],
+      "errors": [
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        },
+        {
+          "event": "command.failed",
+          "command": "existing_project_directories"
+        }
+      ]
+    },
+    "nativeBuildExitCode": 0,
+    "installedRootInode": 203606126,
+    "nativeAcceptance": {
+      "installedFrontendReady": true,
+      "bothIconBookmarkLaunchesReady": true,
+      "currentProject": "/Users/gzq/PrivateProjects/asterlyn",
+      "sourceEditedByAcceptance": false,
+      "extraFindUiCheck": "CUA session timed out and reset during AX capture; not counted as a successful native Find interaction. Final layout is verified by 48 Chromium/WebKit computed-style cases."
+    }
+  },
+  "manualAcceptance": {
+    "status": "passed",
+    "date": "2026-11-04",
+    "scope": "Final integrated installed build, with line and column before trimmed previews",
+    "submission": "User authorized logical commits"
+  }
+}

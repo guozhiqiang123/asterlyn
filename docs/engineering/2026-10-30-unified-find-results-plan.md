@@ -103,3 +103,17 @@ Find 统一呈现目录 → 文件 → 命中/位置树，紧凑合并单子目�
 - 标准安装器已覆盖 `/Applications/Asterlyn.app`，保持根 device/inode `16777234/203606126`，仅创建已验证 ZIP 备份；installed executable SHA-256 `e872116352600fd05ec34ec65d12b58b3905b5a99ede6f7ca74722c0550ee7f6` 与验收包一致，严格验签通过。
 - 两次保存图标书签启动均 frontendReady：PID 74941 / 75036，会话 `session-1793673633737-74941-0` / `session-1793673635676-75036-0`。本地修复构建版本 0.1.25，构建身份 `372e068f18cbde414deb8b1ca4f3c06b74610de6-dirty-1793673384292`。
 - 证据：`/tmp/asterlyn-import-filter-install/installation.json`、`/tmp/asterlyn-import-filter-package.json`、`/tmp/asterlyn-import-filter-native-evidence.json` 及同前缀分类、测试、构建与签名日志。临时原生 AX 验证工具已删除。本项与前一项空白预览修复均已通过人工验收，依次提交。
+
+
+### Find 字号层级修正（2026-11-04）
+
+Find 结果文件 / 目录使用 compact-file-tree 的应用字号和正常字重；命中预览与宿主搜索共用 workspace-search-result code 的摘要字号（应用字号 -2px，最小 10px），不得在 find-match-row 再用应用正文字号覆盖。命中高亮、加载 / 无法预览提示均继承同一摘要字号。分组计数使用 compact-file-tree-count（应用字号 -3px，最小 9px）；搜索 / Find 共用行号样式（应用字号 -4px，最小 9px）。结果标题及“排除 import”继续采用应用字号。编辑器字体由编辑器设置控制，不能因调整结果窗口而改变。
+
+`npm run test:find:typography` 使用真实 Find、宿主搜索和 Files 渲染器，对明暗主题、11/13/16px、引用 / 文本、树 / 平铺视图，在 Chromium 和 WebKit 中作 48 组 computed-style 比较；门禁覆盖字号、字体族、文件字重、计数、行号、高亮与加载提示，另有 20px 代码字体和 1rem 探针。验收和原生交付见 `docs/benchmarks/2026-11-04-find-typography.md`。
+
+
+### 结果缩进与前置位置（2026-11-04，按最新人工反馈）
+
+Find 引用 / 定义与文本命中保留「行号 / 列号 → 代码」的原有前置位置列，树模式继续使用层级缩进和平铺模式原有两列布局。仅移除代码预览匹配前上下文的开头空格 / tab，使同一文件的预览不因源码缩进而参差。匹配本身、行内 / 字符串空格、裁切提示、真实 range、revision 和导航偏移保留；加载 / 失败反馈也保留前方位置。
+
+普通搜索弹窗仍使用自己的展示布局；安全摘要渲染器仅由 Find 选择修剪缩进。异步预览只替换 code 内容，保留行、前置位置标签、焦点和滚动。48 组字号 / 几何门禁覆盖主题、字号、来源和视图，明确断言行列号先于代码、代码开头无缩进、长代码 / 文件名下位置可见；单测继续验证 UTF-16、原始位置和高亮不因显示修剪变化。此前尾部位置方案按用户反馈撤回，当前交付不包含该排版。交付记录见 `docs/benchmarks/2026-11-04-find-layout.md`。

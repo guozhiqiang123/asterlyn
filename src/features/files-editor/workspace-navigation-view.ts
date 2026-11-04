@@ -367,16 +367,26 @@ export function renderWorkspaceSearchMatchContent(
   copy: NavigationCopy,
   locationLabel?:string,
 ): string {
-  const before = match.preview.slice(0, match.previewFromUtf16);
+  const location = locationLabel??`${basename(match.workspacePath)}:${match.line}`;
+  const fullLocation = `${match.workspacePath}:${match.line}`;
+  return `<span class="search-result-location" title="${escapeAttribute(fullLocation)}">${escapeHtml(location)}</span>
+    <code>${renderWorkspaceSearchPreview(match,copy)}</code>`;
+}
+
+/** Render presentation-only text; source offsets and the highlighted match remain authoritative. */
+export function renderWorkspaceSearchPreview(
+  match: WorkspaceTextSearchMatch,
+  copy: NavigationCopy,
+  trimLeadingWhitespace = false,
+): string {
+  const originalBefore = match.preview.slice(0, match.previewFromUtf16);
+  const before = trimLeadingWhitespace ? originalBefore.trimStart() : originalBefore;
   const found = match.preview.slice(match.previewFromUtf16, match.previewToUtf16);
   const after = match.preview.slice(match.previewToUtf16);
   const highlighted = found.length > 0
     ? `<mark class="command-result-match">${escapeHtml(found)}</mark>`
     : `<mark class="command-result-match zero-width" aria-label="${escapeAttribute(copy.zeroWidthMatch)}" title="${escapeAttribute(copy.zeroWidthMatch)}">│</mark>`;
-  const location = locationLabel??`${basename(match.workspacePath)}:${match.line}`;
-  const fullLocation = `${match.workspacePath}:${match.line}`;
-  return `<span class="search-result-location" title="${escapeAttribute(fullLocation)}">${escapeHtml(location)}</span>
-    <code>${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}</code>`;
+  return `${match.leadingClipped ? "…" : ""}${escapeHtml(before)}${highlighted}${escapeHtml(after)}${match.trailingClipped ? "…" : ""}`;
 }
 
 function clipHighlightRanges(

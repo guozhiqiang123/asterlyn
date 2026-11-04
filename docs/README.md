@@ -143,6 +143,10 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Benchmarks
 
+- [`benchmarks/2026-11-04-find-layout.md`](benchmarks/2026-11-04-find-layout.md) — Find 预览缩进清理和前置行列号布局，含真实几何 / UTF-16 导航与原生安装证据。
+
+- [`benchmarks/2026-11-04-find-typography.md`](benchmarks/2026-11-04-find-typography.md) — Find 引用 / 文本结果字号层级、宿主树 / 搜索对齐和原生安装验收。
+
 - [`benchmarks/2026-11-04-picker-host-styles.md`](benchmarks/2026-11-04-picker-host-styles.md) — shared host / portal search-field, focus and list-selection presentation with computed-style regression and native acceptance.
 
 - [`benchmarks/2026-10-16-workspace-matched-plugin-surfaces.md`](benchmarks/2026-10-16-workspace-matched-plugin-surfaces.md) — plugin-owned root-wrapper matching, contribution-backed Tasks visibility, cross-repository artifact identity, and recoverable local installation.

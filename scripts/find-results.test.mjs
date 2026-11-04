@@ -177,3 +177,34 @@ test("readonly dependency results retain independent URI identity and selected l
 test("text result columns preserve the native one-based UTF16 column",()=>{
  const c=new FindResultsController(),report=searchReport();report.matches[0].columnUtf16=4;c.install("/repo","needle",report);assert.equal(c.resultRows().find(row=>row.entry?.index===0).entry.column,4);
 });
+
+import {renderFindLocationPreview} from '../src/features/files-editor/find-results-view.ts';
+import {renderWorkspaceSearchMatchContent,renderWorkspaceSearchPreview} from '../src/features/files-editor/workspace-navigation-view.ts';
+test('Find trims display indentation while preserving internal spaces, escaping and exact language positions',()=>{
+ const text='\t   val label = "  😀"; Target.call("<&>")',from=text.indexOf('Target'),location={uri:'file:///repo/src/a.kt',range:{start:{line:263,character:from},end:{line:263,character:from+6}}};
+ const preview=Object.freeze(locationPreview(text,0,from,from+6)),original=JSON.stringify(preview),c=new FindResultsController();
+ c.installLocations({workspaceRoot:'/repo',workspaceGeneration:1,kind:'references',query:'Target',limited:false,locations:[location]});
+ for(const view of ['tree','flat']){
+  const html=renderFindResults(c.state,EN_US,new Map([[0,preview]]));
+  assert.ok(html.indexOf('class="search-result-location"')<html.indexOf('<code>'));
+  assert.match(html,/<code>val label = &quot;  😀&quot;; <mark class="command-result-match">Target<\/mark>\.call\(&quot;&lt;&amp;&gt;&quot;\)<\/code>/u);
+  assert.match(html,new RegExp(view==='tree'?`>264:${from+1}<`:`>:264:${from+1}<`));
+  assert.deepEqual(c.selectedLocation(),location);assert.equal(JSON.stringify(preview),original);
+  if(view==='tree')c.toggleFileView();
+ }
+});
+test('Find text preview normalization keeps the original search revision and offsets and leaves quick search unchanged',()=>{
+ const text='\t   const needle = "  keep";',from=text.indexOf('needle'),report=searchReport();report.matches=[{...report.matches[0],preview:text,previewFromUtf16:from,previewToUtf16:from+6,columnUtf16:from+1,fromUtf16:400+from,toUtf16:406+from}];
+ const c=new FindResultsController();c.install('/repo','needle',report);const original=JSON.stringify(report);
+ const html=renderFindResults(c.state);assert.match(html,/<code>const <mark class="command-result-match">needle<\/mark> = &quot;  keep&quot;;<\/code>/u);
+ assert.deepEqual(c.selectedMatch(),report.matches[0]);assert.equal(JSON.stringify(report),original);
+ assert.match(renderWorkspaceSearchMatchContent(report.matches[0],EN_US.navigation),/<code>\t   const /u);
+});
+test('Find preserves highlighted whitespace, zero-width matches, clipping hints and fallback locations',()=>{
+ const preview={before:'\t   ',found:'  ',after:'tail',leading:true,trailing:true};
+ assert.equal(renderFindLocationPreview(preview,EN_US.navigation),'…<mark class="command-result-match">  </mark>tail…');
+ const report=searchReport(),m={...report.matches[0],preview:'\t    tail',previewFromUtf16:5,previewToUtf16:5,leadingClipped:true,trailingClipped:true};
+ assert.match(renderWorkspaceSearchPreview(m,EN_US.navigation,true),/^…<mark class="command-result-match zero-width"[^>]*>│<\/mark>tail…$/u);
+ const c=new FindResultsController();c.installLocations({workspaceRoot:'/repo',workspaceGeneration:1,kind:'references',query:'value',limited:false,locations:[{uri:'file:///repo/a.kt',range:{start:{line:2,character:7},end:{line:2,character:12}}}]});
+ for(const value of [undefined,null])assert.match(renderFindResults(c.state,EN_US,new Map([[0,value]])),/<span class="search-result-location"[^>]*>3:8<\/span><code><span class="find-preview-status">[^<]+<\/span><\/code>/u);
+});
