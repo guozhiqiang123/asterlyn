@@ -29,3 +29,10 @@ test("binding generator supports optional versus nullable and rejects unknown sc
   assert.match(typeFor({type:["string","null"]}),/string \| null/u);
   assert.throws(()=>typeFor({type:"unsupported"}));
 });
+
+test("actual event parsing retains the additive actionable project failure",()=>{
+ const project={kind:"dependency-offline",module:":feature-push",dependency:"org.example:library:1.2.3",remaining:0};
+ const event=eventValue({kind:"degraded",sessionId:"s",code:"dependency-offline",progress:{phase:"failed"},failure:{code:"model-unavailable",retryable:false,message:"A current project model is unavailable.",requestId:null,project}});
+ assert.deepEqual(event.failure.project,project);
+ assert.equal(eventValue({kind:"degraded",sessionId:"s",failure:{...event.failure,project:{...project,kind:"invented"}}}).failure,undefined);
+});

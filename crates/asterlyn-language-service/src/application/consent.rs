@@ -30,7 +30,7 @@ struct Grant {
 fn hash(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes.as_ref()))
 }
-fn workspace(root: &Path) -> Result<String, String> {
+pub(super) fn workspace(root: &Path) -> Result<String, String> {
     let root = root
         .canonicalize()
         .map_err(|_| "language approval workspace unavailable")?;

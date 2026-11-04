@@ -3,6 +3,7 @@
 mod actor_runtime;
 pub mod consent;
 mod progress;
+pub mod resources;
 mod model_watch;
 #[cfg(all(test, feature = "process-fixtures"))]
 mod model_recovery_tests;
@@ -91,10 +92,13 @@ pub struct LanguageServiceManager {
     authority: Arc<AtomicU64>,
     starting: Mutex<HashSet<String>>,
     closing: Arc<AtomicBool>,
+    resources: Arc<resources::Pool>,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LanguageServiceEvent {
+    #[serde(skip)]
+    pub failure: Option<crate::protocol::LanguageServiceFailure>,
     pub session_id: String,
     pub kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -145,13 +149,17 @@ pub type ModelObserver = Arc<dyn Fn() -> Result<ModelInputs, String> + Send + Sy
 pub struct ModelAccess {
     load: ModelLoader,
     observe: Option<ModelObserver>,
+    failure_detail: Option<Arc<dyn Fn() -> Option<crate::project_failure::ProjectFailure> + Send + Sync>>,
 }
 impl ModelAccess {
-    pub fn new(load: ModelLoader) -> Self { Self { load, observe: None } }
+    pub fn new(load: ModelLoader) -> Self { Self { load, observe: None, failure_detail: None } }
     pub fn with_observer(mut self, observe: ModelObserver) -> Self { self.observe = Some(observe); self }
+    pub fn with_failure_detail(mut self, detail: Arc<dyn Fn() -> Option<crate::project_failure::ProjectFailure> + Send + Sync>) -> Self { self.failure_detail = Some(detail); self }
 }
 pub(super) struct ActorServices {
     pub tracing: Arc<AtomicBool>,
+    resource_scope: resources::Scope,
+    resource_policy: resources::ResourcePolicy,
     selectors: Option<Vec<(String, Vec<String>)>>,
     model_access: Option<ModelAccess>,
 }
@@ -212,6 +220,7 @@ struct Pending {
 }
 
 impl LanguageServiceManager {
+    pub fn resource_policy(&self, selected:Option<u32>)->Result<resources::ResourcePolicy,String>{self.resources.policy(selected)}
     pub fn debug_enabled(&self) -> bool {
         self.tracing.load(Ordering::Relaxed)
     }
@@ -369,6 +378,8 @@ impl LanguageServiceManager {
             .as_ref()
             .map(|_| consent::cache_identity(&subject.root, &package))
             .transpose()?;
+        let selected_heap = package.packaged.as_ref().and_then(|p| p.initialization_options.pointer("/analysis/compilerMaxMiB")).and_then(Value::as_u64).and_then(|n|u32::try_from(n).ok());
+        let resource_policy = self.resources.policy(selected_heap)?;
         let mut cache = None;
         let mut process = if let Some(mut profile) = package.packaged {
             std::fs::create_dir_all(&profile.cache_parent)
@@ -385,6 +396,7 @@ impl LanguageServiceManager {
             {
                 profile.initialization_options["analysis"]["cacheDirectory"] = json!(path);
             }
+            profile.initialization_options["analysis"]["resourcePolicy"] = json!(resource_policy);
             profile.initialization_options["analysis"]["debugTrace"] = json!(self.debug_enabled());
             let process = LanguageServiceProcess::start_packaged(&profile);
             cache = Some(directory);
@@ -433,6 +445,8 @@ impl LanguageServiceManager {
         drop(sessions);
         let actor_id = id.clone();
         let tracing = self.tracing.clone();
+        self.resources.register(&id, pid);
+        let resource_scope = resources::Scope {pool:self.resources.clone(), owner:id.clone()};
         std::thread::spawn(move || {
             let _cache = cache;
             actor(
@@ -444,6 +458,7 @@ impl LanguageServiceManager {
                 emit,
                 ActorServices {
                     tracing: tracing.clone(),
+                    resource_scope, resource_policy,
                     selectors,
                     model_access,
                 },

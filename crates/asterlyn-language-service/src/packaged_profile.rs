@@ -120,13 +120,15 @@ fn model_failure_message(code: &str) -> &str {
         "model-selected-variant-missing" | "model-dependency-variant-missing" |
         "model-dependency-variant-ambiguous" | "model-selection-unavailable" |
         "selection-unavailable" | "inputs-unavailable" | "authority-revoked" | "identity-invalid" |
-        "android-sdk-missing" | "repository-credentials-missing" | "dependency-unavailable" |
+        "android-sdk-missing" | "repository-credentials-missing" | "dependency-unavailable" | "dependency-offline" |
         "dependency-tls" | "dependency-dns" | "gradle-model-incompatible" |
         "gradle-version-incompatible" | "gradle-toolchain-incompatible" |
         "project-configuration-failed" | "project-script-failed" | "model-artifact-missing" |
         "model-path-missing" | "model-invalid" | "model-json-invalid" | "model-unavailable" |
         "program-failed" | "program-timeout" | "cancelled" | "output-bound" |
-        "request-schema" | "unsupported-run-configuration" => code,
+        "request-schema" | "unsupported-run-configuration" |
+        "analysis-resource-budget-exceeded" | "analysis-resource-request-invalid" |
+        "analysis-resource-unavailable" | "analysis-resource-wait-timeout" | "analysis-resource-queue-full" => code,
         _ => "The reviewed workspace model could not be prepared.",
     }
 }
@@ -135,7 +137,7 @@ fn model_failure_message(code: &str) -> &str {
 mod model_failure_tests {
     #[test]
     fn fixed_recovery_categories_survive_but_raw_or_unrecognized_errors_do_not() {
-        for code in ["model-inputs-changed", "model-obsolete", "model-busy", "model-selected-variant-missing", "repository-credentials-missing"] {
+        for code in ["dependency-offline", "model-inputs-changed", "model-obsolete", "model-busy", "model-selected-variant-missing", "repository-credentials-missing"] {
             assert_eq!(super::model_failure_message(code), code);
         }
         for error in ["/private/source.kt: secret", "password-secret", "model-stolen-source", "model-inputs-changed\nsource"] {

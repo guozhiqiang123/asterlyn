@@ -44,7 +44,10 @@ else if(m.method==='textDocument/definition')send({id:m.id,result:opened===1?[{u
         let selection = observe_revision.load(Ordering::SeqCst).to_string();
         observe_calls.fetch_add(1, Ordering::SeqCst);
         Ok(ModelInputs { inputs: "unchanged".into(), selection })
-    }));
+    })).with_failure_detail(Arc::new(|| Some(crate::project_failure::ProjectFailure {
+        kind: crate::project_failure::ProjectFailureKind::ModelSelectedVariantMissing,
+        module: Some(":app".into()), dependency: None, remaining: 0,
+    })));
     let manager = LanguageServiceManager::default();
     let (sender, events) = mpsc::channel();
     let id = manager.start_with_models(subject.clone(), language, 0, Arc::new(|| true),
@@ -58,14 +61,15 @@ else if(m.method==='textDocument/definition')send({id:m.id,result:opened===1?[{u
         }
         panic!("missing {kind} event");
     };
-    wait("degraded");
+    let failed = wait("degraded");
+    assert_eq!(failed.failure.unwrap().project.unwrap().module.as_deref(),Some(":app"));
     manager.open(&id, &subject, uri.clone(), "java".into(), 1, "class Source {}\n".into())
         .unwrap().recv_timeout(Duration::from_secs(1)).unwrap().unwrap();
     std::thread::sleep(Duration::from_millis(2300));
     assert!(probes.load(Ordering::SeqCst) >= 1);
     assert_eq!(calls.load(Ordering::SeqCst), 1, "failed model observation does not run Gradle repeatedly");
     revision.store(2, Ordering::SeqCst);
-    wait("ready");
+    assert!(wait("ready").failure.is_none(),"successful model replacement clears project failure detail");
     let result = manager.request(&id, &subject, uri, 1, "navigation".into(), "definition".into(),
         TextPosition { line: 0, character: 6 }).unwrap().recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
     assert_eq!(result.as_array().unwrap().len(), 1, "open documents survived recovery exactly once");

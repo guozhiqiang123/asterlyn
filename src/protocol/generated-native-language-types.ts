@@ -6,9 +6,19 @@ export type JavaRequirement = {
 
 export type LanguageFailureCode = "backend-exited" | "protocol-failed" | "resource-limit" | "authority-revoked" | "model-unavailable" | "toolchain-unavailable" | "cancelled" | "unavailable";
 
+export type LanguageResourcePolicy = {
+  readonly "budgetMiB": number;
+  readonly "choicesMiB": ReadonlyArray<number>;
+  readonly "compilerMaxMiB"?: number | null;
+  readonly "maxHeapMiB": number;
+  readonly "physicalMiB": number;
+  readonly "schema": number;
+};
+
 export type NativeLanguageServiceFailure = {
   readonly "code": LanguageFailureCode;
   readonly "message": string;
+  readonly "project"?: (ProjectFailure) | (null);
   readonly "requestId"?: string | null;
   readonly "retryable": boolean;
 };
@@ -25,6 +35,15 @@ export type NativeLanguageServiceReview = {
   readonly "serverId": string;
   readonly "toolchains": ReadonlyArray<ToolchainSnapshot>;
 };
+
+export type ProjectFailure = {
+  readonly "dependency"?: string | null;
+  readonly "kind": ProjectFailureKind;
+  readonly "module"?: string | null;
+  readonly "remaining"?: number;
+};
+
+export type ProjectFailureKind = "dependency-offline" | "dependency-unavailable" | "dependency-tls" | "dependency-dns" | "repository-credentials-missing" | "android-sdk-missing" | "project-configuration-failed" | "project-script-failed" | "model-selected-variant-missing" | "model-dependency-variant-missing" | "model-dependency-variant-ambiguous";
 
 export type SymbolCandidate = {
   readonly "extractorId": string;

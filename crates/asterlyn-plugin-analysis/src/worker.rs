@@ -21,6 +21,7 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub struct Progress {
+    pub project_failure: Option<serde_json::Value>,
     pub stage: String,
     pub count: Option<u64>,
     pub duration_ms: Option<u64>,
@@ -334,6 +335,17 @@ pub(super) fn verify_artifact(artifact: &SealedArtifact) -> Result<(), String> {
     }
     Ok(())
 }
+fn project_failure(value: &serde_json::Value) -> Option<serde_json::Value> {
+    let object = value.as_object()?;
+    if object.keys().any(|key| !["kind","module","dependency","remaining"].contains(&key.as_str())) { return None; }
+    let kind = object.get("kind")?.as_str()?;
+    if kind.is_empty() || kind.len()>80 || !kind.bytes().all(|b| b.is_ascii_lowercase() || b==b'-') { return None; }
+    let token = |s:&str| !s.is_empty() && !s.contains("..") && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b,b':'|b'.'|b'-'|b'_'|b'+'|b'$'));
+    if let Some(v)=object.get("module") { let s=v.as_str()?; if s.len()>80 || !s.starts_with(':') || !token(s) { return None; } }
+    if let Some(v)=object.get("dependency") { let s=v.as_str()?; if s.len()>160 || !token(s) || s.contains('$') || s.split(':').count()!=3 || s.split(':').any(str::is_empty) { return None; } }
+    if object.get("remaining").is_some_and(|v|v.as_u64().is_none_or(|n|n>9999)) { return None; }
+    Some(value.clone())
+}
 fn diagnostic_context(value: &serde_json::Value) -> Option<serde_json::Value> {
     fn token(value: &serde_json::Value) -> Option<&str> { value.as_str().filter(|text| !text.is_empty()
         && text.len() <= 80 && !text.contains("..")
@@ -382,6 +394,7 @@ fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
                     terminal_seen |= stage == "error";
                     last = Instant::now();
                     let event = Progress {
+                        project_failure: value.get("projectFailure").and_then(project_failure),
                         stage: stage.into(),
                         count: value.get("count").and_then(|v| v.as_u64()),
                         duration_ms: value.get("durationMs").and_then(|v| v.as_u64()),
@@ -477,6 +490,12 @@ impl Drop for Reservation {
 #[cfg(test)]
 mod progress_tests {
     use super::*;
+    #[test]
+    fn project_failure_revalidates_private_data_and_size_bounds() {
+        let clean=serde_json::json!({"kind":"dependency-offline","module":":feature-push","dependency":"org.example:library:1.2.3","remaining":0});
+        assert_eq!(project_failure(&clean),Some(clean.clone()));
+        for value in [serde_json::json!({"kind":"dependency-offline","module":"/private/path"}),serde_json::json!({"kind":"dependency-offline","dependency":"https://user:secret@repo"}),serde_json::json!({"kind":"dependency-offline","rawException":"secret"}),serde_json::json!({"kind":"dependency-offline","remaining":10000})] { assert!(project_failure(&value).is_none()); }
+    }
     #[test]
     fn diagnostic_context_rejects_paths_raw_text_and_extra_keys() {
         let clean = diagnostic_context(&serde_json::json!({

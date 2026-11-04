@@ -19,6 +19,7 @@ use serde_json::Value;
 pub mod application;
 mod inbox;
 pub mod protocol;
+pub mod project_failure;
 mod rust_profile;
 use inbox::{EventBuffer, EventReceiver, EventSender};
 pub use rust_profile::RustServerProfile;

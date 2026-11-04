@@ -271,3 +271,28 @@ fn actual_packaged_java_keeps_documents_responsive_during_model_work() {
     manager.stop(&id, &subject).unwrap();
     assert!(diagnosed, "unsaved Java diagnostics must be version-bound");
 }
+
+#[cfg(feature = "process-fixtures")]
+#[test]
+fn private_resource_channel_validates_bounds_and_cancellation_releases_grants() {
+    let node=std::env::var("ASTERLYN_LANGUAGE_SERVICE_NODE").expect("explicit Node fixture");
+    let package=tempfile::tempdir().unwrap();let workspace=tempfile::tempdir().unwrap();let cache=tempfile::tempdir().unwrap();
+    std::fs::write(package.path().join("resource.mjs"),r#"
+let b=Buffer.alloc(0),lease;function send(m){const out=Buffer.from(JSON.stringify({jsonrpc:'2.0',...m}));process.stdout.write('Content-Length: '+out.length+'\r\n\r\n');process.stdout.write(out);}
+function request(id,n){send({id,method:'asterlyn/analysisResources.reserve',params:{memoryMiB:n}});}
+process.stdin.on('data',c=>{b=Buffer.concat([b,c]);for(;;){const i=b.indexOf('\r\n\r\n');if(i<0)return;const n=Number(/Content-Length: (\d+)/i.exec(b.subarray(0,i).toString())[1]);if(b.length<i+4+n)return;const m=JSON.parse(b.subarray(i+4,i+4+n));b=b.subarray(i+4+n);
+if(m.method==='initialize'){if(m.params.initializationOptions.analysis.resourcePolicy.schema!==1)process.exit(11);send({id:m.id,result:{capabilities:{positionEncoding:'utf-16'}}});}
+else if(m.method==='initialized')request('bad',-1);
+else if(m.id==='bad'){if(m.error?.message!=='analysis-resource-request-invalid')process.exit(12);request('one',512);}
+else if(m.id==='one'){if(!/^resource-/.test(m.result?.leaseId))process.exit(13);lease=m.result.leaseId;send({method:'$/cancelRequest',params:{id:'one'}});request('two',512);}
+else if(m.id==='two'){send({method:'asterlyn/analysisResources.release',params:{leaseId:m.result.leaseId}});send({method:'experimental/serverStatus',params:{health:'ok',quiescent:true,code:'resource-fixture-ok',progress:{phase:'ready'}}});}
+}});
+"#).unwrap();
+    let subject=LanguageSubject{owner:"resources-fixture".into(),root:workspace.path().canonicalize().unwrap(),activation:1};
+    let language=LanguagePackage{version:"test".into(),digest:"test".into(),content_digest:"test".into(),root:package.path().into(),node:node.clone().into(),node_digest:"test".into(),rust:None,packaged:Some(PackagedServerProfile{id:"android-jvm".into(),node:node.into(),package_root:package.path().into(),entry:"resource.mjs".into(),initialization_options:json!({}),selectors:vec![("java".into(),vec![".java".into()])],cache_parent:cache.path().into()})};
+    let manager=LanguageServiceManager::default();let (tx,rx)=mpsc::channel();
+    let id=manager.start_with_models(subject.clone(),language,0,Arc::new(||true),Arc::new(move|event|{let _=tx.send(event);}),None).unwrap();
+    let deadline=Instant::now()+Duration::from_secs(3);let mut ready=false;
+    while Instant::now()<deadline{if let Ok(event)=rx.recv_timeout(Duration::from_millis(50))&&event.code.as_deref()==Some("resource-fixture-ok"){ready=true;break;}}
+    manager.stop(&id,&subject).unwrap();assert!(ready,"resource protocol fixture did not finish");
+}

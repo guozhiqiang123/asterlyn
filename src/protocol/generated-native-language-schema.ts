@@ -35,6 +35,55 @@ export const NATIVE_LANGUAGE_SCHEMAS = {
     ],
     "type": "string"
   },
+  "LanguageResourcePolicy": {
+    "additionalProperties": false,
+    "properties": {
+      "budgetMiB": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "choicesMiB": {
+        "items": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "compilerMaxMiB": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "maxHeapMiB": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "physicalMiB": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "schema": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "budgetMiB",
+      "choicesMiB",
+      "maxHeapMiB",
+      "physicalMiB",
+      "schema"
+    ],
+    "type": "object"
+  },
   "NativeLanguageServiceFailure": {
     "properties": {
       "code": {
@@ -42,6 +91,16 @@ export const NATIVE_LANGUAGE_SCHEMAS = {
       },
       "message": {
         "type": "string"
+      },
+      "project": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ProjectFailure"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "requestId": {
         "type": [
@@ -113,6 +172,52 @@ export const NATIVE_LANGUAGE_SCHEMAS = {
       "toolchains"
     ],
     "type": "object"
+  },
+  "ProjectFailure": {
+    "additionalProperties": false,
+    "properties": {
+      "dependency": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "kind": {
+        "$ref": "#/definitions/ProjectFailureKind"
+      },
+      "module": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "remaining": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "kind"
+    ],
+    "type": "object"
+  },
+  "ProjectFailureKind": {
+    "enum": [
+      "dependency-offline",
+      "dependency-unavailable",
+      "dependency-tls",
+      "dependency-dns",
+      "repository-credentials-missing",
+      "android-sdk-missing",
+      "project-configuration-failed",
+      "project-script-failed",
+      "model-selected-variant-missing",
+      "model-dependency-variant-missing",
+      "model-dependency-variant-ambiguous"
+    ],
+    "type": "string"
   },
   "SymbolCandidate": {
     "properties": {

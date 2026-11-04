@@ -37,6 +37,8 @@ pub enum LanguageFailureCode {
 #[cfg_attr(feature = "bindings", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LanguageServiceFailure {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<crate::project_failure::ProjectFailure>,
     pub code: LanguageFailureCode,
     /// Classification only; automatic recovery still requires current authority and a retry budget.
     pub retryable: bool,
@@ -54,7 +56,7 @@ impl LanguageServiceFailure {
                 ProtocolFailed,
                 "The language transport could not continue safely.",
             ),
-            "resource-limit" | "memory-limit" | "cpu-limit" => (
+            "resource-limit" | "memory-limit" | "cpu-limit" | "kotlin-compiler-resource-limit" | "analysis-resource-budget-exceeded" | "analysis-resource-wait-timeout" | "analysis-resource-queue-full" => (
                 ResourceLimit,
                 "The language service reached its resource limit.",
             ),
@@ -80,6 +82,7 @@ impl LanguageServiceFailure {
             ),
         };
         Self {
+            project: None,
             code,
             retryable: code == BackendExited,
             message: message.into(),

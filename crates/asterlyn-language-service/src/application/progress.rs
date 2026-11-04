@@ -11,6 +11,7 @@ pub(super) fn progress(value: &Value) -> Option<Value> {
         return None;
     }
     if ![
+        "waiting",
         "model",
         "sources",
         "backend",

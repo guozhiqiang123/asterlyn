@@ -41,6 +41,7 @@ impl LanguageTrace {
         }
         self.count += 1;
         (self.emit)(LanguageServiceEvent {
+            failure: None,
             session_id: self.id.clone(),
             kind: "debug",
             code: Some(operation.into()),
@@ -88,6 +89,7 @@ pub(super) fn backend_details(params: Option<&Value>) -> Value {
     {
         for key in [
             "durationMs",
+            "heapMiB", "memoryMiB", "files",
             "completed",
             "total",
             "version",
