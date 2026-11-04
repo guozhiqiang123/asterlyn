@@ -63,6 +63,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`benchmarks/2026-11-03-language-p0-baseline.md`](benchmarks/2026-11-03-language-p0-baseline.md) — measured TS/JS/Rust and real Android backend baselines, resource ownership, recovery fault matrix and explicit limits.
 
 - [`engineering/2026-11-04-android-model-recovery-plan.md`](engineering/2026-11-04-android-model-recovery-plan.md) — variant synchronization, model failure recovery and bounded diagnostics for the boostCleaner incident.
+- [`engineering/2026-11-04-project-language-failure-tips-plan.md`](engineering/2026-11-04-project-language-failure-tips-plan.md) — actionable project model failures in host error tips and service status, with bounded dependency context and deduplication.
+- [`engineering/2026-11-04-language-analysis-resource-plan.md`](engineering/2026-11-04-language-analysis-resource-plan.md) — adaptive compiler resources, project memory settings, cross-window admission, bounded OOM recovery and truthful terminal progress.
 - [`benchmarks/2026-11-04-android-model-recovery.md`](benchmarks/2026-11-04-android-model-recovery.md) — real-project, native retry, keyboard navigation, task refresh, package and canonical installation acceptance.
 - [`engineering/2026-11-03-openidea-inspired-evolution-plan.md`](engineering/2026-11-03-openidea-inspired-evolution-plan.md) — planned language-service recovery, provider selection, toolchains, portable services, protocol models, optional symbol indexing and later editing/plugin capabilities informed by the OpenIDEA comparison.
 
