@@ -390,6 +390,7 @@ pub(super) fn model_access(
     let runtime = app.state::<AnalysisManager>().runtime(&cache(&app)?)?;
     let seen_generation = std::sync::atomic::AtomicU64::new(0);
     let failure_log = Mutex::new(None::<(String, Instant)>);
+    let model_attempt = std::sync::atomic::AtomicU64::new(0);
     let watch_app = app.clone();
     let watch_owner = owner.clone();
     let watch_producer = producer.clone();
@@ -404,6 +405,7 @@ pub(super) fn model_access(
     });
     Ok(Some(ModelAccess::new(Arc::new(move |alive, refresh| {
         let began = Instant::now();
+        let attempt = model_attempt.fetch_add(1, Ordering::Relaxed) + 1;
         let result: Result<ModelReply, String> = (|| {
             let authority_app = app.clone();
             let authority_owner = owner.clone();
@@ -543,7 +545,7 @@ pub(super) fn model_access(
                 {
                     *code = progress.error_code.clone();
                 }
-                let mut fields = json!({"window":window,"workspaceHash":workspace_hash,"serviceId":service,"stage":progress.stage,"count":progress.count,"durationMs":progress.duration_ms,"code":progress.error_code,"causeClass":progress.cause_class});
+                let mut fields = json!({"window":window,"workspaceHash":workspace_hash,"serviceId":service,"attempt":attempt,"stage":progress.stage,"count":progress.count,"durationMs":progress.duration_ms,"code":progress.error_code,"causeClass":progress.cause_class});
                 if progress_app
                     .state::<asterlyn_language_service::application::LanguageServiceManager>()
                     .debug_enabled()
@@ -551,6 +553,7 @@ pub(super) fn model_access(
                     fields["causeChain"] = json!(progress.cause_chain);
                     fields["sourceFile"] = json!(progress.source_file);
                     fields["sourceLine"] = json!(progress.source_line);
+                    fields["context"] = json!(progress.context);
                 }
                 progress_app.state::<DiagnosticsLog>().info(
                     "language.model",
@@ -581,7 +584,7 @@ pub(super) fn model_access(
             if seen_generation.swap(handle.reference.generation(), Ordering::Relaxed)
                 != handle.reference.generation()
             {
-                app.state::<DiagnosticsLog>().info("language.model","model.acquired",None,json!({"serviceId":provider.id,"generation":handle.reference.generation(),"bytes":handle.reference.bytes(),"durationMs":began.elapsed().as_millis() as u64}));
+                app.state::<DiagnosticsLog>().info("language.model","model.acquired",None,json!({"serviceId":provider.id,"window":owner.owner,"attempt":attempt,"generation":handle.reference.generation(),"bytes":handle.reference.bytes(),"durationMs":began.elapsed().as_millis() as u64}));
             }
             let value = json!({"path":handle.artifact.path(),"digest":handle.reference.digest(),"bytes":handle.reference.bytes(),"generation":handle.reference.generation(),"schema":handle.reference.schema()});
             Ok(ModelReply {
@@ -594,7 +597,9 @@ pub(super) fn model_access(
             })
         })();
         if let Err(error) = &result {
-            let code = if error.contains("identity") {
+            let code = if error == "workspace model inputs changed during analysis" {
+                "model-inputs-changed"
+            } else if error.contains("identity") {
                 "identity-invalid"
             } else if error.contains("selection") {
                 "selection-unavailable"
@@ -617,9 +622,10 @@ pub(super) fn model_access(
                     .as_ref()
                     .is_none_or(|(last, time)| last != code || time.elapsed().as_secs() >= 30)
             {
-                app.state::<DiagnosticsLog>().info("language.model","model.failed",None,json!({"serviceId":provider.id,"code":code,"durationMs":began.elapsed().as_millis() as u64}));
+                app.state::<DiagnosticsLog>().info("language.model","model.failed",None,json!({"serviceId":provider.id,"window":owner.owner,"attempt":attempt,"code":code,"durationMs":began.elapsed().as_millis() as u64}));
                 *previous = Some((code.into(), Instant::now()));
             }
+            return Err(code.into());
         }
         result
     })).with_observer(observe)))

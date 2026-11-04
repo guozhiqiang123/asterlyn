@@ -29,6 +29,7 @@ pub struct Progress {
     pub cause_chain: Option<String>,
     pub source_file: Option<String>,
     pub source_line: Option<u64>,
+    pub context: Option<serde_json::Value>,
 }
 /// Created by the native admission boundary. Not deserializable from a plugin/frontend.
 pub struct AdmittedProgram {
@@ -333,6 +334,22 @@ pub(super) fn verify_artifact(artifact: &SealedArtifact) -> Result<(), String> {
     }
     Ok(())
 }
+fn diagnostic_context(value: &serde_json::Value) -> Option<serde_json::Value> {
+    fn token(value: &serde_json::Value) -> Option<&str> { value.as_str().filter(|text| !text.is_empty()
+        && text.len() <= 80 && !text.contains("..")
+        && text.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'.' | b'-' | b'_' | b'$'))) }
+    let reason = token(value.get("reason")?)?;
+    let mut out = serde_json::json!({"reason":reason});
+    for key in ["subject", "requested"] {
+        if let Some(text) = value.get(key).and_then(token) { out[key] = text.into(); }
+    }
+    out["available"] = value.get("available").and_then(|v| v.as_array()).map(|items| {
+        items.iter().filter_map(token).take(3).collect::<Vec<_>>()
+    }).unwrap_or_default().into();
+    out["omitted"] = value.get("omitted").and_then(|v| v.as_bool()).unwrap_or(false).into();
+    if out.to_string().len() > 320 { out["available"] = serde_json::json!([]); out["omitted"] = true.into(); }
+    Some(out)
+}
 fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
     let mut last = Instant::now() - Duration::from_secs(1);
     let mut terminal_seen = false;
@@ -418,6 +435,7 @@ fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
                             .get("sourceLine")
                             .and_then(|v| v.as_u64())
                             .filter(|n| *n > 0 && *n <= 1_000_000),
+                        context: value.get("context").and_then(diagnostic_context),
                     };
                     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink(event)));
                 }
@@ -459,6 +477,18 @@ impl Drop for Reservation {
 #[cfg(test)]
 mod progress_tests {
     use super::*;
+    #[test]
+    fn diagnostic_context_rejects_paths_raw_text_and_extra_keys() {
+        let clean = diagnostic_context(&serde_json::json!({
+            "reason":"selected-variant-missing", "subject":":app", "requested":"cleanx100Debug",
+            "available":["cleanx103Debug","/private/secret","password=secret","../escape"],
+            "source":"never logged", "omitted":true,
+        })).unwrap();
+        assert_eq!(clean["available"], serde_json::json!(["cleanx103Debug"]));
+        assert!(clean.get("source").is_none());
+        assert!(!clean.to_string().contains("secret"));
+        assert!(diagnostic_context(&serde_json::json!({"reason":"contains source text"})).is_none());
+    }
     #[test]
     fn bounded_diagnostics_keep_terminal_failures_and_discard_raw_paths_and_messages() {
         let events = Arc::new(Mutex::new(Vec::new()));

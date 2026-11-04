@@ -176,3 +176,7 @@ A Gradle refresh still spans multiple commands: follow review/run IDs between th
 This change correlates each frontend/native command and its worker events; it does not introduce
 an implicit global trace that could mix concurrent user actions. Windows/Linux execution and slow
 filesystem behavior require target-platform acceptance beyond the macOS evidence.
+
+### Android model reconciliation diagnostics (2026-11-04)
+
+`language.model/worker.progress`, `model.acquired` and `model.failed` carry a per-session model attempt and window identity. Opt-in language traces record `model.invalidated` with fixed reason, input revision and generation; the Android adapter records `model-load-started`, `model-invalidated`, and categorized failure with attempt/revision/duration. The generic worker admits only bounded `context` fields (`reason`, `subject`, `requested`, up to three `available` identifiers and `omitted`), discards unknown fields/paths/raw text, and keeps the 512-byte line limit. Context is persisted only when language debug tracing is enabled. Android uses this to distinguish missing selected variants, missing dependency variants and ambiguous dependency variants; no project source, absolute root, raw exception message or credential is logged. Unchanged permanent model failures are observed for identity changes without rerunning Gradle.
