@@ -1,0 +1,341 @@
+{
+  "schema": 1,
+  "acceptedOn": "2026-11-04",
+  "hostVersion": "0.1.25",
+  "hostProductCommit": "d9edb7d5640db3715640aa018a5b99f7342b4790",
+  "buildId": "d9edb7d5640db3715640aa018a5b99f7342b4790-clean-1793710757151",
+  "executableSha256": "578bba21c0d9cf808aa39a0505227bcfad962bb06912584f668816634300a7ec",
+  "artifact": {
+    "file": "Asterlyn-0.1.25-language-p1-macos.app.zip",
+    "bytes": 25600175,
+    "sha256": "72fe31da6864d599d93d51c0d550c083d648d509b797e7bf8011ac5bc9953668"
+  },
+  "packages": [
+    {
+      "id": "dev.asterlyn.android-gradle",
+      "version": "0.6.3",
+      "digest": "sha256:e389dcef3bec99ce45dd521fc27f50a00ebd9a5c3b287a0562525cf85634652d"
+    },
+    {
+      "id": "dev.asterlyn.lsp",
+      "version": "0.3.13",
+      "digest": "sha256:3e921172d7ed0e2d385202bd2760003d3eef91c2a47af681b4f0b9d43f2647df"
+    }
+  ],
+  "sourceNativeSmoke": {
+    "pid": 65744,
+    "session": "session-1793756688075-65744-0",
+    "frontendReady": true,
+    "healthyPackages": true,
+    "knownRecentPathErrorCount": 2
+  },
+  "installation": {
+    "canonicalPath": "/Applications/Asterlyn.app",
+    "strictBundleVerified": true,
+    "rootIdentity": {
+      "rootIdentityPreserved": true,
+      "inode": "203606126",
+      "device": "16777234"
+    },
+    "backupZipSha256": "a4db24377ba8db3aea86f371225297b2c2c8745c98f6003599da5f8297f6add3",
+    "backupExecutableSha256": "dd292c8ccd15e9b98c8cbc08db6d35d4379d7ba6aea45309e66995a08783bd4f",
+    "firstLaunch": {
+      "pid": 65983,
+      "session": "session-1793756724417-65983-0",
+      "buildId": "d9edb7d5640db3715640aa018a5b99f7342b4790-clean-1793710757151",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark"
+    },
+    "reopen": {
+      "pid": 66079,
+      "session": "session-1793756726401-66079-0",
+      "buildId": "d9edb7d5640db3715640aa018a5b99f7342b4790-clean-1793710757151",
+      "frontendReady": true,
+      "launchVia": "icon-bookmark"
+    }
+  },
+  "projectSnapshotAtReceipt": {
+    "rootHash": "f68529dba00844ea",
+    "head": "2736768cf798b5453d44ae789438c257d3f0fc22",
+    "files": {
+      "common/src/main/java/com/swiftcleaner/lib/storage/GlobalConfigNew.kt": "abbf6ca2633d0bc9fdf965836adf818dedbb02082e853e73b488d889d70f5890",
+      "app/src/ads/java/com/swiftcleaner/app/ads/LauncherOutAppAdController.kt": "6376ad46451ef16b93bd33ced35f4239f06a3cfde6d780c26c9d5a5ceec9f666"
+    },
+    "testsEditedSource": false
+  },
+  "firstNativeSession": "session-1793756726401-66079-0",
+  "toolchainPresentation": [
+    {
+      "id": "kotlinJava",
+      "role": "language-server",
+      "javaVersion": "17.0.14",
+      "minimum": 17,
+      "maximumExclusive": 25
+    },
+    {
+      "id": "serverJava",
+      "role": "language-server",
+      "javaVersion": "25.0.5",
+      "minimum": 25
+    },
+    {
+      "id": "gradleJava",
+      "role": "build-model",
+      "javaVersion": "17.0.14",
+      "minimum": 17,
+      "maximumExclusive": 25
+    }
+  ],
+  "model": {
+    "firstAcquisition": {
+      "sequence": 91,
+      "atEpochMs": 1793756791766,
+      "event": "model.acquired",
+      "fields": {
+        "bytes": 228341,
+        "durationMs": 16993,
+        "generation": 1,
+        "serviceId": "android-gradle-model"
+      }
+    },
+    "modules": 25,
+    "startToFirstReadyMs": 221352
+  },
+  "symbols": {
+    "firstSessionQueries": [
+      {
+        "sequence": 125,
+        "atEpochMs": 1793756892992,
+        "event": "query.completed",
+        "fields": {
+          "durationMs": 446,
+          "files": 822,
+          "matches": 512,
+          "partial": true,
+          "persisted": true,
+          "reused": 0
+        }
+      },
+      {
+        "sequence": 137,
+        "atEpochMs": 1793756903794,
+        "event": "query.completed",
+        "fields": {
+          "durationMs": 31,
+          "files": 822,
+          "matches": 2,
+          "partial": false,
+          "persisted": true,
+          "reused": 822
+        }
+      },
+      {
+        "sequence": 501,
+        "atEpochMs": 1793757254647,
+        "event": "query.completed",
+        "fields": {
+          "durationMs": 174,
+          "files": 822,
+          "matches": 512,
+          "partial": true,
+          "persisted": true,
+          "reused": 822
+        }
+      },
+      {
+        "sequence": 508,
+        "atEpochMs": 1793757261151,
+        "event": "query.completed",
+        "fields": {
+          "durationMs": 28,
+          "files": 822,
+          "matches": 2,
+          "partial": false,
+          "persisted": true,
+          "reused": 822
+        }
+      }
+    ],
+    "reopenedSession": "session-1793757358369-69731-0",
+    "queriesAfterProcessRestart": [
+      {
+        "sequence": 70,
+        "atEpochMs": 1793757378042,
+        "event": "query.completed",
+        "fields": {
+          "durationMs": 132,
+          "files": 0,
+          "matches": 0,
+          "partial": true,
+          "persisted": true,
+          "reused": 0
+        }
+      },
+      {
+        "sequence": 114,
+        "atEpochMs": 1793757384451,
+        "event": "query.completed",
+        "fields": {
+          "durationMs": 39,
+          "files": 822,
+          "matches": 2,
+          "partial": false,
+          "persisted": true,
+          "reused": 822
+        }
+      }
+    ],
+    "selectedLocation": "common/src/main/java/com/swiftcleaner/lib/storage/GlobalConfigNew.kt:6:8",
+    "kind": "object",
+    "savedEditorObserved": true
+  },
+  "semanticReferences": {
+    "symbol": "GlobalConfigNew",
+    "total": 69,
+    "excludeImports": true,
+    "visible": 54,
+    "backendReplies": [
+      {
+        "sequence": 199,
+        "atEpochMs": 1793757021768,
+        "event": "request.completed",
+        "fields": {
+          "code": "request.completed",
+          "details": {
+            "durationMs": 623,
+            "outcome": "completed",
+            "requestId": "2",
+            "resultCount": 69
+          },
+          "diagnosticCount": null,
+          "documentHash": "23b8fad669478e71",
+          "progress": null,
+          "sessionId": "language-session-66079-1",
+          "version": 1,
+          "window": "main",
+          "workspaceHash": "f68529dba00844ea"
+        }
+      },
+      {
+        "sequence": 528,
+        "atEpochMs": 1793757269818,
+        "event": "request.completed",
+        "fields": {
+          "code": "request.completed",
+          "details": {
+            "durationMs": 635,
+            "outcome": "completed",
+            "requestId": "4",
+            "resultCount": 69
+          },
+          "diagnosticCount": null,
+          "documentHash": "23b8fad669478e71",
+          "progress": null,
+          "sessionId": "language-session-66079-3",
+          "version": 1,
+          "window": "main",
+          "workspaceHash": "f68529dba00844ea"
+        }
+      }
+    ],
+    "openedReference": "app/src/ads/java/com/swiftcleaner/app/ads/LauncherOutAppAdController.kt:264:17"
+  },
+  "gradleTasks": {
+    "runtime": [
+      {
+        "sequence": 279,
+        "atEpochMs": 1793757118310,
+        "event": "runtime.selected",
+        "fields": {
+          "reviewId": "review-1",
+          "runtime": {
+            "gradleVersion": "8.13",
+            "javaMajor": 17,
+            "javaRequirement": {
+              "maximumMajorExclusive": 24,
+              "minimumMajor": 8
+            },
+            "javaVersion": "17.0.17",
+            "runtimeDigest": "53e7248a512b0096217ef3041479254d684144f87a310da2e0eb9c2985502f55",
+            "selectionReason": "compatible-environment",
+            "selectionSource": "environment",
+            "toolchainRole": "build-runtime"
+          }
+        }
+      }
+    ],
+    "completion": [
+      {
+        "sequence": 287,
+        "atEpochMs": 1793757128258,
+        "event": "run.completed",
+        "fields": {
+          "durationMs": 9948,
+          "exitCode": 0,
+          "failureCategory": null,
+          "message": null,
+          "omittedBytes": 0,
+          "outputEvents": 4113,
+          "runId": "run-2",
+          "status": "succeeded",
+          "stderrBytes": 0,
+          "stdoutBytes": 1012226
+        }
+      }
+    ]
+  },
+  "recovery": {
+    "stoppedAdapterPid": 66281,
+    "stoppedGroup": 66281,
+    "beforeGroup": [
+      {
+        "pid": 66281,
+        "parent": 66079,
+        "group": 66281,
+        "rssKiB": 169616
+      },
+      {
+        "pid": 68763,
+        "parent": 66281,
+        "group": 66281,
+        "rssKiB": 552032
+      },
+      {
+        "pid": 68782,
+        "parent": 66281,
+        "group": 66281,
+        "rssKiB": 393040
+      },
+      {
+        "pid": 68784,
+        "parent": 66281,
+        "group": 66281,
+        "rssKiB": 1406400
+      }
+    ],
+    "beforeGroupRssKiB": 2521088,
+    "killedAtEpochMs": 1793757182491,
+    "newSession": "language-session-66079-3",
+    "restartMs": 2443,
+    "readyMs": 42994,
+    "remainingOldGroupPids": []
+  },
+  "approvalReusedAfterFault": true,
+  "approvalReusedAfterApplicationRestart": true,
+  "debugTracingAfterRestart": false,
+  "unexpectedLanguageErrorCount": 0,
+  "knownErrorCounts": [
+    {
+      "target": "frontend",
+      "event": "command.failed",
+      "command": "existing_project_directories",
+      "count": 5
+    }
+  ],
+  "limits": [
+    "single local macOS acceptance run; no same-condition performance comparison",
+    "Windows/Linux matrix configured but not executed remotely",
+    "syntax candidates are bounded and can be partial; semantic LSP still warms separately",
+    "pre-fault language process-group RSS is a snapshot including JVM children, not retained frontend heap"
+  ]
+}

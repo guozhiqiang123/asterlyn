@@ -1,6 +1,6 @@
 # ADR-0037: On-demand syntax candidates from plugin data
 
-Status: implemented; native P1 delivery evidence is recorded separately.
+Status: implemented and locally accepted on macOS (2026-11-04). [Native P1 evidence](../../benchmarks/2026-11-04-foundation-p1-native.json) records installation, cache persistence and recovery. Windows/Linux CI execution remains pending.
 
 The language plugin may ship `servers/symbol-index.v1.json` as an integrity-covered, bounded data resource. The current first-party provider uses schema 1 / `tokens-v1`. No executable rule, regex program, parser dependency, new process, SDK capability or permission is added. An older host ignores the resource; a missing resource is unsupported, never a semantic fallback. Keywords, lexical delimiters and generic model projection pointers belong to the language plugin.
 

@@ -268,3 +268,5 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/2026-10-30-public-release-plan.md`](engineering/2026-10-30-public-release-plan.md) - coordinated host and language plugin publication.
 
 - [`architecture/decisions/0037-plugin-owned-syntax-candidates.md`](architecture/decisions/0037-plugin-owned-syntax-candidates.md) — on-demand plugin data rules, derived symbols cache and current model scope.
+
+- [`benchmarks/2026-11-04-foundation-p1-native.json`](benchmarks/2026-11-04-foundation-p1-native.json) — P1 精确包 / 书签安装、真实 Gradle / LSP、符号缓存与故障恢复的原生回执。
