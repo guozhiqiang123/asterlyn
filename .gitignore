@@ -6,6 +6,7 @@ ci-artifacts/
 src-tauri/target/
 src-tauri/gen/schemas/
 .idea/
+.openidea/
 .vscode/
 *.log
 .DS_Store
