@@ -41,3 +41,9 @@ Local gates passed with Rust 1.98.1 and Node 24.19.0: 594 workspace tests, stric
 | LSP 0.3.17 | 4,667,327 | `7d079a0b7f3575e0e013e490e6c90ab28a26189145c10361caa0941f2982c193` |
 
 Both archives reproduce from clean paths; LSP also reproduces with LF and CRLF notice inputs. Host bundled archives match exactly. Detailed local receipts are in `.artifacts/public-release-20261105-hxl0mmii/`. Native 0.1.26 installation and remote delivery audit follow the frozen source below; remote publication results are pending.
+
+### Corrected candidate local gates
+
+Host 0.1.27 / Gradle 0.6.8 / LSP 0.3.18: all 1,465 script tests, typecheck/build, exact plugin activation and strict Clippy pass. The full portable core gate (core crates, real stdio lifecycle/actors, workspace symbols and native bindings) passes locally after the Windows URI correction. Both plugin verification pipelines pass, including 81 Gradle / 36 LSP tests, canonical admission and full archive LF/CRLF reproducibility. Main-branch Windows/Linux/macOS validation must finish before the new host tag is created.
+
+Canonical archives: Gradle SHA-256 `83a3f6db3e8eb75a6d9576c82a136c4fbffd3b1b758781e0e92261b00ddd8b5c`; LSP SHA-256 `9c4afe0e36ef7402b3cfc7f9a198ee5022d50a580fc708d6e987162387fd4bb3`. SDK remains unchanged. Final local native upgrade and remote publication evidence will be appended here.
