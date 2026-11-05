@@ -19,4 +19,15 @@ Previous real-project/manual acceptance remains recorded in the owning repair pl
 
 ## Results
 
-Pending.
+Preflight: the pinned Rust formatter and three equivalent let-chain lint corrections were required for the strict release gate. Full Rust workspace tests/strict Clippy, 1,465 script tests, definition/Find rendered checks, native watcher tests, plugin activation/admission and TS/Rust/Android descriptor acceptance pass. SDK bytes remain SHA-256 `3de0a44594d014298b4129c719b84a4544c834966e63c75a090db085fd43e761`.
+
+Clean-checkout packaging identified CRLF/LF differences in two TypeScript notices. The LSP builder now normalizes only those notices and its release verification includes a complete-archive LF/CRLF regression. Canonical plugin digests are finalized after that check; no release tag was created before resolution.
+
+Local gates passed with Rust 1.98.1 and Node 24.19.0: 594 workspace tests, strict all-target Clippy/rustfmt, 1,465 script tests, typecheck/build, definition/Find rendered checks, native watcher checks, generated-contract drift, exact plugin activation, package admission, TS/Rust/Android descriptor acceptance, template and canonical SDK verification.
+
+| Package | Bytes | Canonical SHA-256 |
+| --- | --- | --- |
+| Android Gradle 0.6.7 | 4,792,226 | `44e03b92ec8272ddd8c816b35d9d76c53aa24af4ac58a340a27e3687f14f13bb` |
+| LSP 0.3.17 | 4,667,327 | `7d079a0b7f3575e0e013e490e6c90ab28a26189145c10361caa0941f2982c193` |
+
+Both archives reproduce from clean paths; LSP also reproduces with LF and CRLF notice inputs. Host bundled archives match exactly. Detailed local receipts are in `.artifacts/public-release-20261105-hxl0mmii/`. Native 0.1.26 installation and remote delivery audit follow the frozen source below; remote publication results are pending.
