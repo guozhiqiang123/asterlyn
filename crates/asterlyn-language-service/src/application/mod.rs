@@ -732,9 +732,15 @@ pub fn document_path(root: &Path, uri: &str) -> Result<PathBuf, String> {
     let canonical = path
         .canonicalize()
         .map_err(|_| "language document must exist in the active workspace")?;
+    // File URLs omit Windows' verbatim filesystem prefix. Compare both paths
+    // in the URL-decoded representation, preserving canonical case and aliases.
+    let canonical_identity = url::Url::from_file_path(&canonical)
+        .map_err(|_| "invalid canonical file URI")?
+        .to_file_path()
+        .map_err(|_| "invalid canonical file URI")?;
     if !canonical.starts_with(root)
         || canonical == root
-        || canonical != path
+        || canonical_identity != path
         || !canonical.is_file()
     {
         return Err("language document is outside the workspace or uses a path alias".into());
@@ -1237,6 +1243,11 @@ mod tests {
         let uri = url::Url::from_file_path(&file).unwrap().to_string();
         assert_eq!(document_path(&root, &uri).unwrap(), file);
         assert!(document_path(&root, &format!("{uri}?x=1")).is_err());
+        assert!(document_path(&root, &format!("{uri}#line1")).is_err());
+        let spaced = root.join("with space.ts");
+        std::fs::write(&spaced, "let y=2").unwrap();
+        let spaced_uri = url::Url::from_file_path(&spaced).unwrap().to_string();
+        assert_eq!(document_path(&root, &spaced_uri).unwrap(), spaced);
         assert!(document_path(&root, "https://example.org/a.ts").is_err());
         assert!(document_path(&root, "file:///etc/passwd").is_err());
         #[cfg(unix)]
