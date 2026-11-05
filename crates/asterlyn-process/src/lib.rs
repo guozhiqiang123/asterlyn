@@ -1,7 +1,7 @@
 //! Process groups for host-owned subprocesses, shared by language and auxiliary programs.
 use std::process::Command;
-pub mod toolchain;
 pub mod memory;
+pub mod toolchain;
 
 pub fn configure_process_group(command: &mut Command) {
     #[cfg(unix)]

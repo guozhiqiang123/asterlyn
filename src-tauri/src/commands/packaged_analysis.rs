@@ -5,7 +5,8 @@ use super::*;
 use crate::application::{ActiveWorkspaces, DiagnosticsLog};
 use asterlyn_language_service::PackagedServerProfile;
 use asterlyn_language_service::application::{
-    LanguagePackage, LanguageSubject, ModelAccess, ModelInputs, ModelObserver, ModelReply, ModelResource,
+    LanguagePackage, LanguageSubject, ModelAccess, ModelInputs, ModelObserver, ModelReply,
+    ModelResource,
 };
 use asterlyn_plugin_analysis::{AdmittedProgram, AnalysisRuntime, AuthoritySnapshot, ModelHandle};
 use asterlyn_plugin_models::{ModelGrant, ModelKey, PackageIdentity, ProvidedService, Scope};
@@ -390,7 +391,9 @@ pub(super) fn model_access(
     let runtime = app.state::<AnalysisManager>().runtime(&cache(&app)?)?;
     let seen_generation = std::sync::atomic::AtomicU64::new(0);
     let failure_log = Mutex::new(None::<(String, Instant)>);
-    let last_project_failure = Arc::new(Mutex::new(None::<asterlyn_language_service::project_failure::ProjectFailure>));
+    let last_project_failure = Arc::new(Mutex::new(
+        None::<asterlyn_language_service::project_failure::ProjectFailure>,
+    ));
     let failure_reader = last_project_failure.clone();
     let model_attempt = std::sync::atomic::AtomicU64::new(0);
     let watch_app = app.clone();
@@ -399,7 +402,13 @@ pub(super) fn model_access(
     let watch_provider = provider.clone();
     let watch_entry = runtime_entry.clone();
     let observe: ModelObserver = Arc::new(move || {
-        let state = selection(&watch_app, &watch_owner, &watch_producer, &watch_provider, &watch_entry)?;
+        let state = selection(
+            &watch_app,
+            &watch_owner,
+            &watch_producer,
+            &watch_provider,
+            &watch_entry,
+        )?;
         Ok(ModelInputs {
             inputs: inputs::fingerprint(&watch_owner.root, &watch_provider.input_globs)?,
             selection: digest(&serde_json::to_vec(&state).map_err(|_| "invalid model selection")?),

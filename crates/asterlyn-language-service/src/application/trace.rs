@@ -89,7 +89,9 @@ pub(super) fn backend_details(params: Option<&Value>) -> Value {
     {
         for key in [
             "durationMs",
-            "heapMiB", "memoryMiB", "files",
+            "heapMiB",
+            "memoryMiB",
+            "files",
             "completed",
             "total",
             "version",

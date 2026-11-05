@@ -12,11 +12,13 @@ pub(super) fn actor(
     let ActorServices {
         selectors,
         model_access,
-        tracing, resource_scope, resource_policy,
+        tracing,
+        resource_scope,
+        resource_policy,
     } = services;
-    let mut resource_requests = BTreeMap::<JsonRpcId,(String,u32)>::new();
-    let mut resource_sequence=0u64;
-    let mut resource_grants=BTreeMap::<JsonRpcId,String>::new();
+    let mut resource_requests = BTreeMap::<JsonRpcId, (String, u32)>::new();
+    let mut resource_sequence = 0u64;
+    let mut resource_grants = BTreeMap::<JsonRpcId, String>::new();
     let alive = Arc::new(AtomicBool::new(true));
     struct Alive(Arc<AtomicBool>);
     impl Drop for Alive {
@@ -28,7 +30,11 @@ pub(super) fn actor(
     let (model_sender, model_receiver) = mpsc::sync_channel::<Result<ModelReply, String>>(1);
     let mut model_pending: Option<crate::JsonRpcRequest> = None;
     let mut model_resource: Option<Box<dyn ModelResource>> = None;
-    let mut model_watch = super::model_watch::ModelWatch::new(model_access.as_ref().and_then(|access| access.observe.clone()));
+    let mut model_watch = super::model_watch::ModelWatch::new(
+        model_access
+            .as_ref()
+            .and_then(|access| access.observe.clone()),
+    );
     let mut input_revision = 0u64;
     let mut pending_input_revision = 0u64;
     let mut model_generation = 0;
@@ -60,13 +66,18 @@ pub(super) fn actor(
     let mut termination = "session-ended";
     'session: loop {
         for request_id in resource_requests.keys().cloned().collect::<Vec<_>>() {
-            let (key,amount)=&resource_requests[&request_id];
-            let result=resource_scope.pool.poll(&id,key,*amount,Instant::now());
-            if !matches!(result,Ok(false)) {
-                let value=result.map(|_|{resource_grants.insert(request_id.clone(),key.clone());json!({"leaseId":key})});
+            let (key, amount) = &resource_requests[&request_id];
+            let result = resource_scope.pool.poll(&id, key, *amount, Instant::now());
+            if !matches!(result, Ok(false)) {
+                let value = result.map(|_| {
+                    resource_grants.insert(request_id.clone(), key.clone());
+                    json!({"leaseId":key})
+                });
                 trace.record("resource.settled",None,None,||json!({"memoryMiB":amount,"outcome":if value.is_ok(){"granted"}else{"failed"}}));
                 resource_requests.remove(&request_id);
-                if process.reply_to_server(request_id,value).is_err(){break 'session;}
+                if process.reply_to_server(request_id, value).is_err() {
+                    break 'session;
+                }
             }
         }
         let next_trace = tracing.load(Ordering::Relaxed);
@@ -85,19 +96,25 @@ pub(super) fn actor(
                 break;
             }
             let changed = model_watch.poll(&alive, Instant::now());
-            if changed.is_some() || model_resource
-                .as_ref()
-                .is_some_and(|resource| !resource.is_current())
+            if changed.is_some()
+                || model_resource
+                    .as_ref()
+                    .is_some_and(|resource| !resource.is_current())
             {
                 model_resource = None;
                 model_failure = None;
                 model_generation += 1;
                 rust_ready = false;
-                if changed.is_some() { input_revision += 1; }
+                if changed.is_some() {
+                    input_revision += 1;
+                }
                 let reason = changed.unwrap_or("model-revoked");
                 trace.record("model.invalidated", None, None, || json!({"reason":reason,"revision":input_revision,"generation":model_generation}));
                 if process
-                    .notify("asterlyn/modelInvalidated", Some(json!({"reason":reason,"revision":input_revision})))
+                    .notify(
+                        "asterlyn/modelInvalidated",
+                        Some(json!({"reason":reason,"revision":input_revision})),
+                    )
                     .is_err()
                 {
                     break;
@@ -115,7 +132,9 @@ pub(super) fn actor(
                 || json!({"outcome":if result.is_ok(){"completed"}else{"failed"}}),
             );
             let value = match result {
-                Ok(reply) if pending_input_revision == input_revision && reply.resource.is_current() => {
+                Ok(reply)
+                    if pending_input_revision == input_revision && reply.resource.is_current() =>
+                {
                     if model_resource
                         .as_ref()
                         .is_none_or(|old| old.generation() != reply.resource.generation())
@@ -129,23 +148,36 @@ pub(super) fn actor(
                 Ok(_) => Err("model-obsolete".into()),
                 Err(error) => {
                     model_failure = if pending_input_revision == input_revision {
-                        model_access.as_ref().and_then(|access| access.failure_detail.as_ref())
-                            .and_then(|detail| detail()).and_then(|detail| detail.validated()).map(|project| {
-                                let mut failure = crate::protocol::LanguageServiceFailure::from_code("model-unavailable");
-                                failure.project = Some(project); failure
+                        model_access
+                            .as_ref()
+                            .and_then(|access| access.failure_detail.as_ref())
+                            .and_then(|detail| detail())
+                            .and_then(|detail| detail.validated())
+                            .map(|project| {
+                                let mut failure =
+                                    crate::protocol::LanguageServiceFailure::from_code(
+                                        "model-unavailable",
+                                    );
+                                failure.project = Some(project);
+                                failure
                             })
-                    } else { None };
-                    Err(
-                    if error.len() <= 80
-                        && error.bytes().all(|b| {
-                            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-')
-                        })
-                    {
-                        error
                     } else {
-                        "model-unavailable".into()
-                    },
-                )},
+                        None
+                    };
+                    Err(
+                        if error.len() <= 80
+                            && error.bytes().all(|b| {
+                                b.is_ascii_lowercase()
+                                    || b.is_ascii_digit()
+                                    || matches!(b, b'.' | b'-')
+                            })
+                        {
+                            error
+                        } else {
+                            "model-unavailable".into()
+                        },
+                    )
+                }
             };
             if process.reply_to_server(request.id, value).is_err() {
                 break;
@@ -237,12 +269,32 @@ pub(super) fn actor(
                     #[cfg(test)]
                     eprintln!("server request {}", request.method);
                     if packaged && request.method == "asterlyn/analysisResources.reserve" {
-                        let amount=request.params.as_ref().and_then(|p|p.as_object()).filter(|p|p.len()==1).and_then(|p|p.get("memoryMiB")).and_then(Value::as_u64).and_then(|n|u32::try_from(n).ok()).filter(|n|*n>0&&*n<=resource_policy.max_heap_mib+512);
-                        if let Some(amount)=amount && resource_requests.len()+resource_grants.len()<4 && !resource_requests.contains_key(&request.id) {
+                        let amount = request
+                            .params
+                            .as_ref()
+                            .and_then(|p| p.as_object())
+                            .filter(|p| p.len() == 1)
+                            .and_then(|p| p.get("memoryMiB"))
+                            .and_then(Value::as_u64)
+                            .and_then(|n| u32::try_from(n).ok())
+                            .filter(|n| *n > 0 && *n <= resource_policy.max_heap_mib + 512);
+                        if let Some(amount) = amount
+                            && resource_requests.len() + resource_grants.len() < 4
+                            && !resource_requests.contains_key(&request.id)
+                        {
                             trace.record("resource.requested",None,None,||json!({"memoryMiB":amount,"budgetMiB":resource_policy.budget_mib}));
-                            resource_sequence+=1;let key=format!("resource-{resource_sequence}");
-                            resource_requests.insert(request.id,(key,amount));
-                        }else if process.reply_to_server(request.id,Err("analysis-resource-request-invalid".into())).is_err(){break 'session;}
+                            resource_sequence += 1;
+                            let key = format!("resource-{resource_sequence}");
+                            resource_requests.insert(request.id, (key, amount));
+                        } else if process
+                            .reply_to_server(
+                                request.id,
+                                Err("analysis-resource-request-invalid".into()),
+                            )
+                            .is_err()
+                        {
+                            break 'session;
+                        }
                         continue;
                     }
                     if request.method == "workspace/diagnostic/refresh"
@@ -308,13 +360,30 @@ pub(super) fn actor(
                 }
                 Ok(Some(ServerEvent::Message(JsonRpcMessage::Notification(notification)))) => {
                     if notification.method == "asterlyn/analysisResources.release" {
-                        if let Some(key)=notification.params.as_ref().and_then(|p|p.get("leaseId")).and_then(Value::as_str).filter(|s|s.len()<64){resource_scope.pool.release(&id,key);resource_grants.retain(|_,v|v!=key);}
+                        if let Some(key) = notification
+                            .params
+                            .as_ref()
+                            .and_then(|p| p.get("leaseId"))
+                            .and_then(Value::as_str)
+                            .filter(|s| s.len() < 64)
+                        {
+                            resource_scope.pool.release(&id, key);
+                            resource_grants.retain(|_, v| v != key);
+                        }
                         continue;
                     }
-                    if notification.method == "$/cancelRequest" {
-                        if let Some(request_id)=notification.params.as_ref().and_then(|p|p.get("id")).and_then(|v|serde_json::from_value::<JsonRpcId>(v.clone()).ok()) {
-                            if let Some((key,_))=resource_requests.remove(&request_id){resource_scope.pool.release(&id,&key);}
-                            if let Some(key)=resource_grants.remove(&request_id){resource_scope.pool.release(&id,&key);}
+                    if notification.method == "$/cancelRequest"
+                        && let Some(request_id) = notification
+                            .params
+                            .as_ref()
+                            .and_then(|p| p.get("id"))
+                            .and_then(|v| serde_json::from_value::<JsonRpcId>(v.clone()).ok())
+                    {
+                        if let Some((key, _)) = resource_requests.remove(&request_id) {
+                            resource_scope.pool.release(&id, &key);
+                        }
+                        if let Some(key) = resource_grants.remove(&request_id) {
+                            resource_scope.pool.release(&id, &key);
                         }
                     }
                     if notification.method == "asterlyn/trace"
@@ -414,7 +483,18 @@ pub(super) fn actor(
                             }
                         }
                         emit(LanguageServiceEvent {
-                            failure: if health == "error" { model_failure.clone() } else if code.as_deref().is_some_and(|c|c=="kotlin-compiler-resource-limit"||c.starts_with("analysis-resource-")){Some(crate::protocol::LanguageServiceFailure::from_code(code.as_deref().unwrap()))}else {None},
+                            failure: if health == "error" {
+                                model_failure.clone()
+                            } else if code.as_deref().is_some_and(|c| {
+                                c == "kotlin-compiler-resource-limit"
+                                    || c.starts_with("analysis-resource-")
+                            }) {
+                                Some(crate::protocol::LanguageServiceFailure::from_code(
+                                    code.as_deref().unwrap(),
+                                ))
+                            } else {
+                                None
+                            },
                             progress: super::progress::progress(params),
                             details: None,
                             session_id: id.clone(),

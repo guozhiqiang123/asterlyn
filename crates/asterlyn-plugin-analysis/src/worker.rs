@@ -337,29 +337,84 @@ pub(super) fn verify_artifact(artifact: &SealedArtifact) -> Result<(), String> {
 }
 fn project_failure(value: &serde_json::Value) -> Option<serde_json::Value> {
     let object = value.as_object()?;
-    if object.keys().any(|key| !["kind","module","dependency","remaining"].contains(&key.as_str())) { return None; }
+    if object
+        .keys()
+        .any(|key| !["kind", "module", "dependency", "remaining"].contains(&key.as_str()))
+    {
+        return None;
+    }
     let kind = object.get("kind")?.as_str()?;
-    if kind.is_empty() || kind.len()>80 || !kind.bytes().all(|b| b.is_ascii_lowercase() || b==b'-') { return None; }
-    let token = |s:&str| !s.is_empty() && !s.contains("..") && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b,b':'|b'.'|b'-'|b'_'|b'+'|b'$'));
-    if let Some(v)=object.get("module") { let s=v.as_str()?; if s.len()>80 || !s.starts_with(':') || !token(s) { return None; } }
-    if let Some(v)=object.get("dependency") { let s=v.as_str()?; if s.len()>160 || !token(s) || s.contains('$') || s.split(':').count()!=3 || s.split(':').any(str::is_empty) { return None; } }
-    if object.get("remaining").is_some_and(|v|v.as_u64().is_none_or(|n|n>9999)) { return None; }
+    if kind.is_empty()
+        || kind.len() > 80
+        || !kind.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
+    {
+        return None;
+    }
+    let token = |s: &str| {
+        !s.is_empty()
+            && !s.contains("..")
+            && s.bytes().all(|b| {
+                b.is_ascii_alphanumeric() || matches!(b, b':' | b'.' | b'-' | b'_' | b'+' | b'$')
+            })
+    };
+    if let Some(v) = object.get("module") {
+        let s = v.as_str()?;
+        if s.len() > 80 || !s.starts_with(':') || !token(s) {
+            return None;
+        }
+    }
+    if let Some(v) = object.get("dependency") {
+        let s = v.as_str()?;
+        if s.len() > 160
+            || !token(s)
+            || s.contains('$')
+            || s.split(':').count() != 3
+            || s.split(':').any(str::is_empty)
+        {
+            return None;
+        }
+    }
+    if object
+        .get("remaining")
+        .is_some_and(|v| v.as_u64().is_none_or(|n| n > 9999))
+    {
+        return None;
+    }
     Some(value.clone())
 }
 fn diagnostic_context(value: &serde_json::Value) -> Option<serde_json::Value> {
-    fn token(value: &serde_json::Value) -> Option<&str> { value.as_str().filter(|text| !text.is_empty()
-        && text.len() <= 80 && !text.contains("..")
-        && text.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'.' | b'-' | b'_' | b'$'))) }
+    fn token(value: &serde_json::Value) -> Option<&str> {
+        value.as_str().filter(|text| {
+            !text.is_empty()
+                && text.len() <= 80
+                && !text.contains("..")
+                && text.bytes().all(|b| {
+                    b.is_ascii_alphanumeric() || matches!(b, b':' | b'.' | b'-' | b'_' | b'$')
+                })
+        })
+    }
     let reason = token(value.get("reason")?)?;
     let mut out = serde_json::json!({"reason":reason});
     for key in ["subject", "requested"] {
-        if let Some(text) = value.get(key).and_then(token) { out[key] = text.into(); }
+        if let Some(text) = value.get(key).and_then(token) {
+            out[key] = text.into();
+        }
     }
-    out["available"] = value.get("available").and_then(|v| v.as_array()).map(|items| {
-        items.iter().filter_map(token).take(3).collect::<Vec<_>>()
-    }).unwrap_or_default().into();
-    out["omitted"] = value.get("omitted").and_then(|v| v.as_bool()).unwrap_or(false).into();
-    if out.to_string().len() > 320 { out["available"] = serde_json::json!([]); out["omitted"] = true.into(); }
+    out["available"] = value
+        .get("available")
+        .and_then(|v| v.as_array())
+        .map(|items| items.iter().filter_map(token).take(3).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into();
+    out["omitted"] = value
+        .get("omitted")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+        .into();
+    if out.to_string().len() > 320 {
+        out["available"] = serde_json::json!([]);
+        out["omitted"] = true.into();
+    }
     Some(out)
 }
 fn drain_progress(mut stderr: impl Read, sink: ProgressSink) {
@@ -492,9 +547,16 @@ mod progress_tests {
     use super::*;
     #[test]
     fn project_failure_revalidates_private_data_and_size_bounds() {
-        let clean=serde_json::json!({"kind":"dependency-offline","module":":feature-push","dependency":"org.example:library:1.2.3","remaining":0});
-        assert_eq!(project_failure(&clean),Some(clean.clone()));
-        for value in [serde_json::json!({"kind":"dependency-offline","module":"/private/path"}),serde_json::json!({"kind":"dependency-offline","dependency":"https://user:secret@repo"}),serde_json::json!({"kind":"dependency-offline","rawException":"secret"}),serde_json::json!({"kind":"dependency-offline","remaining":10000})] { assert!(project_failure(&value).is_none()); }
+        let clean = serde_json::json!({"kind":"dependency-offline","module":":feature-push","dependency":"org.example:library:1.2.3","remaining":0});
+        assert_eq!(project_failure(&clean), Some(clean.clone()));
+        for value in [
+            serde_json::json!({"kind":"dependency-offline","module":"/private/path"}),
+            serde_json::json!({"kind":"dependency-offline","dependency":"https://user:secret@repo"}),
+            serde_json::json!({"kind":"dependency-offline","rawException":"secret"}),
+            serde_json::json!({"kind":"dependency-offline","remaining":10000}),
+        ] {
+            assert!(project_failure(&value).is_none());
+        }
     }
     #[test]
     fn diagnostic_context_rejects_paths_raw_text_and_extra_keys() {
@@ -502,11 +564,14 @@ mod progress_tests {
             "reason":"selected-variant-missing", "subject":":app", "requested":"cleanx100Debug",
             "available":["cleanx103Debug","/private/secret","password=secret","../escape"],
             "source":"never logged", "omitted":true,
-        })).unwrap();
+        }))
+        .unwrap();
         assert_eq!(clean["available"], serde_json::json!(["cleanx103Debug"]));
         assert!(clean.get("source").is_none());
         assert!(!clean.to_string().contains("secret"));
-        assert!(diagnostic_context(&serde_json::json!({"reason":"contains source text"})).is_none());
+        assert!(
+            diagnostic_context(&serde_json::json!({"reason":"contains source text"})).is_none()
+        );
     }
     #[test]
     fn bounded_diagnostics_keep_terminal_failures_and_discard_raw_paths_and_messages() {
