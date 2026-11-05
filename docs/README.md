@@ -277,7 +277,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`engineering/2026-10-30-unified-find-results-plan.md`](engineering/2026-10-30-unified-find-results-plan.md) — shared Open in Window result transfer and directory/file/match trees for search and language locations.
 
 - [`engineering/2026-10-30-public-release-plan.md`](engineering/2026-10-30-public-release-plan.md) - coordinated host and language plugin publication.
-- [`engineering/2026-11-05-public-release-plan.md`](engineering/2026-11-05-public-release-plan.md) - coordinated host 0.1.26, Gradle 0.6.7 and LSP 0.3.17 publication and independent delivery audit.
+- [`engineering/2026-11-05-public-release-plan.md`](engineering/2026-11-05-public-release-plan.md) - coordinated host 0.1.27, Gradle 0.6.8 and LSP 0.3.18 publication and independent delivery audit.
 
 - [`architecture/decisions/0037-plugin-owned-syntax-candidates.md`](architecture/decisions/0037-plugin-owned-syntax-candidates.md) — on-demand plugin data rules, derived symbols cache and current model scope.
 
