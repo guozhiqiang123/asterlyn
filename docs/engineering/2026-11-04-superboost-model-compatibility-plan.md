@@ -1,0 +1,35 @@
+# Older AGP model compatibility and visible terminal failures
+
+Date: 2026-11-04. Plan before implementation.
+
+## Evidence
+
+Real `superboost_pro` workspace hash `8b077e93eba3a285`: `:SuperBoost:assembleDualspaceproDebug` succeeds, including an up-to-date run in 7,850ms. Subsequent LSP model imports fail in 8,334–10,110ms with `gradle-model-incompatible` / `org.gradle.tooling.model.UnsupportedMethodException`, before Java/Kotlin indexing starts. Fresh unmodified model-worker reproduction fails identically in 8,981ms. A private diagnostic copy identifies `Library.getSrcJars()` in `AgpModelProgram.Action.collectLibraries` as the failing optional API. Published builder-model JAR inspection confirms AGP 8.10.1 exposes singular `getSrcJar()`, while the pinned 8.12.2 client interface also exposes the plural getter.
+
+The current notification predicate admits only structured project failures or resource exhaustion. Compatibility errors have neither accepted project detail nor that resource category, so degraded/failed status does not publish an error tip. This is a plugin compatibility failure, not evidence of an invalid user project.
+
+## Changes and verification
+
+1. Keep model compatibility policy in the Gradle plugin. Fall back from the optional plural source attachment API to the legacy singular API only for the exact unsupported-method condition. Retain compile graphs and authoritative variant selection; do not suppress unrelated errors or modify project/AGP/dependency versions. Run a real Java proxy compatibility test and the same real project's offline worker import.
+2. Centralize the terminal notification predicate. Show safe localized error tips for settled current-session failures, including unclassified failures using fixed wording. Preserve silent cancellation/authority changes, bounded automatic recovery, workspace/provider fencing, episode deduplication and successful recovery clearing. Compatibility guidance must identify the integration limitation without blaming project source or rendering raw exceptions. The status panel retains the same description.
+3. Add focused terminal-kind, privacy, stale-event, retry/recovery and rendered-panel tests. Validate native classification, generated-contract drift, TypeScript/production startup gate, and complete affected plugin tests. Verify a new immutable Gradle package; LSP remains unchanged unless its own code requires repair.
+4. Reproduce model import and actual Java/Kotlin navigation with the selected real variant. Build/sign an independent native candidate and use the canonical ZIP-backed Contents installer, exact digest and two icon-bookmark startup checks. This delivery also supersedes the pending signed candidate from staged-commit closeout. Do not overwrite unrelated pending work or project source changes.
+
+## Acceptance
+
+Manual acceptance passed on 2026-11-05. The user authorized staged local commits of this repair; remote publication is outside this closeout.
+
+Implemented and verified:
+
+- Gradle plugin 0.6.6 passes all 81 plugin tests, type checks, build, package inspection and reproducible packaging. Six compiled Java proxy cases cover modern plural metadata, legacy singular metadata, null sources, unrelated exceptions and unsupported legacy APIs. Package SHA-256: `b9b202c7a0bfcfee34da4727811254b46d800c5075136ee2d33e036cde1e9229` (4,791,486 bytes).
+- The same real offline model import succeeds in 11,286ms, selecting `:SuperBoost / dualspaceproDebug` with three modules. Using the unchanged packaged LSP 0.3.16 and a cold analysis cache, language preparation reaches Ready in 15,930ms after the model is available. Java and Kotlin cross-module definitions both resolve to `VirtualCore.java` (739ms / 13ms); this is a targeted semantic navigation check, not complete language-feature certification. Owned-process peak RSS is 1,150,560KiB. No stderr output; project working state remains unchanged, including its pre-existing dirty `vaLib` submodule.
+- The host now notifies settled model/compatibility and unknown failures using safe localized wording, with persistent status detail. Cancellation, authorization changes and bounded recovery remain quiet. Direct command errors retain their existing reporting owner to prevent double tips. Current-session/epoch fences and episode reset/deduplication tests pass.
+- Host type checks, all 1,465 script tests and production build pass; Chromium/WebKit status rendering, 43 native language tests plus 3 integrations, contract drift and native desktop checks pass. Main startup bundle remains within its size gate. Existing unrelated pending work is preserved.
+
+The final signed native candidate is `.artifacts/superboost-accepted-fd703a_8/Asterlyn.app`, executable SHA-256 `5ed08274a03e93998cba28a5ed2e260faf79c6029ee64d226333b14ff1b08106`; full ad-hoc identity/sealed-resource and strict signature verification pass. A preceding candidate with the exact same plugin packages passed frontend readiness, activation and native known-good health checkpoint. The final native package was rebuilt after notification deduplication and Rust formatting checks; base native tests pass (38).
+
+Native delivery completed on 2026-11-05 after unlock. The old installed process quit normally. The final candidate passed the real `superboost_pro` frontend/activation/native health-checkpoint probe, then the canonical installer replaced only `Contents` with a verified ZIP backup. Installed executable SHA-256 matches the accepted candidate; strict installed bundle signature verification passes; root inode `203606126` on device `16777234` is preserved. Both stored-icon-bookmark starts record frontend readiness (PIDs 36987 and 37150).
+
+The second installed startup restores the actual workspace and automatically imports the model. An initial `model-inputs-changed` fence rejection (11,692ms) is recovered by the existing bounded second attempt, which acquires the 39,773-byte model in 10,274ms; this is not a repeated AGP compatibility failure. The actual installed language session reaches full Ready 15,098ms after acquisition, 42,188ms after application startup, with zero terminal language failures. Native UI also reports Ready. Both exact plugin packages are enabled/known-good. No consent store or process-health state was edited; target working state remains unchanged.
+
+Evidence: `.artifacts/superboost-accepted-fd703a_8/{accepted-build,source-startup,installed,installed-language}.json` and `signature.log`. Existing startup errors from `existing_project_directories` / `scan_untracked` are recorded separately in the receipt and are outside this language-model repair; no claim of an entirely error-free application log is made. Prior targeted Java/Kotlin cross-module semantic checks and all automated verification remain the acceptance basis for navigation; this native continuation verifies installation and automatic project indexing rather than repeating a physical modifier-click test. Private diagnostic evidence is in `/tmp/asterlyn-superboost-lsp/`; raw exception output is not a normal log or UI channel. No remote publication or automatic dependency installation.
