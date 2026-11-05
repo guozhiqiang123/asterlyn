@@ -27,6 +27,8 @@ The ordinary atomic host Push completed while cancellation was being requested. 
 
 The evidence below describes that initial candidate; final publication evidence follows after the corrected native probe.
 
+The initial Core language contracts run also exposed a Windows-only failure in `rejects_uri_aliases_and_escape`: file-URL decoding removes Windows' verbatim prefix while filesystem canonicalization retains it, so comparing the two raw paths rejects a legitimate canonical URI. Compare the canonical path through the same file-URL round trip, retaining containment, regular-file and alias restrictions. Add encoded-space/fragment coverage and run main-branch cross-platform gates before creating the corrected release tag.
+
 Preflight: the pinned Rust formatter and three equivalent let-chain lint corrections were required for the strict release gate. Full Rust workspace tests/strict Clippy, 1,465 script tests, definition/Find rendered checks, native watcher tests, plugin activation/admission and TS/Rust/Android descriptor acceptance pass. SDK bytes remain SHA-256 `3de0a44594d014298b4129c719b84a4544c834966e63c75a090db085fd43e761`.
 
 Clean-checkout packaging identified CRLF/LF differences in two TypeScript notices. The LSP builder now normalizes only those notices and its release verification includes a complete-archive LF/CRLF regression. Canonical plugin digests are finalized after that check; no release tag was created before resolution.
