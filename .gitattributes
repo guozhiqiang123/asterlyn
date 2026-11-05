@@ -1,0 +1,3 @@
+# Native protocol generators emit canonical LF bytes on every platform.
+src/protocol/generated-native-language-types.ts text eol=lf
+src/protocol/generated-native-language-schema.ts text eol=lf
