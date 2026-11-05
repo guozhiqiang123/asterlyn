@@ -127,33 +127,37 @@ fn process_usage(pid: u32) -> std::io::Result<(Duration, Option<u64>)> {
 #[cfg(target_os = "macos")]
 fn mach_cpu_duration(ticks: u64) -> std::io::Result<Duration> {
     use std::sync::OnceLock;
-    // Minimal binding to the stable macOS SDK API; libc moved this binding to
-    // another crate, but no Mach task/thread API or additional dependency is needed.
-    #[repr(C)]
-    struct MachTimebaseInfo {
-        numer: u32,
-        denom: u32,
-    }
-    unsafe extern "C" {
-        fn mach_timebase_info(info: *mut MachTimebaseInfo) -> i32;
-    }
-    static TIMEBASE: OnceLock<Result<(u32, u32), i32>> = OnceLock::new();
-    let (numer, denom) = TIMEBASE
+    static FREQUENCY: OnceLock<Result<u64, i32>> = OnceLock::new();
+    let frequency = FREQUENCY
         .get_or_init(|| {
-            let mut info = MachTimebaseInfo { numer: 0, denom: 0 };
-            // SAFETY: initialized local output buffer; timebase is immutable per boot.
-            let status = unsafe { mach_timebase_info(&mut info) };
-            if status != 0 || info.denom == 0 || info.numer == 0 {
-                Err(status)
+            let mut frequency = 0_u64;
+            let mut size = std::mem::size_of_val(&frequency);
+            // SAFETY: the read-only kernel sysctl writes a 64-bit clock frequency
+            // into initialized storage; no process or global settings are changed.
+            let status = unsafe {
+                libc::sysctlbyname(
+                    c"hw.tbfrequency".as_ptr(),
+                    std::ptr::from_mut(&mut frequency).cast(),
+                    &mut size,
+                    std::ptr::null_mut(),
+                    0,
+                )
+            };
+            if status != 0 {
+                Err(std::io::Error::last_os_error()
+                    .raw_os_error()
+                    .unwrap_or(libc::EINVAL))
+            } else if size != std::mem::size_of_val(&frequency) || frequency == 0 {
+                Err(libc::EINVAL)
             } else {
-                Ok((info.numer, info.denom))
+                Ok(frequency)
             }
         })
         .as_ref()
-        .map_err(|status| std::io::Error::other(format!("read Mach CPU timebase: {status}")))?;
-    // XNU fill_task_rusage returns Mach time, not nanoseconds. ARM timebases
-    // commonly differ from 1:1; a u128 intermediate avoids multiplication overflow.
-    let nanos = u128::from(ticks) * u128::from(*numer) / u128::from(*denom);
+        .map_err(|code| std::io::Error::from_raw_os_error(*code))?;
+    // Kernel rusage uses hardware ticks. Rosetta's mach_timebase_info describes
+    // its translated application clock instead, so use the kernel frequency.
+    let nanos = u128::from(ticks) * 1_000_000_000 / u128::from(*frequency);
     let nanos =
         u64::try_from(nanos).map_err(|_| std::io::Error::other("plugin CPU counter overflow"))?;
     Ok(Duration::from_nanos(nanos))
@@ -327,7 +331,7 @@ mod tests {
         let tolerance = Duration::from_millis(5);
         assert!(
             observed + tolerance >= before && observed <= after + tolerance,
-            "Mach conversion must agree with POSIX CPU seconds: {before:?} <= {observed:?} <= {after:?}"
+            "Kernel tick conversion must agree with POSIX CPU seconds: {before:?} <= {observed:?} <= {after:?}"
         );
     }
 }

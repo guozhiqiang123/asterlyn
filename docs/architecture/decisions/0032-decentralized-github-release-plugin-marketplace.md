@@ -103,7 +103,7 @@ child process with:
 CPU supervision uses a rolling 60 CPU-second budget over the latest 60 seconds of
 monotonic wall time, sampled at most four times per second with bounded history.
 It must not impose a cumulative lifetime CPU expiry on a long-lived helper.
-Inherited OS limits are preserved. macOS counters use the Mach timebase; Linux
+Inherited OS limits are preserved. macOS kernel counters use `hw.tbfrequency` (including Rosetta, whose application Mach timebase differs); Linux
 uses process user/system ticks; Windows uses process kernel/user times. Memory,
 request deadlines, process-tree ownership and fail-closed sampling remain
 independent. Excess is reported as `resourceLimit` with the applicable window in

@@ -4,9 +4,9 @@ User authorization covers version upgrades, local commits, annotated tags, ordin
 
 | Order | Release | Gate |
 | --- | --- | --- |
-| 1 | Host 0.1.27 / SDK 1.14.0 | Synchronized application/core versions; full release quality checks; canonical bundled plugin bytes; reviewed atomic branch/tag Push; four-platform packaging and stable SDK Release |
-| 2 | Android Gradle 0.6.8 | Host 0.1.27 minimum and CI baseline; existing AGP compatibility regression; deterministic package, native inspection and isolated parity; stable Release |
-| 3 | LSP 0.3.18 | Host 0.1.27 minimum; actual Gradle schema-1 minimum stays 0.6.3, integrated with bundled 0.6.8; unchanged published SDK bytes; canonical admission/activation and published provenance; stable Release |
+| 1 | Host 0.1.28 / SDK 1.14.0 | Synchronized application/core versions; full release quality checks; canonical bundled plugin bytes; reviewed atomic branch/tag Push; four-platform packaging and stable SDK Release |
+| 2 | Android Gradle 0.6.8 | Host 0.1.27 minimum, tested against CI baseline 0.1.28; existing AGP compatibility regression; deterministic package, native inspection and isolated parity; stable Release |
+| 3 | LSP 0.3.18 | Host 0.1.27 minimum, tested against 0.1.28; actual Gradle schema-1 minimum stays 0.6.3, integrated with bundled 0.6.8; unchanged published SDK bytes; canonical admission/activation and published provenance; stable Release |
 | 4 | Independent audit | Remote branch/tag identities; completed Actions; full host asset/checksum set; downloaded plugin digests equal the host's bundled identities; record URLs and limits |
 
 The accepted local plugin versions stay immutable. New metadata/compatibility baselines use new versions. The LSP's private resource-admission transport needs the updated host, so the previous 0.1.25 release baseline must not be advertised for this distribution. No SDK surface change is required; retain the exact published 1.14.0 artifact and digest.
@@ -57,3 +57,11 @@ The 6aa52604 native candidate passed full signing, actual superboost_pro and res
 Run 41999597208 confirms the launch fix: Windows core (56), real stdio (3) and actor (41) tests pass. Its last failure is evidence counting: the symbols gate required five tests on every OS, although the Unix-only symlink fixture is not compiled on Windows. Bind all four portable fixture names explicitly, require the Unix symlink fixture on Unix, and derive the minimum count from that exact list. This strengthens fixture identity without dropping any platform-applicable test.
 
 Run 42000146403 passes every Windows Rust/stdio/actor/symbol test. The final generated-contract byte check exposes CRLF checkout conversion of the two committed TypeScript outputs. Pin exactly those generated files to `text eol=lf` in `.gitattributes`; retain byte-exact drift comparison and generator output. This is checkout normalization, not a protocol change. Recheck the attributes and generated output locally and rerun all three CI platforms.
+
+### Rosetta resource-accounting correction and final host 0.1.28
+
+Package preview 42000654925 (Intel job 127159596107) catches a real undercount: the x86_64 executable runs under Rosetta on the ARM runner. POSIX observes about 99.75 ms process CPU while the Mach conversion reports 2.39 ms (41.67x lower). Rosetta presents a 1:1 application clock timebase; the kernel's `proc_pid_rusage` counters still use native hardware ticks. XNU exposes the native 64-bit clock frequency through `hw.tbfrequency` ([kernel implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_mib.c)); use that frequency for kernel CPU counters and retain overflow/error checks. The independent POSIX regression must pass for both native ARM and the actual x86_64 binary under Rosetta before another tag. Do not relax or remove the failing test.
+
+Cancel the unpublished v0.1.27 Release run 42001039800 and superseded preview; retain its annotated tag. Final host target becomes **0.1.28**, tested plugin baselines follow that source. Plugin versions remain **0.6.8 / 0.3.18** and the true private-transport minimum stays 0.1.27: the CPU accounting repair changes neither plugin contract nor archive bytes. LSP's actual Gradle schema minimum remains 0.6.3. Revalidate both archive identities before publishing.
+
+The kernel-frequency correction passes all eight plugin-runtime tests as native aarch64 and as the actual x86_64 binary under Rosetta on this development Mac. The previously failing independent POSIX comparison remains unchanged in strictness.
