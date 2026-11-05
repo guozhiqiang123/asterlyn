@@ -13,12 +13,16 @@ fn peer() -> (tempfile::TempDir, LanguageServiceProcess) {
     );
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().canonicalize().unwrap();
-    std::fs::write(root.join("peer.mjs"), include_str!("fixtures/peer.mjs")).unwrap();
+    std::fs::write(
+        root.join("-peer fixture.mjs"),
+        include_str!("fixtures/peer.mjs"),
+    )
+    .unwrap();
     let mut process = LanguageServiceProcess::start_packaged(&PackagedServerProfile {
         id: "portable-fixture".into(),
         node,
         package_root: root.clone(),
-        entry: "peer.mjs".into(),
+        entry: "-peer fixture.mjs".into(),
         initialization_options: Value::Null,
         selectors: vec![("typescript".into(), vec![".ts".into()])],
         cache_parent: root,

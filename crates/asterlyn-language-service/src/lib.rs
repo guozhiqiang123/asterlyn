@@ -296,7 +296,8 @@ impl LanguageServiceProcess {
             command.process_group(0);
         }
         command
-            .arg(profile.package_root.join(TYPESCRIPT_SERVER_ENTRY))
+            .arg("--")
+            .arg(TYPESCRIPT_SERVER_ENTRY)
             .arg("--stdio")
             .current_dir(&profile.package_root)
             .stdin(Stdio::piped())

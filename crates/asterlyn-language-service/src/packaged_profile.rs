@@ -82,7 +82,10 @@ impl LanguageServiceProcess {
         }
         configure_process_group(&mut command);
         command
-            .arg(profile.package_root.join(&profile.entry))
+            .arg("--")
+            // Node 24 cannot load Windows verbatim absolute entry paths. The entry
+            // was validated above; resolve it only inside the bound package cwd.
+            .arg(&profile.entry)
             .current_dir(&profile.package_root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
