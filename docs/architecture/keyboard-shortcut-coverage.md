@@ -208,6 +208,7 @@ this is a routing and accessibility contract, not permission to modify a read-on
 | Resolve selected conflict | write | `changes.selection.conflict.resolve` | **Custom** |
 | Show selected path history | navigation | `changes.selection.history` | **Custom** |
 | Copy selected change name, relative path, absolute path | read | `changes.selection.copyName`, `changes.selection.copyRelativePath`, `changes.selection.copyAbsolutePath` | **Custom** |
+| Changes directory: Move to Trash / Copy Path | destructive/read | folder context target | **Local:** right-click or Shift+F10 on the focused directory; Trash requires review and confirmation |
 | Toggle tree/flat view | presentation | `changes.view.toggle` | **Default:** Control+P on macOS; **Custom** elsewhere |
 | Expand/collapse all Changes folders | presentation | `changes.folders.expandAll`, `changes.folders.collapseAll` | **Custom** |
 | Stage all Unversioned / Trash all Unversioned | write/destructive | `changes.unversioned.stageAll`, `changes.unversioned.trashAll` | **Custom**; Trash remains unassigned and confirmed |

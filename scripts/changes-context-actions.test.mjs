@@ -9,9 +9,11 @@ import {
 import {
   changesContextPolicy,
   changesHistoryIntent,
+  changesContextPolicies,
 } from "../src/features/changes-commit/changes-context-policy.ts";
 import { EN_US } from "../src/localization/en-US.ts";
 import { contextMenuModelErrors } from "../src/shared/context-menu/context-menu-model.ts";
+import { resolveChangesDirectoryContextTarget } from "../src/features/changes-commit/changes-navigation-binding.ts";
 
 const enabled = { kind: "enabled" };
 const policy = {
@@ -207,4 +209,65 @@ test("command routing reuses context policy and revalidates the exact target", a
   current = false;
   await provider.executeCommand("restore", ordinary);
   assert.deepEqual(events.at(-1), ["blocked", EN_US.changes.contextMenu.targetChanged]);
+});
+
+test("directory menu copies exact paths and requests reviewed Trash without file selection", async () => {
+  const currentSnapshot = snapshot([{ ...target().change, path: ".openidea/new.txt", worktreeStatus: "untracked" }]);
+  const directory = resolveChangesDirectoryContextTarget(currentSnapshot, 5, ".openidea", "unversioned", ".", 3);
+  const events = [];
+  let session;
+  let current = true;
+  let availability = enabled;
+  const actions = new ChangesContextActions(
+    { open(_anchor, value) { session = value; } },
+    { async writeText(text) { events.push(["copy", text]); return { status: "copied" }; } },
+    {
+      current: () => current,
+      select() { assert.fail("folder context must not change selected Diff or inclusion"); },
+      groupPolicy: () => ({ stage: availability, trash: availability }),
+      trash: (value) => events.push(["review-trash", value.workspacePath, value.kind]),
+      blocked: (reason) => events.push(["blocked", reason]),
+      status() {}, error(error) { throw error; },
+    },
+    () => EN_US.changes,
+  );
+  assert.equal(actions.open({ target: directory, anchor: { x: 1, y: 2 }, restoreFocus() {} }), true);
+  assert.deepEqual(contextMenuModelErrors(session.model), []);
+  assert.deepEqual(session.model.items.filter((item) => item.kind !== "separator").map((item) => item.label), ["Move to Trash…", "Copy Path"]);
+  assert.deepEqual(events, []);
+  for (const action of ["copy-name", "copy-relative-path", "copy-absolute-path", "trash"]) {
+    await session.invoke(`changes.context-actions.${action}`);
+  }
+  assert.deepEqual(events, [["copy", ".openidea"], ["copy", ".openidea"], ["copy", "/repo/.openidea"], ["review-trash", ".openidea", "directory"]]);
+  availability = { kind: "busy", label: "Mutation busy" };
+  await session.invoke("changes.context-actions.trash");
+  assert.deepEqual(events.at(-1), ["blocked", "Mutation busy"]);
+  availability = { kind: "blocked", reason: "Native Trash unavailable" };
+  await session.invoke("changes.context-actions.trash");
+  assert.deepEqual(events.at(-1), ["blocked", "Native Trash unavailable"]);
+  current = false;
+  await session.invoke("changes.context-actions.copy-absolute-path");
+  assert.deepEqual(events.at(-1), ["blocked", EN_US.changes.contextMenu.targetChanged]);
+  assert.equal(actions.open({ target: directory }), false);
+});
+
+test("shared Changes availability keeps native restrictions and mutation busy state current", () => {
+  let busy = false;
+  let bulkBusy = false;
+  let native = true;
+  const policies = changesContextPolicies({
+    snapshot: () => snapshot(), source: () => ({ readOnly: true }),
+    mutationBusy: () => busy, bulkBusy: () => bulkBusy, trashAvailable: () => native,
+    reasons: () => EN_US.changes.contextMenu,
+  });
+  assert.equal(policies.policyOptions(target()).sourceAvailable, false);
+  assert.equal(policies.groupPolicy().trash.kind, "enabled");
+  native = false;
+  assert.equal(policies.groupPolicy().trash.kind, "blocked");
+  assert.equal(policies.groupPolicy().stage.kind, "enabled");
+  bulkBusy = true;
+  assert.equal(policies.groupPolicy().trash.kind, "busy");
+  assert.equal(policies.policyOptions(target()).mutationBusy, false);
+  busy = true;
+  assert.equal(policies.policyOptions(target()).mutationBusy, true);
 });

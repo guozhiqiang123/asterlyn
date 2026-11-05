@@ -13,6 +13,7 @@ export class WorkspaceTrashDialogBinding<TTarget extends WorkspaceTrashTarget> {
   private readonly copy: () => WorkspaceTrashDialogCopy;
   private readonly focusTarget: (target: TTarget) => HTMLElement | null;
   private focusReturn: HTMLElement | null = null;
+  private focusIdentity: TTarget | null = null;
   private dialogWasOpen = false;
   private disposed = false;
 
@@ -35,6 +36,7 @@ export class WorkspaceTrashDialogBinding<TTarget extends WorkspaceTrashTarget> {
     const dialog = this.controller.state.dialog;
     const open = dialog !== null;
     if (dialog && !this.dialogWasOpen) {
+      this.focusIdentity = dialog.target;
       this.focusReturn = this.focusTarget(dialog.target) ?? (
         document.activeElement instanceof HTMLElement ? document.activeElement : null
       );
@@ -75,14 +77,20 @@ export class WorkspaceTrashDialogBinding<TTarget extends WorkspaceTrashTarget> {
   dispose(): void {
     this.disposed = true;
     this.focusReturn = null;
+    this.focusIdentity = null;
   }
 
   private restoreFocus(): void {
     const target = this.focusReturn;
+    const identity = this.focusIdentity;
     this.focusReturn = null;
-    if (!target) return;
+    this.focusIdentity = null;
+    if (!target && !identity) return;
     queueMicrotask(() => {
-      if (target.isConnected) target.focus();
+      if (this.disposed) return;
+      const current = identity ? this.focusTarget(identity) : null;
+      if (current?.isConnected) current.focus();
+      else if (target?.isConnected) target.focus();
       else this.root.querySelector<HTMLElement>("#navigator-body")?.focus();
     });
   }

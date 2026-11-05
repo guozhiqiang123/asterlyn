@@ -11,6 +11,8 @@ import { diagnostics } from "./application/diagnostics.ts";
 import { changeWorkspacePath, fileChangeKey, findFileChange } from "./change-identity.ts";
 import { LazyContextMenuHost } from "./shared/context-menu/lazy-context-menu-host.ts";
 import { WorkspaceTrashRuntime } from "./features/workspace-trash/workspace-trash-runtime.ts";
+import { workspaceTrashPresentation } from "./features/workspace-trash/workspace-trash-presentation.ts";
+import { changesContextPolicies } from "./features/changes-commit/changes-context-policy.ts";
 import {
   createCreatedFileStagingRuntime, resolveProjectFilesRepositoryLocation,
 } from "./features/files-editor/project-file-staging.ts";
@@ -123,6 +125,7 @@ import {
 import {
   changesContextTargetIsCurrent,
   type ChangesContextTarget,
+  type ChangesDirectoryContextTarget,
   type ChangesFileContextTarget,
 } from "./features/changes-commit/changes-navigation-binding.ts";
 import {
@@ -464,7 +467,7 @@ export class AsterlynApp {
   private readonly filesEditorRuntime: FilesEditorRuntime;
   private readonly projectFilesContextRuntime: ProjectFilesContextSurfaceRuntime;
   private readonly workspaceTrashRuntime: WorkspaceTrashRuntime<
-    ProjectFilesContextTarget | ChangesFileContextTarget
+    ProjectFilesContextTarget | ChangesFileContextTarget | ChangesDirectoryContextTarget
   >;
   private readonly unversionedTrashRuntime: UnversionedTrashRuntime;
   private readonly projectFilesOperationRuntime: ProjectFilesOperationRuntime;
@@ -1250,7 +1253,7 @@ export class AsterlynApp {
         settle: (lease) => this.windowSession.completeTransition(lease.generation),
       },
     );
-    this.workspaceTrashRuntime = new WorkspaceTrashRuntime({
+    this.workspaceTrashRuntime = new WorkspaceTrashRuntime<ProjectFilesContextTarget | ChangesFileContextTarget | ChangesDirectoryContextTarget>({
       root,
       mutations: this.workspaceMutations,
       runtime: {
@@ -1258,14 +1261,14 @@ export class AsterlynApp {
           const root = this.windowSession.workspace.state.root;
           return root ? { root, generation: this.windowSession.generation } : null;
         },
-        isTargetCurrent: (target) => "change" in target
+        isTargetCurrent: (target) => "repositoryRevision" in target
           ? this.isChangesContextTargetCurrent(target)
           : this.isProjectFilesContextTargetCurrent(target),
         completed: (targets, _outcome) => {
           const first = targets[0];
           if (!first) return;
           const paths = targets.map((target) => target.workspacePath);
-          if ("change" in first) {
+          if ("repositoryRevision" in first) {
             this.filesEditorRuntime.files.removeAtOrBelow(paths);
           } else {
             for (const path of paths) this.projectFilesOperationRuntime.controller.clearClipboardAtOrBelow(path);
@@ -1281,36 +1284,7 @@ export class AsterlynApp {
         status: (message) => this.setStatus(message, "success"),
         error: (error) => this.showError(error),
       },
-      messages: () => {
-        const labels = this.localization.catalog.projectFiles.contextMenu;
-        return {
-          targetChanged: labels.sourceChanged,
-          blocked: labels.trashBlocked,
-          operationFailed: labels.operationFailed,
-          trashed: labels.trashedEntry,
-          saveBeforeTrash: this.localization.catalog.changes.saveBeforeTrashUnversioned,
-        };
-      },
-      copy: () => {
-        const labels = this.localization.catalog.projectFiles.contextMenu;
-        return {
-          title: labels.confirmTrashTitle,
-          cancel: labels.cancel,
-          confirm: labels.confirmTrash,
-          working: labels.working,
-          fileDetail: labels.trashFileDetail,
-          folderDetail: labels.trashFolderDetail,
-          multipleDetail: labels.trashMultipleDetail,
-        };
-      },
-      focusTarget: (target) => Array.from(this.root.querySelectorAll<HTMLElement>(
-        "change" in target ? "[data-change-path]" : "[data-project-node]",
-      )).find((element) => (
-        "change" in target
-          ? element.dataset.changePath === target.path &&
-            (element.dataset.changeRepositoryId ?? ".") === target.repositoryId
-          : element.dataset.projectNode === target.workspacePath
-      )) ?? null,
+      ...workspaceTrashPresentation(this.root, () => this.localization.catalog),
       changed: () => {
         if (
           this.shellState.layout.leftTool === "files" ||
@@ -1537,32 +1511,14 @@ export class AsterlynApp {
         },
         included: (target) => !this.changesState.excludedPaths.has(fileChangeKey(target.change)),
         snapshot: () => this.windowSession.repository.state.snapshot,
-        policyOptions: (target) => {
-          const snapshot = this.windowSession.repository.state.snapshot;
-          const labels = this.localization.catalog.changes.contextMenu;
-          const source = this.filesEditorRuntime.files.fileForWorkspacePath(target.workspacePath);
-          return {
-            sourceAvailable: Boolean(source && !source.readOnly),
-            conflictAvailable: Boolean(target.change.conflicted && snapshot),
-            mutationBusy: this.state.loading || this.changesState.mutation !== null ||
-              this.workspaceTrashRuntime.controller.busy,
-            trashAvailable: !bridge.isDemo,
-            reasons: labels,
-          };
-        },
-        groupPolicy: () => {
-          const labels = this.localization.catalog.changes.contextMenu;
-          const busy = this.state.loading || this.changesState.mutation !== null ||
-            this.workspaceTrashRuntime.controller.busy || this.unversionedTrashRuntime.busy;
-          return {
-            stage: busy ? { kind: "busy", label: labels.mutationBusy } : { kind: "enabled" },
-            trash: busy
-              ? { kind: "busy", label: labels.mutationBusy }
-              : bridge.isDemo
-                ? { kind: "blocked", reason: labels.operationsUnavailable }
-                : { kind: "enabled" },
-          };
-        },
+        ...changesContextPolicies({
+          snapshot: () => this.windowSession.repository.state.snapshot,
+          source: (path) => this.filesEditorRuntime.files.fileForWorkspacePath(path),
+          mutationBusy: () => this.state.loading || this.changesState.mutation !== null || this.workspaceTrashRuntime.controller.busy,
+          bulkBusy: () => this.unversionedTrashRuntime.busy,
+          trashAvailable: () => !bridge.isDemo,
+          reasons: () => this.localization.catalog.changes.contextMenu,
+        }),
         setIncluded: (target, included) =>
           this.setChangePathsIncluded([fileChangeKey(target.change)], included),
         showDiff: (target) => this.openChangesContextDiff(target),

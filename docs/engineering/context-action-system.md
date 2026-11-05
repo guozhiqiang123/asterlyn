@@ -182,8 +182,8 @@ secondary click.
 The shared host has no global rule for selecting the target:
 
 - Files selects the file/folder row without opening or expanding it.
-- Changes installs a context/primary row selection without changing commit inclusion or loading a
-  Diff.
+- Changes file rows install a context/primary selection without changing commit inclusion or
+  loading a Diff. Directory menus preserve that file selection and operate on the captured folder.
 - A single History commit becomes primary selection and may load details, but performs no file or
   Git action.
 - History multi-selection is retained when right-click occurs inside the range and replaced by a
@@ -574,6 +574,56 @@ Git object, workspace path, or recovery state.
 After all context surfaces have production evidence, assess whether project, History-filter,
 editor-tab, remote, and Push-mode dropdowns benefit from the same geometry/focus primitives. Do not
 merge their feature state or force a context-action provider model onto persistent toggle menus.
+
+### Changes directory menus (2026-11-04)
+
+Changes directory rows expose **Move to Trash…** and **Copy Path** (name, workspace-relative,
+absolute), using the same shared menu host and clipboard feedback as file rows. Right-click and
+Shift+F10 capture the concrete folder, group, repository and workspace identity, including the
+terminal path of a compacted directory chain. They preserve commit inclusion and the active Diff.
+Submodule paths are qualified with the owning repository's workspace-relative root.
+
+Folder Trash uses the existing window-wide workspace mutation planner and confirmation dialog.
+It moves the entire reviewed directory, including unchanged/hidden contents counted in the
+preview, rather than silently treating the visible change rows as the directory inventory.
+Opening the menu does not issue a native request. Activation rechecks availability and identity;
+the planner and confirmation independently verify the exact target before mutation. Cancellation
+restores the directory's keyboard focus. Shared busy/demo restrictions and native root, metadata,
+symlink, dirty-editor and stale-inventory protections remain in force.
+
+Acceptance: 1,459 frontend script tests, TypeScript/production build, 82 workspace unit tests and
+5 workspace integration tests pass. `npm run test:changes-context:rendered` passes Chromium and
+WebKit coverage for pointer/keyboard opening, expanded/collapsed directories, tracked/untracked
+groups, exact submodule paths, no mutation on menu opening, confirmation/cancellation and stale
+targets. Native testing found that list repaint detached the saved focus element; the dialog now
+retains its semantic target and resolves the current row on close. The rendered fixture reproduces
+the failure before that correction and verifies focus recovery after repaint in both engines.
+
+The installed macOS `0.1.25` bundle passed strict ad-hoc signature verification and a fresh rendered
+smoke within 6,000 ms. The canonical installer preserved the app root, retained a verified ZIP
+backup and verified frontend readiness on both icon-bookmark launches. Actual native acceptance
+used only `.artifacts/changes-folder-context-20261104.dpDXvx/native-fixture/.openidea`: Copy Path
+reported success; the review counted 3 entries, 14 bytes and 2 hidden entries; cancellation restored
+the folder and Shift+F10 reopened its menu; confirmation moved the test directory to system Trash
+and Changes became clean. The test directory's absence was independently checked afterward.
+
+Final archive:
+`.artifacts/changes-folder-context-20261104.dpDXvx/Asterlyn-0.1.25-changes-folder-context-final-macos-arm64.zip`,
+25,651,612 bytes, SHA-256
+`c83978c28f0c7cd0882f1a2d45924a5ea72759a8121621ab047153e36e23ea94`.
+Installed executable SHA-256:
+`b93d441ffed37f29f73b686b3322c3436fb27a2b8f1117061892a14558faa8a3`.
+Final native smoke and install receipts are in the artifact's `final/` directory. The earlier
+multi-instance smoke failure is retained separately; the final single-probe smoke passed. The exact
+Android `0.6.5` and LSP `0.3.14` package health checkpoint passed; that source-workspace probe also
+recorded two `existing_project_directories` command errors, retained in its receipt.
+
+Resource scope: opening a directory menu uses the current bounded Changes snapshot and creates no
+native request or persistent cache. Availability and dialog-presentation mapping now live in their
+feature modules; the unchanged startup size gate passes (Vite reports 501.87 kB for the final emitted
+main asset, including its standard size advisory). No separate long-duration memory profile or
+Windows/Linux native acceptance was run. Manual acceptance passed and local staged commits were
+authorized on 2026-11-05; remote publication remains outside this closeout.
 
 ### 2026-09-20 manual-test follow-up
 

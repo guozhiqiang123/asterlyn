@@ -9,6 +9,7 @@ import { resolveProjectFilesContextTarget } from "../src/features/files-editor/p
 import {
   changesContextTargetIsCurrent,
   resolveChangesGroupContextTarget,
+  resolveChangesDirectoryContextTarget,
   resolveChangesContextTarget,
 } from "../src/features/changes-commit/changes-navigation-binding.ts";
 import {
@@ -37,6 +38,36 @@ const change = {
   conflicted: false,
   submodule: false,
 };
+
+test("Changes directories bind their group, exact repository and workspace path", () => {
+  const snapshot = repositorySnapshot();
+  snapshot.repositoryRoots.push({ id: "library", relativePath: "vendor/library", displayName: "library" });
+  snapshot.changes = [
+    { ...change, path: ".openidea/.gitignore", worktreeStatus: "untracked" },
+    { ...change, path: ".openidea/changelists.json", worktreeStatus: "untracked" },
+    { ...change, path: ".openidea/tracked.txt" },
+    { ...change, path: ".openidea-other/new.txt", worktreeStatus: "untracked" },
+    { ...change, repositoryId: "library", path: ".openidea/new.txt", workspacePath: "vendor/library/.openidea/new.txt", worktreeStatus: "untracked" },
+  ];
+  const directory = resolveChangesDirectoryContextTarget(snapshot, 4, ".openidea", "unversioned", ".", 12);
+  assert.equal(directory.kind, "directory");
+  assert.equal(directory.workspacePath, ".openidea");
+  assert.deepEqual(directory.changes.map((item) => item.path), [".openidea/.gitignore", ".openidea/changelists.json"]);
+  assert.equal(changesContextTargetIsCurrent(directory, snapshot, 4, 12), true);
+  const nested = resolveChangesDirectoryContextTarget(snapshot, 4, ".openidea", "unversioned", "library", 12);
+  assert.equal(nested.workspacePath, "vendor/library/.openidea");
+  assert.equal(nested.changes.length, 1);
+  assert.equal(resolveChangesDirectoryContextTarget(snapshot, 4, ".openidea", "conflicts", ".", 12), null);
+  for (const path of ["", ".", "../.openidea", "/.openidea", ".openidea/..", "vendor\\library"]) {
+    assert.equal(resolveChangesDirectoryContextTarget(snapshot, 4, path, "unversioned"), null);
+  }
+  assert.equal(changesContextTargetIsCurrent(directory, snapshot, 5, 12), false);
+  assert.equal(changesContextTargetIsCurrent(directory, snapshot, 4, 13), false);
+  assert.equal(changesContextTargetIsCurrent(directory, { ...snapshot, changes: snapshot.changes.slice(1) }, 4, 12), false);
+  assert.equal(changesContextTargetIsCurrent(directory, {
+    ...snapshot, changes: [...snapshot.changes, { ...change, path: ".openidea/added.txt", worktreeStatus: "untracked" }],
+  }, 4, 12), false);
+});
 const branch = {
   repositoryId: ".",
   kind: "local",

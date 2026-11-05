@@ -15,7 +15,7 @@ import {
 } from "../../shared/context-menu/context-menu-copy-actions.ts";
 import type { DelegatedContextRequest } from "../../shared/context-menu/delegated-context-binding.ts";
 import type { ChangesContextTarget } from "./changes-navigation-binding.ts";
-import type { ChangesFileContextTarget, ChangesGroupContextTarget } from "./changes-navigation-binding.ts";
+import type { ChangesDirectoryContextTarget, ChangesFileContextTarget, ChangesGroupContextTarget } from "./changes-navigation-binding.ts";
 import {
   changesContextPolicy,
   changesHistoryIntent,
@@ -38,13 +38,13 @@ export interface ChangesContextRuntime {
   included(target: ChangesFileContextTarget): boolean;
   snapshot(): RepositorySnapshot | null;
   policyOptions(target: ChangesFileContextTarget): Omit<ChangesContextPolicyOptions, "snapshot">;
-  groupPolicy(target: ChangesGroupContextTarget): { stage: ContextMenuAvailability; trash: ContextMenuAvailability };
+  groupPolicy(target: ChangesGroupContextTarget | ChangesDirectoryContextTarget): { stage: ContextMenuAvailability; trash: ContextMenuAvailability };
   setIncluded(target: ChangesFileContextTarget, included: boolean): void;
   showDiff(target: ChangesFileContextTarget): void | Promise<void>;
   jumpToSource(target: ChangesFileContextTarget): void | Promise<void>;
   resolveConflict(target: ChangesFileContextTarget): void | Promise<void>;
   restore(target: ChangesFileContextTarget): void | Promise<void>;
-  trash(target: ChangesFileContextTarget): void | Promise<void>;
+  trash(target: ChangesFileContextTarget | ChangesDirectoryContextTarget): void | Promise<void>;
   stageAll(target: ChangesGroupContextTarget): void | Promise<void>;
   trashAll(target: ChangesGroupContextTarget): void | Promise<void>;
   installHistoryQuery(intent: HistoryQueryIntent): void;
@@ -76,6 +76,7 @@ export class ChangesContextActions {
     const { target } = request;
     if (!this.runtime.current(target)) return false;
     if (target.kind === "group") return this.openGroup(request, target);
+    if (target.kind === "directory") return this.openDirectory(request, target);
     if (!this.runtime.select(target)) return false;
     const labels = this.copy().contextMenu;
     const pathLabels = {
@@ -115,6 +116,11 @@ export class ChangesContextActions {
     action: ChangesContextCommandAction,
     target: ChangesContextTarget,
   ): ContextMenuAvailability {
+    if (target.kind === "directory") {
+      if (action.startsWith("copy-")) return ENABLED;
+      return action === "trash" ? this.runtime.groupPolicy(target).trash
+        : { kind: "blocked", reason: this.copy().contextMenu.operationsUnavailable };
+    }
     if (target.kind === "group") {
       const policy = this.runtime.groupPolicy(target);
       return action === "stage-all"
@@ -161,6 +167,11 @@ export class ChangesContextActions {
         else if (action === "trash-all") await this.runtime.trashAll(target);
         return;
       }
+      if (target.kind === "directory") {
+        if (action.startsWith("copy-")) await this.copyPath(`${OWNER_ID}.${action}`, target);
+        else if (action === "trash") await this.runtime.trash(target);
+        return;
+      }
       if (!this.runtime.select(target)) {
         this.runtime.blocked(this.copy().contextMenu.targetChanged);
         return;
@@ -174,7 +185,7 @@ export class ChangesContextActions {
 
   private async copyPath(
     actionId: string,
-    target: ChangesFileContextTarget,
+    target: ChangesFileContextTarget | ChangesDirectoryContextTarget,
     actions = workspacePathCopyActions(OWNER_ID, target, {
       copy: this.copy().contextMenu.copyPath,
       fileName: this.copy().contextMenu.fileName,
@@ -209,6 +220,32 @@ export class ChangesContextActions {
           this.runtime.error(error);
         }
       },
+      blocked: (reason) => this.runtime.blocked(reason),
+      restoreFocus: request.restoreFocus,
+    });
+    return true;
+  }
+
+  private openDirectory(
+    request: DelegatedContextRequest<ChangesContextTarget>,
+    target: ChangesDirectoryContextTarget,
+  ): boolean {
+    const labels = this.copy().contextMenu;
+    const pathLabels = { copy: labels.copyPath, fileName: labels.fileName,
+      relativePath: labels.relativePath, absolutePath: labels.absolutePath };
+    this.host.open(request.anchor, {
+      ownerId: OWNER_ID,
+      model: {
+        ariaLabel: labels.ariaLabel(target.path),
+        items: [
+          { kind: "command", id: `${OWNER_ID}.trash`, actionId: `${OWNER_ID}.trash`,
+            label: labels.trash, availability: this.commandAvailability("trash", target), tone: "danger" },
+          { kind: "separator" },
+          buildPathCopyGroup(`${OWNER_ID}.copy-path`, pathLabels, workspacePathCopyActions(OWNER_ID, target, pathLabels)),
+        ],
+      },
+      isCurrent: () => this.runtime.current(target),
+      invoke: (actionId) => this.executeCommand(actionId.slice(OWNER_ID.length + 1) as ChangesContextCommandAction, target),
       blocked: (reason) => this.runtime.blocked(reason),
       restoreFocus: request.restoreFocus,
     });

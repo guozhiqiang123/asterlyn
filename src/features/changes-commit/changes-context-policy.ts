@@ -33,6 +33,31 @@ export interface ChangesContextPolicyOptions {
   readonly reasons: ChangesContextPolicyReasons;
 }
 
+export function changesContextPolicies(ports: {
+  snapshot(): RepositorySnapshot | null;
+  source(path: string): { readonly readOnly?: boolean } | null;
+  mutationBusy(): boolean;
+  bulkBusy(): boolean;
+  trashAvailable(): boolean;
+  reasons(): ChangesContextPolicyReasons;
+}) {
+  return {
+    policyOptions: (target: ChangesFileContextTarget): Omit<ChangesContextPolicyOptions, "snapshot"> => {
+      const source = ports.source(target.workspacePath);
+      return {
+        sourceAvailable: Boolean(source && !source.readOnly),
+        conflictAvailable: Boolean(target.change.conflicted && ports.snapshot()),
+        mutationBusy: ports.mutationBusy(), trashAvailable: ports.trashAvailable(), reasons: ports.reasons(),
+      };
+    },
+    groupPolicy: (): { stage: ContextMenuAvailability; trash: ContextMenuAvailability } => {
+      const reasons = ports.reasons();
+      const stage = ports.mutationBusy() || ports.bulkBusy() ? busy(reasons.mutationBusy) : enabled();
+      return { stage, trash: stage.kind === "busy" || ports.trashAvailable() ? stage : blocked(reasons.operationsUnavailable) };
+    },
+  };
+}
+
 export function changesContextPolicy(
   target: ChangesFileContextTarget,
   options: ChangesContextPolicyOptions,

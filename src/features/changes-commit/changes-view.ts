@@ -471,7 +471,7 @@ function renderChangeRow(
     </div>`;
   }
   if (row.kind === "directory") {
-    return `<div class="change-directory virtual" role="treeitem" ${position} aria-expanded="${!row.collapsed}">
+    return `<div class="change-directory virtual" role="treeitem" tabindex="0" ${position} aria-expanded="${!row.collapsed}" data-change-directory="${escapeAttribute(row.node.path)}" data-change-group="${row.group}" data-change-repository-id="${escapeAttribute(row.repositoryId)}">
       <div class="change-directory-row" style="--tree-depth:${row.depth + (row.nested ? 1 : 0)}" data-change-disclosure="${escapeAttribute(row.key)}">
         <input class="change-checkbox" type="checkbox" data-include-directory="${escapeAttribute(row.node.path)}" data-include-directory-group="${row.group}" data-include-directory-repository="${escapeAttribute(row.repositoryId)}" aria-label="${escapeAttribute(copy.include(row.node.path))}" ${row.group === "conflicts" ? "disabled checked" : ""} />
         <button class="change-tree-toggle" type="button" aria-label="${escapeAttribute(row.collapsed ? copy.expand(row.node.path) : copy.collapse(row.node.path))}"><span class="tree-chevron ${row.collapsed ? "" : "expanded"}">${icon("chevron", 12)}</span></button>
