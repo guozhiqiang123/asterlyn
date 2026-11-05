@@ -27,6 +27,8 @@ try{
  await gate("core",["test","--locked","-p","asterlyn-process","-p","asterlyn-language-service","-p","asterlyn-task","-p","asterlyn-plugin-models","-p","asterlyn-plugin-dependencies","--","--test-threads=2"],1);
  await gate("portable-process",["test","--locked","-p","asterlyn-language-service","--features","process-fixtures","--test","process_lifecycle","--","--test-threads=1"],3);
  await gate("portable-actors",["test","--locked","-p","asterlyn-language-service","--features","process-fixtures","--lib","--","--test-threads=2"],3,["real_actor_eof_and_malformed_frames_are_distinct_and_new_sessions_get_new_ids","actor_cancellation_bypasses_a_stalled_request_and_rejects_foreign_owners","internal_backend_recovery_invalidates_pending_results_without_reopening_documents"]);
- await gate("workspace-symbols",["test","--locked","-p","asterlyn-workspace","--test","symbols"],5);
+ const symbolFixtures=["five_languages_skip_literals_and_comments_keep_utf16_locations","saved_cache_reopens_invalidates_and_never_persists_overlays","model_scope_excludes_unrelated_modules_and_missing_scope_never_expands","limits_malformed_rules_and_duplicate_overlays_are_bounded"];
+ if(process.platform!=="win32")symbolFixtures.push("symlink_outside_workspace_cannot_be_read");
+ await gate("workspace-symbols",["test","--locked","-p","asterlyn-workspace","--test","symbols"],symbolFixtures.length,symbolFixtures);
  await gate("native-bindings",["scripts/generate-native-language-contract.mjs","--check"],0,[],process.execPath);
 }finally{process.removeListener("SIGINT",interrupted);process.removeListener("SIGTERM",interrupted);await writeFile(join(output,"summary.json"),JSON.stringify({schema:1,platform:process.platform,arch:process.arch,node:process.version,results},null,2)+"\n");}
