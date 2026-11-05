@@ -56,7 +56,13 @@ impl LanguageServiceFailure {
                 ProtocolFailed,
                 "The language transport could not continue safely.",
             ),
-            "resource-limit" | "memory-limit" | "cpu-limit" | "kotlin-compiler-resource-limit" | "analysis-resource-budget-exceeded" | "analysis-resource-wait-timeout" | "analysis-resource-queue-full" => (
+            "resource-limit"
+            | "memory-limit"
+            | "cpu-limit"
+            | "kotlin-compiler-resource-limit"
+            | "analysis-resource-budget-exceeded"
+            | "analysis-resource-wait-timeout"
+            | "analysis-resource-queue-full" => (
                 ResourceLimit,
                 "The language service reached its resource limit.",
             ),
@@ -73,6 +79,11 @@ impl LanguageServiceFailure {
                 ToolchainUnavailable,
                 "A compatible inspected toolchain is unavailable.",
             ),
+            "gradle-model-incompatible"
+            | "gradle-version-incompatible"
+            | "gradle-toolchain-incompatible" => {
+                (ModelUnavailable, "A current project model is unavailable.")
+            }
             value if value.starts_with("model-") => {
                 (ModelUnavailable, "A current project model is unavailable.")
             }
@@ -94,6 +105,18 @@ impl LanguageServiceFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gradle_model_failures_retain_the_model_category_without_automatic_restart() {
+        for reason in [
+            "gradle-model-incompatible",
+            "gradle-version-incompatible",
+            "gradle-toolchain-incompatible",
+        ] {
+            let failure = LanguageServiceFailure::from_code(reason);
+            assert_eq!(failure.code, LanguageFailureCode::ModelUnavailable);
+            assert!(!failure.retryable);
+        }
+    }
     #[test]
     fn failure_is_fixed_private_and_retry_is_not_authority() {
         for code in [
