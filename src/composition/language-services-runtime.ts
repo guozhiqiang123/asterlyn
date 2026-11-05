@@ -1,3 +1,4 @@
+import {shouldNotifyLanguageFailure} from "../application/language-services/failure-notification-policy.ts";
 import type {RegisteredPluginContribution} from "../application/plugins/plugin-types.ts";
 import {LanguageProviderPreferences,selectLanguageProvider,type ProviderPreferenceStorage} from "../application/language-services/provider-selection.ts";
 import {workspaceFileUri} from "../application/language-services/workspace-file-uri.ts";
@@ -48,13 +49,13 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
   const projectKey=()=>JSON.stringify(options.workspace());
   const states=new Map<string,LanguageServiceStatus>();
   let tipEpoch=0;
-  let tips:import("../features/language-services/project-failure-notifications.ts").LanguageProjectFailureNotifications|null=null;
-  let tipsLoading:Promise<import("../features/language-services/project-failure-notifications.ts").LanguageProjectFailureNotifications>|null=null;
-  const notifyProjectFailure=(id:string,status:LanguageServiceStatus)=>{
+  let tips:import("../features/language-services/language-failure-notifications.ts").LanguageFailureNotifications|null=null;
+  let tipsLoading:Promise<import("../features/language-services/language-failure-notifications.ts").LanguageFailureNotifications>|null=null;
+  const notifyFailure=(id:string,status:LanguageServiceStatus)=>{
     if(tips){tips.observe(id,status);return;}
-    if((status.state!=="failed"&&status.progress?.phase!=="failed")||(!status.failure?.project&&status.failure?.code!=="resource-limit")||!options.notificationPublisher)return;
+    if(!shouldNotifyLanguageFailure(status)||!options.notificationPublisher)return;
     const token=tipEpoch;
-    tipsLoading??=import("../features/language-services/project-failure-notifications.ts").then(({LanguageProjectFailureNotifications})=>tips=new LanguageProjectFailureNotifications(options.notificationPublisher!,()=>options.copy?.().workspaceStatus.locale??"en"));
+    tipsLoading??=import("../features/language-services/language-failure-notifications.ts").then(({LanguageFailureNotifications})=>tips=new LanguageFailureNotifications(options.notificationPublisher!,()=>options.copy?.().workspaceStatus.locale??"en"));
     void tipsLoading.then(observer=>{const current=states.get(id);if(!disposed&&token===tipEpoch&&current&&scopeCurrent(current.scope))observer.observe(id,current);}).catch(options.reportError);
   };
   const publish=(status:LanguageServiceStatus)=>{
@@ -64,7 +65,7 @@ export function createLanguageServicesRuntime(options: LanguageServicesRuntimeOp
     if(!provider)return;
     const id=`${status.scope.pluginId}:${status.scope.serverId??"typescript"}`;
     states.set(id,status);
-    notifyProjectFailure(id,status);
+    notifyFailure(id,status);
     options.status?.(status);renderStatus();
   };
   let resourcePolicy:import("../protocol/generated-native-language-types.ts").LanguageResourcePolicy|undefined;

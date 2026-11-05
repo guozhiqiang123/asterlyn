@@ -15,6 +15,8 @@ export interface LanguageServiceStatus {
   scope: LanguageConsentScope; sessionId: string | null;
   choices?:readonly {id:string;label:string}[]; selectionKey?:string; selectedProvider?:string;
   recovery?:LanguageRecoveryAttempt;
+  /** The command error path already owns the user notification. */
+  reported?:boolean;
   failure?:import("../../protocol/generated-native-language-types.ts").NativeLanguageServiceFailure;
   toolchains?:readonly import("../../protocol/toolchain.ts").JavaToolchainSnapshot[];
   state: "recovering" | "provider-selected" | "conflict" | "partial" | "preparing" | "awaiting-approval" | "declined" | "indexing" | "ready" | "failed" | "stopped";
@@ -135,12 +137,12 @@ class Session {
   get scope():LanguageConsentScope{return this.info;}
   referenceCurrent(handle:EditorLanguageServiceHandle,version:number):boolean {const doc=this.docs.get(handleKey(handle));return !!doc&&this.current(doc)&&doc.latest.version===version;}
   private live():boolean{return !this.dead && (this.warmed || [...this.docs.values()].some(doc=>this.current(doc)));}
-  private status(state:LanguageServiceStatus["state"],code?:string,progress?:LanguageServiceProgress):void {
+  private status(state:LanguageServiceStatus["state"],code?:string,progress?:LanguageServiceProgress,reported=false):void {
     this.recoveryPolicy.healthy(state==="ready"&&(!progress||progress.phase==="ready"));
     const working=["recovering","preparing","awaiting-approval","indexing"].includes(state)||((state==="ready"||state==="partial")&&progress!==undefined&&!["ready","failed"].includes(progress.phase));
     if(working&&(!this.working||(this.lastState==="awaiting-approval"&&state!=="awaiting-approval")))this.startedAt=Date.now();
     this.working=working;this.lastState=state;
-    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,failure:this.failure,toolchains:this.toolchains,recovery:this.recovery??undefined,startedAt:this.startedAt});}catch{/* Status cannot change authority. */}
+    try{this.lifecycle?.({scope:this.info,sessionId:this.sessionId,state,code,progress,failure:this.failure,toolchains:this.toolchains,recovery:this.recovery??undefined,startedAt:this.startedAt,...(reported?{reported:true}:{})});}catch{/* Status cannot change authority. */}
   }
   async warm():Promise<void>{this.warmed=true;try{await this.ensure();}catch{/* ensure owns classification and finite recovery. */}}
   private failureCode(error:unknown):string {
@@ -178,7 +180,7 @@ class Session {
     if(this.dead||generation!==this.generation||this.consent.denied)return;
     const code=this.failureCode(error);
     if(this.recover(code))return;
-    this.failed=true;this.status("failed",this.recoveryPolicy.exhausted()&&["backend-exited","language-start-backend-exited"].includes(code)?"language-recovery-exhausted":code);
+    this.failed=true;this.status("failed",this.recoveryPolicy.exhausted()&&["backend-exited","language-start-backend-exited"].includes(code)?"language-recovery-exhausted":code,undefined,true);
     this.reportError(error);
   }
   private approval(event: LanguageServiceApprovalEvent): void { try { this.approvalTrace?.(event); } catch { /* Logging cannot change consent. */ } }
