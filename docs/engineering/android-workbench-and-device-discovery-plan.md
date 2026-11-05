@@ -141,3 +141,20 @@ cancellation, window close, app shutdown, and retry all end in one deterministic
 
 Every commit keeps both repositories buildable. Cross-repository artifact bumps happen only after
 the corresponding plugin repository commit passes its own verification.
+
+## Project-open task synchronization and shared Refresh (2026-11-04)
+
+Manual acceptance passed and local staged commits were authorized on 2026-11-05. Remote
+publication is outside this closeout.
+
+Implementation scope: opening a project with an enabled, matched Android Gradle provider schedules one background task sync. Retained cache stays visible. The existing host review/trust, cancellation, execution limits and task-cache pipeline remain authoritative. Repeated evidence/cache publications must not schedule another scan; disabling/re-enabling, a new plugin version or a new project session permits a fresh scan. Failed/cancelled scans wait for manual retry. Queued work is rejected after switching projects, disabling the plugin or disposal. This first-party startup policy lives in composition; the pure scheduler has no Gradle knowledge and no new SDK/process permission is added. Other plugins do not auto-execute.
+
+Run and Tasks retain the title-bar Refresh button, which refreshes task/run-configuration evidence through the same serialized operation. Busy state disables the button and exposes aria-busy. Devices, when contributed, retain their device-refresh semantics. One header handler routes the current view's action; tab changes never trigger a scan. Keep current fonts, selection and layout.
+
+Startup waits for the provider's retained cache to finish validation before scheduling discovery, so cache hydration cannot overwrite fresh results. The scheduler loads with the optional workbench module to preserve the existing 500,000-byte application startup boundary. Provider replacement during an in-flight refresh queues the replacement, rejects the old provider's delayed plan and never launches that plan in the new scope.
+
+Acceptance (macOS arm64, 2026-11-04): all 1,451 script tests, TypeScript/production build and the unchanged startup boundary pass. Chromium and WebKit exercise the actual Run/Tasks/Devices header routing, loading/disabled state, active-run blocking and shell visibility ownership. Scheduler tests cover cache hydration, new workspace/version, cancellation/error deduplication and rapid disable/re-enable; contribution-runtime tests cover replaced providers and delayed plans.
+
+Native verification retained the user's currently open FilesRecovery project. In final installed session `session-1793779971134-83018-0`, exactly one `tasks.startup-sync` started and settled; automatic discovery succeeded in 18,470 ms and published 15,980 tasks with a ready cache. A subsequent title-bar refresh from Run succeeded in 19,190 ms with the same count, retained the Run tab and restored the enabled Refresh button. The automatic-start count remained one. This validates the same enabled Android Gradle provider path without switching the user's working project to boostCleaner. Saved editor tabs and the original tool-window visibility were restored after verification.
+
+The signed package passed exact plugin activation/known-good startup verification and canonical Contents-only replacement. Both saved-icon-bookmark starts reached frontend readiness; `/Applications/Asterlyn.app` retained inode `203606126`, device `16777234`. Installed executable SHA-256: `8ae301bf14dde46049aa097eabc828b5d6b7862001d075c8bd3d89d2f5db5d2f`. Previous installation was archived as ZIP. Detailed receipts: `/tmp/asterlyn-task-sync-startup.json`, `/tmp/asterlyn-task-sync-install.json`, `/tmp/asterlyn-task-sync-acceptance.json`. Existing `existing_project_directories` invalid-path errors for persisted recent-project entries are unrelated to task discovery; no task execution or plugin activation error occurred in this acceptance. Windows/Linux native behavior was not exercised.

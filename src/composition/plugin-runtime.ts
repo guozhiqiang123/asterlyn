@@ -279,8 +279,8 @@ export class PluginCompositionRuntime {
     return this.preferences.setSetting(pluginId, settingId, value);
   }
 
-  refreshProviders(identity: PluginWorkspaceIdentity): Promise<void> {
-    return this.contributions.refreshProviders(identity);
+  refreshProviders(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
+    return this.contributions.refreshProviders(identity, providerQualifiedId);
   }
 
   runTask(taskKey: string, identity: PluginWorkspaceIdentity): Promise<void> {

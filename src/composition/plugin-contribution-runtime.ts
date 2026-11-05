@@ -57,6 +57,7 @@ export class PluginContributionRuntime {
   private readonly releaseRegistry: () => void;
   private disposed = false;
   private refreshInFlight: Promise<void> | null = null;
+  private refreshOwners = new Map<string, RegisteredProvider>();
   private refreshAbort: AbortController | null = null;
   private runInFlight: Promise<void> | null = null;
   private activeRun: { readonly providerQualifiedId: string; readonly taskId: string; readonly status: Extract<TaskRunState, "queued" | "running"> } | null = null;
@@ -90,6 +91,7 @@ export class PluginContributionRuntime {
     this.abortRefresh();
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
     this.refreshInFlight = null;
+    this.refreshOwners.clear();
     this.runInFlight = null;
     this.activeRun = null;
     this.options.replaceProviders(this.identity, []);
@@ -98,12 +100,21 @@ export class PluginContributionRuntime {
   async refreshProviders(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
     if (!this.matches(identity)) return;
     if (this.runInFlight || this.options.mutationBlocked?.()) throw new PluginTaskBusyError();
-    if (this.refreshInFlight) return this.refreshInFlight;
+    if (this.refreshInFlight) {
+      const requested = [...this.providers.values()].map(entry => entry.contribution)
+        .filter(provider => !providerQualifiedId || provider.qualifiedId === providerQualifiedId);
+      if (requested.every(provider => this.refreshOwners.get(provider.qualifiedId) === provider)) return this.refreshInFlight;
+      const retry = () => this.refreshProviders(identity, providerQualifiedId);
+      return this.refreshInFlight.then(retry, retry);
+    }
+    this.refreshOwners = new Map([...this.providers.values()].map(entry => entry.contribution)
+      .filter(provider => !providerQualifiedId || provider.qualifiedId === providerQualifiedId)
+      .map(provider => [provider.qualifiedId, provider]));
     const operation = this.refreshProvidersSerialized(identity, providerQualifiedId);
     this.refreshInFlight = operation;
     void operation.then(
-      () => { if (this.refreshInFlight === operation) this.refreshInFlight = null; },
-      () => { if (this.refreshInFlight === operation) this.refreshInFlight = null; },
+      () => { if (this.refreshInFlight === operation) { this.refreshInFlight = null; this.refreshOwners.clear(); } },
+      () => { if (this.refreshInFlight === operation) { this.refreshInFlight = null; this.refreshOwners.clear(); } },
     );
     return this.refreshInFlight;
   }
@@ -188,13 +199,13 @@ export class PluginContributionRuntime {
     }
   }
   private async refreshProvidersSerialized(identity: PluginWorkspaceIdentity, providerQualifiedId?: string): Promise<void> {
-    for (const { contribution } of this.providers.values()) {
+    for (const { contribution } of [...this.providers.values()]) {
       if (providerQualifiedId && contribution.qualifiedId !== providerQualifiedId) continue;
       if (!contribution.refresh) continue;
       let plan: PluginTaskRefreshPlan | null = null;
       try {
         plan = await contribution.refresh() ?? null;
-        if (!this.matches(identity)) return;
+        if (!this.matches(identity) || this.providers.get(contribution.qualifiedId)?.contribution !== contribution) return;
         if (!plan) continue;
         if (!validRefreshPlan(plan, contribution)) throw new Error(`Invalid task refresh plan from ${contribution.qualifiedId}`);
         this.publishProviders();
@@ -208,6 +219,7 @@ export class PluginContributionRuntime {
         }
         if (this.matches(identity) && this.providers.get(contribution.qualifiedId)?.contribution === contribution) plan.apply(result);
       } catch (error) {
+        if (!this.matches(identity) || this.providers.get(contribution.qualifiedId)?.contribution !== contribution) continue;
         this.options.reportError(error);
         if (plan && this.matches(identity) && this.providers.get(contribution.qualifiedId)?.contribution === contribution) {
           try {

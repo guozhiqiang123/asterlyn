@@ -69,6 +69,7 @@ export interface PluginWorkspaceCatalog {
 export class PluginTasksRuntime {
   private readonly root: HTMLElement;
   private readonly tasks: TasksRuntime;
+  private readonly taskController: TasksController;
   private readonly plugins: PluginCompositionRuntime;
   private readonly platform: () => "posix" | "windows";
   private readonly reportError: (error: unknown) => void;
@@ -110,6 +111,7 @@ export class PluginTasksRuntime {
       options.reportError,
     );
     const controller = new TasksController();
+    this.taskController = controller;
     const executionController = new TaskExecutionController(options.executionBridge);
     this.execution = new TaskExecutionRuntime(
       root,
@@ -135,8 +137,11 @@ export class PluginTasksRuntime {
     this.plugins = new PluginCompositionRuntime({
       registerCommand: options.registerCommand,
       replaceProviders: (identity, providers) => {
+        if (!this.matches(identity)) return;
         controller.acceptProviders(identity, providers);
         this.setAvailable(providers.length > 0);
+        this.reconcileAutomaticSync();
+        void this.renderWorkbench();
       },
       reportDiagnostic: (diagnostic) => options.reportError(diagnostic.error ?? new Error(diagnostic.message)),
       reportError: options.reportError,
@@ -173,6 +178,7 @@ export class PluginTasksRuntime {
     });
     this.releaseManagement = this.plugins.subscribeManagement((snapshot) => {
       this.applyTaskPresentation(snapshot);
+      this.reconcileAutomaticSync();
       this.publishManagement();
       void this.renderWorkbench();
       this.identityChanged?.();
@@ -180,6 +186,7 @@ export class PluginTasksRuntime {
     this.tasks = new TasksRuntime(root, controller, {
       copy: options.copy,
       refresh: (identity) => this.runSession.busy ? Promise.reject(new PluginTaskBusyError()) : this.plugins.refreshProviders(identity),
+      headerRefresh: (identity) => this.workbenchHost ? this.workbenchHost.refresh() : this.plugins.refreshProviders(identity),
       cancel: (identity) => this.plugins.cancelTask(identity),
       runTask: (taskKey, identity) => this.runSession.busy ? Promise.reject(new PluginTaskBusyError()) : this.plugins.runTask(taskKey, identity),
       revealOutput: (taskKey, identity) => { this.execution.reveal(taskKey, identity); },
@@ -192,6 +199,7 @@ export class PluginTasksRuntime {
   async activateWorkspace(identity: PluginWorkspaceIdentity): Promise<void> {
     this.runSession.reset();
     this.identity = Object.freeze({ root: identity.root, generation: identity.generation });
+    this.workbenchHost?.activateWorkspace(identity);
     this.authorization.activate(identity);
     this.tasks.activate(identity);
     this.execution.activate(identity);
@@ -411,6 +419,13 @@ export class PluginTasksRuntime {
         runSession: () => this.runSession.snapshot,
         executeRun: (request) => this.executeWorkbenchRun(request),
         cancelRun: () => this.runSession.cancel(),
+        refreshTasks: () => {
+          const identity = this.identity;
+          return identity && !this.runSession.busy ? this.plugins.refreshProviders(identity) : Promise.resolve();
+        },
+        taskRefreshBusy: () => this.tasksLoading,
+        taskRefreshBlocked: () => this.runSession.busy,
+        synchronizeTasks: (identity, providerId) => this.plugins.refreshProviders(identity, providerId),
       }));
     const host = await this.workbenchHostPromise;
     if (!this.identity) {
@@ -419,6 +434,13 @@ export class PluginTasksRuntime {
     }
     this.workbenchHost = host;
     host.render();
+    this.reconcileAutomaticSync();
+  }
+
+  private get tasksLoading(): boolean { return this.taskController.state.status === "loading"; }
+
+  private reconcileAutomaticSync(): void {
+    if (this.identity) this.workbenchHost?.synchronizeTasks(this.identity, this.taskController.state.providers);
   }
 
 

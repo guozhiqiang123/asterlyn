@@ -14,6 +14,7 @@ export interface TasksRuntimeOptions {
   readonly runTask?: (taskKey: string, identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly revealOutput?: (taskKey: string, identity: TasksWorkspaceIdentity) => void;
   readonly refresh?: (identity: TasksWorkspaceIdentity) => void | Promise<void>;
+  readonly headerRefresh?: (identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly cancel?: (identity: TasksWorkspaceIdentity) => void | Promise<void>;
   readonly error?: (error: unknown) => void;
 }
@@ -73,7 +74,7 @@ export class TasksRuntime {
     const viewport = preserveViewport ? captureTasksViewport(host) : null;
     const copy = this.options.copy?.();
     host.innerHTML = renderTasksView(this.controller.state, copy, this.visibleLimit, this.disclosure().snapshot.exceptions, this.presentation, this.viewMode);
-    syncTasksHeaderRefresh(this.root, this.controller.state, copy);
+    if (!this.options.headerRefresh) syncTasksHeaderRefresh(this.root, this.controller.state, copy);
     this.bind();
     restoreTasksFocus(host, focus);
     restoreTasksViewport(host, viewport);
@@ -104,9 +105,7 @@ export class TasksRuntime {
     const signal = controller.signal;
     this.root.querySelector<HTMLButtonElement>("#tasks-header-refresh")
       ?.addEventListener("click", () => {
-        if (!this.root.querySelector<HTMLElement>("#tasks-view-host")?.classList.contains("hidden")) {
-          void this.refresh();
-        }
+        void this.refresh(true);
       }, { signal });
     host.addEventListener("input", (event) => {
       const target = event.target;
@@ -178,10 +177,11 @@ export class TasksRuntime {
     try { await this.options.runTask(taskKey, identity); } catch (error) { this.options.error?.(error); }
   }
 
-  private async refresh(): Promise<void> {
+  private async refresh(header = false): Promise<void> {
     const identity = this.controller.state.identity;
-    if (!identity || !this.options.refresh) return;
-    try { await this.options.refresh(identity); } catch (error) { this.options.error?.(error); }
+    const refresh = header ? this.options.headerRefresh ?? this.options.refresh : this.options.refresh;
+    if (!identity || !refresh) return;
+    try { await refresh(identity); } catch (error) { this.options.error?.(error); }
   }
 
   private async cancel(): Promise<void> {
@@ -314,6 +314,7 @@ export function syncTasksHeaderRefresh(root: ParentNode, state: TasksState, copy
   const headerRefresh = root.querySelector<HTMLButtonElement>("#tasks-header-refresh");
   if (!headerRefresh) return;
   headerRefresh.disabled = state.status === "loading";
+  headerRefresh.setAttribute("aria-busy", String(state.status === "loading"));
   if (!copy) return;
   headerRefresh.setAttribute("aria-label", copy.refresh);
   headerRefresh.title = copy.refresh;

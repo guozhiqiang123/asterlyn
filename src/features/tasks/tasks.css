@@ -233,6 +233,11 @@
 .tasks-query-label { display: block; }
 
 .tasks-collection-toolbar { justify-self: end; }
+#tasks-header-refresh[aria-busy="true"] svg { animation: tasks-header-refresh-spin 1s linear infinite; }
+@keyframes tasks-header-refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  #tasks-header-refresh[aria-busy="true"] svg { animation: none; }
+}
 
 .tasks-query-label input {
   box-sizing: border-box;

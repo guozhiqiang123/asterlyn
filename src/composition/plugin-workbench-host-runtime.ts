@@ -4,6 +4,10 @@ import type { PluginCompositionRuntime } from "./plugin-runtime.ts";
 import type { PluginStagedRunPlan } from "../application/plugins/index.ts";
 import type { PluginRunSessionSnapshot } from "./plugin-run-session-runtime.ts";
 import { PluginWorkbenchContributionRuntime } from "./plugin-workbench-contribution-runtime.ts";
+import { WorkspaceTaskSync } from "../application/tasks/workspace-task-sync.ts";
+import { diagnostics } from "../shared/diagnostics.ts";
+import type { PluginWorkspaceIdentity } from "../application/plugins/index.ts";
+import type { TaskProviderProjection } from "../features/tasks/tasks-model.ts";
 
 export interface PluginWorkbenchHostRuntimeOptions {
   readonly root: HTMLElement;
@@ -14,6 +18,10 @@ export interface PluginWorkbenchHostRuntimeOptions {
   readonly runSession: () => PluginRunSessionSnapshot | null;
   readonly executeRun: (request: PluginWorkbenchRunRequest) => Promise<void>;
   readonly cancelRun: () => void;
+  readonly refreshTasks: () => Promise<void>;
+  readonly taskRefreshBusy: () => boolean;
+  readonly taskRefreshBlocked?: () => boolean;
+  readonly synchronizeTasks: (identity: PluginWorkspaceIdentity, providerId: string) => Promise<void>;
 }
 
 export interface PluginWorkbenchRunRequest {
@@ -33,6 +41,10 @@ export class PluginWorkbenchHostRuntime {
   private readonly runSession: () => PluginRunSessionSnapshot | null;
   private readonly executeRun: (request: PluginWorkbenchRunRequest) => Promise<void>;
   private readonly cancelRun: () => void;
+  private readonly refreshTasks: () => Promise<void>;
+  private readonly taskRefreshBusy: () => boolean;
+  private readonly taskRefreshBlocked: () => boolean;
+  private readonly automaticSync: WorkspaceTaskSync;
   private readonly contributions: PluginWorkbenchContributionRuntime;
   private abort: AbortController | null = null;
   private activeView = "tasks";
@@ -48,6 +60,15 @@ export class PluginWorkbenchHostRuntime {
     this.runSession = options.runSession;
     this.executeRun = options.executeRun;
     this.cancelRun = options.cancelRun;
+    this.refreshTasks = options.refreshTasks;
+    this.taskRefreshBusy = options.taskRefreshBusy;
+    this.taskRefreshBlocked = options.taskRefreshBlocked ?? (() => false);
+    this.automaticSync = new WorkspaceTaskSync({
+      eligiblePlugins: new Set(["dev.asterlyn.android-gradle"]),
+      refresh: options.synchronizeTasks,
+      reportError: options.reportError,
+      diagnostic: (phase, pluginId, providerId) => diagnostics.report("info", "tasks.startup-sync", `phase=${phase};plugin=${pluginId};provider=${providerId}`),
+    });
     let ready = false;
     this.contributions = new PluginWorkbenchContributionRuntime(
       this.plugins.contributionRegistry,
@@ -71,6 +92,10 @@ export class PluginWorkbenchHostRuntime {
     const tasks = this.root.querySelector<HTMLElement>("#tasks-view-host");
     const refreshAction = this.root.querySelector<HTMLButtonElement>("#tasks-header-refresh");
     if (!tabs || !view || !tasks || !refreshAction) return;
+    refreshAction.disabled = this.taskRefreshBusy() || this.taskRefreshBlocked();
+    refreshAction.setAttribute("aria-busy", String(this.taskRefreshBusy()));
+    refreshAction.setAttribute("aria-label", this.copy().refresh);
+    refreshAction.title = this.copy().refresh;
     this.abort?.abort();
     const abort = new AbortController();
     this.abort = abort;
@@ -95,10 +120,8 @@ export class PluginWorkbenchHostRuntime {
     }).join("");
     const showTasks = this.activeView === "tasks";
     const showDevices = this.activeView === "devices";
-    const showRun = this.activeView === "run";
     tasks.classList.toggle("hidden", !showTasks);
     view.classList.toggle("hidden", showTasks);
-    refreshAction.classList.toggle("hidden", showRun);
     const snapshot = this.contributions.snapshot();
     if (showTasks) {
       refreshAction.setAttribute("aria-label", this.copy().refresh);
@@ -108,11 +131,9 @@ export class PluginWorkbenchHostRuntime {
       const provider = snapshot.targetProviders.find((candidate) => candidate.pluginId === entry.id);
       const refreshLabel = resolvePluginMessage(entry.localization, this.locale(), "device.action.refresh");
       refreshAction.disabled = provider?.snapshot.status === "loading";
+      refreshAction.setAttribute("aria-busy", String(provider?.snapshot.status === "loading"));
       refreshAction.setAttribute("aria-label", refreshLabel);
       refreshAction.title = refreshLabel;
-      refreshAction.addEventListener("click", () => {
-        if (provider) void this.contributions.refreshTargets(provider.qualifiedId).catch(this.reportError);
-      }, { signal: abort.signal });
     }
     view.innerHTML = "";
     const revision = ++this.renderRevision;
@@ -171,10 +192,30 @@ export class PluginWorkbenchHostRuntime {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.automaticSync.dispose();
     this.renderRevision += 1;
     this.abort?.abort();
     this.abort = null;
     this.contributions.dispose();
+  }
+
+  async refresh(): Promise<void> {
+    const entry = this.activeWorkspaceTool();
+    if (!entry || this.activeView !== "devices") return this.refreshTasks();
+    const provider = this.contributions.snapshot().targetProviders.find(candidate => candidate.pluginId === entry.id);
+    if (provider) await this.contributions.refreshTargets(provider.qualifiedId);
+  }
+
+  activateWorkspace(identity: PluginWorkspaceIdentity): void { this.automaticSync.activate(identity); }
+
+  synchronizeTasks(identity: PluginWorkspaceIdentity, projections: readonly TaskProviderProjection[]): void {
+    if (this.disposed) return;
+    this.automaticSync.activate(identity);
+    this.automaticSync.reconcile(this.plugins.managementSnapshot.entries,
+      this.plugins.contributionRegistry.list().filter(contribution => contribution.kind === "provider")
+        .map(contribution => ({ ...contribution,
+          ready: projections.some(provider => provider.id === contribution.qualifiedId && provider.snapshot.cache?.status !== "validating"),
+        })));
   }
 
   private activeWorkspaceTool() {

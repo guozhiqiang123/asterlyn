@@ -123,6 +123,34 @@ test("provider collections are validated, qualified, and isolated from task snap
   await runtime.dispose();
 });
 
+test("replacement providers wait for the cancelled refresh and execute exactly once", async () => {
+  const runtime = new PluginRuntime(); const calls=[],applied=[],errors=[];let finish;
+  const make = label => ({kind:"provider",id:"tasks",label,snapshot:()=>({status:"ready",tasks:[]}),refresh:()=>({request:{pluginId:"android",providerId:"tasks",taskId:"discover",label,executablePath:"gradlew",args:[]},apply:()=>applied.push(label)})});
+  const adapter = new PluginContributionRuntime(runtime.contributions,{registerCommand:()=>()=>{},replaceProviders:()=>{},reportError:e=>errors.push(e),executeTaskRefresh:async(_identity,plan)=>{calls.push(plan.request.label);if(plan.request.label==="old")return new Promise(resolve=>{finish=resolve;});return{status:"succeeded",outputs:[],truncated:false,error:null};}});
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity,{},[plugin("android",ctx=>ctx.contribute(make("old")))]);
+  const first=adapter.refreshProviders(identity,"android.tasks");
+  for(let i=0;i<10&&!finish;i++)await Promise.resolve();
+  await runtime.activate(identity,{},[plugin("android",ctx=>ctx.contribute(make("new")))]);
+  const second=adapter.refreshProviders(identity,"android.tasks");assert.deepEqual(calls,["old"]);
+  finish({status:"cancelled",outputs:[],truncated:false,error:null});await Promise.all([first,second]);
+  assert.deepEqual(calls,["old","new"]);assert.deepEqual(applied,["new"]);assert.deepEqual(errors,[]);
+  adapter.dispose();await runtime.dispose();
+});
+
+test("a removed provider's delayed refresh plan cannot launch a task", async () => {
+  const runtime=new PluginRuntime();let releasePlan;const calls=[];
+  const request={pluginId:"android",providerId:"tasks",taskId:"discover",label:"old",executablePath:"gradlew",args:[]};
+  const adapter=new PluginContributionRuntime(runtime.contributions,{registerCommand:()=>()=>{},replaceProviders:()=>{},reportError:e=>{throw e;},executeTaskRefresh:async(_identity,plan)=>{calls.push(plan.request.label);return{status:"succeeded",outputs:[],truncated:false,error:null};}});
+  adapter.activateWorkspace(identity);
+  await runtime.activate(identity,{},[plugin("android",ctx=>ctx.contribute({kind:"provider",id:"tasks",label:"old",snapshot:()=>({status:"ready",tasks:[]}),refresh:()=>new Promise(resolve=>{releasePlan=resolve;})}))]);
+  const first=adapter.refreshProviders(identity);
+  await runtime.activate(identity,{},[plugin("android",ctx=>ctx.contribute({kind:"provider",id:"tasks",label:"new",snapshot:()=>({status:"ready",tasks:[]}),refresh:()=>({request:{...request,label:"new"},apply(){}})}))]);
+  const second=adapter.refreshProviders(identity);releasePlan({request,apply(){throw Error("obsolete");}});
+  await Promise.all([first,second]);assert.deepEqual(calls,["new"]);
+  adapter.dispose();await runtime.dispose();
+});
+
 test("provider refresh exposes only a typed execution plan and deduplicates concurrent requests", async () => {
   const runtime = new PluginRuntime();
   const plans = [];
