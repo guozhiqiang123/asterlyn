@@ -65,3 +65,29 @@ Package preview 42000654925 (Intel job 127159596107) catches a real undercount: 
 Cancel the unpublished v0.1.27 Release run 42001039800 and superseded preview; retain its annotated tag. Final host target becomes **0.1.28**, tested plugin baselines follow that source. Plugin versions remain **0.6.8 / 0.3.18** and the true private-transport minimum stays 0.1.27: the CPU accounting repair changes neither plugin contract nor archive bytes. LSP's actual Gradle schema minimum remains 0.6.3. Revalidate both archive identities before publishing.
 
 The kernel-frequency correction passes all eight plugin-runtime tests as native aarch64 and as the actual x86_64 binary under Rosetta on this development Mac. The previously failing independent POSIX comparison remains unchanged in strictness.
+
+### Accepted final source and local delivery
+
+Host 0.1.28 source `53be69e695ee1aff4804caed537ca62c58308ac1`; SDK stays 1.14.0. All 1,465 script checks, frontend check/build, strict Rust Clippy and formatting pass. The native/Rosetta resource tests pass, the Windows plugin-runtime target compiles, and [Core language contracts 42003537620](https://github.com/guozhiqiang123/asterlyn/actions/runs/42003537620) passes Linux/Windows/macOS. [Package preview 42003537662](https://github.com/guozhiqiang123/asterlyn/actions/runs/42003537662) passes all four distribution targets, including real helper lifecycle and native startup.
+
+Final plugin sources: Gradle `dce93b1238e48d0db0407d8c26922d5c59c4940d`, LSP `a9fc54442c327eb6be7f9c4df2394881fa462fc5`. Final-host [Gradle rehearsal 42004497462](https://github.com/guozhiqiang123/asterlyn-plugin-android-gradle/actions/runs/42004497462) and [LSP main verification 42004480128](https://github.com/guozhiqiang123/asterlyn-plugin-lsp/actions/runs/42004480128) pass. Both plugin archives retain the canonical digests above; the host CI SDK archive also matches the exact existing published/vendor 1.14.0 bytes.
+
+Native 0.1.28: complete ad-hoc bundle signature/strict verification; exact plugin health checkpoint; verified ZIP/CRC; canonical Contents-only installation with the original app root inode preserved; two stored-icon starts with frontend readiness. The user's current Gradle-plugin workspace was retained. Accepted/installed executable SHA-256 `85ee107dc16381993fc541c59fadf729cc944b635ce6ef1ade16aea981ade35f`; accepted ZIP SHA-256 `3c93adcdd1e4fcfdefa68965bf61c6c3e079daf8ebc7f7b8c9930f3e7ec3913e`. Evidence: `.artifacts/public-release-20261105-hxl0mmii/native-0.1.28/`.
+
+These are platform delivery and deterministic protocol checks. The local Intel regression runs under Rosetta on ARM; formal Release CI also passes on its native `macos-15-intel` runner. This does not claim a new full Android semantic/manual acceptance on Intel or Windows hardware. Previously recorded real-project/manual acceptance still applies. Final stable Release asset/provenance audit follows below.
+
+### Stable publication and independent audit
+
+| Component | Stable Release | Successful tag workflow |
+| --- | --- | --- |
+| Host 0.1.28 / SDK 1.14.0 | [v0.1.28](https://github.com/guozhiqiang123/asterlyn/releases/tag/v0.1.28) | [42004232255](https://github.com/guozhiqiang123/asterlyn/actions/runs/42004232255) |
+| Android Gradle 0.6.8 | [v0.6.8](https://github.com/guozhiqiang123/asterlyn-plugin-android-gradle/releases/tag/v0.6.8) | [42008397028](https://github.com/guozhiqiang123/asterlyn-plugin-android-gradle/actions/runs/42008397028) |
+| LSP 0.3.18 | [v0.3.18](https://github.com/guozhiqiang123/asterlyn-plugin-lsp/releases/tag/v0.3.18) | [42008868586](https://github.com/guozhiqiang123/asterlyn-plugin-lsp/actions/runs/42008868586) |
+
+All three are confirmed stable, non-draft latest Releases. The host publishes 34 assets: the complete four-platform installer/inspector set, SDK, five component checksum manifests, combined SHA256SUMS and 17 CycloneDX files. Coverage is complete for the 28 distributable/SBOM files; all manifest-listed digests agree with GitHub asset digests. The downloaded checksum files, SDK and published ARM macOS inspector also pass local byte checks. SDK 1.14.0 remains exactly `3de0a44594d014298b4129c719b84a4544c834966e63c75a090db085fd43e761`.
+
+Both plugin Releases were downloaded separately, hashed, compared byte-for-byte with the host's bundled archives and admitted with the inspector downloaded from host v0.1.28. Gradle remains `83a3f6db3e8eb75a6d9576c82a136c4fbffd3b1b758781e0e92261b00ddd8b5c`; LSP remains `9c4afe0e36ef7402b3cfc7f9a198ee5022d50a580fc708d6e987162387fd4bb3`. LSP's published-SDK policy independently passes against the downloaded stable host SDK; its tag workflow also confirms the actual minimum producer Release v0.6.3.
+
+Each source/tag push used the reviewed ordinary boundary, preserving all existing tag objects, followed by independent remote branch, annotated-tag, peeled-source and zero-ahead/zero-behind verification. Candidate tags v0.1.26 and v0.1.27 remain preserved; independent API reads confirm neither has a published Release. Their failures/cancellations are historical evidence, not successful delivery targets.
+
+Detailed audit receipts: `.artifacts/public-release-20261105-hxl0mmii/host-published-audit.json`, the two `*-published-audit.json` plugin receipts, `latest-releases-verified.json`, source/tag request and verification receipts, final Actions snapshots, and native installation/archive evidence. The final closeout is documentation-only; no published source/tag or artifact is rewritten.
