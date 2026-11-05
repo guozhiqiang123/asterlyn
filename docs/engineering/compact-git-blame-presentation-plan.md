@@ -16,6 +16,10 @@
   temporarily moves to a context menu or another application surface. The dedicated gutter keeps
   the compact `YYYY-MM-DD` date, while the line-end annotation shows the author and exact local
   authored time as `YYYY-MM-DD HH:mm`.
+- With code folded, selected-line authorship follows the end of the entire visible line, including
+  adjacent folded regions and their trailing code. Focusing a fold placeholder must not insert
+  metadata before it or move the target between pointer press and release; one click unfolds it.
+  Fold/unfold transactions update the annotation even when the selection and focus stay unchanged.
 - Gutter rows follow the Android Studio-style `date | author` order. A fixed-width date column and
   an 8-pixel gap make every author begin at the same horizontal position; long author names are
   truncated inside a bounded author column.
@@ -35,6 +39,40 @@
   Automatic lookup failures are attempted once per source rather than retried on every cursor
   movement. Dirty conflict Result projections require an explicit gutter request and do not issue
   automatic Git queries per keystroke.
+
+## Fold-placeholder click correction (2026-11-04)
+
+- Root cause: the annotation was anchored to the selected source line's end. When that position
+  was also a fold boundary, focus/selection inserted authorship before the pressed placeholder,
+  shifting it before pointer release. The new real-pointer regression reproduced this in WebKit:
+  the first click left both folded regions present (`2` instead of the expected `1`).
+- The shared presentation now follows connected folded ranges to the visible line's final source
+  line and refreshes when the fold range set changes. This keeps metadata after adjacent folded
+  regions and trailing code without replacing CodeMirror's unfold handler or editing document text.
+- Chromium and WebKit pass cached/cold authorship, focus transfer, adjacent folds, fold-only state
+  updates, visible/hidden Blame gutters, unchanged source content and exact-commit navigation.
+  Existing read-only/editable Diff and conflict-pane coverage also passes. All 1,441 frontend script
+  tests, TypeScript checking, production build, and both engines' Diff/conflict rendered suites pass.
+  The build reports a 502.09 kB main chunk and the standard over-500-kB advisory.
+- Resource/accessibility scope: this adds no Git requests, retained pane state, extra annotations,
+  event interception or layout reads. Fold-range traversal stops at the first disconnected region;
+  the existing single metadata button, accessible name and commit destination remain intact.
+  A separate long-duration process-tree memory profile and non-macOS native packages were not run.
+- Fresh macOS `0.1.25` package was explicitly ad-hoc signed with sealed resources, strictly verified,
+  and passed rendered native smoke within 6,000 ms. The canonical installer preserved the installed
+  application root, verified a recoverable ZIP backup, and confirmed frontend readiness on both
+  saved-icon-bookmark launches. Installed/accepted executable SHA-256:
+  `5e6ec5fccc898339b86a2e4c2a93442cda199817eaa17ffbda83f3b1fe29bfdf`.
+- Native UI acceptance used the actual boostCleaner
+  `app/src/main/java/com/swiftcleaner/app/EntryTargetNavigator.kt`: folding the `pendingFunction`
+  branch and clicking its ellipsis once immediately revealed
+  `MinusOneFunctionAnalyticsTarget.DicePve`, retaining `wuqi · 2026-10-30 16:44` authorship.
+- Archive: `.artifacts/fold-blame-click-20261104.B4W8k8/Asterlyn-0.1.25-fold-blame-click-macos-arm64.zip`,
+  25,601,807 bytes, SHA-256
+  `d63017bbb90b0ef5353190cdf2f4cc53f12be22573aef45df0ffdc18d725f947`.
+  Native smoke and installation receipts are retained beside the archive as `native-smoke.log` and
+  `install-evidence.json`. Manual acceptance passed and local staged commits were authorized on
+  2026-11-05; no remote publication is part of this closeout.
 
 ## Independent line-end authorship correction (2026-10-23)
 

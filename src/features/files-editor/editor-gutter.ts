@@ -1,4 +1,5 @@
 import type { EditorState, Extension } from "@codemirror/state";
+import { foldedRanges } from "@codemirror/language";
 import {
   Decoration,
   EditorView,
@@ -265,7 +266,8 @@ function blameLineEndPresentation(
     }
 
     update(update: ViewUpdate): void {
-      if (update.docChanged || update.selectionSet || update.focusChanged) {
+      if (update.docChanged || update.selectionSet || update.focusChanged ||
+          foldedRanges(update.startState) !== foldedRanges(update.state)) {
         this.decorations = blameLineEndDecorations(update.view, hunks, copy, openCommit, sourceLine);
       }
     }
@@ -287,8 +289,20 @@ function blameLineEndDecorations(
     Decoration.widget({
       widget: new GitBlameLineEndWidget(hunk, copy, openCommit),
       side: 1,
-    }).range(view.state.doc.line(documentLine).to),
+    }).range(blameLineEndPosition(view.state, documentLine)),
   ]);
+}
+
+function blameLineEndPosition(state: EditorState, documentLine: number): number {
+  const line = state.doc.line(documentLine);
+  let end = line.to;
+  // Folds can join several source lines into one visible line. Keep metadata
+  // after that whole line so focusing it cannot move a pressed fold placeholder.
+  foldedRanges(state).between(line.from, state.doc.length, (from, to) => {
+    if (from > end) return false;
+    end = Math.max(end, state.doc.lineAt(to).to);
+  });
+  return end;
 }
 
 class GitBlameLineEndWidget extends WidgetType {

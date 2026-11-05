@@ -9,6 +9,12 @@ const server = await createServer({
   server: { host: "127.0.0.1", port: 0, hmr: false },
   plugins: [{
     name: "git-blame-fixture",
+    resolveId(id) {
+      if (id === "/__git_blame_tools.js") return "\0git-blame-tools";
+    },
+    load(id) {
+      if (id === "\0git-blame-tools") return 'export { EditorView } from "@codemirror/view"; export { foldEffect } from "@codemirror/language";';
+    },
     configureServer(vite) {
       vite.middlewares.use("/__git_blame", (_request, response) => {
         response.setHeader("Content-Type", "text/html");
@@ -216,6 +222,7 @@ try {
       await page.locator(".cm-line").first().click();
       assert.equal(await page.locator(".cm-git-blame-line-end").count(), 0, `${name}: untracked files have no invented authorship`);
       assert.equal(await page.evaluate(() => window.gitBlameFixture.loads), 5, `${name}: untracked files do not request Git Blame`);
+      await verifyFoldedAuthorship(page, name);
       for (const kind of ["readonly", "editable", "conflict"]) {
         await page.evaluate(async (kind) => {
           const [{ DiffEditor }, { EditableDiffEditor }, { ConflictEditor }, { DEFAULT_APP_PREFERENCES }, { EN_US }] = await Promise.all([
@@ -288,4 +295,83 @@ try {
   }
 } finally {
   await server.close();
+}
+
+async function verifyFoldedAuthorship(page, name) {
+  for (const cached of [true, false]) {
+    await page.evaluate(async (cached) => {
+      const [{ TextEditor }, { EditorView, foldEffect }, { DEFAULT_APP_PREFERENCES }, { EN_US }] = await Promise.all([
+        import("/src/text-editor.ts"),
+        import("/__git_blame_tools.js"),
+        import("/src/preferences.ts"), import("/src/localization/en-US.ts"),
+      ]);
+      const fixture = window.gitBlameFixture;
+      fixture.editor.destroy();
+      const host = document.querySelector("#editor");
+      host.replaceChildren();
+      const content = "fun render() {\n  if (ready) {\n    first()\n  } else {\n    second()\n  }\n  done()\n}\n";
+      const editor = new TextEditor({
+        ...fixture.runtime,
+        async load(source) {
+          const result = await fixture.runtime.load(source);
+          return { ...result, hunks: [{ ...result.hunks[0], lineCount: 9 }] };
+        },
+      }, EN_US.editor, fixture.menu);
+      editor.mount(host, "folded", 1, content, content, "src/Folded.kt", DEFAULT_APP_PREFERENCES, fixture.source, null, () => {});
+      fixture.editor = editor;
+      fixture.foldedContent = content;
+      fixture.foldedView = EditorView.findFromDOM(host.querySelector(".cm-editor"));
+      const view = fixture.foldedView;
+      const doc = view.state.doc;
+      fixture.refold = () => view.dispatch({ effects: [
+        foldEffect.of({ from: doc.line(2).to, to: doc.line(4).from + 2 }),
+        foldEffect.of({ from: doc.line(4).to, to: doc.line(6).from + 2 }),
+      ] });
+      view.dispatch({
+        selection: { anchor: doc.line(8).from },
+        effects: [
+          foldEffect.of({ from: doc.line(2).to, to: doc.line(4).from + 2 }),
+          foldEffect.of({ from: doc.line(4).to, to: doc.line(6).from + 2 }),
+        ],
+      });
+      if (cached) view.focus();
+    }, cached);
+    if (cached) await page.waitForSelector(".cm-git-blame-line-end");
+    await page.locator("#outside").click();
+    assert.equal(await page.locator(".cm-foldPlaceholder").count(), 2, `${name}: adjacent code regions start folded`);
+    for (const remaining of [1, 0]) {
+      // A single real pointer gesture must unfold at the original coordinates,
+      // even when focus/selection inserts the line's authorship before mouseup.
+      await page.locator(".cm-foldPlaceholder").first().click();
+      assert.equal(await page.locator(".cm-foldPlaceholder").count(), remaining, `${name}: first click unfolds immediately (cached=${cached})`);
+      await page.waitForSelector(".cm-git-blame-line-end");
+      assert.equal(await page.evaluate(() => window.gitBlameFixture.editor.content()), await page.evaluate(() => window.gitBlameFixture.foldedContent), `${name}: unfolding preserves source content`);
+    }
+    await page.locator(".cm-git-blame-line-end").click();
+    assert.equal(await page.evaluate(() => window.gitBlameFixture.opened?.hunk.oid), "0123456789abcdef0123456789abcdef01234567", `${name}: unfolded line metadata still opens its exact commit`);
+    await page.evaluate(() => {
+      const fixture = window.gitBlameFixture;
+      fixture.foldedView.dispatch({ selection: { anchor: fixture.foldedView.state.doc.line(2).from } });
+      fixture.refold();
+    });
+    const geometry = await page.locator(".cm-git-blame-line-end").evaluate((marker) => {
+      const lastFold = marker.closest(".cm-line").querySelectorAll(".cm-foldPlaceholder");
+      return {
+        folds: lastFold.length,
+        markerLeft: marker.getBoundingClientRect().left,
+        foldRight: lastFold.item(lastFold.length - 1)?.getBoundingClientRect().right,
+      };
+    });
+    assert.equal(geometry.folds, 2, `${name}: metadata shares the collapsed visual line`);
+    assert.ok(geometry.markerLeft > geometry.foldRight, `${name}: fold-only updates place metadata after both placeholders`);
+    await page.locator(".cm-gutters").first().click({ button: "right" });
+    await page.evaluate(async () => {
+      const session = window.gitBlameFixture.menu.session;
+      await session.invoke("editor.git-blame.toggle");
+      session.restoreFocus();
+    });
+    await page.locator("#outside").click();
+    await page.locator(".cm-foldPlaceholder").first().click();
+    assert.equal(await page.locator(".cm-foldPlaceholder").count(), 1, `${name}: one click also unfolds with the blame gutter visible`);
+  }
 }
