@@ -27,7 +27,7 @@ export interface ManagedLanguageStatusCopy {
   verificationRequired(server: string): string;
   recoveryAvailable(server: string): string;
   progressLabel(server: string): string;
-  actions: Record<"open" | "install" | "cancel" | "verify" | "recover", string>;
+  actions: Record<"open" | "install" | "cancel" | "verify" | "recover" | "suppress" | "dismiss", string>;
 }
 export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
   management: {
@@ -45,7 +45,7 @@ export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
     verificationRequired: server => `${server} must be verified before use`,
     recoveryAvailable: server => `${server} has an installed version available for recovery`,
     progressLabel: server => `${server} installation progress`,
-    actions: { open: "Manage", install: "Install", cancel: "Cancel", verify: "Verify", recover: "Review" },
+    actions: { open: "Manage", install: "Install", cancel: "Cancel", verify: "Verify", recover: "Review", suppress: "Don't show for this project", dismiss: "Later" },
   },
   coverage:{complete:"Analysis coverage confirmed",partial:"Results cover part of the project",unknown:"The provider has not confirmed analysis coverage"},incompleteEmpty:"No locations returned; analysis coverage is incomplete or unconfirmed.",
   excludeImports:"Exclude imports",
@@ -79,7 +79,7 @@ export const ZH_CN_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
     verificationRequired: server => `${server} 使用前需要重新校验`,
     recoveryAvailable: server => `${server} 有可恢复的已安装版本`,
     progressLabel: server => `${server} 安装进度`,
-    actions: { open: "管理", install: "安装", cancel: "取消", verify: "校验", recover: "查看" },
+    actions: { open: "管理", install: "安装", cancel: "取消", verify: "校验", recover: "查看", suppress: "本项目不再提示", dismiss: "稍后提醒" },
   },
   coverage:{complete:"已确认分析覆盖范围",partial:"结果仅覆盖部分项目",unknown:"提供者尚未确认分析覆盖范围"},incompleteEmpty:"本次未返回位置；分析范围尚不完整或未确认。",
   excludeImports:"排除 import",

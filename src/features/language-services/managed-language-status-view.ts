@@ -2,7 +2,14 @@ import type { CatalogSelection } from "../../application/language-services/catal
 import type { ManagedInstallationRecommendation } from "../../application/language-services/installation-recommendation.ts";
 import type { ManagedLanguageStatusCopy } from "../../localization/language-service-copy.ts";
 
-export type ManagedLanguageStatusAction = "open" | "install" | "cancel" | "verify" | "recover";
+export type ManagedLanguageStatusAction =
+  | "open"
+  | "install"
+  | "cancel"
+  | "verify"
+  | "recover"
+  | "suppress"
+  | "dismiss";
 export interface ManagedLanguageStatusLabels {
   readonly language: string;
   readonly server: string;
@@ -34,17 +41,18 @@ export function managedLanguageStatusPresentation(
     });
   if (selection.kind !== "selected") {
     if (["inactive", "ineligible-document", "unknown-language", "project-unmatched"].includes(selection.kind)) return HIDDEN;
-    if (selection.kind === "unconfigured") return show(selection.kind, "information", copy.unconfigured(labels.language), ["open"]);
-    if (selection.kind === "platform-unavailable") return show(selection.kind, "warning", copy.platformUnavailable(labels.language), ["open"]);
+    if (selection.kind === "unconfigured") return show(selection.kind, "information", copy.unconfigured(labels.language), ["open", "suppress", "dismiss"]);
+    if (selection.kind === "platform-unavailable") return show(selection.kind, "warning", copy.platformUnavailable(labels.language), ["open", "suppress", "dismiss"]);
     if (selection.kind === "project-unknown") return show(selection.kind, "progress", copy.projectUnknown(labels.language), [], true);
-    return show(selection.kind, "warning", copy.selectionRequired(labels.language), ["open"]);
+    return show(selection.kind, "warning", copy.selectionRequired(labels.language), ["open", "suppress", "dismiss"]);
   }
   switch (recommendation.kind) {
     case "none": return HIDDEN;
     case "checking": return show("checking", "progress", copy.checking(labels.language), [], true);
     case "unavailable": return show(`unavailable-${recommendation.reason}`, "warning",
       recommendation.reason === "installation-facts" ? copy.factsUnavailable(labels.language)
-        : recommendation.reason === "target" ? copy.targetUnavailable(labels.server) : copy.recipeUnavailable(labels.server), ["open"]);
+        : recommendation.reason === "target" ? copy.targetUnavailable(labels.server) : copy.recipeUnavailable(labels.server),
+      recommendation.reason === "installation-facts" ? ["open"] : ["open", "suppress", "dismiss"]);
     case "installing": {
       const { completedBytes, totalBytes } = recommendation.operation;
       const progress = totalBytes > 0 ? `${Math.floor(completedBytes * 100 / totalBytes)}%` : "";
@@ -54,7 +62,7 @@ export function managedLanguageStatusPresentation(
     case "removing": return show("removing", "progress", copy.removing(labels.server), ["cancel", "open"], true);
     case "verification-required": return show("verification-required", "warning", copy.verificationRequired(labels.server), ["verify", "open"]);
     case "recovery-available": return show("recovery-available", "warning", copy.recoveryAvailable(labels.server), ["recover", "open"]);
-    case "install-available": return show("install-available", "information", copy.installAvailable(labels.server), ["install", "open"]);
+    case "install-available": return show("install-available", "information", copy.installAvailable(labels.server), ["install", "open", "suppress", "dismiss"]);
     case "installed": return HIDDEN;
   }
 }

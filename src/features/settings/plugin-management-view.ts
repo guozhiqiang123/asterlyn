@@ -89,7 +89,23 @@ export interface PluginManagementCopy {
   readonly uninstallPlugin: string;
   readonly confirmUninstallPlugin: string;
   readonly uninstallKeepsData: string;
+  readonly languageServices: string;
+  readonly supportedLanguages: string;
+  readonly configuredServers: string;
+  readonly noConfiguredServers: string;
+  hiddenLanguageRecommendations(count: number): string;
+  readonly resetLanguageRecommendations: string;
 }
+
+export interface ManagedLanguageRecommendationViewState {
+  readonly workspaceRoot: string | null;
+  readonly suppressedByPlugin: Readonly<Record<string, number>>;
+}
+
+const EMPTY_LANGUAGE_RECOMMENDATIONS: ManagedLanguageRecommendationViewState = Object.freeze({
+  workspaceRoot: null,
+  suppressedByPlugin: Object.freeze({}),
+});
 
 export interface PluginMarketplaceViewState {
   readonly tab: PluginManagementTab;
@@ -140,13 +156,14 @@ export function renderPluginManagementSection(
     restartRequired: false, busyPlugin: null, confirmUninstallPlugin: null,
     confirmEnablePlugin: null,
   },
+  languageRecommendations: ManagedLanguageRecommendationViewState = EMPTY_LANGUAGE_RECOMMENDATIONS,
 ): string {
   const admittedIds = new Set(marketplace.installations?.plugins.map((plugin) => plugin.pluginId) ?? []);
   const cards = snapshot.entries
     .filter((entry) => !admittedIds.has(entry.id))
-    .map((entry) => renderPluginEntry(entry, copy))
+    .map((entry) => renderPluginEntry(entry, copy, languageRecommendations))
     .join("");
-  const admitted = renderAdmittedPackages(marketplace, copy, snapshot);
+  const admitted = renderAdmittedPackages(marketplace, copy, snapshot, languageRecommendations);
   const restart = renderPluginRestart(marketplace, copy);
   const installedError = marketplace.error
     ? `<div class="plugin-marketplace-error" role="alert">${escapeHtml(marketplace.error)}</div>`
@@ -167,6 +184,7 @@ function renderAdmittedPackages(
   state: PluginMarketplaceViewState,
   copy: PluginManagementCopy,
   management: PluginManagementSnapshot,
+  languageRecommendations: ManagedLanguageRecommendationViewState,
 ): string {
   return state.installations?.plugins.map((plugin) => {
     const entry = management.entries.find((candidate) => candidate.id === plugin.pluginId);
@@ -205,7 +223,7 @@ function renderAdmittedPackages(
       ? `<p>${escapeHtml(description)}</p><small><code>${escapeHtml(plugin.pluginId)}</code> · <code>${escapeHtml(plugin.repository)}</code></small>`
       : `<p><code>${escapeHtml(plugin.repository)}</code></p>`;
     const operational = entry
-      ? `<div class="plugin-management-meta">${renderPluginState(entry, copy)}</div>${renderPluginOperationalDetails(entry, copy)}`
+      ? `<div class="plugin-management-meta">${renderPluginState(entry, copy)}</div>${renderPluginOperationalDetails(entry, copy, languageRecommendations)}`
       : "";
     const enableReview = state.confirmEnablePlugin === plugin.pluginId && !plugin.enabled
       ? renderEnableReview(plugin.pluginId, selected, version?.packageDigest ?? null, entry, copy, busy)
@@ -319,7 +337,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function renderPluginEntry(entry: PluginManagementEntry, copy: PluginManagementCopy): string {
+function renderPluginEntry(
+  entry: PluginManagementEntry,
+  copy: PluginManagementCopy,
+  languageRecommendations: ManagedLanguageRecommendationViewState,
+): string {
   const name = pluginMessage(entry, copy, entry.nameKey);
   const description = pluginMessage(entry, copy, entry.descriptionKey);
   const state = renderPluginState(entry, copy);
@@ -330,7 +352,7 @@ function renderPluginEntry(entry: PluginManagementEntry, copy: PluginManagementC
   return `<article class="plugin-management-card" data-plugin-id="${escapeAttribute(entry.id)}" tabindex="-1">
     <div class="plugin-management-card-header"><div><h3>${escapeHtml(name)}</h3><p>${escapeHtml(description)}</p></div>${enableControl}</div>
     <div class="plugin-management-meta"><span class="plugin-management-builtin">${escapeHtml(origin)}</span><span>${escapeHtml(copy.version)}: <code>${escapeHtml(entry.version)}</code></span>${state}</div>
-    ${renderPluginOperationalDetails(entry, copy)}
+    ${renderPluginOperationalDetails(entry, copy, languageRecommendations)}
   </article>`;
 }
 
@@ -342,13 +364,38 @@ function renderPluginState(entry: PluginManagementEntry, copy: PluginManagementC
   ].join("");
 }
 
-function renderPluginOperationalDetails(entry: PluginManagementEntry, copy: PluginManagementCopy): string {
+function renderPluginOperationalDetails(
+  entry: PluginManagementEntry,
+  copy: PluginManagementCopy,
+  languageRecommendations: ManagedLanguageRecommendationViewState,
+): string {
   const diagnostics = entry.diagnostics.length > 0
     ? `<div class="plugin-management-diagnostics" role="alert"><strong>${escapeHtml(copy.diagnostics)}</strong><ul>${entry.diagnostics.slice(0, MAX_DIAGNOSTICS).map((diagnostic) => `<li>${escapeHtml(boundedDiagnostic(diagnostic.message))}</li>`).join("")}</ul></div>`
     : "";
   const settings = entry.settingDescriptors.map((descriptor) => renderSetting(entry, descriptor, copy)).join("");
   const authorization = renderWorkspaceTrust(entry, copy);
-  return `${diagnostics}<div class="plugin-management-settings" data-plugin-settings="${escapeAttribute(entry.id)}"><h4>${escapeHtml(copy.settings)}</h4>${settings}${authorization}${!settings && !authorization ? `<p class="plugin-management-no-settings">${escapeHtml(copy.noSettings)}</p>` : ""}</div>`;
+  const catalog = renderManagedLanguageCatalog(entry, copy, languageRecommendations);
+  return `${diagnostics}${catalog}<div class="plugin-management-settings" data-plugin-settings="${escapeAttribute(entry.id)}"><h4>${escapeHtml(copy.settings)}</h4>${settings}${authorization}${!settings && !authorization ? `<p class="plugin-management-no-settings">${escapeHtml(copy.noSettings)}</p>` : ""}</div>`;
+}
+
+function renderManagedLanguageCatalog(
+  entry: PluginManagementEntry,
+  copy: PluginManagementCopy,
+  recommendations: ManagedLanguageRecommendationViewState,
+): string {
+  const catalog = entry.languageServerCatalog;
+  if (!catalog) return "";
+  const languages = catalog.languages.map((language) =>
+    pluginMessage(entry, copy, language.labelKey)).join(", ");
+  const servers = catalog.servers.map((server) =>
+    pluginMessage(entry, copy, server.labelKey)).join(", ");
+  const suppressed = recommendations.workspaceRoot === null
+    ? 0
+    : recommendations.suppressedByPlugin[entry.id] ?? 0;
+  const reset = suppressed > 0
+    ? `<div class="plugin-setting-row" data-managed-language-recommendation-row="${escapeAttribute(entry.id)}"><div><strong>${escapeHtml(copy.resetLanguageRecommendations)}</strong><span>${escapeHtml(copy.hiddenLanguageRecommendations(suppressed))}</span></div><div class="plugin-setting-control"><button class="secondary-button" type="button" data-managed-language-recommendation-reset="${escapeAttribute(entry.id)}">${escapeHtml(copy.resetLanguageRecommendations)}</button></div></div>`
+    : "";
+  return `<div class="plugin-management-settings plugin-managed-language-settings" data-managed-language-settings="${escapeAttribute(entry.id)}"><h4>${escapeHtml(copy.languageServices)}</h4><div class="plugin-setting-row"><div><strong>${escapeHtml(copy.supportedLanguages)}</strong><span>${escapeHtml(languages)}</span></div></div><div class="plugin-setting-row"><div><strong>${escapeHtml(copy.configuredServers)}</strong><span>${escapeHtml(servers || copy.noConfiguredServers)}</span></div></div>${reset}</div>`;
 }
 
 function renderWorkspaceTrust(entry: PluginManagementEntry, copy: PluginManagementCopy): string {

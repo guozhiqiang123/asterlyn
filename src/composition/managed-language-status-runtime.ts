@@ -9,6 +9,11 @@ import {
   type InstallationFacts,
 } from "../application/language-services/installation-facts.ts";
 import { recommendManagedInstallation } from "../application/language-services/installation-recommendation.ts";
+import {
+  managedLanguageRecommendationIdentityKey,
+  type ManagedLanguageRecommendationIdentity,
+  type ManagedLanguageRecommendationPreferences,
+} from "../application/language-services/recommendation-preferences.ts";
 import { resolvePluginMessage } from "../application/plugins/index.ts";
 import type { PluginManagementSnapshot } from "../application/plugins/plugin-types.ts";
 import type { EditorDocument } from "../editor-document.ts";
@@ -34,10 +39,13 @@ export interface ManagedLanguageEnvironmentBridge {
 }
 
 export interface ManagedLanguageStatusPorts {
+  readonly workspaceRoot: () => string | null;
   readonly context: () => ManagedLanguageStatusContext;
   readonly locale: () => string;
   readonly copy: () => ManagedLanguageStatusCopy;
+  readonly preferences: ManagedLanguageRecommendationPreferences;
   readonly openManagement: (pluginId: string | null) => void;
+  readonly restoreEditorFocus: () => void;
   readonly reportError: (error: unknown) => void;
 }
 
@@ -98,7 +106,10 @@ export class ManagedLanguageStatusRuntime {
   private disposed = false;
   private boundHost: HTMLElement | null = null;
   private activePluginId: string | null = null;
+  private activeRecommendation: ManagedLanguageRecommendationIdentity | null = null;
+  private readonly transientDismissals = new Set<string>();
   private releaseManagement = (): void => undefined;
+  private releasePreferences = (): void => undefined;
   private readonly root: HTMLElement;
   private readonly bridge: ManagedLanguageEnvironmentBridge;
   private readonly ports: ManagedLanguageStatusPorts;
@@ -111,6 +122,7 @@ export class ManagedLanguageStatusRuntime {
     this.root = root;
     this.bridge = bridge;
     this.ports = ports;
+    this.releasePreferences = ports.preferences.subscribe(() => this.refresh());
     void this.reloadEnvironment();
   }
 
@@ -136,6 +148,7 @@ export class ManagedLanguageStatusRuntime {
     if (!this.environment) {
       host.innerHTML = "";
       this.activePluginId = null;
+      this.activeRecommendation = null;
       return;
     }
     const projection = projectManagedLanguageStatus(
@@ -148,6 +161,17 @@ export class ManagedLanguageStatusRuntime {
       this.ports.copy(),
     );
     this.activePluginId = projection.pluginId;
+    this.activeRecommendation = managedLanguageRecommendationIdentity(
+      this.ports.workspaceRoot(),
+      projection.selection,
+      projection.pluginId,
+    );
+    const identity = this.activeRecommendation;
+    if (identity && (this.ports.preferences.isSuppressed(identity) ||
+      this.transientDismissals.has(managedLanguageRecommendationIdentityKey(identity)))) {
+      host.innerHTML = "";
+      return;
+    }
     host.innerHTML = renderManagedLanguageStatus(projection.presentation, this.ports.copy());
   }
 
@@ -155,9 +179,13 @@ export class ManagedLanguageStatusRuntime {
     this.disposed = true;
     this.releaseManagement();
     this.releaseManagement = (): void => undefined;
+    this.releasePreferences();
+    this.releasePreferences = (): void => undefined;
     this.facts.reset();
     this.environment = null;
+    this.boundHost?.replaceChildren();
     this.boundHost = null;
+    this.activeRecommendation = null;
   }
 
   private async reloadEnvironment(): Promise<void> {
@@ -185,9 +213,44 @@ export class ManagedLanguageStatusRuntime {
         ? event.target.closest<HTMLButtonElement>("[data-managed-language-action]")
         : null;
       if (!target || !host.contains(target)) return;
+      const action = target.dataset.managedLanguageAction;
+      const identity = this.activeRecommendation;
+      if (action === "dismiss" && identity) {
+        const key = managedLanguageRecommendationIdentityKey(identity);
+        this.transientDismissals.delete(key);
+        this.transientDismissals.add(key);
+        while (this.transientDismissals.size > 128) {
+          const oldest = this.transientDismissals.values().next().value as string | undefined;
+          if (oldest === undefined) break;
+          this.transientDismissals.delete(oldest);
+        }
+        this.refresh();
+        queueMicrotask(this.ports.restoreEditorFocus);
+        return;
+      }
+      if (action === "suppress" && identity) {
+        this.ports.preferences.suppress(identity);
+        this.refresh();
+        queueMicrotask(this.ports.restoreEditorFocus);
+        return;
+      }
       this.ports.openManagement(this.activePluginId);
     });
   }
+}
+
+export function managedLanguageRecommendationIdentity(
+  workspaceRoot: string | null,
+  selection: CatalogSelection,
+  pluginId: string | null,
+): ManagedLanguageRecommendationIdentity | null {
+  if (workspaceRoot === null || pluginId === null || !("languageId" in selection)) return null;
+  return Object.freeze({
+    workspaceRoot,
+    pluginId: selection.kind === "selected" ? selection.provider.pluginId : pluginId,
+    languageId: selection.languageId,
+    providerKey: selection.kind === "selected" ? selection.provider.key : null,
+  });
 }
 
 function selectionLabels(

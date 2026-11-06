@@ -210,8 +210,8 @@ this is a routing and accessibility contract, not permission to modify a read-on
 | Cancel a pending installation | lifecycle | **Command / planned** | Exact owned task and transactional cancellation boundary |
 | Review/uninstall a managed service | destructive | **Command / planned** | Exact version, affected-session review, use leases and buffer preservation |
 | Start/stop the selected service | lifecycle | **Command / planned** | Native approval/session route; no arbitrary command execution |
-| Suppress/restore project installation recommendations | presentation | **Command / planned** | Project/service preference grants no install or execution authority |
-| Navigate recommendation controls, review or service chooser | presentation | **Local / planned** | Tab/arrows/Enter/Escape as applicable, accessible names and focus restoration |
+| Suppress/restore project installation recommendations | presentation | **Local:** focused status-bar and plugin Settings buttons use Tab/Enter/Space; dismissal restores editor focus | Project/service preference grants no install or execution authority; dynamic project/provider identity is owned by the focused surface |
+| Navigate recommendation controls, review or service chooser | presentation | **Local:** current recommendation controls use Tab/Enter/Space and restore editor focus; review/chooser keys remain planned | Accessible names and exact active recommendation identity |
 
 ## 6. Changes, commit, and working-tree recovery
 

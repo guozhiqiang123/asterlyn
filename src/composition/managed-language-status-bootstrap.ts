@@ -3,6 +3,7 @@ import type { PluginManagementSnapshot } from "../application/plugins/plugin-typ
 import type { EditorDocument } from "../editor-document.ts";
 import type { ProjectFilesState } from "../features/files-editor/project-files-controller.ts";
 import type { ManagedLanguageStatusCopy } from "../localization/language-service-copy.ts";
+import type { ManagedLanguageRecommendationPreferences } from "../application/language-services/recommendation-preferences.ts";
 import {
   ManagedLanguageStatusRuntime,
   managedLanguageStatusContext,
@@ -15,7 +16,9 @@ export interface ManagedLanguageStatusBootstrapPorts {
   readonly files: () => ProjectFilesState;
   readonly locale: () => string;
   readonly copy: () => ManagedLanguageStatusCopy;
+  readonly preferences: ManagedLanguageRecommendationPreferences;
   readonly openManagement: (pluginId: string | null) => void;
+  readonly restoreEditorFocus: () => void;
   readonly reportError: (error: unknown) => void;
 }
 
@@ -25,10 +28,13 @@ export function startManagedLanguageStatus(
   ports: ManagedLanguageStatusBootstrapPorts,
 ): ManagedLanguageStatusRuntime {
   return new ManagedLanguageStatusRuntime(root, { read: readManagedLanguageEnvironment }, {
+    workspaceRoot: ports.workspaceRoot,
     context: () => managedLanguageStatusContext(ports.workspaceRoot(), ports.document(), ports.files()),
     locale: ports.locale,
     copy: ports.copy,
+    preferences: ports.preferences,
     openManagement: ports.openManagement,
+    restoreEditorFocus: ports.restoreEditorFocus,
     reportError: ports.reportError,
   }).connectManagement(host);
 }

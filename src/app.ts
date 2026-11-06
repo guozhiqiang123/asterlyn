@@ -8,7 +8,7 @@ import type { EditorNavigationHistory } from "./features/files-editor/editor-nav
 import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
 import { createLanguageServicesRuntime, languageWorkspaceForWindow, workspaceFileUri } from "./composition/language-services-runtime.ts";
 import { createTauriLanguageServiceBridge } from "./adapters/tauri/tauri-language-service-bridge.ts";
-import type { ManagedLanguageStatusRuntime } from "./composition/managed-language-status-runtime.ts";
+import type { ManagedLanguageStatusRuntime } from "./composition/managed-language-status-runtime.ts"; import { ManagedLanguageRecommendationPreferences } from "./application/language-services/recommendation-preferences.ts";
 import { bridge } from "./bridge";
 import { diagnostics } from "./application/diagnostics.ts";
 import { changeWorkspacePath, fileChangeKey, findFileChange } from "./change-identity.ts";
@@ -418,7 +418,7 @@ export class AsterlynApp {
   private readonly editorSurface: EditorSurface;
   private readonly editorNavigation: EditorNavigationHistory;
   private readonly projectSymbols: ReturnType<typeof projectSymbolsRuntime>;
-  private readonly languageServices: ReturnType<typeof createLanguageServicesRuntime> | null; private managedLanguageStatus: ManagedLanguageStatusRuntime | null = null;
+  private readonly languageServices: ReturnType<typeof createLanguageServicesRuntime> | null; private managedLanguageStatus: ManagedLanguageStatusRuntime | null = null; private readonly managedLanguageRecommendationPreferences = new ManagedLanguageRecommendationPreferences(window.localStorage, window);
   private readonly contextMenuHost: LazyContextMenuHost;
   private readonly stashRuntime: StashRuntime;
   private readonly dialogRuntime: ApplicationDialogRuntime;
@@ -717,7 +717,7 @@ export class AsterlynApp {
       keyboard: this.shortcuts.handleTerminalKeyEvent, presentationChanged: () => this.refreshShortcutPresentation(),
     }, initialCatalog.locale);
     this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), confirm: (request) => this.dialogRuntime.confirm(request), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, processQueryBridge: bridge, toolOperationBridge: bridge, installedPluginRuntimeBridge: bridge, pluginMarketplaceBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), identityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
-    if ("__TAURI_INTERNALS__" in window) void import("./composition/managed-language-status-bootstrap.ts").then(({ startManagedLanguageStatus }) => { if (!this.disposed) this.managedLanguageStatus = startManagedLanguageStatus(root, this.pluginTasksRuntime, { workspaceRoot: () => this.windowSession.workspace.state.root, document: () => this.activeDocument(), files: () => this.filesState, locale: () => this.localization.catalog.locale, copy: () => this.localization.catalog.editor.languageService.management, openManagement: (pluginId) => this.openSettings({ section: "plugins", ...(pluginId ? { pluginId } : {}) }), reportError: (error) => diagnostics.report("warning", "managed-language.environment", String(error)) }); }).catch((error) => diagnostics.report("warning", "managed-language.bootstrap", String(error)));
+    if ("__TAURI_INTERNALS__" in window) void import("./composition/managed-language-status-bootstrap.ts").then(({ startManagedLanguageStatus }) => { if (!this.disposed) this.managedLanguageStatus = startManagedLanguageStatus(root, this.pluginTasksRuntime, { workspaceRoot: () => this.windowSession.workspace.state.root, document: () => this.activeDocument(), files: () => this.filesState, locale: () => this.localization.catalog.locale, copy: () => this.localization.catalog.editor.languageService.management, preferences: this.managedLanguageRecommendationPreferences, openManagement: (pluginId) => { this.settingsReturnFocus = '[data-managed-language-action="open"]'; this.openSettings({ section: "plugins", ...(pluginId ? { pluginId } : {}) }); }, restoreEditorFocus: () => this.root.querySelector<HTMLElement>(".cm-content")?.focus(), reportError: (error) => diagnostics.report("warning", "managed-language.environment", String(error)) }); }).catch((error) => diagnostics.report("warning", "managed-language.bootstrap", String(error)));
     const languageWorkspace = languageWorkspaceForWindow(this.windowSession);
     const definitionNavigator = createLanguageDefinitionNavigator({ workspace: languageWorkspace, files: () => this.filesState.files, open: (root, file) => this.openProjectFile(root, file),
       openSource: async (root,location)=>{const source=location.readonlySource;if(!source||this.windowSession.workspace.state.root!==root)return;this.captureMountedTextEditor();this.filesEditorRuntime.editor.activatePreview({kind:"language-source",workspaceRoot:root,uri:location.uri,path:source.path,content:source.text,languageId:source.languageId});this.renderEditor();},
@@ -745,7 +745,7 @@ export class AsterlynApp {
       definitionDiagnostic: (event) => diagnostics.report("info", "language.definition.lookup", `kind=${event.kind ?? "definition"};outcome=${event.outcome};targets=${event.targetCount}`),
       approvalDiagnostic: (event) => diagnostics.report("info", "language.approval", `outcome=${event.outcome};reason=${event.reason ?? "none"}`),
     }) : null;
-    this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, bridge, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error), revokePluginExecution: (pluginId) => this.languageServices?.revoke(pluginId) });
+    this.pluginManagementBinding = new PluginManagementBinding(root, this.pluginTasksRuntime, bridge, { visible: () => this.shellState.page === "settings" && this.settingsState.section === "plugins", render: (focus) => this.renderSettingsPage(focus), reportError: (error) => this.showError(error), revokePluginExecution: (pluginId) => this.languageServices?.revoke(pluginId), languageRecommendations: { workspaceRoot: () => this.windowSession.workspace.state.root, count: (root, pluginId) => this.managedLanguageRecommendationPreferences.count(root, pluginId), clear: (root, pluginId) => this.managedLanguageRecommendationPreferences.clear(root, pluginId), subscribe: (listener) => this.managedLanguageRecommendationPreferences.subscribe(listener) } });
     this.workbenchLayoutRuntime = new WorkbenchLayoutRuntime(root, this.shellController, () => this.scheduleEditorMeasure());
     this.findResultsRuntime = new FindResultsRuntime(root, {
       copy: () => this.localization.catalog,
@@ -2122,7 +2122,7 @@ export class AsterlynApp {
     this.gitOperationRuntime.dispose();
     this.windowSession.dispose();
     this.appUpdatePresentationRuntime.dispose();
-    this.settingsPresentationRuntime.dispose(); this.pluginManagementBinding.dispose(); this.pluginTasksRuntime.dispose();
+    this.settingsPresentationRuntime.dispose(); this.pluginManagementBinding.dispose(); this.managedLanguageRecommendationPreferences.dispose(); this.pluginTasksRuntime.dispose();
     this.releaseKeybindings();
     this.shortcuts.dispose();
     this.shellController.dispose();

@@ -21,7 +21,7 @@ test("active catalog language without a chosen server recommends configuration",
   assert.equal(projection.selection.kind, "unconfigured");
   assert.equal(projection.presentation.visible, true);
   assert.equal(projection.presentation.text, "Rust language service is not configured");
-  assert.deepEqual(projection.presentation.actions, ["open"]);
+  assert.deepEqual(projection.presentation.actions, ["open", "suppress", "dismiss"]);
   assert.equal(projection.pluginId, entry.id);
 });
 
@@ -46,5 +46,5 @@ test("selected server cannot expose install before a native recipe exists", () =
     { kind: "available", snapshot: environment.installation }, "en-US", EN_US_LANGUAGE_SERVICE_COPY.management);
   assert.equal(projection.selection.kind, "selected");
   assert.equal(projection.presentation.state, "unavailable-recipe");
-  assert.deepEqual(projection.presentation.actions, ["open"]);
+  assert.deepEqual(projection.presentation.actions, ["open", "suppress", "dismiss"]);
 });

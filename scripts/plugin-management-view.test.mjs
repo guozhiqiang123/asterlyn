@@ -18,6 +18,7 @@ const copy = {
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
   deleteVersion: "Delete", confirmDeleteVersion: version => `Delete version ${version}?`, deleteVersionDescription: "Removes historical files only.", protectedVersion: "Current package is protected.",
   enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", repairPlugin: "Repair", repairPluginTitle: "Reverify this package and prepare another isolated activation attempt", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin data is retained.",
+  languageServices: "Language services", supportedLanguages: "Recognized source languages", configuredServers: "Approved language servers", noConfiguredServers: "No upstream language server has been selected yet.", hiddenLanguageRecommendations: count => `${count} hidden`, resetLanguageRecommendations: "Restore project recommendations",
 };
 
 const entry = {
@@ -109,6 +110,36 @@ test("plugin management renders an empty catalog without a workspace", () => {
   const html = renderPluginManagementSection({ schemaVersion: 1, entries: [] }, copy);
   assert.match(html, /No plugins\./);
   assert.match(html, /data-plugin-management/);
+});
+
+test("language catalog settings disclose the current boundary and restore project prompts", () => {
+  const pluginId = "dev.asterlyn.lsp";
+  const languageEntry = {
+    ...entry,
+    id: pluginId,
+    localization: { ...entry.localization, locales: {
+      ...entry.localization.locales,
+      "en-US": { ...entry.localization.locales["en-US"], "language.rust": "Rust" },
+    } },
+    languageServerCatalog: {
+      schemaVersion: 1,
+      languages: [{ id: "rust", labelKey: "language.rust", extensions: [".rs"], fileNames: [] }],
+      servers: [],
+    },
+  };
+  const html = renderPluginManagementSection(
+    { schemaVersion: 1, entries: [languageEntry] },
+    copy,
+    false,
+    undefined,
+    { workspaceRoot: "/repo", suppressedByPlugin: { [pluginId]: 1 } },
+  );
+  assert.match(html, /data-managed-language-settings="dev\.asterlyn\.lsp"/u);
+  assert.match(html, /Recognized source languages/u);
+  assert.match(html, />Rust</u);
+  assert.match(html, /No upstream language server has been selected yet\./u);
+  assert.match(html, /1 hidden/u);
+  assert.match(html, /data-managed-language-recommendation-reset="dev\.asterlyn\.lsp"/u);
 });
 
 test("plugin marketplace renders configured Release sources as host-owned controls", () => {

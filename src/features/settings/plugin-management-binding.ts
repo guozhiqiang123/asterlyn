@@ -24,6 +24,12 @@ export interface PluginManagementBindingOptions {
   readonly render: (focusSelector?: string) => void;
   readonly reportError: (error: unknown) => void;
   readonly revokePluginExecution?: (pluginId: string) => void;
+  readonly languageRecommendations?: {
+    readonly workspaceRoot: () => string | null;
+    readonly count: (workspaceRoot: string | null, pluginId: string) => number;
+    readonly clear: (workspaceRoot: string | null, pluginId: string) => number;
+    readonly subscribe: (listener: () => void) => () => void;
+  };
 }
 
 export interface PluginSettingsFocusTarget {
@@ -37,6 +43,7 @@ export class PluginManagementBinding {
   private loaded = false;
   private pendingFocus: PluginSettingsFocusTarget | null = null;
   private readonly release: () => void;
+  private readonly releaseLanguageRecommendations: () => void;
   private releaseInstallations: (() => void) | null = null;
   private disposed = false;
   private tab: PluginMarketplaceViewState["tab"] = "installed";
@@ -65,6 +72,9 @@ export class PluginManagementBinding {
     this.release = host.subscribePluginManagement(() => {
       if (this.options.visible()) this.options.render();
     });
+    this.releaseLanguageRecommendations = options.languageRecommendations?.subscribe(() => {
+      if (this.options.visible()) this.options.render();
+    }) ?? (() => undefined);
     void marketplace.subscribeInstallations?.(() => {
       void marketplace.listPluginInstallations().then((snapshot) => {
         if (this.disposed || (this.installations && snapshot.generation < this.installations.generation)) return;
@@ -82,6 +92,13 @@ export class PluginManagementBinding {
   }
 
   render(copy: PluginManagementCopy): string {
+    const recommendationPort = this.options.languageRecommendations;
+    const workspaceRoot = recommendationPort?.workspaceRoot() ?? null;
+    const suppressedByPlugin = Object.freeze(Object.fromEntries(
+      this.host.pluginManagementSnapshot.entries
+        .filter((entry) => entry.languageServerCatalog !== undefined)
+        .map((entry) => [entry.id, recommendationPort?.count(workspaceRoot, entry.id) ?? 0]),
+    ));
     return renderPluginManagementSection(this.host.pluginManagementSnapshot, copy, this.loading, {
       tab: this.tab,
       snapshot: this.marketplaceSnapshot,
@@ -98,7 +115,7 @@ export class PluginManagementBinding {
       confirmUninstallPlugin: this.confirmUninstallPlugin,
       confirmEnablePlugin: this.confirmEnablePlugin,
       confirmDeleteVersion: this.confirmDeleteVersion,
-    });
+    }, { workspaceRoot, suppressedByPlugin });
   }
 
   bind(): void {
@@ -161,11 +178,19 @@ export class PluginManagementBinding {
           this.options.render(`#${CSS.escape(input.id)}`);
         }
       }));
+    this.root.querySelectorAll<HTMLButtonElement>("[data-managed-language-recommendation-reset]")
+      .forEach((button) => button.addEventListener("click", () => {
+        const pluginId = button.dataset.managedLanguageRecommendationReset;
+        const recommendations = this.options.languageRecommendations;
+        if (!pluginId || !recommendations) return;
+        recommendations.clear(recommendations.workspaceRoot(), pluginId);
+        this.options.render(`.plugin-management-card[data-plugin-id="${CSS.escape(pluginId)}"]`);
+      }));
     this.bindMarketplace();
     this.focusPendingTarget();
   }
 
-  dispose(): void { this.disposed = true; this.release(); this.releaseInstallations?.(); }
+  dispose(): void { this.disposed = true; this.release(); this.releaseLanguageRecommendations(); this.releaseInstallations?.(); }
 
   private ensureCatalog(): void {
     if (!this.loaded && !this.loading) {
