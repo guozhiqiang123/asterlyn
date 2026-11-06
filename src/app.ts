@@ -8,6 +8,7 @@ import type { EditorNavigationHistory } from "./features/files-editor/editor-nav
 import { projectTextBlameAvailability } from "./features/files-editor/text-blame-availability.ts";
 import { createLanguageServicesRuntime, languageWorkspaceForWindow, workspaceFileUri } from "./composition/language-services-runtime.ts";
 import { createTauriLanguageServiceBridge } from "./adapters/tauri/tauri-language-service-bridge.ts";
+import type { ManagedLanguageStatusRuntime } from "./composition/managed-language-status-runtime.ts";
 import { bridge } from "./bridge";
 import { diagnostics } from "./application/diagnostics.ts";
 import { changeWorkspacePath, fileChangeKey, findFileChange } from "./change-identity.ts";
@@ -410,7 +411,6 @@ const COMPLETE_REPOSITORY_SLICES: readonly SessionInvalidationSlice[] = [
   "history",
   "operation",
 ];
-
 export class AsterlynApp {
   private disposed = false; private localization: Localization;
   private localeRequestGeneration = 0;
@@ -418,7 +418,7 @@ export class AsterlynApp {
   private readonly editorSurface: EditorSurface;
   private readonly editorNavigation: EditorNavigationHistory;
   private readonly projectSymbols: ReturnType<typeof projectSymbolsRuntime>;
-  private readonly languageServices: ReturnType<typeof createLanguageServicesRuntime> | null;
+  private readonly languageServices: ReturnType<typeof createLanguageServicesRuntime> | null; private managedLanguageStatus: ManagedLanguageStatusRuntime | null = null;
   private readonly contextMenuHost: LazyContextMenuHost;
   private readonly stashRuntime: StashRuntime;
   private readonly dialogRuntime: ApplicationDialogRuntime;
@@ -717,6 +717,7 @@ export class AsterlynApp {
       keyboard: this.shortcuts.handleTerminalKeyEvent, presentationChanged: () => this.refreshShortcutPresentation(),
     }, initialCatalog.locale);
     this.pluginTasksRuntime = new PluginTasksRuntime(root, { registerCommand: (descriptor) => this.shortcuts.registerPluginCommand(descriptor), copy: () => this.localization.catalog.tasks, locale: () => this.localization.catalog.locale, reportError: (error) => this.showError(error), confirm: (request) => this.dialogRuntime.confirm(request), executionBridge: bridge, artifactBridge: bridge, taskCacheBridge: bridge, processQueryBridge: bridge, toolOperationBridge: bridge, installedPluginRuntimeBridge: bridge, pluginMarketplaceBridge: bridge, notificationPublisher: this.notificationCenter, recentTaskStorage: window.localStorage, availabilityChanged: () => this.reconcilePluginActivityAvailability(), identityChanged: () => this.reconcilePluginActivityAvailability(), taskTerminal: openingTaskTerminalPort(this.terminalPanel, () => { if (this.shellState.layout.bottomTool !== "terminal") this.toggleTool("terminal"); }), reconcileAfterTask: (identity) => reconcileAfterSuccessfulTask(identity, { matches: (candidate) => this.windowSession.matches(candidate.generation, candidate.root), filesRoot: () => this.filesState.root, refreshFiles: () => this.filesEditorRuntime.files.refresh(), activateWatch: () => this.workspaceWatch.activate(), repositoryRoot: () => this.windowSession.repository.state.snapshot?.root ?? null, ensureUntracked: (candidate) => this.windowSession.ensureUntrackedScan(candidate.root, candidate.generation, false, "workspaceMutation"), scheduleTracked: (candidate) => this.windowSession.scheduleTrackedRefresh(candidate.root, "workspaceMutation", [], 0) }) });
+    if ("__TAURI_INTERNALS__" in window) void import("./composition/managed-language-status-bootstrap.ts").then(({ startManagedLanguageStatus }) => { if (!this.disposed) this.managedLanguageStatus = startManagedLanguageStatus(root, this.pluginTasksRuntime, { workspaceRoot: () => this.windowSession.workspace.state.root, document: () => this.activeDocument(), files: () => this.filesState, locale: () => this.localization.catalog.locale, copy: () => this.localization.catalog.editor.languageService.management, openManagement: (pluginId) => this.openSettings({ section: "plugins", ...(pluginId ? { pluginId } : {}) }), reportError: (error) => diagnostics.report("warning", "managed-language.environment", String(error)) }); }).catch((error) => diagnostics.report("warning", "managed-language.bootstrap", String(error)));
     const languageWorkspace = languageWorkspaceForWindow(this.windowSession);
     const definitionNavigator = createLanguageDefinitionNavigator({ workspace: languageWorkspace, files: () => this.filesState.files, open: (root, file) => this.openProjectFile(root, file),
       openSource: async (root,location)=>{const source=location.readonlySource;if(!source||this.windowSession.workspace.state.root!==root)return;this.captureMountedTextEditor();this.filesEditorRuntime.editor.activatePreview({kind:"language-source",workspaceRoot:root,uri:location.uri,path:source.path,content:source.text,languageId:source.languageId});this.renderEditor();},
@@ -1761,6 +1762,7 @@ export class AsterlynApp {
     const root = this.windowSession.workspace.state.root;
     if (change.catalogChanged && change.reason !== "refresh-complete" && root) void this.pluginTasksRuntime.updateWorkspaceEvidence({ root, generation: this.windowSession.generation }, this.filesState);
     if (change.catalogChanged) this.contextMenuHost.revalidate();
+    if (change.catalogChanged) this.managedLanguageStatus?.refresh();
     if (change.error) this.showError(change.error);
   }
 
@@ -2086,6 +2088,7 @@ export class AsterlynApp {
     if (this.disposed) return;
     this.disposed = true;
     this.languageServices?.dispose();
+    this.managedLanguageStatus?.dispose();
     this.projectSymbols.dispose();
     this.editorSurface.setNavigationObserver(null);
     this.editorNavigation.reset(null);
@@ -5865,6 +5868,7 @@ export class AsterlynApp {
     this.languageServices?.refresh();
     const snapshot = this.windowSession.repository.state.snapshot;
     const document = this.activeDocument();
+    this.managedLanguageStatus?.refresh();
     if (document.kind !== "project-file") this.editorNavigation.leave();
     const retainedEditorKeys = this.editorState.session.textTabs.map((tab) => tab.id);
     if (document.kind === "historical-file" || document.kind==="language-source") retainedEditorKeys.push(editorDocumentKey(document));
