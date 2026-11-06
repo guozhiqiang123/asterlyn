@@ -55,6 +55,14 @@ impl ManagedRegisteredRecipe {
         &self.notice_text
     }
 
+    pub(super) fn notice_text_arc(&self) -> Arc<str> {
+        self.notice_text.clone()
+    }
+
+    pub fn summary(&self) -> ManagedRecipeSummary {
+        summary(&self.recipe)
+    }
+
     pub(super) fn validate_authority(
         &self,
         authority: &ManagementAuthority,

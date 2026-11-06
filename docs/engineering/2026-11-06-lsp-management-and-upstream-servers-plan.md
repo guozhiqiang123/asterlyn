@@ -1,6 +1,6 @@
 # LSP 管理插件与上游语言服务改造计划
 
-日期：2026-11-06。状态：**用户已授权实施及分步本地提交；F0 核心契约与基线已落地，F1 推荐交互已进入本机验收收口，F2 已完成精确包身份隔离的原生配方注册表、已审查票据执行器、跨进程内容/索引事务、受限 HTTP/TLS 下载、受控解包及不可变发布/卸载恢复基础，具体服务端与版本尚未选定。** 逐步契约与验证见 [基础实施记录](2026-11-06-lsp-foundation-contract.md)。
+日期：2026-11-06。状态：**用户已授权实施及分步本地提交；F0 核心契约与基线已落地，F1 推荐交互已进入本机验收收口，F2 已完成原生配方与任务注册表、已审查单次工作句柄、跨进程内容/索引事务、受限 HTTP/TLS 下载、受控解包及不可变发布/卸载恢复基础，具体服务端与版本尚未选定。** 逐步契约与验证见 [基础实施记录](2026-11-06-lsp-foundation-contract.md)。
 
 架构决定：[ADR-0038](../architecture/decisions/0038-managed-upstream-language-servers.md)。本计划取代此前讨论的“分别发布 TS/JS、Rust、Android JVM 语言插件”建议，延续现有语言服务、插件、项目模型与资源治理。
 
@@ -154,5 +154,6 @@ F5 若上游独立导入即可满足需求，不额外依赖 Android Gradle 插�
 | 2026-11-06 | F2.7 将启动恢复与提交扩展为跨进程事务 | 私有 `installation-index-v1.lock` 同时使用进程内 mutex 和 OS 排他文件锁：Unix `flock`，Windows `LockFileEx`；Unix 权限收敛为 `0600`，拒绝符号链接/reparse point。索引读取、启动内容恢复、发布/隔离内容、CAS 保存及可确认回滚均在同一锁内，另一个 Asterlyn 进程不能在恢复中途提交；进程崩溃由 OS 释放锁，不新增常驻线程或轮询。语言库 86 项、桌面库 180 项、Clippy、原生协议漂移检查及 Windows x86_64 目标编译通过，macOS 子进程实测锁占用和释放；完整双进程恢复/提交竞态、强杀/掉电注入和 Windows 运行仍待验收，锁等待当前无独立超时/取消 |
 | 2026-11-06 | F2.8 建立不可拆分的原生规范安装配方 | 非序列化 `ManagedInstallRecipeSpec` 用 `managed-language-install-recipe-v1` 摘要绑定插件/服务、版本/target、归档/内容摘要、精确 HTTPS 来源、规范允许 origin、归档格式/固定输出/执行位、下载/展开上限及 SPDX 许可表达式和 notice URL/摘要；准入重新计算并要求与 `recipeDigest` 一致。执行器的准备和真实 HTTP 安装入口只接受 sealed `ManagedInstallRecipe`，不能分别替换 URL、解包参数或许可身份。4 项专项测试及语言库 90 项、桌面库 180 项、Clippy、原生协议漂移检查、Windows x86_64 目标编译通过；插件目录 schema 尚未运输配方，也未加入真实配方/notice 内容、管理 IPC 或许可确认 |
 | 2026-11-06 | F2.9 建立宿主原生配方注册表 | `ManagedRecipeRegistry` 只接收宿主拥有的 catalog entry，重新准入规范 recipe 并复核保留的 UTF-8 notice 原文摘要；每个插件版本/包摘要/server/target 只有一个活动 recipe，精确 reference 还绑定 recipe digest。最多 64 项，单 notice 128 KiB、总计 1 MiB，拒绝非法控制字符、重复槽位、notice 不符、换包和过期引用。执行器准备/下载入口进一步只接受注册表产生且与当前 `ManagementAuthority` 精确一致的 sealed entry。3 项专项测试及语言库 93 项、桌面库 180 项、Clippy 和 Windows x86_64 目标编译通过；桌面尚未加载任何注册表条目，也未开放管理协议/capability |
+| 2026-11-06 | F2.10 绑定 review、ticket 与后台工作句柄 | `ManagedInstallationTaskRegistry` 把精确 authority、registered recipe、5 分钟 review 和 coordinator ticket 保持在原生内存；确认后返回字段私有、单次消费的工作句柄，operation ID 只能用于同 authority 取消，不能伪造执行权。pending/active 分别沿用 32/8 上限；过期 review 清除，入队失败/句柄遗失自动取消，registry 撤销会清除旧 review/job，完成后移除活动句柄。notice 使用同一 `Arc<str>`，不复制有界许可原文。3 项专项测试及语言库 96 项、桌面库 180 项、Clippy、协议漂移和 Windows x86_64 目标编译通过；尚未接桌面 blocking scheduler、事件或 IPC |
 
 实施时追加源码/包/工具身份、用户候选决定、测试和实测回执。目录基础不代表运行验收或内存结论。

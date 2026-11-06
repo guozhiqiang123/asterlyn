@@ -66,6 +66,13 @@ impl ManagedInstallationExecutor {
         self.lock()?.cancel(authority, ticket)
     }
 
+    pub fn reconcile_authority(
+        &self,
+        authority: &ManagementAuthority,
+    ) -> Result<(), ManagedInstallError> {
+        self.lock()?.reconcile_authority(authority)
+    }
+
     /// Blocking production path. The host must call this from a bounded worker
     /// after `confirm`; it performs no UI or plugin callbacks itself.
     pub fn execute_confirmed_install_blocking(
@@ -114,7 +121,7 @@ impl ManagedInstallationExecutor {
         }
     }
 
-    fn execute_confirmed_install_with<F>(
+    pub(super) fn execute_confirmed_install_with<F>(
         &self,
         authority: &ManagementAuthority,
         ticket: &ManagedOperationTicket,

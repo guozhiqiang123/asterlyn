@@ -150,3 +150,15 @@ F2.6 仍不是用户可调用的安装器：尚缺受信任目录到原生配方
 3 项专项测试覆盖精确包解析和 notice 保留、过期 recipe/换版本/换包/禁用拒绝，以及重复槽、notice 内容/控制字符、64 项上限。完整语言库 93 项、桌面库 180 项通过（另有 3 项既有 ignored），Clippy `-D warnings` 和 Windows x86_64 语言服务目标编译通过。注册表仍没有接入桌面状态或插件包 schema，所有测试条目均为内存夹具；当前产品注册表事实仍为空。
 
 下一步建立只传稳定 reference 的管理协议与宿主任务注册表。配方注册表替换必须与插件 activation 代际协调：撤销/换包时取消未完成 review/job，已经发布的不可变制品继续由索引和租约管理。未完成这一生命周期接线前不开放 capability 或安装按钮。
+
+## F2.10 Review、Ticket 与单次后台工作句柄
+
+`ManagedInstallationTaskRegistry` 将 F2.9 immutable recipe registry 与 F2.6 executor 组合成原生任务所有者。准备安装只接收精确 `ManagedRecipeReference` 和当前 `ManagementAuthority`，解析后同时保存 registered recipe、authority 与 5 分钟 deadline；对外 review details 由协调器 review、受限 recipe summary 和与注册 entry 共享的 `Arc<str>` notice 组成，不复制最大 128 KiB 的许可原文。pending review 继续受 32 项上限约束，过期项在新准备和确认失败时清除。
+
+确认必须使用与准备阶段逐字段相同的窗口、activation、插件 ID/版本/包摘要及权限事实。成功后 coordinator ticket、registered recipe 和 authority 进入最多 8 项的 active map，并返回字段私有的 `ManagedConfirmedInstall`；公开 operation ID 只用于查找和展示，无法重新构造 ticket 的 `Arc` 身份或工作句柄。blocking 执行会先把该句柄原子标记为 running，只允许消费一次，再走 F2.9→F2.6→F2.5 的完整链，终态后移除 active binding。
+
+取消先以 operation ID 找到原生 ticket，再检查完整 authority，其他窗口或换包请求返回 permission denied。若宿主确认后未能把工作入队，可显式 `abandon_install`；即使调用方直接丢弃未消费句柄，`Drop` 也会先记录取消再删除 binding。整个 task registry 因插件撤销/换包而释放时，会按插件/窗口撤销 coordinator 中尚未确认的 review 和未完成 job；已发布内容、索引和真实使用租约不由这层提前删除。
+
+3 项专项测试覆盖精确 authority 的准备→确认→取消→迟到执行、过期 review 清理与确认工作 abandon，以及 registry drop 撤销未确认 review。完整语言库 96 项、桌面库 180 项通过（另有 3 项既有 ignored），Clippy `-D warnings`、原生协议漂移检查和 Windows x86_64 语言服务目标编译通过；测试没有访问网络，成功下载/提交仍由 F2.6 本地归档夹具覆盖。
+
+当前 task registry 仍是语言服务库内部构件：桌面尚未拥有它，也没有 bounded `spawn_blocking` 调度、终态/进度事件或 renderer/plugin 命令。下一步先把空 recipe registry 与任务所有者接入 `ManagedLanguageInstallationState`，再定义只含 summary/reference/review ID/operation ID 的管理协议；在没有真实注册 recipe 时所有列表保持空且安装准备返回 not found。

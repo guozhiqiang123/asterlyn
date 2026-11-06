@@ -17,6 +17,8 @@ mod recipe_registry;
 pub use recipe_registry::*;
 mod storage;
 pub use storage::*;
+mod task_registry;
+pub use task_registry::*;
 mod content_storage;
 pub use content_storage::*;
 mod coordinator;
