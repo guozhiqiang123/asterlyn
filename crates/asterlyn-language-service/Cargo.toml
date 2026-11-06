@@ -19,9 +19,12 @@ tempfile.workspace = true
 sha2.workspace = true
 url = "=2.5.8"
 asterlyn-process = { path = "../asterlyn-process" }
+flate2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 schemars = { version = "=0.8.22", optional = true }
+tar.workspace = true
+zip.workspace = true
 
 [[bin]]
 name = "export-language-contract"

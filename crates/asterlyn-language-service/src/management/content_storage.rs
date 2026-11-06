@@ -10,7 +10,7 @@ use std::{
 const CONTENT_DIRECTORY: &str = "content-v1";
 const STAGING_DIRECTORY: &str = "content-staging-v1";
 const TOMBSTONE_DIRECTORY: &str = "content-tombstones-v1";
-const MAX_CONTENT_FILES: u32 = 65_536;
+pub(super) const MAX_CONTENT_ENTRIES: u32 = 65_536;
 const MAX_CONTENT_DEPTH: usize = 64;
 const MAX_CONTENT_PATH_BYTES: usize = 16_384;
 
@@ -18,6 +18,7 @@ const MAX_CONTENT_PATH_BYTES: usize = 16_384;
 pub struct ManagedContentInventory {
     pub digest: String,
     pub expanded_bytes: u64,
+    pub entry_count: u32,
     pub file_count: u32,
 }
 
@@ -29,7 +30,8 @@ struct StagedManagedContent {
 }
 
 /// Composes verified immutable content with the durable installation index.
-/// Network acquisition and archive extraction remain separate native boundaries.
+/// Network acquisition remains a separate native boundary; admitted archive
+/// layouts are verified and extracted directly into this store's private stage.
 #[derive(Debug)]
 pub struct ManagedInstallationContentStore {
     root: PathBuf,
@@ -83,6 +85,54 @@ impl ManagedInstallationContentStore {
         let result = (|| {
             copy_tree(source, &staged_path, expanded_limit)?;
             let inventory = inventory_tree(&staged_path, expanded_limit)?;
+            if inventory.expanded_bytes == 0 || inventory.digest != artifact.content_digest {
+                return Err(ManagedInstallError::IntegrityMismatch);
+            }
+            self.staged.insert(
+                id,
+                StagedManagedContent {
+                    identity: artifact.clone(),
+                    path: staged_path.clone(),
+                    inventory: inventory.clone(),
+                },
+            );
+            Ok(inventory)
+        })();
+        if result.is_err() {
+            let _ = remove_owned_directory(&staged_path);
+        }
+        result
+    }
+
+    /// Verify and safely expand an application-owned archive directly into a
+    /// private same-filesystem stage. No archive path or layout is accepted
+    /// from the plugin protocol; callers must use an admitted native recipe.
+    pub fn stage_archive(
+        &mut self,
+        artifact: &ManagedArtifact,
+        archive_path: &Path,
+        extraction: &ManagedArchiveExtraction,
+    ) -> Result<ManagedContentInventory, ManagedInstallError> {
+        artifact.validate()?;
+        extraction.validate()?;
+        let id = artifact.id();
+        if self.staged.contains_key(&id) {
+            return Err(ManagedInstallError::Busy);
+        }
+        self.ensure_layout()?;
+        let temporary = tempfile::Builder::new()
+            .prefix("stage-")
+            .tempdir_in(self.staging_root())
+            .map_err(|_| ManagedInstallError::StorageFailed)?;
+        let staged_path = temporary.keep();
+        let result = (|| {
+            super::archive::extract_verified_archive(
+                archive_path,
+                &staged_path,
+                &artifact.archive_digest,
+                extraction,
+            )?;
+            let inventory = inventory_tree(&staged_path, extraction.expanded_bytes)?;
             if inventory.expanded_bytes == 0 || inventory.digest != artifact.content_digest {
                 return Err(ManagedInstallError::IntegrityMismatch);
             }
@@ -342,6 +392,11 @@ fn copy_directory(
     let mut entries = directory_entries(source)?;
     entries.sort_by(|left, right| left.0.cmp(&right.0));
     for (name, path) in entries {
+        state.entries = state
+            .entries
+            .checked_add(1)
+            .filter(|count| *count <= MAX_CONTENT_ENTRIES)
+            .ok_or(ManagedInstallError::ResourceLimit)?;
         let next_relative = relative.join(&name);
         ensure_relative_path(&next_relative)?;
         let metadata =
@@ -365,7 +420,6 @@ fn copy_directory(
             state.files = state
                 .files
                 .checked_add(1)
-                .filter(|count| *count <= MAX_CONTENT_FILES)
                 .ok_or(ManagedInstallError::ResourceLimit)?;
             let input =
                 open_file_no_follow(&path).map_err(|_| ManagedInstallError::IntegrityMismatch)?;
@@ -420,6 +474,7 @@ fn inventory_tree(
     Ok(ManagedContentInventory {
         digest: format!("sha256:{:x}", hash.finalize()),
         expanded_bytes: state.bytes,
+        entry_count: state.entries,
         file_count: state.files,
     })
 }
@@ -440,6 +495,11 @@ fn inventory_directory(
     let mut entries = directory_entries(&directory)?;
     entries.sort_by(|left, right| left.0.cmp(&right.0));
     for (name, path) in entries {
+        state.entries = state
+            .entries
+            .checked_add(1)
+            .filter(|count| *count <= MAX_CONTENT_ENTRIES)
+            .ok_or(ManagedInstallError::ResourceLimit)?;
         let next_relative = relative.join(&name);
         ensure_relative_path(&next_relative)?;
         let metadata =
@@ -461,7 +521,6 @@ fn inventory_directory(
         state.files = state
             .files
             .checked_add(1)
-            .filter(|count| *count <= MAX_CONTENT_FILES)
             .ok_or(ManagedInstallError::ResourceLimit)?;
         state.bytes = state
             .bytes
@@ -506,6 +565,7 @@ fn inventory_directory(
 #[derive(Default)]
 struct TreeState {
     bytes: u64,
+    entries: u32,
     files: u32,
 }
 

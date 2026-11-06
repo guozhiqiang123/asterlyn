@@ -3,6 +3,8 @@
 
 mod model;
 pub use model::*;
+mod archive;
+pub use archive::*;
 mod storage;
 pub use storage::*;
 mod content_storage;
