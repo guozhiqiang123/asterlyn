@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub mod application;
+pub mod management;
 mod inbox;
 pub mod project_failure;
 pub mod protocol;

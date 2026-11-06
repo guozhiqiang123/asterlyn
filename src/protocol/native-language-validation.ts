@@ -4,7 +4,7 @@ type Schema={readonly [key:string]:unknown};
 const models=NATIVE_LANGUAGE_SCHEMAS as Readonly<Record<string,Schema>>;
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==="object"&&!Array.isArray(value);
 /** Structural output checks derive from serde. Unknown output fields remain forward compatible. */
-export function isNativeLanguageModel(name:keyof typeof NATIVE_LANGUAGE_SCHEMAS,value:unknown,optionalFields:readonly string[]=[]):boolean {
+export function isNativeLanguageModel(name:keyof typeof NATIVE_LANGUAGE_SCHEMAS,value:unknown,optionalFields:readonly string[]=[],strict=false):boolean {
  let nodes=0;
  const check=(schema:Schema,value:unknown,depth:number,optional:readonly string[]=[]):boolean=>{
   if(++nodes>32768||depth>32)return false;
@@ -18,6 +18,7 @@ export function isNativeLanguageModel(name:keyof typeof NATIVE_LANGUAGE_SCHEMAS,
    case "object":{
     if(!record(value))return false;
     const required=Array.isArray(schema.required)?schema.required:[],properties=record(schema.properties)?schema.properties:{};
+    if(strict&&schema.additionalProperties===false&&Object.keys(value).some(key=>!Object.hasOwn(properties,key)))return false;
     if(!required.every(key=>typeof key==="string"&&(optional.includes(key)||Object.hasOwn(value,key)&&value[key]!==undefined)))return false;
     for(const [key,type] of Object.entries(properties))if(value[key]!==undefined&&(!record(type)||!check(type,value[key],depth+1)))return false;
     if(record(schema.additionalProperties))for(const [key,item] of Object.entries(value))if(!Object.hasOwn(properties,key)&&!check(schema.additionalProperties,item,depth+1))return false;

@@ -15,6 +15,76 @@ export type LanguageResourcePolicy = {
   readonly "schema": number;
 };
 
+export type ManagedArtifact = {
+  readonly "archiveDigest": string;
+  readonly "contentDigest": string;
+  readonly "recipeDigest": string;
+  readonly "server": ManagedServerId;
+  readonly "target": string;
+  readonly "version": string;
+};
+
+export type ManagedArtifactOwnership = "managed" | "external";
+
+export type ManagedArtifactStatus = {
+  readonly "artifact": ManagedInstalledArtifact;
+  readonly "useCount": number;
+  readonly "verification": ManagedArtifactVerification;
+};
+
+export type ManagedArtifactVerification = "required" | "verified";
+
+export type ManagedInstallationIndex = {
+  readonly "artifacts": ReadonlyArray<ManagedInstalledArtifact>;
+  readonly "revision": number;
+  readonly "schemaVersion": number;
+  readonly "selections": ReadonlyArray<ManagedServerSelection>;
+};
+
+export type ManagedInstallationSnapshot = {
+  readonly "artifacts": ReadonlyArray<ManagedArtifactStatus>;
+  readonly "epoch": string;
+  readonly "indexRevision": number;
+  readonly "operations": ReadonlyArray<ManagedInstallOperation>;
+  readonly "protocolVersion": number;
+  readonly "revision": number;
+  readonly "selections": ReadonlyArray<ManagedServerSelection>;
+};
+
+export type ManagedInstalledArtifact = {
+  readonly "id": string;
+  readonly "identity": ManagedArtifact;
+  readonly "ownership": ManagedArtifactOwnership;
+};
+
+export type ManagedInstallError = "invalid-request" | "unsupported-schema" | "permission-denied" | "stale-review" | "expired-review" | "not-found" | "busy" | "resource-limit" | "integrity-mismatch" | "storage-failed" | "protected-artifact" | "external-artifact" | "in-use" | "cancelled" | "invalid-transition" | "unverified" | "state-changed";
+
+export type ManagedInstallOperation = {
+  readonly "artifactId": string;
+  readonly "completedBytes": number;
+  readonly "failure"?: (ManagedInstallError) | (null);
+  readonly "id": string;
+  readonly "kind": ManagedOperationKind;
+  readonly "phase": ManagedOperationPhase;
+  readonly "server": ManagedServerId;
+  readonly "totalBytes": number;
+};
+
+export type ManagedOperationKind = "install" | "remove";
+
+export type ManagedOperationPhase = "acquiring" | "verifying" | "committing" | "waiting-for-uses" | "completed" | "cancelled" | "failed";
+
+export type ManagedServerId = {
+  readonly "pluginId": string;
+  readonly "serverId": string;
+};
+
+export type ManagedServerSelection = {
+  readonly "current"?: string | null;
+  readonly "rollback"?: string | null;
+  readonly "server": ManagedServerId;
+};
+
 export type NativeLanguageServiceFailure = {
   readonly "code": LanguageFailureCode;
   readonly "message": string;

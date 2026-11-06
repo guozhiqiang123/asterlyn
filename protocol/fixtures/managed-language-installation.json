@@ -1,0 +1,774 @@
+{
+  "base": {
+    "protocolVersion": 1,
+    "epoch": "test-epoch",
+    "revision": 3,
+    "indexRevision": 1,
+    "artifacts": [
+      {
+        "artifact": {
+          "id": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+          "identity": {
+            "server": {
+              "pluginId": "dev.example.lsp",
+              "serverId": "rust"
+            },
+            "version": "1.0.0",
+            "target": "aarch64-apple-darwin",
+            "recipeDigest": "sha256:e1d8e552330911f9f779f85b6f2c00a15e790dcc3fbb3b28f5da1d660a30c5b8",
+            "archiveDigest": "sha256:0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3",
+            "contentDigest": "sha256:ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73"
+          },
+          "ownership": "managed"
+        },
+        "verification": "verified",
+        "useCount": 0
+      }
+    ],
+    "selections": [
+      {
+        "server": {
+          "pluginId": "dev.example.lsp",
+          "serverId": "rust"
+        },
+        "current": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+        "rollback": null
+      }
+    ],
+    "operations": []
+  },
+  "cases": [
+    {
+      "name": "verified current",
+      "valid": true,
+      "edits": []
+    },
+    {
+      "name": "empty authoritative index",
+      "valid": true,
+      "edits": [
+        {
+          "path": "/artifacts",
+          "value": []
+        },
+        {
+          "path": "/selections",
+          "value": []
+        }
+      ]
+    },
+    {
+      "name": "external pending verification",
+      "valid": true,
+      "edits": [
+        {
+          "path": "/artifacts/0/artifact/ownership",
+          "value": "external"
+        },
+        {
+          "path": "/artifacts/0/verification",
+          "value": "required"
+        }
+      ]
+    },
+    {
+      "name": "rollback retained without current",
+      "valid": true,
+      "edits": [
+        {
+          "path": "/selections/0/current",
+          "value": null
+        },
+        {
+          "path": "/selections/0/rollback",
+          "value": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793"
+        }
+      ]
+    },
+    {
+      "name": "future protocol",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/protocolVersion",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "unknown root field",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/future",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "unknown nested field",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/artifact/identity/path",
+          "value": "/tmp/server"
+        }
+      ]
+    },
+    {
+      "name": "unsafe revision",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/revision",
+          "value": 9007199254740992
+        }
+      ]
+    },
+    {
+      "name": "negative revision",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/indexRevision",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "fractional revision",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/revision",
+          "value": 1.5
+        }
+      ]
+    },
+    {
+      "name": "invalid epoch",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/epoch",
+          "value": "a\nb"
+        }
+      ]
+    },
+    {
+      "name": "duplicate artifact",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts",
+          "value": [
+            {
+              "artifact": {
+                "id": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+                "identity": {
+                  "server": {
+                    "pluginId": "dev.example.lsp",
+                    "serverId": "rust"
+                  },
+                  "version": "1.0.0",
+                  "target": "aarch64-apple-darwin",
+                  "recipeDigest": "sha256:e1d8e552330911f9f779f85b6f2c00a15e790dcc3fbb3b28f5da1d660a30c5b8",
+                  "archiveDigest": "sha256:0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3",
+                  "contentDigest": "sha256:ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73"
+                },
+                "ownership": "managed"
+              },
+              "verification": "verified",
+              "useCount": 0
+            },
+            {
+              "artifact": {
+                "id": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+                "identity": {
+                  "server": {
+                    "pluginId": "dev.example.lsp",
+                    "serverId": "rust"
+                  },
+                  "version": "1.0.0",
+                  "target": "aarch64-apple-darwin",
+                  "recipeDigest": "sha256:e1d8e552330911f9f779f85b6f2c00a15e790dcc3fbb3b28f5da1d660a30c5b8",
+                  "archiveDigest": "sha256:0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3",
+                  "contentDigest": "sha256:ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73"
+                },
+                "ownership": "managed"
+              },
+              "verification": "verified",
+              "useCount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "duplicate selection",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/selections",
+          "value": [
+            {
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "current": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+              "rollback": null
+            },
+            {
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "current": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+              "rollback": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty selection",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/selections/0/current",
+          "value": null
+        }
+      ]
+    },
+    {
+      "name": "current equals rollback",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/selections/0/rollback",
+          "value": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793"
+        }
+      ]
+    },
+    {
+      "name": "dangling selection",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/selections/0/current",
+          "value": "sha256:ffa63583dfa6706b87d284b86b0d693a161e4840aad2c5cf6b5d27c3b9621f7d"
+        }
+      ]
+    },
+    {
+      "name": "cross server selection",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/selections/0/server/serverId",
+          "value": "other"
+        }
+      ]
+    },
+    {
+      "name": "invalid digest",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/artifact/identity/recipeDigest",
+          "value": "sha256:GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
+        }
+      ]
+    },
+    {
+      "name": "unknown ownership",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/artifact/ownership",
+          "value": "plugin"
+        }
+      ]
+    },
+    {
+      "name": "unknown verification",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/verification",
+          "value": "ready"
+        }
+      ]
+    },
+    {
+      "name": "too many uses",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/useCount",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "name": "negative uses",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/useCount",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "path as target",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/artifact/identity/target",
+          "value": "../../server"
+        }
+      ]
+    },
+    {
+      "name": "newline in id",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/artifacts/0/artifact/identity/server/serverId",
+          "value": "rust\n"
+        }
+      ]
+    },
+    {
+      "name": "active download",
+      "valid": true,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "acquiring",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "failed install with old current",
+      "valid": true,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "failed",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": "storage-failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "duplicate active work",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "acquiring",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": null
+            },
+            {
+              "id": "job-2",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "acquiring",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "progress overflow",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "acquiring",
+              "completedBytes": 17,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "zero byte install",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "acquiring",
+              "completedBytes": 0,
+              "totalBytes": 0,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oversize download",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "acquiring",
+              "completedBytes": 4,
+              "totalBytes": 536870913,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "uncompleted verification",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "verifying",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "incomplete successful install",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "completed",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "completed install",
+      "valid": true,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "completed",
+              "completedBytes": 16,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "failure without failed phase",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "acquiring",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": "storage-failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "failed without error",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "failed",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unknown error",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "failed",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": "invented"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "remove awaiting leases",
+      "valid": true,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+              "kind": "remove",
+              "phase": "waiting-for-uses",
+              "completedBytes": 0,
+              "totalBytes": 0,
+              "failure": null
+            }
+          ]
+        },
+        {
+          "path": "/artifacts/0/useCount",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "remove external",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+              "kind": "remove",
+              "phase": "waiting-for-uses",
+              "completedBytes": 0,
+              "totalBytes": 0,
+              "failure": null
+            }
+          ]
+        },
+        {
+          "path": "/artifacts/0/artifact/ownership",
+          "value": "external"
+        }
+      ]
+    },
+    {
+      "name": "remove missing artifact",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:ffa63583dfa6706b87d284b86b0d693a161e4840aad2c5cf6b5d27c3b9621f7d",
+              "kind": "remove",
+              "phase": "waiting-for-uses",
+              "completedBytes": 0,
+              "totalBytes": 0,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "remove acquiring",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:d9603bc935b08b106e7f5aa180588d342a311917c2b02087a4aa3efecc62f793",
+              "kind": "remove",
+              "phase": "acquiring",
+              "completedBytes": 0,
+              "totalBytes": 0,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "install waiting for leases",
+      "valid": false,
+      "edits": [
+        {
+          "path": "/operations",
+          "value": [
+            {
+              "id": "job-1",
+              "server": {
+                "pluginId": "dev.example.lsp",
+                "serverId": "rust"
+              },
+              "artifactId": "sha256:c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3",
+              "kind": "install",
+              "phase": "waiting-for-uses",
+              "completedBytes": 4,
+              "totalBytes": 16,
+              "failure": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
