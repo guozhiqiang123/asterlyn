@@ -1,3 +1,5 @@
+import type { EditorContentContextPort } from "./features/files-editor/editor-content-context.ts";
+import { editorContentContextExtension } from "./features/files-editor/editor-content-context-extension.ts";
 import { editorNavigationUpdate, validEditorRange } from "./features/files-editor/editor-navigation-view.ts";
 import { completeLanguageService, languageServiceEditorExtensions, languageDiagnostic, type LanguageEditorContext } from "./features/files-editor/language-service-editor.ts";
 import {
@@ -122,6 +124,7 @@ export class TextEditor {
     private readonly blameRuntime: GitBlameRuntime,
     private blameCopy: EditorCopy,
     private readonly contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
+    private readonly contentContext: EditorContentContextPort | null = null,
   ) {}
 
   mount(
@@ -551,6 +554,10 @@ export class TextEditor {
         readOnly.of(EditorState.readOnly.of(this.readOnlyValue)),
         editable.of(EditorView.editable.of(!this.readOnlyValue)),
         codeMirrorFocusOwnership,
+        ...(this.contentContext ? [editorContentContextExtension(
+          () => ({ tabId: entry.id, path: entry.path, loadEpoch: entry.loadEpoch }),
+          view => this.activeId === entry.id && entry.view === view, this.contentContext, this.contextMenu,
+        )] : []),
         language.of([]),
         ...entry.blameController.extensions("text", blame),
         changeIndicators.extension,

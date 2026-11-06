@@ -13,8 +13,10 @@ export class LazyContextMenuHost implements ContextMenuPort {
   private disposed = false;
 
   constructor(document: Document, window: Window) {
+    // Suppress the native fallback after feature handlers and CodeMirror observers.
+    // Capture-phase prevention makes unhandled events look consumed and skips the
+    // editor's own context-selection bookkeeping.
     document.addEventListener("contextmenu", this.preventNativeContextMenu, {
-      capture: true,
       signal: this.listeners.signal,
     });
     void import("./context-menu-host.ts")

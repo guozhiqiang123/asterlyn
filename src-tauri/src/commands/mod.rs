@@ -52,6 +52,8 @@ mod image;
 mod shell;
 mod task;
 mod terminal;
+mod text_clipboard;
+pub(crate) use text_clipboard::{read_text_clipboard, write_text_clipboard};
 mod trust;
 mod workspace;
 mod workspace_watch;

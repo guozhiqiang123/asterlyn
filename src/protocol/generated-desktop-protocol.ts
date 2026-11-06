@@ -16,6 +16,8 @@ export interface DesktopCommandMap {
   query_project_symbols: { args: { root: string; requestId: string; query: string; origin: string | null; overlays: Array<SymbolOverlay>; }; result: SymbolQueryReport };
   cancel_project_symbols: { args: { requestId: string; }; result: void };
   validate_project_symbol: { args: { root: string; candidate: SymbolCandidate; identity: string; scopeToken: string | null; origin: string | null; overlay: SymbolOverlay | null; }; result: boolean };
+  read_text_clipboard: { args: Record<string, never>; result: string };
+  write_text_clipboard: { args: { text: string; }; result: void };
   check_for_app_updates: { args: Record<string, never>; result: Model.AppUpdateCheckResult };
   install_app_update: { args: Record<string, never>; result: Model.AppUpdateInstallResult };
   open_app_update_release: { args: { releaseUrl: string; }; result: void };
@@ -186,6 +188,8 @@ export const DESKTOP_RESULT_VALIDATORS: {
   query_project_symbols: "featureScoped",
   cancel_project_symbols: "void",
   validate_project_symbol: "boolean",
+  read_text_clipboard: "string",
+  write_text_clipboard: "void",
   check_for_app_updates: "appUpdateCheckResult",
   install_app_update: "appUpdateInstallResult",
   open_app_update_release: "void",

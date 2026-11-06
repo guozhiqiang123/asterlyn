@@ -6,7 +6,7 @@ import "../../src/features/files-editor/language-location-picker.css";
 import { TextEditor } from "../../src/text-editor.ts";
 import { DEFAULT_APP_PREFERENCES } from "../../src/preferences.ts";
 import { EN_US } from "../../src/localization/en-US.ts";
-import { ContextMenuHost } from "../../src/shared/context-menu/context-menu-host.ts";
+import { LazyContextMenuHost } from "../../src/shared/context-menu/lazy-context-menu-host.ts";
 import { createLanguageDefinitionNavigator } from "../../src/composition/language-definition-navigation.ts";
 import { workspaceFileUri } from "../../src/composition/language-services-runtime.ts";
 const source = 'import { target } from "./目录/target file";\nconst emoji = "😀";\nconst result = target();\n';
@@ -17,7 +17,7 @@ const files = [
 ];
 const contents = [source, "\uFEFFexport function target() { return 1; }\r\n", "export const target = 2;\n"];
 const state: any = { mode: "link", active: files[0], requests: [], statuses: [], outcomes: [], pending: [], epoch: 1, serviceGeneration:0 };
-const menu = new ContextMenuHost(document, window);
+const menu = new LazyContextMenuHost(document, window);
 function reportStatus(message:string,kind:unknown) {
   state.statuses.push({message,kind});
   if(state.measurement?.actionAt!==undefined&&state.measurement.feedbackFrameAt===undefined){

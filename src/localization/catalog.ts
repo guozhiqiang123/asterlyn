@@ -1,3 +1,4 @@
+import type { EditorContentCopy } from "../features/files-editor/editor-content-context.ts";
 import type { NavigationCopy } from "./navigation-copy.ts";
 export type { NavigationCopy, NavigationCommandId } from "./navigation-copy.ts";
 import type { LanguageServiceCopy } from "./language-service-copy.ts";
@@ -290,6 +291,7 @@ export interface ProjectFilesCopy {
 }
 
 export interface EditorCopy {
+  contentContext: EditorContentCopy;
   languageService: LanguageServiceCopy;
   conflict: string;
   saving: string;

@@ -473,6 +473,8 @@ pub fn run() {
             rollback_workspace_replacement,
             finalize_workspace_replacement,
             read_text_file,
+            read_text_clipboard,
+            write_text_clipboard,
             read_image_file,
             save_text_file,
             read_diff,

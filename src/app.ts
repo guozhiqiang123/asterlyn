@@ -1,3 +1,5 @@
+import { EditorContentContextRuntime } from "./features/files-editor/editor-content-context.ts";
+import { createEditorFileContext } from "./features/files-editor/editor-file-context.ts";
 import {sameCommitFileChanges} from "./application/commands/commit-file-changes.ts";
 import { projectSymbolsRuntime } from "./composition/project-symbols-runtime.ts";
 import { createFindLanguageResultsPorts, createLanguageDefinitionNavigator } from "./composition/language-definition-navigation.ts";
@@ -572,6 +574,46 @@ export class AsterlynApp {
       initialCatalog.editor,
       blameRuntime,
       this.contextMenuHost,
+      new EditorContentContextRuntime({
+        host: this.contextMenuHost,
+        clipboard: { readText: () => bridge.readTextClipboard(), writeText: text => bridge.writeTextClipboard(text) },
+        copy: () => this.localization.catalog.editor.contentContext,
+        find: text => this.openCommandSurface("workspace", text),
+        status: text => this.setStatus(text, "normal"), error: error => this.showError(error),
+        file: handle => {
+          this.captureMountedTextEditor();
+          const catalog = this.localization.catalog;
+          return createEditorFileContext(handle, {
+            headOid: (snapshot, id) => repositoryBranch(snapshot, id)?.oid ?? null,
+            source: () => ({
+              root: this.windowSession.workspace.state.root, generation: this.windowSession.generation,
+              snapshot: this.windowSession.repository.state.snapshot,
+              tab: this.editorState.session.active.kind === "text" && this.editorState.session.active.id === handle.tabId
+                ? this.filesEditorRuntime.editor.tab(handle.tabId) : null,
+              busy: this.state.loading || this.changesState.mutation !== null,
+            }),
+            reasons: { unavailable: catalog.editor.contentContext.unavailable, busy: catalog.editor.waitForFileOperation,
+              saveFirst: catalog.changes.saveBeforeRevert, readOnly: catalog.editor.contentContext.readOnly,
+              restoreUnavailable: catalog.changes.contextMenu.restoreUnavailable },
+            reveal: async document => {
+              const result = await bridge.revealWorkspaceEntry(document.repositoryRoot, document.workspacePath, "file");
+              this.setStatus(result.selected ? catalog.projectFiles.contextMenu.revealedSelection : catalog.projectFiles.contextMenu.openedContainingFolder, "success");
+            },
+            history: intent => this.installContextHistoryQuery(intent),
+            diff: change => {
+              if (this.changesRuntime.controller.selectContextChange(change.path, change.repositoryId || ".")) this.openSelectedChangeDiff();
+            },
+            compareBuffer: source => this.openHistoricalComparison(source),
+            restore: async change => {
+              if (this.changesRuntime.controller.selectContextChange(change.path, change.repositoryId || ".")) await this.revertSelectedChange();
+            },
+            confirmBufferRollback: path => this.dialogRuntime.confirm({
+              title: catalog.editor.contentContext.rollback, message: catalog.editor.contentContext.rollbackConfirm(path),
+              confirmLabel: catalog.editor.contentContext.rollback, cancelLabel: catalog.common.cancel, destructive: true,
+            }),
+          });
+        },
+      }),
     );
     this.editorNavigation = createEditorNavigationRuntime({
       surface: this.editorSurface, root: () => this.windowSession.workspace.state.root, loading: () => this.state.loading,
@@ -2555,7 +2597,7 @@ export class AsterlynApp {
     this.closeHistoryDialog();
   }
 
-  private openCommandSurface(mode: NavigationMode): void {
+  private openCommandSurface(mode: NavigationMode, initialQuery?: string): void {
     const workspaceRoot = this.windowSession.workspace.state.root;
     if (mode !== "commands" && !workspaceRoot) return;
     this.workspaceSearchDebouncer.cancel();
@@ -2570,7 +2612,7 @@ export class AsterlynApp {
       mode, this.filesEditorRuntime.commands.state.mode, this.filesEditorRuntime.commands.state.query,
       this.filesEditorRuntime.search.state.search.request?.query,
     );
-    this.filesEditorRuntime.commands.open(mode, retainedQuery);
+    this.filesEditorRuntime.commands.open(mode, initialQuery ?? retainedQuery);
     this.renderCommandSurface(true);
     if (mode === "workspace") this.scheduleWorkspaceSearch();
     if (mode === "recent" && workspaceRoot && !this.filesState.loading) {

@@ -140,6 +140,8 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Design and references
 
+- [`engineering/2026-11-06-editor-content-context-menu.md`](engineering/2026-11-06-editor-content-context-menu.md) — selection-aware source editor context menus, clipboard safety and file action reuse.
+
 - [`design/rebased-reference.md`](design/rebased-reference.md) — what may be learned from Rebased and what must remain original.
 - [`design/context-menu-drafts.md`](design/context-menu-drafts.md) — reviewed per-surface context-menu behavior inputs for Editor/Diff Git Blame, Files, Changes, Branches, History, and commit details.
 - [`design/interaction-feedback.md`](design/interaction-feedback.md) — mandatory visible feedback and stable event-lifecycle rules for every user-invoked action.

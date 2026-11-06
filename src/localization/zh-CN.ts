@@ -215,6 +215,13 @@ export const ZH_CN = {
     },
   },
   editor: {
+    contentContext: {
+      ariaLabel: "编辑区操作", cut: "剪切", copy: "复制", paste: "粘贴", find: "在文件中查找",
+      reveal: "在文件管理器中显示", history: "显示历史", diff: "显示差异", rollback: "回滚",
+      readOnly: "该文档为只读。", unavailable: "此操作需要受 Git 跟踪的项目源码文件。",
+      changed: "源文件或选区已变化，请重新打开菜单。", copied: "已复制文本", cutDone: "已剪切文本", pasted: "已粘贴文本", emptyClipboard: "剪贴板中没有文本。",
+      rollbackConfirm: path => `放弃 ${path} 的未保存修改并恢复已保存内容？可以通过撤销还原此操作。`,
+    },
     languageService: ZH_CN_LANGUAGE_SERVICE_COPY,
     conflict: "冲突", saving: "正在保存", unsaved: "未保存", saved: "已保存", close: "关闭",
     closeFile: (name) => `关闭 ${name}`, preview: "预览", diff: "差异", imagePreview: "图像预览", diffPreview: "差异预览",

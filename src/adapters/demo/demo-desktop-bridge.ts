@@ -71,7 +71,7 @@ import type {
   WorkspaceRevealResult,
   WorkspaceEntryInspection,
 } from "../../models";
-import { parseWindowChromeMode, type WindowChromeMode } from "../../protocol/window-chrome.ts";
+import { demoShellBridge } from "./demo-shell-bridge.ts";
 import type { DesktopBridge, DirectoryChoice } from "../../protocol/desktop-bridge";
 import { isImagePreviewPath } from "../../presentation/image-preview.ts";
 import { demoAppUpdateBridge } from "./demo-app-update-bridge.ts";
@@ -162,13 +162,9 @@ const demoBridge: DesktopBridge = {
   ...demoAppUpdateBridge, ...demoHeadCommitMutationBridge(() => browserSnapshot, (value) => { browserSnapshot = value; }, completeDemoMutation, demoDelay),
   ...demoWorktreeBridge,
   ...createDemoRemoteOperationBridge(cancelledDemoRemoteOperations, demoDelay, completeDemoMutation),
+  ...demoShellBridge,
   isDemo: !isTauri,
   native: false,
-
-  async windowChromeMode(): Promise<WindowChromeMode> {
-    if (!isTauri) return "custom-right";
-    return parseWindowChromeMode(await invoke<unknown>("window_chrome_mode"));
-  },
 
   isLastProjectWindow: () => isTauri ? invoke<boolean>("is_last_project_window") : Promise.resolve(true),
 

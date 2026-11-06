@@ -31,6 +31,8 @@
     {"name": "query_project_symbols", "args": {"root": "string", "requestId": "string", "query": "string", "origin": "nullable:string", "overlays": "array:SymbolOverlay"}, "result": "SymbolQueryReport", "validator": "featureScoped"},
     {"name": "cancel_project_symbols", "args": {"requestId": "string"}, "result": "void", "validator": "void"},
     {"name": "validate_project_symbol", "args": {"root": "string", "candidate": "SymbolCandidate", "identity": "string", "scopeToken": "nullable:string", "origin": "nullable:string", "overlay": "nullable:SymbolOverlay"}, "result": "boolean", "validator": "boolean"},
+    { "name": "read_text_clipboard", "args": {}, "result": "string", "validator": "string" },
+    { "name": "write_text_clipboard", "args": { "text": "string" }, "result": "void", "validator": "void" },
     { "name": "check_for_app_updates", "args": {}, "result": "AppUpdateCheckResult", "validator": "appUpdateCheckResult" },
     { "name": "install_app_update", "args": {}, "result": "AppUpdateInstallResult", "validator": "appUpdateInstallResult" },
     { "name": "open_app_update_release", "args": { "releaseUrl": "string" }, "result": "void", "validator": "void" },

@@ -174,6 +174,10 @@ this is a routing and accessibility contract, not permission to modify a read-on
 
 | User action | Family | Command / local route | State / default |
 | --- | --- | --- | --- |
+| Open source content context menu | presentation | source editor captured selection/caret provider | **Local:** Shift+F10 / ContextMenu; existing menu keyboard navigation and Escape focus return |
+| Cut, Copy, Paste selected source text | editing | CodeMirror editing / source content menu | **Local:** native Primary+X/C/V; menu uses explicit bounded clipboard access and undoable captured-selection edits |
+| Find selected source text in files | navigation | seeded workspace search | **Local/contextual:** selection menu opens existing Text search with exact selected text |
+| Reveal source / Show History / changed-only Diff and Rollback | navigation/destructive | exact source-file context | **Local/contextual:** menu captures file identity; reviewed Git restore and confirmed unsaved-only undoable rollback |
 | Find/replace in active editor or Diff | editing | `editor.find.open` | **Default:** Primary+F in editor/Diff scopes |
 | Go to definition; from the declaration, find usages | navigation | eligible language editor's versioned navigation | **Local:** F12, Ctrl+click, Command+click on macOS |
 | Show reference choices explicitly | navigation | eligible language editor's read-only references query | **Local:** Shift+F12; Alt+F7 (Option+F7 on macOS) |

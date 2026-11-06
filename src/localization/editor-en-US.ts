@@ -1,6 +1,13 @@
 import type { EditorCopy } from "./catalog.ts";
 import { EN_US_LANGUAGE_SERVICE_COPY } from "./language-service-copy.ts";
 export const EN_US_EDITOR_COPY: EditorCopy = {
+    contentContext: {
+      ariaLabel: "Editor actions", cut: "Cut", copy: "Copy", paste: "Paste", find: "Find in Files",
+      reveal: "Reveal in File Manager", history: "Show History", diff: "Show Diff", rollback: "Rollback",
+      readOnly: "This document is read-only.", unavailable: "This action requires a tracked project source file.",
+      changed: "The source or selection changed. Open the menu again.", copied: "Text copied", cutDone: "Text cut", pasted: "Text pasted", emptyClipboard: "The clipboard does not contain text.",
+      rollbackConfirm: path => `Discard unsaved edits in ${path} and restore its saved content? This edit can be undone.`,
+    },
     languageService: EN_US_LANGUAGE_SERVICE_COPY,
     conflict: "Conflict", saving: "Saving", unsaved: "Unsaved", saved: "Saved", close: "Close",
     closeFile: (name) => `Close ${name}`, preview: "Preview", diff: "Diff", imagePreview: "Image preview", diffPreview: "Diff preview",

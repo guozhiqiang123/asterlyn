@@ -1,3 +1,4 @@
+import type { EditorContentContextPort } from "./editor-content-context.ts";
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { DiffEditor } from "../../diff-editor.ts";
 import type { DiffExpansionAnchor } from "./diff-expansion-anchor.ts";
@@ -60,6 +61,7 @@ export class LazyTextEditor {
   private theme: EffectiveTheme = "dark";
   private phrases: Readonly<Record<string, string>> = {};
   private readonly contextMenu: ContextMenuPort;
+  private readonly contentContext: EditorContentContextPort | null;
   private languageServiceFactory: EditorLanguageServicePortFactory | null = null;
   private navigationObserver: ((update: EditorNavigationUpdate) => void) | null = null;
   setNavigationObserver(observer: ((update: EditorNavigationUpdate) => void) | null): void {
@@ -69,10 +71,12 @@ export class LazyTextEditor {
     blameRuntime: GitBlameRuntime,
     blameCopy: EditorCopy,
     contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
+    contentContext: EditorContentContextPort | null = null,
   ) {
     this.blameRuntime = blameRuntime;
     this.blameCopy = blameCopy;
     this.contextMenu = contextMenu;
+    this.contentContext = contentContext;
   }
 
   mount(
@@ -300,6 +304,7 @@ export class LazyTextEditor {
           this.blameRuntime,
           this.blameCopy,
           this.contextMenu,
+          this.contentContext,
         );
         editor.setLanguageServices(this.languageServiceFactory);
         editor.setNavigationObserver(this.navigationObserver);

@@ -14,6 +14,7 @@
     "test:scripts": "node --test scripts/*.test.mjs",
     "test:conflict:rendered": "node scripts/test-conflict-editor-rendered.mjs",
     "test:diff:rendered": "node scripts/test-diff-editor-rendered.mjs",
+    "test:editor-context:rendered": "node scripts/test-editor-content-context-rendered.mjs",
     "test:editor-patch:rendered": "node scripts/test-editor-patch-popover-rendered.mjs",
     "test:git-blame:rendered": "node scripts/test-git-blame-rendered.mjs",
     "test:changes-context:rendered": "node scripts/test-changes-folder-context-rendered.mjs",

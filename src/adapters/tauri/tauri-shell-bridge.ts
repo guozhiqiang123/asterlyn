@@ -9,6 +9,8 @@ import { invokeDesktopCommand, openDialog } from "./desktop-command-adapter.ts";
 
 export const tauriShellBridge: DesktopShellBridge = {
   isDemo: false,
+  readTextClipboard: () => invokeDesktopCommand<string>("read_text_clipboard", {}),
+  writeTextClipboard: (text) => invokeDesktopCommand<void>("write_text_clipboard", { text }),
   async windowChromeMode() {
     return parseWindowChromeMode(await invokeDesktopCommand<unknown>("window_chrome_mode"));
   },

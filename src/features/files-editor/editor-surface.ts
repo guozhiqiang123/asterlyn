@@ -1,3 +1,4 @@
+import type { EditorContentContextPort } from "./editor-content-context.ts";
 import { markdownSplitRange, errorMessage, escapeHtml } from "./editor-surface-helpers.ts";
 import type { DiffPresentation, DiffSideLabels } from "../../diff-presentation.ts";
 import type { GitConflictContent, ImageDiffPreview, ImagePreview } from "../../models.ts";
@@ -68,6 +69,7 @@ export class EditorSurface {
     copy: EditorCopy,
     blameRuntime: GitBlameRuntime,
     contextMenu: ContextMenuPort = NOOP_CONTEXT_MENU_PORT,
+    contentContext: EditorContentContextPort | null = null,
   ) {
     this.root = root;
     this.copy = copy;
@@ -80,6 +82,7 @@ export class EditorSurface {
       blameRuntime,
       copy,
       contextMenu,
+      contentContext,
     );
     this.editableDiffEditor = new LazyEditableDiffEditor(copy, blameRuntime, contextMenu);
     this.conflictEditor = new LazyConflictEditor(copy, blameRuntime, contextMenu);

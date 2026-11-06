@@ -219,3 +219,22 @@ state model.
 - Cross-window context actions or remote workspaces require a target identity broader than one
   window-scoped workspace session.
 - Feature event ordering requires a transactional command dispatcher beyond explicit typed ports.
+
+## Source editor content actions — 2026-11-06
+
+The source text editor now supplies separate selection and caret menus. Selected text exposes Cut,
+Copy, Paste and Find in Files; a caret exposes Paste, Reveal in File Manager and Show History,
+adding Show Diff and Rollback only for disk or buffer changes. Git Blame gutters keep their own
+provider. File-scoped operations reuse authorized project reveal, History queries, Diff and reviewed
+restore. Unsaved-only rollback is a confirmed, undoable buffer edit; viewing an unsaved Diff never
+writes the file. Read-only content cannot be cut or pasted. Tab/load/workspace/document/selection
+identity is rechecked after asynchronous clipboard reads or writes. Clipboard commands are bounded
+text-only shell capabilities, never a plugin capability; neither contents nor source text is logged.
+See the [plan and acceptance](../../engineering/2026-11-06-editor-content-context-menu.md).
+
+The window host suppresses native context-menu fallback during bubbling, after providers and editor
+observers receive the event. Capture-phase `preventDefault` must not be used to hide native menus:
+CodeMirror and feature providers use that flag to recognize consumed events. While an overlay owns
+focus, its source document identity keeps the session alive; captured selection is restored before
+action execution, whose asynchronous edits still require an exact live selection match. Rendered
+acceptance must compose `LazyContextMenuHost`, matching the actual application startup boundary.

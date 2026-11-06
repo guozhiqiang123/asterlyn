@@ -95,6 +95,8 @@ export interface AppUpdateBridge {
 }
 
 export interface DesktopShellBridge {
+  readTextClipboard(): Promise<string>;
+  writeTextClipboard(text: string): Promise<void>;
   readonly isDemo: boolean;
   windowChromeMode(): Promise<WindowChromeMode>;
   isLastProjectWindow(): Promise<boolean>;
