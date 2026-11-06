@@ -7,6 +7,8 @@ mod archive;
 pub use archive::*;
 mod download;
 pub use download::*;
+mod http_download;
+pub use http_download::*;
 mod storage;
 pub use storage::*;
 mod content_storage;

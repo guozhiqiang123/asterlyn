@@ -92,3 +92,15 @@ F2.3 提交时 F2 仍缺下载暂存、可信来源/重定向/传输上限、取
 2 项来源策略测试覆盖允许 CDN、query、HTTP 降级、凭据、fragment、IP/本地域名、跨 origin 和重定向循环；2 项流式暂存测试覆盖单调进度、成功进入内容 stage、取消、超长输入及下载/内容临时目录清理，既有启动恢复测试追加废弃下载文件。完整语言库 79 项、桌面库 180 项通过（另有 3 项既有 ignored），相关 Clippy `-D warnings` 通过；F2.4 没有改变原生生成协议。
 
 这一批次仍没有发起网络请求。真实 adapter 必须关闭透明内容解码，校验成功状态/`Content-Length`、TLS、响应超时与读取超时，在每次重定向前应用上述策略，并对 DNS 解析结果执行公网地址约束；取消还需能中断阻塞中的网络读取。完成这些以及管理审查/IPC、许可回执、跨进程锁、执行 profile 和进程租约接线后，F2 才可能退出。
+
+## F2.5 受限原生 HTTP/TLS 下载适配器
+
+`download_and_stage_managed_archive_blocking` 把 F2.4 的不可序列化来源策略接到平台原生 TLS transport，并继续保持为未进入 IPC 的原生内部入口。客户端只接受原生配方生成的 `ManagedArtifact`、`ManagedArchiveExtraction` 与 `ManagedDownloadPolicy`；插件和 renderer 仍不能提交 URL、允许域名、摘要、输出路径、代理或任意请求头。依赖固定为 `reqwest 0.13.5` 的 blocking/native-tls 最小特性，避免引入捆绑的 Rust TLS 加密后端；实际证书根和 TLS 实现由当前平台提供。
+
+请求只允许 HTTPS，最低 TLS 1.2，忽略系统代理配置，关闭 referrer、重试及 gzip/brotli/deflate/zstd 透明解码，并固定 HTTP/1 和 `Accept-Encoding: identity`。所有准许 origin 在发起请求前解析，每个域名最多接受 16 个去重地址；任一地址属于未指定、loopback、私网、link-local、文档、benchmark、multicast、保留 IPv4/IPv6 或嵌入式私有 IPv4 时整项失败。同一域名不能在一份策略中混用端口。解析结果固定到 HTTP client，重定向每一跳都重新执行 F2.4 的精确 URL/origin/循环/次数策略；最终连接 peer 必须仍为公网地址且属于最终响应域名自身的固定集合，不能借另一个已准许域名的地址通过校验。
+
+响应只接受 `200 OK`、与配方完全相同的 `Content-Length` 以及缺省或精确 `identity` 的 `Content-Encoding`，之后直接流式进入 F2.4 私有暂存、摘要、解包及内容身份链。连接超时为 15 秒，整次请求上限为 10 分钟；调用方必须放在状态所有者和 UI 线程之外，并把协调器票据的取消与进度闭包传入。取消会在请求前、响应头后和每次流读取边界生效，但当前 blocking API 不能立即打断正在进行的系统 DNS、connect 或单次读取；这些操作最终仍受连接/请求超时约束，系统 DNS 本身尚无独立超时。
+
+3 项专项测试覆盖所有准许域名解析和固定、私网/特殊/IPv4 嵌入式 IPv6/过多结果/同域多端口拒绝，以及状态码、长度、编码、缺失 peer、私网 peer、跨域固定地址冒用。完整语言库 82 项、桌面库 180 项通过（另有 3 项既有 ignored），相关 Clippy `-D warnings` 与原生协议漂移检查通过。验证在当前 macOS 完成且没有访问公网，不代表 Windows/Linux 构建或真实 CDN/TLS 行为已验收。
+
+F2.5 仍未开放管理命令或产生可点击的安装闭环。后续必须把配方准入、许可回执、管理审查/IPC、协调器 ticket、后台任务、提交/失败/取消终态、跨进程锁和真实掉电注入接成一个事务，再进行受控真实下载与多平台验证；执行 profile、实际服务租约及 F3 上游选型也仍在后续阶段。

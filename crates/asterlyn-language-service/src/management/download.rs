@@ -52,6 +52,10 @@ impl ManagedDownloadPolicy {
         &self.source
     }
 
+    pub fn allowed_origins(&self) -> impl Iterator<Item = &str> {
+        self.allowed_origins.iter().map(String::as_str)
+    }
+
     /// Validate the exact response URL chain reported by the native HTTP
     /// adapter. The first item is the admitted source and later items are
     /// redirects, including the final response URL.
