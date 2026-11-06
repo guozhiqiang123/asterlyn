@@ -126,3 +126,15 @@ F2.6 仍不是用户可调用的安装器：尚缺受信任目录到原生配方
 新增 1 项 OS 锁测试，由独立子进程分别验证持锁时拒绝和释放后成功，既有符号链接测试追加锁文件攻击，内容恢复/不确定提交等原测试继续覆盖锁内路径。完整语言库 86 项、桌面库 180 项通过（另有 3 项既有 ignored），Clippy `-D warnings`、原生协议漂移检查及 `x86_64-pc-windows-gnu` 语言服务目标编译通过。子进程测试在 macOS 运行；Windows 仅完成交叉编译，尚未执行两个完整应用进程同时恢复/提交、Windows 运行或掉电测试。
 
 当前锁获取是阻塞式且没有独立超时/取消，但持锁区不包含 HTTP 或解压；后续仍需真实双应用进程竞争、进程强杀/掉电故障注入和异常慢磁盘验证，再决定是否增加有界等待与明确 busy 终态。管理 IPC/capability、任务事件、许可/配方准入和真实上游仍保持关闭。
+
+## F2.8 原生规范安装配方与摘要绑定
+
+`ManagedInstallRecipeSpec` 定义宿主原生目录适配器必须提供的 schema 1 配方输入；它和准入后的 `ManagedInstallRecipe` 都没有 serde/前端绑定，不能作为插件或 renderer 的管理请求反序列化。规范摘要使用独立 `managed-language-install-recipe-v1` domain，按长度前缀绑定插件/服务 ID、版本、target、归档/内容 SHA-256、规范化初始 HTTPS URL、排序去重后的全部允许 origin、归档格式、gzip 固定输出路径/执行位、下载/展开上限，以及许可身份。来源与 origin 继续复用 F2.4 的 HTTPS/域名/凭据/本地地址边界；相同 origin 的输入顺序或重复初始 origin 不会产生伪差异。
+
+许可身份包含最长 256 字符且可由 `spdx 0.10` 解析的表达式、经过相同公网 HTTPS 规则规范化的 notice URL，以及 exact notice 文本的 SHA-256。摘要变化会使旧 `recipeDigest` 准入失败；当前只绑定“未来受信任目录适配器声明并保留的 notice 身份”，尚未实现 notice 内容运输、展示或用户许可回执，不能把一个未核对内容的摘要当成已完成许可审查。
+
+`calculated_digest` 供受信任目录构建工具生成候选摘要，`admit` 始终重新计算并与声明值比较；成功后只暴露只读 artifact/extraction/policy/license 视图及精确 `ManagedInstallPlan`。`ManagedInstallationExecutor::prepare_install` 和生产 HTTP 执行入口已改为只接受 sealed recipe；确认 job 仍在联网前重新绑定由该 recipe 派生的完整 artifact、下载量与展开上限。因此来源、重定向范围、解包方式或许可身份不能在审查后作为松散参数替换，即使最终调用者仍处于原生进程内。
+
+4 项配方专项测试覆盖完整绑定、origin 顺序/冗余规范化、来源/格式/大小/SPDX/notice 任一替换导致摘要不匹配，以及 HTTP、本地/非法许可和 schema 拒绝。完整语言库 90 项、桌面库 180 项通过（另有 3 项既有 ignored），Clippy `-D warnings`、原生协议漂移检查及 Windows x86_64 语言服务目标编译通过；测试没有加入真实服务配方、访问网络或修改插件目录 schema。
+
+下一步仍需设计宿主拥有的准入配方注册表，把已批准服务/target/版本映射到 sealed recipe，并验证/保留 notice 内容；随后管理审查和 IPC 只能提交稳定服务/配方引用，不能提交这些底层字段。用户尚未选择任何真实上游，因此本批次不把示例 recipe 加入默认目录或显示安装动作。

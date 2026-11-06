@@ -32,10 +32,10 @@ impl ManagedInstallationExecutor {
     pub fn prepare_install(
         &self,
         authority: &ManagementAuthority,
-        plan: ManagedInstallPlan,
+        recipe: &ManagedInstallRecipe,
         now: Instant,
     ) -> Result<ManagedInstallReview, ManagedInstallError> {
-        self.lock()?.prepare_install(authority, plan, now)
+        self.lock()?.prepare_install(authority, recipe.plan(), now)
     }
 
     pub fn prepare_remove(
@@ -70,10 +70,10 @@ impl ManagedInstallationExecutor {
         &self,
         authority: &ManagementAuthority,
         ticket: &ManagedOperationTicket,
-        artifact: &ManagedArtifact,
-        extraction: &ManagedArchiveExtraction,
-        policy: &ManagedDownloadPolicy,
+        recipe: &ManagedInstallRecipe,
     ) -> Result<ManagedContentInventory, ManagedInstallError> {
+        let artifact = recipe.artifact();
+        let extraction = recipe.extraction();
         self.execute_confirmed_install_with(
             authority,
             ticket,
@@ -84,7 +84,7 @@ impl ManagedInstallationExecutor {
                     store,
                     artifact,
                     extraction,
-                    policy,
+                    recipe.policy(),
                     is_cancelled,
                     progress,
                 )
@@ -236,40 +236,40 @@ mod tests {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         encoder.write_all(payload).unwrap();
         let archive = encoder.finish().unwrap();
-        let artifact = ManagedArtifact {
+        let mut recipe_spec = ManagedInstallRecipeSpec {
+            schema_version: MANAGED_INSTALL_RECIPE_SCHEMA_VERSION,
             server: ManagedServerId {
                 plugin_id: "dev.example.lsp".into(),
                 server_id: "fixture".into(),
             },
             version: "1.0.0".into(),
             target: "aarch64-apple-darwin".into(),
-            recipe_digest: hash(b"recipe"),
+            recipe_digest: hash(b"placeholder"),
             archive_digest: hash(&archive),
             content_digest: content.digest,
-        };
-        let extraction = ManagedArchiveExtraction {
+            source: "https://downloads.example.com/server.gz".into(),
+            allowed_redirect_origins: vec![],
             format: ManagedArchiveFormat::Gzip {
                 output_path: "server".into(),
                 executable: false,
             },
             download_bytes: archive.len() as u64,
             expanded_bytes: payload.len() as u64,
+            license: ManagedRecipeLicense {
+                expression: "MIT".into(),
+                notice_url: "https://github.com/example/server/blob/v1/LICENSE".into(),
+                notice_digest: hash(b"license"),
+            },
         };
+        recipe_spec.recipe_digest = recipe_spec.calculated_digest().unwrap();
+        let recipe = recipe_spec.admit().unwrap();
+        let artifact = recipe.artifact().clone();
+        let extraction = recipe.extraction().clone();
         let authority = authority();
         let executor =
             ManagedInstallationExecutor::open(root.clone(), "fixture-epoch".into()).unwrap();
         let now = Instant::now();
-        let review = executor
-            .prepare_install(
-                &authority,
-                ManagedInstallPlan {
-                    artifact: artifact.clone(),
-                    download_bytes: extraction.download_bytes,
-                    expanded_bytes: extraction.expanded_bytes,
-                },
-                now,
-            )
-            .unwrap();
+        let review = executor.prepare_install(&authority, &recipe, now).unwrap();
         let ticket = executor.confirm(&authority, &review.id, now).unwrap();
         Fixture {
             _directory: directory,

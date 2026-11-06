@@ -11,6 +11,8 @@ mod http_download;
 pub use http_download::*;
 mod installer;
 pub use installer::*;
+mod recipe;
+pub use recipe::*;
 mod storage;
 pub use storage::*;
 mod content_storage;

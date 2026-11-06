@@ -134,6 +134,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "spdx",
  "tar",
  "tempfile",
  "url",

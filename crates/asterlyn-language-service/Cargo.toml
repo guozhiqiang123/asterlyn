@@ -23,6 +23,7 @@ flate2.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+spdx.workspace = true
 schemars = { version = "=0.8.22", optional = true }
 tar.workspace = true
 zip.workspace = true
