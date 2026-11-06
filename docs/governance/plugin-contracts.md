@@ -67,6 +67,18 @@ accepted by the public admission/runtime path, but has not yet completed the sec
 oldest/current installed-host, hostile-update, cross-platform, performance, and accessibility gates
 required for `stable`.
 
+## Planned managed-language-server contracts
+
+[ADR-0038](../architecture/decisions/0038-managed-upstream-language-servers.md) and the [2026-11-06 plan](../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) propose the contracts below. They are not supported capabilities or permission IDs today; F0 freezes declarations, versions, numeric bounds and negative/conformance fixtures before implementation.
+
+| Logical contract | Owner / consumer | State / version axis | Required boundary and evidence |
+| --- | --- | --- | --- |
+| `plugin.language-server-catalog` | Management plugin declares; host validates/projects | proposed; independently versioned catalog/SDK contract | Bounded selectors, project conditions, provenance, exact install recipes and runtime requirements; old-host rejection and malformed/overlapping selector tests |
+| `host.managed-language-server-installation` | Native host owns; management plugin submits named intents | proposed; capability protocol and install schema are separate | Typed install/cancel/uninstall, immutable versions, source/integrity/license checks, use leases, atomic recovery and external-tool protection; no ambient plugin network/process/filesystem authority |
+| `host.language-server-recommendation` | Host language feature owns; plugin supplies admitted metadata | proposed host presentation contract | Enabled-plugin/source-document gate, status-bar feedback, project/service deduplication and dismiss/restore settings; missing-server recommendations perform no network/process launch; installed services retain normal approval/lifecycle gates |
+
+Document identity, runtime states and resource governance continue through the existing language application service. This creates no second session owner and grants no execution from installation preferences. User server choices and per-language migration gates remain pending.
+
 ## Version axes
 
 The following versions solve different compatibility problems and must not be collapsed:

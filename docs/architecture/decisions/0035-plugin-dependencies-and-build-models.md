@@ -35,3 +35,7 @@ upgrade instead of aborting the application setup hook.
 ## Failed-model input observation (2026-11-04)
 
 A successful model lease is not required to observe subsequent input/selection changes. Each native language actor may own one generic, bounded, background identity probe at a two-second interval, supplied by its admitted model provider. It hashes declared input globs and contribution state bindings; it never executes the analysis program. Changed or newly available inputs revoke old-generation results and notify that actor, including after model failure. Unchanged terminal failures do not retry. Probes stop with actor ownership and never block editor I/O. Build-system selection stays plugin-owned.
+
+## 管理插件目标依赖调整（2026-11-06，尚未实施）
+
+用户最新确认的 [ADR-0038](0038-managed-upstream-language-servers.md) 保留一个全局 LSP 管理插件，上游服务独立安装。目标是仅由确实消费 Android 模型的服务配置要求 Gradle 模型，TS/Rust 和管理开关不再承担全局 Gradle 强依赖。现有包及启用/禁用/回滚门禁在兼容迁移前继续按本 ADR 执行，不能直接删除 manifest 依赖或放宽原生校验冒充完成。上游自有 Gradle 导入仍属于项目执行审查范围。具体变更随 [F0/F5/F6](../../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) 的契约与真实 Android 验收落地。

@@ -61,3 +61,7 @@ limits before returning it. The editor renders this as a dedicated read-only pre
 save, workspace-file identity, Git actions or execution authority. There is no arbitrary URI-to-file
 read endpoint. A plugin adapter can obtain this content only through its reviewed backend; the
 response is untrusted text, never HTML. Session/workspace/version checks still apply to navigation.
+
+## Planned upstream migration — 2026-11-06
+
+[ADR-0038](0038-managed-upstream-language-servers.md) changes the future backend direction toward published upstream servers managed through the existing LSP plugin. Generic model leases, tool identity, approval, bounded process supervision and source validation remain reusable. The current Android adapter and compiler bridges remain supported legacy behavior until replacement passes the [plan's](../../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) actual variant/module/unsaved Java–Kotlin acceptance. Expanded compiler forks or a custom semantic engine are outside that plan. No shipped declaration or authorization changes in this documentation stage.

@@ -52,6 +52,8 @@ This avoids both extremes: a monolith that loads every subsystem at startup and 
 
 ## Evolution seams
 
+The planned language-service evolution follows [ADR-0038](decisions/0038-managed-upstream-language-servers.md) and the [LSP management plan](../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md): retain one management plugin, present file-triggered status-bar installation recommendations, and manage upstream server tools separately from the plugin package. The host retains actual installation, execution and session authority. Existing profiles, dependency checks and accepted adapters remain until staged migration passes. Official implementations are preferred; fallback candidates require the user's selection. This direction is planned, not shipped behavior.
+
 The active migration from the first vertical slice to capability-owned application modules is
 tracked in [`Architecture refactoring`](../engineering/architecture-refactoring.md). Workbench
 ownership follows [`ADR-0007`](decisions/0007-workbench-feature-ownership.md), while all future

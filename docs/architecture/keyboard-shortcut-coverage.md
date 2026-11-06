@@ -199,6 +199,20 @@ this is a routing and accessibility contract, not permission to modify a read-on
 | Fold, select, edit, undo/redo, copy/paste | editing | CodeMirror behavior | **Local** until explicitly promoted as product commands |
 | Resize Markdown split | presentation | splitter keyboard contract | **Local** |
 
+### Planned upstream-language management actions
+
+[ADR-0038](decisions/0038-managed-upstream-language-servers.md) and the [management plan](../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) inventory these actions before implementation. F0 freezes stable IDs and reuses existing status/retry commands. **Command / planned** requires discoverable, customizable, initially unassigned commands; it does not claim current coverage.
+
+| Planned user action | Family | Classification | Implementation gate |
+| --- | --- | --- | --- |
+| Open language-server management / active-file service details | presentation | **Command / planned** | Enabled plugin, admitted catalog and current file identity |
+| Review/install a selected upstream service | write | **Command / planned** | Same exact version/source/runtime review as the status-bar action |
+| Cancel a pending installation | lifecycle | **Command / planned** | Exact owned task and transactional cancellation boundary |
+| Review/uninstall a managed service | destructive | **Command / planned** | Exact version, affected-session review, use leases and buffer preservation |
+| Start/stop the selected service | lifecycle | **Command / planned** | Native approval/session route; no arbitrary command execution |
+| Suppress/restore project installation recommendations | presentation | **Command / planned** | Project/service preference grants no install or execution authority |
+| Navigate recommendation controls, review or service chooser | presentation | **Local / planned** | Tab/arrows/Enter/Escape as applicable, accessible names and focus restoration |
+
 ## 6. Changes, commit, and working-tree recovery
 
 | User action | Family | Target command | State |

@@ -231,3 +231,7 @@ grant execution or bypass the finite restart owner.
 ## P1 syntax candidate resource
 
 [ADR-0037](0037-plugin-owned-syntax-candidates.md) adds the optional integrity-covered `servers/symbol-index.v1.json` pure data resource in plugin 0.3.13. Existing semantic operations, SDK and permission declarations are unchanged. Model scope is read through the current approved actor/model lease; no new execution authority or background project scan is introduced.
+
+## Planned upstream-server management amendment — 2026-11-06
+
+[ADR-0038](0038-managed-upstream-language-servers.md) records the user-approved direction to retain `dev.asterlyn.lsp` as the management/catalog entry, recommend upstream LSP installation from an eligible opened source file, and separate explicit installation from project execution approval. The host remains the installer/process/document owner. Existing profiles and fixed-resource contracts remain current until the [staged plan](../../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) supplies versioned contracts and per-language acceptance. This note enables no arbitrary commands, downloads or workspace edits; bundled-resource retirement must preserve syntax-candidate functionality.

@@ -45,6 +45,7 @@ The documents in this directory are the current source of truth. A decision that
 - [`architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md`](architecture/decisions/0032-decentralized-github-release-plugin-marketplace.md) — direct GitHub Release plugin sources, static admission, immutable installation, isolated activation, restart recovery, and rollback.
 - [`architecture/decisions/0033-structured-local-diagnostics.md`](architecture/decisions/0033-structured-local-diagnostics.md) — one bounded local JSONL timeline across the webview, native host, capabilities, and isolated plugin lifecycle.
 - [`architecture/decisions/0034-plugin-language-services.md`](architecture/decisions/0034-plugin-language-services.md) — language-provider plugins, real document versions, supervised LSP sessions and execution authority.
+- [`architecture/decisions/0038-managed-upstream-language-servers.md`](architecture/decisions/0038-managed-upstream-language-servers.md) — planned single management plugin, explicit upstream-server installation, bottom-bar recommendations and user-selected backend migration.
 
 - [`engineering/2026-10-30-language-service-lifecycle-plan.md`](engineering/2026-10-30-language-service-lifecycle-plan.md) — persistent project approval, automatic startup, truthful indexing progress and opt-in language tracing.
 - [`engineering/2026-10-30-android-lsp-incremental-plan.md`](engineering/2026-10-30-android-lsp-incremental-plan.md) — Android LSP persistent cache, incremental modules, bounded scheduling and cross-module queries.
@@ -57,6 +58,8 @@ The documents in this directory are the current source of truth. A decision that
 - [`../templates/plugin-typescript`](../templates/plugin-typescript) — executable isolated TypeScript plugin repository template and pinned Release workflow.
 
 ## Delivery
+
+- [`engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md`](engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) — planned single LSP management plugin, file-triggered status-bar recommendations, managed upstream installation and staged migration; governed by [ADR-0038](architecture/decisions/0038-managed-upstream-language-servers.md), with server selection and implementation pending.
 
 - [`engineering/2026-11-06-plugin-history-removal-plan.md`](engineering/2026-11-06-plugin-history-removal-plan.md) — explicit historical plugin deletion, protected runtime/recovery versions and transactional storage cleanup.
 
