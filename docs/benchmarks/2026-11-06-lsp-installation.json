@@ -1,0 +1,34 @@
+{
+  "platform": "darwin-arm64",
+  "node": "v26.8.1",
+  "cpu": "Apple M2 Pro",
+  "artifacts": 64,
+  "selections": 64,
+  "activeJobs": 8,
+  "finishedJobs": 16,
+  "uses": 128,
+  "iterations": 300,
+  "budgets": {
+    "acceptP95Ms": 25,
+    "recommendP95Ms": 5,
+    "retainedHeapBytes": 16777216
+  },
+  "runs": [
+    {
+      "acceptP95Ms": 0.6371669999999909,
+      "recommendP95Ms": 0.008749999999992042,
+      "retainedHeapBytes": 128000
+    },
+    {
+      "acceptP95Ms": 0.6410829999999805,
+      "recommendP95Ms": 0.011041999999974905,
+      "retainedHeapBytes": 115440
+    },
+    {
+      "acceptP95Ms": 0.5646670000000995,
+      "recommendP95Ms": 0.005332999999950516,
+      "retainedHeapBytes": 98584
+    }
+  ],
+  "scope": "Synthetic in-memory projection only; excludes native storage, WebView/RSS and actual language servers."
+}
