@@ -425,6 +425,8 @@ pub fn run() {
             start_language_service,
             forget_language_service_consent,
             read_managed_language_environment,
+            list_managed_language_recipes,
+            prepare_managed_language_install,
             open_language_document,
             change_language_document,
             close_language_document,

@@ -12,6 +12,7 @@ use url::{Host, Url};
 
 const MAX_DOWNLOAD_REDIRECTS: usize = 5;
 const MAX_DOWNLOAD_ORIGINS: usize = 8;
+const MAX_MANAGED_URL_BYTES: usize = 4096;
 
 /// Native-recipe transport policy. It is deliberately not serializable and
 /// never accepts a URL supplied by a plugin or the renderer.
@@ -143,6 +144,9 @@ pub(super) fn acquire_verified_archive(
 }
 
 fn validated_https_url(value: &str) -> Result<Url, ManagedInstallError> {
+    if value.len() > MAX_MANAGED_URL_BYTES {
+        return Err(ManagedInstallError::ResourceLimit);
+    }
     let url = Url::parse(value).map_err(|_| ManagedInstallError::InvalidRequest)?;
     validate_https_url(&url)?;
     Ok(url)
@@ -257,6 +261,20 @@ mod tests {
         assert_eq!(
             policy.validate_chain(&[policy.source().clone(), policy.source().clone()]),
             Err(ManagedInstallError::PermissionDenied)
+        );
+    }
+
+    #[test]
+    fn policy_rejects_unbounded_recipe_urls() {
+        let source = format!("https://example.com/{}", "a".repeat(MAX_MANAGED_URL_BYTES));
+        assert_eq!(
+            ManagedDownloadPolicy::new(&source, &[]),
+            Err(ManagedInstallError::ResourceLimit)
+        );
+        let origin = format!("https://{}.example.com", "a".repeat(MAX_MANAGED_URL_BYTES));
+        assert_eq!(
+            ManagedDownloadPolicy::new("https://example.com/server", &[origin]),
+            Err(ManagedInstallError::ResourceLimit)
         );
     }
 }

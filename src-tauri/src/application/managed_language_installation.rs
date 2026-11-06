@@ -1,9 +1,11 @@
 use asterlyn_language_service::management::{
-    ManagedInstallError, ManagedInstallationExecutor, ManagedInstallationSnapshot,
-    ManagedInstallationTaskRegistry, ManagedRecipeRegistry,
+    ManagedArtifact, ManagedInstallError, ManagedInstallationExecutor, ManagedInstallationSnapshot,
+    ManagedInstallationTaskRegistry, ManagedOperationKind, ManagedRecipeReference,
+    ManagedRecipeRegistry, ManagedRecipeSummary, ManagedServerId, ManagementAuthority,
 };
-use serde::Serialize;
-use std::time::{SystemTime, UNIX_EPOCH};
+use serde::{Serialize, Serializer};
+use std::sync::Arc;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 const STORE_DIRECTORY: &str = "managed-language-tools-v1";
@@ -15,6 +17,58 @@ pub(crate) struct ManagedLanguageEnvironment {
     platform: &'static str,
     target: &'static str,
     installation: ManagedInstallationSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedLanguageRecipeCatalog {
+    protocol_version: u32,
+    target: &'static str,
+    recipes: Vec<ManagedLanguageRecipeSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedLanguageRecipeSummary {
+    reference: ManagedLanguageRecipeReference,
+    version: String,
+    archive_digest: String,
+    content_digest: String,
+    download_bytes: u64,
+    expanded_bytes: u64,
+    source: String,
+    license: ManagedLanguageRecipeLicense,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedLanguageRecipeReference {
+    server: ManagedServerId,
+    target: String,
+    recipe_digest: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedLanguageRecipeLicense {
+    expression: String,
+    notice_url: String,
+    notice_digest: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedLanguageInstallReview {
+    protocol_version: u32,
+    review_id: String,
+    kind: ManagedOperationKind,
+    artifact: ManagedArtifact,
+    index_revision: u64,
+    download_bytes: u64,
+    expanded_bytes: u64,
+    recipe: ManagedLanguageRecipeSummary,
+    #[serde(serialize_with = "serialize_notice_text")]
+    notice_text: Arc<str>,
 }
 
 pub(crate) struct ManagedLanguageInstallationState {
@@ -85,6 +139,91 @@ impl ManagedLanguageInstallationState {
             ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
         }
     }
+
+    pub(crate) fn recipe_catalog(
+        &self,
+        authority: &ManagementAuthority,
+    ) -> Result<ManagedLanguageRecipeCatalog, ManagedInstallError> {
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available { tasks, target, .. } => {
+                let recipes = tasks
+                    .recipe_summaries(authority, target)?
+                    .into_iter()
+                    .map(ManagedLanguageRecipeSummary::from)
+                    .collect();
+                Ok(ManagedLanguageRecipeCatalog {
+                    protocol_version: 1,
+                    target,
+                    recipes,
+                })
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
+    }
+
+    pub(crate) fn prepare_install(
+        &self,
+        authority: &ManagementAuthority,
+        server_id: String,
+        recipe_digest: String,
+        now: Instant,
+    ) -> Result<ManagedLanguageInstallReview, ManagedInstallError> {
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available { tasks, target, .. } => {
+                let reference = ManagedRecipeReference {
+                    server: ManagedServerId {
+                        plugin_id: authority.plugin_id.clone(),
+                        server_id,
+                    },
+                    target: (*target).into(),
+                    recipe_digest,
+                };
+                let details = tasks.prepare_install(authority, &reference, now)?;
+                Ok(ManagedLanguageInstallReview {
+                    protocol_version: 1,
+                    review_id: details.review.id,
+                    kind: details.review.kind,
+                    artifact: details.review.artifact,
+                    index_revision: details.review.index_revision,
+                    download_bytes: details.review.download_bytes,
+                    expanded_bytes: details.review.expanded_bytes,
+                    recipe: details.recipe.into(),
+                    notice_text: details.notice_text,
+                })
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
+    }
+}
+
+fn serialize_notice_text<S>(value: &Arc<str>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(value)
+}
+
+impl From<ManagedRecipeSummary> for ManagedLanguageRecipeSummary {
+    fn from(summary: ManagedRecipeSummary) -> Self {
+        Self {
+            reference: ManagedLanguageRecipeReference {
+                server: summary.reference.server,
+                target: summary.reference.target,
+                recipe_digest: summary.reference.recipe_digest,
+            },
+            version: summary.version,
+            archive_digest: summary.archive_digest,
+            content_digest: summary.content_digest,
+            download_bytes: summary.download_bytes,
+            expanded_bytes: summary.expanded_bytes,
+            source: summary.source,
+            license: ManagedLanguageRecipeLicense {
+                expression: summary.license.expression,
+                notice_url: summary.license.notice_url,
+                notice_digest: summary.license.notice_digest,
+            },
+        }
+    }
 }
 
 fn native_environment(os: &str, architecture: &str) -> Option<(&'static str, &'static str)> {
@@ -104,9 +243,9 @@ mod tests {
     use super::{
         ManagedInstallError, ManagedInstallationExecutor, ManagedInstallationTaskRegistry,
         ManagedLanguageInstallationAvailability, ManagedLanguageInstallationState,
-        ManagedRecipeRegistry, native_environment,
+        ManagedRecipeRegistry, ManagementAuthority, native_environment,
     };
-    use asterlyn_language_service::management::ManagementAuthority;
+    use std::time::Instant;
 
     #[test]
     fn maps_only_catalog_supported_native_targets() {
@@ -155,8 +294,7 @@ mod tests {
 
         let environment = state.environment().expect("managed environment");
         assert!(environment.installation.artifacts.is_empty());
-        let ManagedLanguageInstallationAvailability::Available { tasks, target, .. } = &state.state
-        else {
+        let ManagedLanguageInstallationAvailability::Available { target, .. } = &state.state else {
             panic!("expected available managed installation state");
         };
         let authority = ManagementAuthority {
@@ -170,10 +308,21 @@ mod tests {
             may_manage: true,
         };
         assert!(
-            tasks
-                .recipe_summaries(&authority, target)
+            state
+                .recipe_catalog(&authority)
                 .expect("empty registered recipe catalog")
+                .recipes
                 .is_empty()
         );
+        assert_eq!(target, &"aarch64-apple-darwin");
+        assert!(matches!(
+            state.prepare_install(
+                &authority,
+                "rust".into(),
+                "sha256:1111111111111111111111111111111111111111111111111111111111111111".into(),
+                Instant::now(),
+            ),
+            Err(ManagedInstallError::NotFound)
+        ));
     }
 }

@@ -25,7 +25,10 @@ pub(crate) use language_service::{
     forget_language_service_consent, open_language_document, prepare_language_service,
     request_language_service, start_language_service, stop_language_service,
 };
-pub(crate) use managed_language_installation::read_managed_language_environment;
+pub(crate) use managed_language_installation::{
+    list_managed_language_recipes, prepare_managed_language_install,
+    read_managed_language_environment,
+};
 pub(crate) use plugin_cache::{
     cleanup_plugin_task_cache, compute_workspace_fingerprint, mark_plugin_task_cache_dirty,
     read_plugin_task_cache, write_plugin_task_cache,

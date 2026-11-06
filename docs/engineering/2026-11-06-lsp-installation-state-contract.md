@@ -168,3 +168,11 @@ F2.6 仍不是用户可调用的安装器：尚缺受信任目录到原生配方
 `ManagedLanguageInstallationState` 启动恢复后不再直接保留 `ManagedInstallationExecutor`，而是用它和宿主拥有的 `ManagedRecipeRegistry` 构造唯一的 `ManagedInstallationTaskRegistry`。环境快照也经该任务所有者读取，使后续 review、确认、取消和后台执行只能沿同一个原生任务身份进入；桌面状态释放时，F2.10 的撤销语义会同时覆盖尚未确认的 review 和未完成 job。
 
 当前注入的 recipe registry 明确为空。专项测试从临时私有存储恢复桌面状态，确认安装快照为空、当前 target 的 recipe summary 也为空；因此本步没有凭空开放安装按钮、URL 输入、插件自批或网络访问。桌面库完整 181 项通过（另有 3 项既有 ignored）。下一步在此所有权边界上增加宿主派生 authority 的只读列表与 prepare 协议，再单独接用户确认和有界 blocking worker。
+
+## F2.12 宿主派生 Authority 的列表与 Prepare 协议
+
+桌面新增 `list_managed_language_recipes` 与 `prepare_managed_language_install` 两条窄命令。调用方只能提交插件 ID，以及 prepare 所需的 server ID 和已列出 recipe digest；窗口标签、workspace activation、当前 target、已启用插件的实际版本与包摘要全部由宿主重新读取。宿主在插件 marketplace 串行边界内选择当前未隔离版本，重新核对保留包摘要、不可变展开内容和已准入 `languageServerCatalog`，并在返回 authority 前再次比较窗口 activation。静态目录本身仍不能从隔离的插件运行时调用管理命令；`mayManage` 只在第一方 Tauri 路由完成上述复验后创建。
+
+返回模型只包含有界 recipe summary/reference，prepare 只产生 review ID、精确 artifact、索引 revision、资源量、许可/来源摘要和已保留 notice 原文。协议层逐字段拒绝未知字段、重复 reference、非 HTTPS/超长 URL、身份/摘要替换、非安全整数、资源越界、非法 notice 控制字符及超过 128 KiB 的 notice；原生 recipe URL 同步增加 4,096 字节上限。notice 在原生 DTO 中继续共享 `Arc<str>`，仅在最终序列化时读取，不提前复制。
+
+当前宿主 recipe registry 与已发布 LSP 目录的 `servers` 都仍为空：列表稳定返回空集合，任意 prepare 返回 not found，不会创建 review、启动网络或出现确认入口。确认、取消、后台执行、进度事件和 UI 均未开放。完整语言库 97 项、桌面库 182 项通过（另有 3 项 ignored），脚本 1,621 项、TypeScript、Clippy `-D warnings`、桌面生成协议与原生/目录协议漂移检查通过；Windows GNU 语言服务目标编译通过，当前工具链未安装 Windows MSVC target，因此该目标没有复验。
