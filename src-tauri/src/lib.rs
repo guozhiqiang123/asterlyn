@@ -45,12 +45,13 @@ use adapters::system_file_clipboard::{
 use adapters::working_diff::{WorkingDiffBase, working_diff_base};
 use application::{
     ActiveWorkspaces, CommitFileRestoreRegistry, DiagnosticsLog, GitOperationCoordinator,
-    HistoryPageCacheRegistry, LanguageServiceManager, PendingRepositoryWindowReservation,
-    PendingRepositoryWindows, PluginMarketplaceCoordinator, PluginProcessQueryManager,
-    ScanRegistry, TaskManager, WorkspaceEntryInspection, WorkspaceMutationCoordinator,
-    WorkspaceMutationPreview, WorkspaceReplacementDiff, WorkspaceReplacementPreview,
-    WorkspaceReplacementRegistry, WorkspaceSearchIndexRegistry, WorkspaceSearchRegistry,
-    WorkspaceTextSearchReport, WorkspaceWatchService, WorkspaceWatchStatus, WorkspaceWriteRegistry,
+    HistoryPageCacheRegistry, LanguageServiceManager, ManagedLanguageInstallationState,
+    PendingRepositoryWindowReservation, PendingRepositoryWindows, PluginMarketplaceCoordinator,
+    PluginProcessQueryManager, ScanRegistry, TaskManager, WorkspaceEntryInspection,
+    WorkspaceMutationCoordinator, WorkspaceMutationPreview, WorkspaceReplacementDiff,
+    WorkspaceReplacementPreview, WorkspaceReplacementRegistry, WorkspaceSearchIndexRegistry,
+    WorkspaceSearchRegistry, WorkspaceTextSearchReport, WorkspaceWatchService,
+    WorkspaceWatchStatus, WorkspaceWriteRegistry,
     acknowledge_workspace_mutation_recovery as acknowledge_workspace_mutation_recovery_application,
     apply_authorized_replacement, build_plugin_host_supervisor, exact_git_repository,
     execute_workspace_mutation_plan, finalize_replacement, finalize_workspace_mutation_recovery,
@@ -327,6 +328,13 @@ pub fn run() {
             app.manage(diagnostics);
             app.state::<LanguageServiceManager>()
                 .set_debug(std::env::var("ASTERLYN_LSP_TRACE").as_deref() == Ok("1"));
+            let managed_language_installation =
+                ManagedLanguageInstallationState::open(app.handle()).map_err(|error| {
+                    std::io::Error::other(format!(
+                        "open managed language installation state: {error:?}"
+                    ))
+                })?;
+            app.manage(managed_language_installation);
             ensure_bundled_plugins(app.handle()).map_err(std::io::Error::other)?;
             recover_interrupted_plugin_activations(app.handle()).map_err(std::io::Error::other)?;
             let plugin_hosts = build_plugin_host_supervisor(app.handle().clone())
@@ -422,6 +430,7 @@ pub fn run() {
             set_language_service_debug,
             start_language_service,
             forget_language_service_consent,
+            read_managed_language_environment,
             open_language_document,
             change_language_document,
             close_language_document,

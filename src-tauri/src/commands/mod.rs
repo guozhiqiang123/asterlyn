@@ -6,6 +6,7 @@ mod git_recovery;
 mod language_rust;
 mod language_service;
 mod language_service_state;
+mod managed_language_installation;
 pub(crate) use language_service_state::{
     language_service_workspace_state, set_language_service_debug, set_language_service_resources,
 };
@@ -24,6 +25,7 @@ pub(crate) use language_service::{
     forget_language_service_consent, open_language_document, prepare_language_service,
     request_language_service, start_language_service, stop_language_service,
 };
+pub(crate) use managed_language_installation::read_managed_language_environment;
 pub(crate) use plugin_cache::{
     cleanup_plugin_task_cache, compute_workspace_fingerprint, mark_plugin_task_cache_dirty,
     read_plugin_task_cache, write_plugin_task_cache,

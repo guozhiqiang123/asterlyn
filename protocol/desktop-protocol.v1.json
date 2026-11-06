@@ -25,6 +25,7 @@
     ,"LanguageServiceReview": "./language-service"
     ,"LanguageServiceTextChange": "./language-service"
     ,"LanguageServiceResultEnvelope": "./language-service"
+    ,"ManagedLanguageEnvironment": "./managed-language-environment"
   },
   "diagnosticContextCommands": ["activate_installed_plugin_runtime", "invoke_installed_plugin_callback", "prepare_task_execution", "start_task_execution"],
   "commands": [
@@ -64,6 +65,7 @@
     { "name": "set_language_service_debug", "args": { "enabled": "boolean" }, "result": "void", "validator": "void" },
     { "name": "prepare_language_service", "args": { "workspaceRoot": "string", "pluginId": "string", "serverId?": "string" }, "result": "LanguageServiceReview", "validator": "languageServiceReview" },
     { "name": "forget_language_service_consent", "args": { "workspaceRoot": "string" }, "result": "void", "validator": "void" },
+    { "name": "read_managed_language_environment", "args": {}, "result": "ManagedLanguageEnvironment", "validator": "featureScoped" },
     { "name": "start_language_service", "args": { "workspaceRoot": "string", "reviewId": "string", "serverId?": "string", "remember?": "boolean", "refreshModel?": "boolean" }, "result": "string", "validator": "string" },
     { "name": "open_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "languageId": "string", "version": "number", "text": "string" }, "result": "void", "validator": "void" },
     { "name": "change_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "version": "number", "changes": "array:LanguageServiceTextChange" }, "result": "void", "validator": "void" },

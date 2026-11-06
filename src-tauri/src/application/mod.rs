@@ -7,6 +7,7 @@ pub(crate) mod gradle_task_runtime;
 mod history_page_cache;
 pub(crate) mod java_installations;
 pub(crate) mod language_consent;
+mod managed_language_installation;
 mod operation_supervisor;
 mod plugin_marketplace;
 mod plugin_process_query;
@@ -35,6 +36,9 @@ pub(crate) use commit_file_restore::{
 pub(crate) use diagnostics::DiagnosticsLog;
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use history_page_cache::HistoryPageCacheRegistry;
+pub(crate) use managed_language_installation::{
+    ManagedLanguageEnvironment, ManagedLanguageInstallationState,
+};
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use plugin_marketplace::{PendingPluginAdmission, PluginMarketplaceCoordinator};
 pub(crate) use plugin_process_query::{

@@ -8,6 +8,7 @@ import type { PluginToolOperationParameters, PluginToolOperationResult } from ".
 import type { PluginSourceSnapshot, PluginInstallationSnapshot, InstalledPluginManifestSnapshot, PluginPackageAdmissionReview } from "./plugin-marketplace";
 import type { InstalledPluginActivation, InstalledPluginRuntimeDiagnostics, PluginRuntimeTheme, PluginRuntimeValue } from "./plugin-runtime";
 import type { LanguageServiceWorkspaceState, LanguageServiceReview, LanguageServiceTextChange, LanguageServiceResultEnvelope } from "./language-service";
+import type { ManagedLanguageEnvironment } from "./managed-language-environment";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 export const DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS = ["activate_installed_plugin_runtime","invoke_installed_plugin_callback","prepare_task_execution","start_task_execution"] as const;
@@ -49,6 +50,7 @@ export interface DesktopCommandMap {
   set_language_service_debug: { args: { enabled: boolean; }; result: void };
   prepare_language_service: { args: { workspaceRoot: string; pluginId: string; serverId?: string; }; result: LanguageServiceReview };
   forget_language_service_consent: { args: { workspaceRoot: string; }; result: void };
+  read_managed_language_environment: { args: Record<string, never>; result: ManagedLanguageEnvironment };
   start_language_service: { args: { workspaceRoot: string; reviewId: string; serverId?: string; remember?: boolean; refreshModel?: boolean; }; result: string };
   open_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; languageId: string; version: number; text: string; }; result: void };
   change_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; version: number; changes: Array<LanguageServiceTextChange>; }; result: void };
@@ -221,6 +223,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   set_language_service_debug: "void",
   prepare_language_service: "languageServiceReview",
   forget_language_service_consent: "void",
+  read_managed_language_environment: "featureScoped",
   start_language_service: "string",
   open_language_document: "void",
   change_language_document: "void",
