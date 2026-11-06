@@ -1,5 +1,6 @@
 use asterlyn_language_service::management::{
     ManagedInstallError, ManagedInstallationExecutor, ManagedInstallationSnapshot,
+    ManagedInstallationTaskRegistry, ManagedRecipeRegistry,
 };
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,7 +23,7 @@ pub(crate) struct ManagedLanguageInstallationState {
 
 enum ManagedLanguageInstallationAvailability {
     Available {
-        executor: ManagedInstallationExecutor,
+        tasks: ManagedInstallationTaskRegistry,
         platform: &'static str,
         target: &'static str,
     },
@@ -56,8 +57,10 @@ impl ManagedLanguageInstallationState {
                 .as_millis()
         );
         let executor = ManagedInstallationExecutor::open(root, epoch)?;
+        let tasks =
+            ManagedInstallationTaskRegistry::new(executor, ManagedRecipeRegistry::default());
         Ok(ManagedLanguageInstallationAvailability::Available {
-            executor,
+            tasks,
             platform,
             target,
         })
@@ -66,12 +69,12 @@ impl ManagedLanguageInstallationState {
     pub(crate) fn environment(&self) -> Result<ManagedLanguageEnvironment, ManagedInstallError> {
         match &self.state {
             ManagedLanguageInstallationAvailability::Available {
-                executor,
+                tasks,
                 platform,
                 target,
                 ..
             } => {
-                let installation = executor.snapshot()?;
+                let installation = tasks.snapshot()?;
                 Ok(ManagedLanguageEnvironment {
                     protocol_version: 1,
                     platform,
@@ -99,9 +102,11 @@ fn native_environment(os: &str, architecture: &str) -> Option<(&'static str, &'s
 #[cfg(test)]
 mod tests {
     use super::{
-        ManagedInstallError, ManagedLanguageInstallationAvailability,
-        ManagedLanguageInstallationState, native_environment,
+        ManagedInstallError, ManagedInstallationExecutor, ManagedInstallationTaskRegistry,
+        ManagedLanguageInstallationAvailability, ManagedLanguageInstallationState,
+        ManagedRecipeRegistry, native_environment,
     };
+    use asterlyn_language_service::management::ManagementAuthority;
 
     #[test]
     fn maps_only_catalog_supported_native_targets() {
@@ -127,6 +132,48 @@ mod tests {
         assert_eq!(
             state.environment().unwrap_err(),
             ManagedInstallError::StorageFailed
+        );
+    }
+
+    #[test]
+    fn desktop_state_owns_an_empty_host_recipe_task_registry() {
+        let directory = tempfile::tempdir().expect("temporary installation store");
+        let executor = ManagedInstallationExecutor::open(
+            directory.path().join("managed-language"),
+            "desktop-empty-registry".into(),
+        )
+        .expect("installation executor");
+        let tasks =
+            ManagedInstallationTaskRegistry::new(executor, ManagedRecipeRegistry::default());
+        let state = ManagedLanguageInstallationState {
+            state: ManagedLanguageInstallationAvailability::Available {
+                tasks,
+                platform: "macos-arm64",
+                target: "aarch64-apple-darwin",
+            },
+        };
+
+        let environment = state.environment().expect("managed environment");
+        assert!(environment.installation.artifacts.is_empty());
+        let ManagedLanguageInstallationAvailability::Available { tasks, target, .. } = &state.state
+        else {
+            panic!("expected available managed installation state");
+        };
+        let authority = ManagementAuthority {
+            window_id: "main".into(),
+            activation: 1,
+            plugin_id: "dev.asterlyn.lsp-manager".into(),
+            plugin_version: "1.0.0".into(),
+            package_digest:
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000".into(),
+            enabled: true,
+            may_manage: true,
+        };
+        assert!(
+            tasks
+                .recipe_summaries(&authority, target)
+                .expect("empty registered recipe catalog")
+                .is_empty()
         );
     }
 }

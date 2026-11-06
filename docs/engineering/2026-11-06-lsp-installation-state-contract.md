@@ -162,3 +162,9 @@ F2.6 仍不是用户可调用的安装器：尚缺受信任目录到原生配方
 3 项专项测试覆盖精确 authority 的准备→确认→取消→迟到执行、过期 review 清理与确认工作 abandon，以及 registry drop 撤销未确认 review。完整语言库 96 项、桌面库 180 项通过（另有 3 项既有 ignored），Clippy `-D warnings`、原生协议漂移检查和 Windows x86_64 语言服务目标编译通过；测试没有访问网络，成功下载/提交仍由 F2.6 本地归档夹具覆盖。
 
 当前 task registry 仍是语言服务库内部构件：桌面尚未拥有它，也没有 bounded `spawn_blocking` 调度、终态/进度事件或 renderer/plugin 命令。下一步先把空 recipe registry 与任务所有者接入 `ManagedLanguageInstallationState`，再定义只含 summary/reference/review ID/operation ID 的管理协议；在没有真实注册 recipe 时所有列表保持空且安装准备返回 not found。
+
+## F2.11 桌面任务所有权与空目录接线
+
+`ManagedLanguageInstallationState` 启动恢复后不再直接保留 `ManagedInstallationExecutor`，而是用它和宿主拥有的 `ManagedRecipeRegistry` 构造唯一的 `ManagedInstallationTaskRegistry`。环境快照也经该任务所有者读取，使后续 review、确认、取消和后台执行只能沿同一个原生任务身份进入；桌面状态释放时，F2.10 的撤销语义会同时覆盖尚未确认的 review 和未完成 job。
+
+当前注入的 recipe registry 明确为空。专项测试从临时私有存储恢复桌面状态，确认安装快照为空、当前 target 的 recipe summary 也为空；因此本步没有凭空开放安装按钮、URL 输入、插件自批或网络访问。桌面库完整 181 项通过（另有 3 项既有 ignored）。下一步在此所有权边界上增加宿主派生 authority 的只读列表与 prepare 协议，再单独接用户确认和有界 blocking worker。
