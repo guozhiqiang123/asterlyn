@@ -61,6 +61,7 @@ The documents in this directory are the current source of truth. A decision that
 
 - [`engineering/2026-11-06-lsp-foundation-contract.md`](engineering/2026-11-06-lsp-foundation-contract.md) — incremental LSP catalog contracts, admission bounds, development SDK and verification evidence; installation/runtime migration remains pending.
 - [`engineering/2026-11-06-lsp-installation-state-contract.md`](engineering/2026-11-06-lsp-installation-state-contract.md) — native installation state, review/transaction/lease boundaries, shared protocol cases and recommendation facts; actual storage, IPC and status-bar wiring remain pending.
+- [`engineering/2026-11-06-lsp-command-and-behavior-baseline.md`](engineering/2026-11-06-lsp-command-and-behavior-baseline.md) — frozen existing/runtime versus future management command inventory, migration behavior matrix, and comparable resource/performance gates.
 
 - [`engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md`](engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) — single LSP management plugin, file-triggered status-bar recommendations, managed upstream installation and staged migration; governed by [ADR-0038](architecture/decisions/0038-managed-upstream-language-servers.md), with foundation work in progress and server selection/product integration pending.
 
