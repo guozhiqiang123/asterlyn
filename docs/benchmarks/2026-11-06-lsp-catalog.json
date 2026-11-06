@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "node": "v26.8.1",
+  "platform": "darwin",
+  "arch": "arm64",
+  "results": [
+    {
+      "name": "single-manager",
+      "pluginCount": 1,
+      "languageCount": 6,
+      "serverCount": 4,
+      "compileMs": [
+        0.6849169999999987,
+        0.1096250000000012,
+        0.0828339999999983
+      ],
+      "queryP50Ms": 0.001041999999998211,
+      "queryP95Ms": 0.002415999999996643,
+      "preferredQueryP95Ms": 0.0018750000000054001,
+      "retainedHeapBytes": 441104,
+      "withinBudget": true
+    },
+    {
+      "name": "maximum-catalogs",
+      "pluginCount": 64,
+      "languageCount": 16,
+      "serverCount": 16,
+      "compileMs": [
+        11.919165999999997,
+        7.472499999999997,
+        7.52708299999999
+      ],
+      "queryP50Ms": 0.11041700000001242,
+      "queryP95Ms": 0.14300000000000068,
+      "preferredQueryP95Ms": 0.0206670000000031,
+      "retainedHeapBytes": 1176736,
+      "withinBudget": true
+    }
+  ]
+}
