@@ -51,9 +51,11 @@ impl ManagedInstallationContentStore {
 
     /// Restore interrupted content moves before the index is exposed to a coordinator.
     pub fn load_and_recover(&mut self) -> Result<ManagedInstallationIndex, ManagedInstallError> {
-        let index = self.index.load()?;
-        self.recover_content(&index)?;
-        Ok(index)
+        let index_store = self.index.clone();
+        index_store.with_locked_index(|index| {
+            self.recover_content(index)?;
+            Ok(index.clone())
+        })
     }
 
     /// Import an already safely extracted directory into a private same-filesystem stage.
