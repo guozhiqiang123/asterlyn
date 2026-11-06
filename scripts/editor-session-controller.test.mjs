@@ -26,6 +26,23 @@ test("a reopened loaded tab activates without reading again", async () => {
   assert.equal(reads, 1);
 });
 
+test("repeated exact Diff preview activation is silent while returning from another document activates", () => {
+  const controller = new EditorSessionController(gateway());
+  const events = [];
+  let transitions = 0;
+  controller.subscribe((event) => events.push(event));
+  const document = {kind: "commit-diff", repositoryRoot: "/repo", repositoryId: ".", oid: "a".repeat(40), path: "same.ts"};
+  assert.equal(controller.activatePreview(document, () => transitions++), true);
+  events.length = 0;
+  assert.equal(controller.activatePreview({...document}, () => transitions++), false);
+  assert.deepEqual(events, []);
+  assert.equal(transitions, 1);
+  assert.equal(controller.activatePreview({...document, repositoryId: "child"}), true);
+  assert.equal(controller.activatePreview({...document, oid: "b".repeat(40)}), true);
+  controller.activateWelcome();
+  assert.equal(controller.activatePreview(document), true);
+});
+
 test("ensuring an editable Diff buffer preserves the active preview", async () => {
   const controller = new EditorSessionController(gateway());
   controller.installWorkspace("/repo");

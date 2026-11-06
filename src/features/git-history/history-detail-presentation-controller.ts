@@ -40,6 +40,7 @@ export class HistoryDetailPresentationController {
   private readonly storage: Pick<Storage, "getItem" | "setItem">;
   private readonly value: MutableHistoryDetailPresentationState;
   private commitPatchGeneration = 0;
+  private commitPatchRequestKey: string | null = null;
   private comparisonPatchGeneration = 0;
 
   constructor(storage: Pick<Storage, "getItem" | "setItem">) {
@@ -92,7 +93,12 @@ export class HistoryDetailPresentationController {
     this.value.collapsedCommitFileDirectories = new Set(paths);
   }
 
-  beginCommitPatch(): number {
+  canReuseCommitPatch(requestKey: string): boolean {
+    return this.commitPatchRequestKey === requestKey && this.value.commitPatchError === null;
+  }
+
+  beginCommitPatch(requestKey: string | null = null): number {
+    this.commitPatchRequestKey = requestKey;
     const generation = ++this.commitPatchGeneration;
     this.value.commitPatch = null;
     this.value.commitPatchLoading = true;
@@ -123,6 +129,7 @@ export class HistoryDetailPresentationController {
   }
 
   clearCommitPatch(): void {
+    this.commitPatchRequestKey = null;
     this.commitPatchGeneration += 1;
     this.value.collapsedCommitFileDirectories.clear();
     this.value.commitPatch = null;

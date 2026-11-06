@@ -71,6 +71,62 @@ test("latest change selection owns working Diff completion", async () => {
   assert.equal(controller.state.workingPatchLoading, false);
 });
 
+test("repeated activation retains pending and ready Diff without duplicate reads", async () => {
+  const pending = deferred();
+  let reads = 0;
+  const events = [];
+  const controller = new ChangesCommitController(gateway({ readLocalDiff() { reads += 1; return pending.promise; } }));
+  controller.installSnapshot(snapshot([change("a.txt")]));
+  controller.subscribe((event) => events.push(event));
+  controller.selectChange("a.txt");
+  const loading = controller.loadSelectedDiff(false, true);
+  controller.selectChange("a.txt");
+  await controller.loadSelectedDiff(false, true);
+  assert.equal(reads, 1);
+  pending.resolve(diff("a.txt"));
+  await loading;
+  const patch = controller.state.workingPatch;
+  const base = controller.state.workingDiffBase;
+  const version = controller.state.workingPatchVersion;
+  events.length = 0;
+  for (let i = 0; i < 20; i += 1) {
+    controller.selectChange("a.txt");
+    await controller.loadSelectedDiff(false, true);
+  }
+  assert.equal(reads, 1);
+  assert.equal(controller.state.workingPatch, patch);
+  assert.equal(controller.state.workingDiffBase, base);
+  assert.equal(controller.state.workingPatchVersion, version);
+  assert.deepEqual(events, []);
+  await controller.loadSelectedDiff(false);
+  assert.equal(reads, 2, "explicit refresh still reads Git");
+  await controller.loadSelectedDiff(true, true);
+  assert.equal(reads, 3, "expanded patch is a different request");
+  controller.installSnapshot(snapshot([change("a.txt")]));
+  await controller.loadSelectedDiff(true, true);
+  assert.equal(reads, 4, "repository reconciliation invalidates reuse");
+});
+
+test("activation reuse retries failures and distinguishes repositories with identical paths", async () => {
+  let reads = 0;
+  const controller = new ChangesCommitController(gateway({
+    async readLocalDiff(_root, selected) {
+      reads += 1;
+      if (reads === 1) throw new Error("first read failed");
+      return diff(selected.path);
+    },
+  }));
+  const main = change("same.txt");
+  controller.installSnapshot(snapshot([main, { ...main, repositoryId: "lib", workspacePath: "lib/same.txt" }]));
+  await controller.loadSelectedDiff(false, true);
+  await controller.loadSelectedDiff(false, true);
+  assert.equal(reads, 2);
+  controller.selectChange("same.txt", "lib");
+  await controller.loadSelectedDiff(false, true);
+  assert.equal(reads, 3);
+  assert.equal(controller.state.workingDiffPath, "lib/same.txt");
+});
+
 test("an unavailable editable base preserves the read-only patch fallback", async () => {
   const controller = new ChangesCommitController(gateway({
     readWorkingDiffBase() { throw new Error("not editable"); },

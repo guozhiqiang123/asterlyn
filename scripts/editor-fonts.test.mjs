@@ -55,6 +55,8 @@ test("desktop packaging contains only JetBrains Mono and limits optional downloa
       "licenses/clipboard-rs-0.3.5-MIT.txt",
     "../third-party/licenses/codemirror-merge-6.12.2-MIT.txt":
       "licenses/codemirror-merge-6.12.2-MIT.txt",
+    "../third-party/licenses/codemirror-view-6.43.14-MIT.txt":
+      "licenses/codemirror-view-6.43.14-MIT.txt",
     "../third-party/licenses/trash-5.2.9-MIT.txt":
       "licenses/trash-5.2.9-MIT.txt",
   });

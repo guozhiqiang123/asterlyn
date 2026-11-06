@@ -121,6 +121,7 @@ export class ChangesCommitController {
   private snapshot: RepositorySnapshot | null = null;
   private repositoryGeneration = 0;
   private diffSequence = 0;
+  private diffRequestKey: string | null = null;
   private mutationSequence = 0;
   private disposed = false;
   private messages: Pick<ChangesCopy, "patchTruncated" | "patchTimedOut" | "unexpectedError">;
@@ -165,6 +166,7 @@ export class ChangesCommitController {
     );
     const scanStateChanged = previousSnapshot?.untrackedState !== snapshot?.untrackedState;
     this.snapshot = snapshot;
+    this.diffRequestKey = null;
     if (rootChanged) {
       this.repositoryGeneration += 1;
       this.diffSequence += 1;
@@ -226,9 +228,12 @@ export class ChangesCommitController {
   }
 
   selectChange(path: string, repositoryId = "."): boolean {
-    if (!this.snapshot || !findFileChange(this.snapshot.changes, repositoryId, path)) return false;
+    const change = this.snapshot && findFileChange(this.snapshot.changes, repositoryId, path);
+    if (!change) return false;
     const changed = this.state.selectedChange?.path !== path ||
       (this.state.selectedChange.repositoryId || ".") !== repositoryId;
+    if (!changed && (this.state.workingDiffPath === null ||
+        this.state.workingDiffPath === changeWorkspacePath(change))) return true;
     this.state.selectedChange = { repositoryId, path, staged: false };
     this.clearWorkingDiff(false);
     this.emit({
@@ -357,6 +362,7 @@ export class ChangesCommitController {
 
   clearWorkingDiff(emit = true): void {
     this.diffSequence += 1;
+    this.diffRequestKey = null;
     this.state.workingPatch = null;
     this.state.workingDiffBase = null;
     this.state.workingImageDiff = null;
@@ -366,10 +372,20 @@ export class ChangesCommitController {
     if (emit) this.emit({ reason: "diff-clear", diffChanged: true });
   }
 
-  async loadSelectedDiff(expandedUnchanged: boolean): Promise<void> {
+  canReuseSelectedDiff(expandedUnchanged: boolean): boolean {
+    const selected = this.selectedChange();
+    return Boolean(this.snapshot && selected &&
+      this.diffRequestKey === JSON.stringify([this.snapshot.root, selected.repositoryId || ".", selected.path, expandedUnchanged]) &&
+      !this.state.workingPatchError &&
+      (this.state.workingPatchLoading || this.state.workingPatch || this.state.workingImageDiff));
+  }
+
+  async loadSelectedDiff(expandedUnchanged: boolean, reuse = false): Promise<void> {
     const snapshot = this.snapshot;
     const selected = this.selectedChange();
     if (!snapshot || !selected) return;
+    if (reuse && this.canReuseSelectedDiff(expandedUnchanged)) return;
+    this.diffRequestKey = JSON.stringify([snapshot.root, selected.repositoryId || ".", selected.path, expandedUnchanged]);
     const sequence = ++this.diffSequence;
     const generation = this.repositoryGeneration;
     const path = changeWorkspacePath(selected);

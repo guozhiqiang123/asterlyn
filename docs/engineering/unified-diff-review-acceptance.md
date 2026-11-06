@@ -331,3 +331,112 @@ Run the matrix in both dark and light themes, and in English and Chinese.
   `855a84977948e83c92831a5e16bd34bd043e1310d7d5e79c5604b87b20c74db1`.
   Installation evidence and the verified previous-installation ZIP path are recorded in
   `.artifacts/diff-header-alignment-20261030.ojkDlc/install-evidence.json`.
+
+### Phase 15 — repeated file activation retains the Diff (2026-11-06)
+
+- User recording `/Users/gzq/Movies/20261106_155624.mp4` shows the displayed Changes Diff replaced
+  by a loading surface at approximately 5.4, 6.4 and 7.4 seconds, then recreated. The reported
+  History file list follows a second equivalent path: each click began a fresh commit patch read.
+- Changes selection is now idempotent when its selected identity and displayed Diff agree.
+  File-row/Show Diff activation can reuse the current pending or ready exact request; normal
+  repository reconciliation, explicit refresh, expanded-patch reads and errors invalidate or bypass
+  reuse. Repository and workspace identity remain part of the request. Context selection of another
+  file still retargets correctly when that file is subsequently opened.
+- The editor-session owner suppresses duplicate activation events for the already active exact
+  Diff document. Ordinary History and commit-folder file activation reuse the matching in-flight or
+  completed commit request, including image success with no textual patch. Another commit, root,
+  path, original path, expansion mode, failed request, cleared inspection or return from a different
+  active document takes the normal load path. No multi-document patch cache was introduced.
+- `npm run test:diff-reactivation:rendered` exercises the production application file-selection
+  methods, controllers and lazy EditorSurface with fixture gateways. Chromium and WebKit pass
+  editable Changes, read-only Changes and History cases: five pending clicks issue one patch read;
+  twenty ready clicks cause zero additional patch/backing-buffer reads, activations, loading transitions or renders;
+  CodeMirror nodes, both panes' scroll positions and selection survive. Unsaved editable content
+  and Undo survive; reconciliation, returning to a preview, changed commit and retry still read.
+- All 1,616 frontend script tests, TypeScript checking, production build and existing Chromium/WebKit
+  Diff layout/revert suites pass. The emitted main asset is 499.17 kB. Request reuse retains only
+  one bounded identity per working/commit Diff and adds no timer or background process. Existing
+  focus/keyboard behavior is retained; no separate long-duration memory or frame-time profile was run.
+- The fresh macOS arm64 `0.1.28` package was explicitly ad-hoc signed with sealed resources,
+  strictly verified and passed rendered native smoke within 6,000 ms. The canonical installer
+  preserved the installed app root and verified frontend readiness on two icon-bookmark launches.
+  The installed executable matches the accepted source with SHA-256
+  `eea557af0497fac5c968c00139a913202239cf73b950afeae6d19bdbaf5a3bd6`.
+  Headless native AX activation reopened Changes `package.json` three times; the preview remained
+  present and both editor text-field hashes stayed unchanged. Browser fixtures provide the precise
+  node-identity/no-transient-loading assertions; AX before/after snapshots alone do not measure flicker.
+- Native build initially stopped because concurrently added workspace `reqwest` features required
+  lockfile resolution. The lockfile was reconciled and the locked build then passed; no unrelated
+  Rust implementation was reverted. Startup validation preserved the existing active Android
+  `0.6.8` and LSP `0.3.18` identities and verified both health checkpoints. The first probe expected
+  bundled LSP `0.3.19` and timed out because the installed profile uses `0.3.18`; its receipt and the
+  successful active-profile probe are retained. The source-workspace probe also recorded two
+  `existing_project_directories` failures. These are separate from the tested file-activation paths.
+- Accepted archive:
+  `.artifacts/diff-reactivation-20261106.787hEc/Asterlyn-0.1.28-diff-reactivation-macos-arm64.zip`,
+  25,938,021 bytes, SHA-256
+  `9df16024ec402defe6660278b9c95d24c834a757c691f3ac1c186050d8face2c`.
+  Installation, native smoke, plugin health, rendered regression and recording contact-sheet
+  evidence are retained beside it. Node `26.8.1`, Rust `1.97.1`; Windows/Linux native acceptance
+  was not run. The implementation and local acceptance evidence are recorded here.
+
+## Phase 16 — bounded continuous Diff scrolling (2026-11-06)
+
+- Recordings `/Users/gzq/Movies/20261106_164713.mp4` and
+  `/Users/gzq/Movies/20261106_164812.mp4` show Asterlyn's editable Diff intermittently
+  exposing blank code areas while the reference application continues to paint code.
+  The investigation found two compounding costs: repeated full change-block projection
+  in each gutter line callback, and `@codemirror/view` 6.43.11 height-map traversal
+  returning thousands of blocks outside the editor's requested viewport.
+- Pin `@codemirror/view` to official npm release **6.43.14**. Its published height-map
+  traversal clamps recursive branch bounds to the requested interval. The npm tarball
+  was independently SHA-512 verified against
+  `sha512-hC45YnmJNR1rz42OF57BLoQNFMV12/13drnvibDsR2quNDmldcb4WvYVV81hFQg56i9lcqQMEDqilhX2QDcGQQ==`.
+  This remains the existing MIT-licensed editor dependency; no new UI framework,
+  runtime service, or background process is introduced. Its upstream attribution is
+  retained under `third-party/licenses/codemirror-view-6.43.14-MIT.txt` and included
+  in the native app's license resources. Package size evidence follows native acceptance.
+- Change-indicator state now owns its projected blocks. Selection, focus, viewport,
+  and localization-only changes reuse that projection. Document edits and baseline
+  replacement invalidate it. Patch popovers and overview markers use the same projection.
+- Connector snapshots have a per-pane interval index. Scrolling queries nearby blocks,
+  measures their geometry before writing SVG attributes, and reuses surviving paths.
+  The index includes spanning/nested ranges and zero-length deletion anchors. It is
+  replaced with the snapshot and disposed with the surface; retained state is bounded
+  by the current snapshot plus visible paths. Existing shared outer vertical scrolling,
+  alignment, docked horizontal scrollbars, and splitter behavior are preserved.
+- `npm run test:diff-scroll:rendered` mounts production editor adapters and the complete
+  application styles in Chromium and WebKit. It tests editable 3k/10k/30k-line files and
+  a read-only 10k-line History Diff with forward/reverse wheel input. Gates require
+  actual movement beyond 10,000px, P95 frame intervals below 50ms, fewer than 600
+  gutter elements per pane, no viewport blocks outside the requested line interval,
+  no sampled blank code area, stable editor instances, reusable connector nodes, and
+  surviving editable Undo. All eight cases pass: Chromium P95 8.4–9.2ms; WebKit P95
+  23–31ms; at most 103 gutter elements per pane. These are browser-fixture rAF samples,
+  not a native compositor trace or a guarantee that no unobserved frame can be blank.
+- All 1,619 script tests, TypeScript checking, production build, and existing
+  Chromium/WebKit Diff layout/revert, repeated-selection, conflict editor, Patch popover,
+  and Git Blame rendered suites pass. The main asset remains 499.17 kB. Initial test
+  fixture failures (missing application styles and a separately imported Undo module)
+  were corrected in the fixture, without relaxing the viewport, input, or performance gates.
+- The fresh macOS arm64 **0.1.28** app passed explicit ad-hoc signing, sealed-resource
+  strict verification, rendered native smoke within 6,000ms, and exact active-package
+  health checks for Android 0.6.8 and LSP 0.3.18. The source-workspace health probe again
+  observed the two `existing_project_directories` failures noted in Phase 15; these did
+  not prevent frontend readiness, plugin health, or opening the requested Diff.
+- Canonical replacement of `/Applications/Asterlyn.app` preserved its root identity.
+  Both saved-icon launch and quit/reopen reached `application.frontend_ready` with build
+  `247af4a5b8b35ae7191b07428f1d5b52017f4d80-dirty-1793958188336`.
+  Installed executable SHA-256 matches the accepted bundle:
+  `becb03c29384a10a31d7c708adb84c6268e4a52a38d9724cd61af78130fece8d`.
+  Native AX activation opened Changes `src/app.ts` and exposed nonempty read-only and
+  editable code panes. Browser tests provide the scrolling/frame-budget assertions;
+  native AX snapshots do not establish compositor frame times. Windows/Linux native
+  acceptance and long-duration heap profiling were not run.
+- Accepted archive:
+  `.artifacts/diff-scroll-20261106.8Lqba8/Asterlyn-0.1.28-diff-scroll-macos-arm64.zip`,
+  **25,951,244 bytes**, SHA-256
+  `93a33cae8f4def72909f57863cfded937f91170ec6e1064c48a4e71bd65a6d29`.
+  The evidence directory retains browser metrics, pre-fix CPU samples, dependency
+  integrity, checks/build logs, native health, signature, ZIP backup receipt, installation
+  and opening evidence. The installed repair was accepted by the user on 2026-11-06.

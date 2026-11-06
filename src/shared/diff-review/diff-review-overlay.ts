@@ -5,6 +5,7 @@ import {
   diffReviewOverlayFrame,
   measureDiffReviewRange,
 } from "./diff-review-geometry.ts";
+import { DiffReviewViewportIndex } from "./diff-review-viewport.ts";
 
 export interface DiffReviewOverlayConnection {
   readonly from: DiffReviewPaneId;
@@ -14,6 +15,8 @@ export interface DiffReviewOverlayConnection {
 export class DiffReviewOverlay {
   private readonly svg: SVGSVGElement;
   private snapshot: DiffReviewSnapshot | null = null;
+  private index = new DiffReviewViewportIndex([]);
+  private readonly paths = new Map<string, SVGPathElement>();
   private frame: number | null = null;
   private readonly disposers: Array<() => void> = [];
   private readonly resizeObserver: ResizeObserver;
@@ -39,6 +42,7 @@ export class DiffReviewOverlay {
 
   setSnapshot(snapshot: DiffReviewSnapshot): void {
     this.snapshot = snapshot;
+    this.index = new DiffReviewViewportIndex(snapshot.blocks);
     this.schedule();
   }
 
@@ -56,6 +60,7 @@ export class DiffReviewOverlay {
     this.resizeObserver.disconnect();
     for (const dispose of this.disposers.splice(0)) dispose();
     this.svg.remove();
+    this.paths.clear();
   }
 
   private render(): void {
@@ -70,8 +75,35 @@ export class DiffReviewOverlay {
     });
     if (frame.width <= 0 || frame.height <= 0) {
       this.svg.replaceChildren();
+      this.paths.clear();
       this.svg.style.display = "none";
       return;
+    }
+    const projected: Array<{ key: string; path: string; className: string; blockId: string }> = [];
+    for (const connection of this.connections) {
+      const fromView = this.views[connection.from];
+      const toView = this.views[connection.to];
+      if (!fromView || !toView) continue;
+      const candidates = new Set([
+        ...this.index.intersecting(connection.from, fromView.viewport.from, fromView.viewport.to),
+        ...this.index.intersecting(connection.to, toView.viewport.from, toView.viewport.to),
+      ]);
+      for (const block of candidates) {
+        const fromRange = block.ranges[connection.from];
+        const toRange = block.ranges[connection.to];
+        if (!fromRange || !toRange) continue;
+        const origin = { left: frame.pageLeft, top: frame.pageTop };
+        const source = measureDiffReviewRange(fromView, fromRange, origin);
+        const target = measureDiffReviewRange(toView, toRange, origin);
+        if (!source || !target) continue;
+        projected.push({
+          key: `${connection.from}:${connection.to}:${block.id}`,
+          path: buildDiffReviewConnectorPath(source, target),
+          className: ["diff-review-connector", `diff-review-connector-${block.status}`,
+            block.id === snapshot.activeBlockId ? "is-active" : ""].filter(Boolean).join(" "),
+          blockId: block.id,
+        });
+      }
     }
     this.svg.style.removeProperty("display");
     this.svg.style.left = `${frame.left}px`;
@@ -79,33 +111,23 @@ export class DiffReviewOverlay {
     this.svg.style.width = `${frame.width}px`;
     this.svg.style.height = `${frame.height}px`;
     this.svg.setAttribute("viewBox", `0 0 ${frame.width} ${frame.height}`);
-    this.svg.replaceChildren();
-    for (const block of snapshot.blocks) {
-      for (const connection of this.connections) {
-        const fromView = this.views[connection.from];
-        const toView = this.views[connection.to];
-        const fromRange = block.ranges[connection.from];
-        const toRange = block.ranges[connection.to];
-        if (!fromView || !toView || !fromRange || !toRange) continue;
-        const source = measureDiffReviewRange(fromView, fromRange, {
-          left: frame.pageLeft,
-          top: frame.pageTop,
-        });
-        const target = measureDiffReviewRange(toView, toRange, {
-          left: frame.pageLeft,
-          top: frame.pageTop,
-        });
-        if (!source || !target) continue;
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", buildDiffReviewConnectorPath(source, target));
-        path.setAttribute("class", [
-          "diff-review-connector",
-          `diff-review-connector-${block.status}`,
-          block.id === snapshot.activeBlockId ? "is-active" : "",
-        ].filter(Boolean).join(" "));
-        path.dataset.blockId = block.id;
+    const shown = new Set<string>();
+    for (const item of projected) {
+      shown.add(item.key);
+      let path = this.paths.get(item.key);
+      if (!path) {
+        path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.dataset.blockId = item.blockId;
+        this.paths.set(item.key, path);
         this.svg.append(path);
       }
+      if (path.getAttribute("d") !== item.path) path.setAttribute("d", item.path);
+      if (path.getAttribute("class") !== item.className) path.setAttribute("class", item.className);
+    }
+    for (const [key, path] of this.paths) {
+      if (shown.has(key)) continue;
+      path.remove();
+      this.paths.delete(key);
     }
   }
 }

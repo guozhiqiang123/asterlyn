@@ -4,8 +4,9 @@ import test from "node:test";
 import {
   editorChangeHighlightLines,
   editorChangeIndicatorBlocks,
+  createEditorChangeIndicators,
 } from "../src/editor-change-indicators.ts";
-import { Text } from "@codemirror/state";
+import { EditorState, Text } from "@codemirror/state";
 import {
   editorPatchRollbackChange,
   projectEditorPatch,
@@ -28,6 +29,30 @@ test("change indicators classify additions, modifications, and deletions", () =>
 
 test("change indicator input normalizes CRLF baselines", () => {
   assert.deepEqual(editorChangeIndicatorBlocks("one\r\ntwo\r\n", "one\ntwo\n"), []);
+});
+
+test("indicator projections survive selection and copy changes, and invalidate on edits or new baselines", () => {
+  for (const documentSide of ["a", "b"]) {
+    const indicators = createEditorChangeIndicators("one\nold\nend", {overview: "Changes"}, {
+      documentSide, gutter: false, overview: false,
+    });
+    let state = EditorState.create({doc: "one\nnew\nend", extensions: indicators.extension});
+    const field = indicators.extension[0];
+    const initial = state.field(field).blocks;
+    state = state.update({selection: {anchor: 5}}).state;
+    assert.equal(state.field(field).blocks, initial);
+    const view = {get state() {return state;}, dispatch(spec) {state = state.update(spec).state;}};
+    indicators.setCopy(view, {overview: "Updated changes"});
+    assert.equal(state.field(field).blocks, initial);
+    state = state.update({changes: {from: 4, to: 7, insert: "new\nadded"}}).state;
+    assert.notEqual(state.field(field).blocks, initial);
+    assert.deepEqual(state.field(field).blocks, editorChangeIndicatorBlocks(
+      documentSide === "a" ? state.doc.toString() : "one\nold\nend",
+      documentSide === "a" ? "one\nold\nend" : state.doc.toString(), documentSide,
+    ));
+    indicators.setBaseline(view, state.doc.toString());
+    assert.deepEqual(state.field(field).blocks, []);
+  }
 });
 
 test("before-side indicators anchor removals in the left document", () => {

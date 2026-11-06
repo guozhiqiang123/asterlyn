@@ -90,6 +90,7 @@ export function editorChangeIndicatorCopy(copy: EditorCopy): EditorChangeIndicat
 type IndicatorState = {
   readonly baseline: Text;
   readonly chunks: readonly Chunk[];
+  readonly blocks: readonly EditorChangeIndicatorBlock[];
   readonly copy: EditorChangeIndicatorCopy;
 };
 
@@ -108,13 +109,12 @@ export function createEditorChangeIndicators(
   const baseline = text(initialBaseline);
   const documentSide = options.documentSide ?? "b";
   const field = StateField.define<IndicatorState>({
-    create: (state) => ({
-      baseline,
-      chunks: documentSide === "a"
+    create: (state) => {
+      const chunks = documentSide === "a"
         ? Chunk.build(state.doc, baseline, LINE_AWARE_DIFF_CONFIG)
-        : Chunk.build(baseline, state.doc, LINE_AWARE_DIFF_CONFIG),
-      copy: initialCopy,
-    }),
+        : Chunk.build(baseline, state.doc, LINE_AWARE_DIFF_CONFIG);
+      return { baseline, chunks, blocks: blocksFromChunks(chunks, baseline, state.doc, documentSide), copy: initialCopy };
+    },
     update: (value, transaction) => {
       let next = transaction.docChanged
         ? {
@@ -138,7 +138,10 @@ export function createEditorChangeIndicators(
           next = { ...next, copy: effect.value.copy };
         }
       }
-      return next;
+      return next.chunks === value.chunks && !transaction.docChanged ? next : {
+        ...next,
+        blocks: blocksFromChunks(next.chunks, next.baseline, transaction.newDoc, documentSide),
+      };
     },
   });
   const activePatch = StateField.define<EditorChangeIndicatorBlock | null>({
@@ -158,12 +161,7 @@ export function createEditorChangeIndicators(
       const requested = state.field(activePatch);
       if (!requested) return null;
       const indicator = state.field(field);
-      const blocks = blocksFromChunks(
-        indicator.chunks,
-        indicator.baseline,
-        state.doc,
-        documentSide,
-      );
+      const blocks = indicator.blocks;
       const index = blocks.findIndex((block) => sameBlock(block, requested));
       if (index < 0) return null;
       const block = blocks[index]!;
@@ -238,7 +236,7 @@ export function createEditorChangeIndicators(
       initialSpacer: () => new ChangeGutterSpacer(),
       lineMarker: (view, line) => {
         const block = blockAtLine(
-          indicatorBlocks(view.state, field, documentSide),
+          indicatorBlocks(view.state, field),
           view.state.doc.lineAt(line.from).number,
         );
         return block ? new ChangeGutterMarker(
@@ -294,12 +292,7 @@ export function createEditorChangeIndicators(
       private render(): void {
         const state = this.view.state.field(field);
         this.ruler.setAttribute("aria-label", state.copy.overview);
-        const blocks = blocksFromChunks(
-          state.chunks,
-          state.baseline,
-          this.view.state.doc,
-          documentSide,
-        );
+        const blocks = state.blocks;
         const totalLines = Math.max(1, this.view.state.doc.lines);
         this.ruler.replaceChildren(...blocks.map((block) => {
           const marker = document.createElement("button");
@@ -332,7 +325,7 @@ export function createEditorChangeIndicators(
       view.dispatch({ effects: updateIndicator.of({ kind: "copy", copy }) });
     },
     revealFirst(view) {
-      const block = indicatorBlocks(view.state, field, documentSide)[0];
+      const block = indicatorBlocks(view.state, field)[0];
       if (!block) return false;
       revealIndicatorBlock(view, block, revealIndicator);
       return true;
@@ -398,15 +391,8 @@ function revealIndicatorBlock(
 function indicatorBlocks(
   state: EditorState,
   field: StateField<IndicatorState>,
-  documentSide: "a" | "b",
 ): readonly EditorChangeIndicatorBlock[] {
-  const indicator = state.field(field);
-  return blocksFromChunks(
-    indicator.chunks,
-    indicator.baseline,
-    state.doc,
-    documentSide,
-  );
+  return state.field(field).blocks;
 }
 
 function blocksFromChunks(

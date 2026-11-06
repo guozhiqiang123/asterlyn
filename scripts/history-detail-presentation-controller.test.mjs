@@ -54,6 +54,24 @@ test("workspace reset clears transient detail state without losing the view pref
   assert.equal(controller.state.comparisonPatchLoading, false);
 });
 
+test("exact commit request reuse covers pending, ready and image results but never failed or cleared state", () => {
+  const controller = new HistoryDetailPresentationController(memoryStorage());
+  const generation = controller.beginCommitPatch("root/repo/oid/path/collapsed");
+  assert.equal(controller.canReuseCommitPatch("root/repo/oid/path/collapsed"), true);
+  assert.equal(controller.canReuseCommitPatch("root/repo/other-oid/path/collapsed"), false);
+  assert.equal(controller.canReuseCommitPatch("root/repo/oid/path/expanded"), false);
+  controller.completeCommitPatch(generation, commitPatch("ready"));
+  assert.equal(controller.canReuseCommitPatch("root/repo/oid/path/collapsed"), true);
+  const image = controller.beginCommitPatch("image");
+  controller.completeCommitPatch(image, null);
+  assert.equal(controller.canReuseCommitPatch("image"), true);
+  controller.failCommitPatch(image, "failed");
+  assert.equal(controller.canReuseCommitPatch("image"), false);
+  controller.beginCommitPatch("retry");
+  controller.clearCommitPatch();
+  assert.equal(controller.canReuseCommitPatch("retry"), false);
+});
+
 function commitPatch(patch) {
   return {
     repositoryId: ".",

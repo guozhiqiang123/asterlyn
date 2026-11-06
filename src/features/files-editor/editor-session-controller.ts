@@ -4,6 +4,7 @@ import type {
   SaveTextFileResult,
   TextFileSnapshot,
 } from "../../models.ts";
+import { isDiffDocument } from "./diff-context-expansion.ts";
 import type {
   EditorPathMigrationLease,
   EditorPathMigrationPreparation,
@@ -231,9 +232,12 @@ export class EditorSessionController {
     return true;
   }
 
-  activatePreview(document: PreviewDocument): void {
+  activatePreview(document: PreviewDocument, beforeTransition?: () => void): boolean {
+    if (isDiffDocument(document) && editorDocumentKey(this.activeDocument()) === editorDocumentKey(document)) return false;
+    beforeTransition?.();
     this.state.session = activatePreview(this.state.session, document);
     this.emit({ reason: "activation", documentChanged: true, tabsChanged: true });
+    return true;
   }
 
   reactivatePreview(): boolean {

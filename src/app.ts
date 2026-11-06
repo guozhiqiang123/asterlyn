@@ -5033,17 +5033,15 @@ export class AsterlynApp {
       if (restoreFocus) this.focusChangeRow(path, repositoryId);
       return;
     }
-    this.changesRuntime.controller.selectChange(path, repositoryId);
-    if (this.changesState.selectedChange && this.windowSession.repository.state.snapshot) {
-      this.activateDiffPreview({
-        kind: "working-diff",
-        repositoryRoot: this.windowSession.repository.state.snapshot.root,
-        selection: { ...this.changesState.selectedChange },
-      });
-    }
+    if (!this.changesRuntime.controller.selectChange(path, repositoryId)) return;
+    const activated = this.activateDiffPreview({
+      kind: "working-diff",
+      repositoryRoot: snapshot.root,
+      selection: { ...this.changesState.selectedChange! },
+    });
     this.markChangeSelection(path, repositoryId);
-    this.renderEditor();
-    if (this.changesState.selectedChange) void this.loadSelectedDiff();
+    if (activated) this.renderEditor();
+    if (this.changesState.selectedChange) void this.loadSelectedDiff(true);
     if (restoreFocus) this.focusChangeRow(path, repositoryId);
   }
 
@@ -6848,9 +6846,8 @@ export class AsterlynApp {
 
   private activateDiffPreview(
     document: Exclude<EditorDocument, { kind: "welcome" | "project-file" }>,
-  ): void {
-    this.captureMountedTextEditor();
-    this.filesEditorRuntime.editor.activatePreview(document);
+  ): boolean {
+    return this.filesEditorRuntime.editor.activatePreview(document, () => this.captureMountedTextEditor());
   }
 
   private diffControls(
@@ -7093,7 +7090,7 @@ export class AsterlynApp {
     };
   }
 
-  private loadSelectedDiff(): void {
+  private loadSelectedDiff(reuse = false): void {
     const snapshot = this.windowSession.repository.state.snapshot;
     const document = this.activeDocument();
     const selected = this.changesRuntime.controller.selectedChange();
@@ -7105,7 +7102,8 @@ export class AsterlynApp {
       document.selection.repositoryId !== (selected.repositoryId || ".") ||
       document.selection.path !== selected.path
     ) return;
-    const diff = this.changesRuntime.controller.loadSelectedDiff(this.diffContextExpansion.requestsExpandedPatch(document));
+    if (reuse && this.changesRuntime.controller.canReuseSelectedDiff(this.diffContextExpansion.requestsExpandedPatch(document))) return;
+    const diff = this.changesRuntime.controller.loadSelectedDiff(this.diffContextExpansion.requestsExpandedPatch(document), reuse);
     if (!isImagePreviewPath(selected.path) && !selected.conflicted && !selected.submodule) {
       const file = workingDiffSourceFile(this.filesState.files, document, snapshot.changes);
       if (file && file.readOnly !== true) {
@@ -7143,7 +7141,7 @@ export class AsterlynApp {
     }
   }
 
-  private async loadSelectedCommitDiff(restoreFocus = false): Promise<void> {
+  private async loadSelectedCommitDiff(restoreFocus = false, reuse = false): Promise<void> {
     const active = this.activeDocument();
     if (active.kind === "commit-diff" && this.stashRuntime.isDiff(active)) {
       await this.stashRuntime.loadDiff(active, this.diffContextExpansion.requestsExpandedPatch(active));
@@ -7169,7 +7167,10 @@ export class AsterlynApp {
     const oid = details.oid;
     const key = commitKey(details);
     const repositoryId = details.repositoryId;
-    const generation = this.gitHistoryPresentationRuntime.detail.beginCommitPatch();
+    const requestKey = JSON.stringify([editorDocumentKey(document), file.originalPath,
+      this.diffContextExpansion.requestsExpandedPatch(document)]);
+    if (reuse && this.gitHistoryPresentationRuntime.detail.canReuseCommitPatch(requestKey)) return;
+    const generation = this.gitHistoryPresentationRuntime.detail.beginCommitPatch(requestKey);
     const imageDiff = isImagePreviewPath(file.path);
     const imageKey = editorDocumentKey(document);
     if (imageDiff) {
@@ -7455,7 +7456,7 @@ export class AsterlynApp {
     ) return;
     const file = this.gitHistoryPresentationRuntime.folderDiff.selectFile(path);
     if (!file || !this.historyReadRuntime.details.selectFile(path)) return;
-    this.activateDiffPreview({
+    const activated = this.activateDiffPreview({
       kind: "commit-diff",
       repositoryRoot: snapshot.root,
       repositoryId: target.repositoryId,
@@ -7464,7 +7465,7 @@ export class AsterlynApp {
     });
     this.updateCommitFolderFileSelection(path);
     if (restoreFocus) this.focusCommitFile(path);
-    void this.loadSelectedCommitDiff(restoreFocus);
+    void this.loadSelectedCommitDiff(restoreFocus, !activated);
   }
 
   private updateCommitFolderFileSelection(path: string): void {
@@ -7698,7 +7699,7 @@ export class AsterlynApp {
     }
     if (!this.historyReadRuntime.details.selectFile(path)) return;
     this.gitHistoryPresentationRuntime.detail.show("commit");
-    this.activateDiffPreview({
+    const activated = this.activateDiffPreview({
       kind: "commit-diff",
       repositoryRoot: snapshot.root,
       repositoryId: details.repositoryId,
@@ -7707,7 +7708,7 @@ export class AsterlynApp {
     });
     this.updateCommitFileSelection(path);
     if (restoreFocus) this.focusCommitFile(path);
-    void this.loadSelectedCommitDiff(restoreFocus);
+    void this.loadSelectedCommitDiff(restoreFocus, !activated);
   }
 
   private updateCommitFileSelection(path: string): void {
@@ -7833,7 +7834,7 @@ export class AsterlynApp {
       return;
     }
     this.changesRuntime.controller.selectChange(selected.path, selected.repositoryId || ".");
-    this.activateDiffPreview({
+    const activated = this.activateDiffPreview({
       kind: "working-diff",
       repositoryRoot: snapshot.root,
       selection: {
@@ -7842,8 +7843,8 @@ export class AsterlynApp {
         staged: false,
       },
     });
-    this.renderEditor();
-    this.loadSelectedDiff();
+    if (activated) this.renderEditor();
+    this.loadSelectedDiff(true);
   }
 
   private openChangeConflict(path: string, repositoryId = "."): void {
