@@ -1,0 +1,1949 @@
+{
+  "valid": [
+    {
+      "name": "single server metadata",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "language without chosen upstream",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": []
+      }
+    },
+    {
+      "name": "compound suffix and exact names",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".d.rs"
+            ],
+            "fileNames": [
+              "Cargo.toml",
+              ".rustconfig"
+            ]
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown schema",
+      "catalog": {
+        "schemaVersion": 2,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unsafe integer",
+      "catalog": {
+        "schemaVersion": 9007199254740992,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "fractional schema",
+      "catalog": {
+        "schemaVersion": 1.5,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown catalog field",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ],
+        "command": "sh"
+      }
+    },
+    {
+      "name": "no languages",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "too many languages",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate language",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          },
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown language field",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": [],
+            "execute": "x"
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid language id",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "Rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty selector",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate suffix",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs",
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "path suffix",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              "../rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty compound segment",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".d..rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "uppercase suffix",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".RS"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "oversized suffix",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "selector newline",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs\n"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "filename traversal",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": [
+              "../Cargo.toml"
+            ]
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "filename parent",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": [
+              ".."
+            ]
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "long filename",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": [
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ]
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "too many servers",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate server",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          },
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty server language",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unbound language",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "java"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate language reference",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust",
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown server field",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true,
+            "argv": [
+              "--run"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown affiliation",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "official"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "repository credentials",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://user@github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "repository redirect query",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp?next=https://evil.test",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "repository newline",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp\n",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown platform",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "darwin"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty platform",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate platform",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64",
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "required marker absent",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "marker traversal",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "../Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate markers",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml",
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "required marker nonbool",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": "true"
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty label",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "long label",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ],
+            "requireRootMarker": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing required field",
+      "catalog": {
+        "schemaVersion": 1,
+        "languages": [
+          {
+            "id": "rust",
+            "labelKey": "language.rust",
+            "extensions": [
+              ".rs"
+            ],
+            "fileNames": []
+          }
+        ],
+        "servers": [
+          {
+            "id": "example-rust",
+            "labelKey": "server.rust",
+            "languageIds": [
+              "rust"
+            ],
+            "upstream": {
+              "repository": "https://github.com/example/lsp",
+              "affiliation": "community"
+            },
+            "platforms": [
+              "macos-arm64"
+            ],
+            "rootMarkers": [
+              "Cargo.toml"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "null catalog",
+      "catalog": null
+    },
+    {
+      "name": "array catalog",
+      "catalog": []
+    }
+  ]
+}

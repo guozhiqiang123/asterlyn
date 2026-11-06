@@ -59,6 +59,8 @@ The documents in this directory are the current source of truth. A decision that
 
 ## Delivery
 
+- [`engineering/2026-11-06-lsp-foundation-contract.md`](engineering/2026-11-06-lsp-foundation-contract.md) — incremental LSP catalog contracts, admission bounds, development SDK and verification evidence; installation/runtime migration remains pending.
+
 - [`engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md`](engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) — planned single LSP management plugin, file-triggered status-bar recommendations, managed upstream installation and staged migration; governed by [ADR-0038](architecture/decisions/0038-managed-upstream-language-servers.md), with server selection and implementation pending.
 
 - [`engineering/2026-11-06-plugin-history-removal-plan.md`](engineering/2026-11-06-plugin-history-removal-plan.md) — explicit historical plugin deletion, protected runtime/recovery versions and transactional storage cleanup.

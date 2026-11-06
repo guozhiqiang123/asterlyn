@@ -1,0 +1,37 @@
+# LSP 管理基础：分步实施记录
+
+日期：2026-11-06。用户已授权实施及分步本地提交；不包含远端推送、tag 或 Release。总计划见 [改造计划](2026-11-06-lsp-management-and-upstream-servers-plan.md)。
+
+## F0.1 静态目录与准入
+
+原生所有者为 `asterlyn-plugin-package::language_catalog`。可选 manifest 字段 `languageServerCatalog` 与同名必需 capability 必须同时存在。它只描述元数据，不附带安装/执行权限，不改变 `languageServices` 或旧 `languageServers` 的行为。
+
+| 字段 | 契约 |
+| --- | --- |
+| `schemaVersion` | 整数 `1`；目录 schema 与 SDK、运行协议、将来的安装 schema 分别治理 |
+| `languages` | 1–16 个唯一语言 ID；`labelKey`、`extensions`、`fileNames`；两种选择器不能同时为空，各最多 16 项 |
+| `servers` | 0–16 个唯一服务 ID；0 项允许先识别语言、暂不选定上游 |
+| 服务覆盖 | 1–16 个已声明语言；每项必须有默认语言包中的 `labelKey` |
+| 上游 | GitHub 仓库的精确 HTTPS 页面、`language-official` 或 `community`；归属是经维护者审核的声明，不是执行信任证明 |
+| 平台 | macOS/Linux/Windows × arm64/x64；1–6 个不重复项，仅表达该目录项的适用范围，不代表宿主已在所有平台验收 |
+| 项目条件 | 最多 8 个不重复根目录文件名与显式 `requireRootMarker`；要求 marker 时不能为空；只消费宿主已知证据，不发起扫描 |
+| 选择器界限 | 后缀不超过 32 个 ASCII 字符，支持 `.d.ts` 等复合后缀；精确文件名不超过 128 个字符，禁止路径分隔符、`.`、`..`；匹配区分大小写 |
+
+语言 ID 最多 64 个字符，服务 ID 最多 128 个字符，文案 key 最多 160 个字符。目录内未知字段、非法枚举、重复 ID/数组项、悬空语言引用和控制字符拒绝准入，不进行猜测或修复。不同语言可以声明重叠选择器，匹配层必须显式报告冲突，不能按数组顺序选择。
+
+`npm run protocol:catalog` 从原生 serde 模型生成 SDK 类型、前端结构 schema 和同源字符串规则；`protocol:catalog:check` 检查漂移。前端严格校验输入并复制为深层只读值，原生始终重新权威准入。双方读取同一份 44 例 JSON 语料（3 正例、41 反例），另外验证真实插件归档、默认文案、旧宿主拒绝与字段权限隔离。
+
+SDK `1.15.0` 为未发布开发制品，major 仍为 1。canonical 制品由宿主维护，模板使用同一份校验和覆盖的 tgz；历史 `1.14.0` 制品与 LSP `0.3.18` 不变。现有管理 manifest 运输增加可选元数据，desktop/plugin runtime protocol 仍为 1；旧宿主依赖未知 capability 拒绝，不依赖 app version 的字符串比较碰巧挡住新包。
+
+调用链：原生 package inspection → 已准入 management manifest → 安装清单现有传输 → `adaptPluginManifest` → 经验证的不可变目录。目录展示/推荐必须进一步检查启用、激活及项目代际；本步仅接通数据契约，不从所有已安装 manifest 自动推荐。
+
+安装配方、下载地址/摘要、不可变安装索引、安装/运行状态、命名管理请求、资源租约及执行 profile 尚未准入。不得把目录存在当成“可安装”或“已就绪”。Node/JVM/原生启动参数必须等对应分发和安全约束验收后逐项加入，不能预先开放通用 shell/argv。
+
+## 本批次验证与边界
+
+- Rust package 测试 19 项通过（含共享语料与真实归档准入），Clippy `-D warnings` 通过；前端全量 `test:scripts` 1,525 项通过（其中本次目录测试 46 项）；`npm run check`、`protocol:catalog:check` 与 `npm run build` 通过。
+- canonical SDK 为 8,782 bytes，SHA-256 `fb9ca043d2a8cf246d05e17776344b9c8d229ce7e8588dd1b13e370bef8cc1c9`；SDK 打包测试验证源文件与 canonical 制品一致，模板锁文件验证同一制品 SHA-512。没有发布远端。
+- 本步没有 UI 或可启动服务，不新增快捷键、焦点流或无障碍控件；F1 仍需真实编辑器及键盘验收。
+- 数量、字符串及前端检查节点（8,192）有固定上限；不查询网络、不启动进程、不扫描项目。没有新的后台循环或常驻服务，未以静态检查冒充整机内存实测。
+- 不宣称 F0 总阶段已完成：安装/状态契约、命令 inventory、既有行为矩阵和运行资源预算仍需后续步骤冻结；F1–F6 也未验收。
+- 未选择上游版本、未改变安装插件、未替换本机应用或运行旧项目模型；原生安装交付在可用产品闭环后按 `local-build.md` 执行。

@@ -3,7 +3,11 @@
  * It intentionally has no imports from the host, Tauri, DOM, filesystem, or process APIs.
  */
 
-export const PLUGIN_SDK_VERSION = "1.14.0" as const;
+export const PLUGIN_SDK_VERSION = "1.15.0" as const;
+
+import type { LanguageServerCatalog } from "./generated-language-catalog.ts";
+export type { CatalogLanguage as SdkCatalogLanguage, CatalogServer as SdkCatalogServer, CatalogPlatform as SdkCatalogPlatform } from "./generated-language-catalog.ts";
+export type SdkLanguageServerCatalog = LanguageServerCatalog;
 export const PLUGIN_SDK_MAJOR = 1 as const;
 
 export const SDK_PLUGIN_LOCALIZATION_LIMITS = Object.freeze({
@@ -260,6 +264,8 @@ export interface SdkPackagedLanguageServer {
 }
 
 export interface SdkPluginManifest {
+  /** Static metadata only. Requires languageServerCatalog; grants no installation or execution. */
+  readonly languageServerCatalog?: SdkLanguageServerCatalog;
   readonly dependencies?: readonly SdkPluginDependency[];
   readonly modelProviders?: readonly SdkModelProvider[];
   readonly languageServers?: readonly SdkPackagedLanguageServer[];

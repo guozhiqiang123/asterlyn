@@ -4,7 +4,7 @@ This package contains the public declarative types and constants used to author 
 It does not contain host implementation code and does not grant filesystem, process, network,
 credential, WebView, or shell access.
 
-The initial public baseline was SDK `1.8.0`; the current additive contract is SDK `1.14.0`, SDK major `1`. Runtime-installable packages additionally
+The initial public baseline was SDK `1.8.0`; the current development contract is SDK `1.15.0`, SDK major `1`. Runtime-installable packages additionally
 use package schema `3` and plugin-host protocol `1`; those are independent compatibility axes.
 
 SDK `1.12.0` adds the host-owned `rust-analyzer` profile alongside the TypeScript contribution introduced in SDK `1.11.0`. Rust requires host 0.1.21 or later. This canonical SDK artifact is development-only until a compatible host Release publishes it. SDK `1.10.0` replaces runtime-installable package-authored executable/argument declarations with
@@ -83,3 +83,16 @@ for packaging, Release, authority, compatibility, diagnostics, and lifecycle rul
 SDK `1.14.0` adds optional static `dependencies` (`id`, stable numeric `minimum`, optional `maximumExclusive`) with at most 16 required plugins. A runtime package declaring dependencies also requires `pluginDependencies`; this carries lifecycle constraints, not process authority. Enablement atomically enables compatible installed dependencies, without downloading packages or granting execution permission. Enabled consumers lock dependency disable/removal/incompatible selection. Host-bundled dependency requirements also protect legacy rollback selections. This remains an unpublished development artifact.
 
 SDK `1.14.0` adds `modelProviders` (`workspaceModels`, `host.workspace-models.execute`) and `languageServers` (`packagedLanguageServices`, `languageServices`, `host.language-services.execute`). Entries are fixed integrity-covered Node modules; Java version ranges and separately installed components are static declarations. No runtime executable/argv authority is added. `stateBindings` resolve a producer's current window contribution snapshot before native model work. Model payloads stay in sealed native files, outside descriptor callbacks. Server IDs are bounded metadata; the native host admits only a server and selectors declared in that exact verified package. This canonical artifact remains development-only until a compatible host release publishes it.
+
+## Development catalog contract (1.15.0)
+
+`languageServerCatalog` is optional static manifest metadata, with a required matching capability
+for runtime packages. Types are generated from the native admission model into
+`generated-language-catalog.ts`; do not hand-edit them. The catalog contains bounded languages,
+selectors, localized names, upstream provenance, platforms and root-marker conditions. It grants
+no download, installation, filesystem or execution authority. Servers absent from the catalog
+remain unselected. Unknown required capability IDs cause older hosts to reject the package.
+
+The canonical `asterlyn-plugin-sdk-1.15.0.tgz` is **development-only**, not a published host Release.
+The historical 1.14.0 artifact and published LSP package remain unchanged. Installation recipes,
+management requests and runtime profiles will be introduced separately after their own acceptance.

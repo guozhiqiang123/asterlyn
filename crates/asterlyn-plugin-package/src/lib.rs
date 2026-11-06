@@ -4,7 +4,9 @@ pub use analysis_programs::{
     ModelConsumer, ModelProvider, ModelStateBinding, PackagedLanguageServer,
 };
 mod language_authority;
+pub mod language_catalog;
 pub use asterlyn_plugin_dependencies::PluginDependency;
+use language_catalog::LanguageServerCatalog;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs::{self, OpenOptions};
@@ -45,6 +47,7 @@ pub const SUPPORTED_CAPABILITIES: &[&str] = &[
     "pluginDependencies",
     "workspaceModels",
     "packagedLanguageServices",
+    "languageServerCatalog",
 ];
 pub const SUPPORTED_PERMISSIONS: &[&str] = &[
     "host.execution-targets.read",
@@ -110,6 +113,8 @@ pub struct AdmittedPluginManifest {
     pub model_providers: Vec<ModelProvider>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub language_servers: Vec<PackagedLanguageServer>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language_server_catalog: Option<LanguageServerCatalog>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_authorization: Option<TaskAuthorization>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,6 +209,8 @@ struct PackageManifest {
     model_providers: Vec<ModelProvider>,
     #[serde(default)]
     language_servers: Vec<PackagedLanguageServer>,
+    #[serde(default)]
+    language_server_catalog: Option<LanguageServerCatalog>,
     #[serde(default)]
     task_authorization: Option<TaskAuthorization>,
     #[serde(default)]
@@ -419,6 +426,7 @@ fn report_from(
         dependencies: manifest.dependencies,
         model_providers: manifest.model_providers,
         language_servers: manifest.language_servers,
+        language_server_catalog: manifest.language_server_catalog,
         task_authorization: manifest.task_authorization,
         workspace_tool: manifest.workspace_tool,
         host_operations: manifest.host_operations,
@@ -757,6 +765,18 @@ fn validate_manifest(
         "host.process.query",
     )?;
     language_authority::validate(&manifest.capabilities, &manifest.permissions)?;
+    language_catalog::validate_authority(
+        manifest.language_server_catalog.as_ref(),
+        &manifest.capabilities,
+    )?;
+    if let Some(catalog) = &manifest.language_server_catalog {
+        let messages = &manifest.localization.locales[&manifest.localization.default_locale];
+        if catalog.label_keys().any(|key| !messages.contains_key(key)) {
+            return Err(contract(
+                "language server catalog references a missing default message",
+            ));
+        }
+    }
     analysis_programs::validate(
         &manifest.capabilities,
         &manifest.permissions,

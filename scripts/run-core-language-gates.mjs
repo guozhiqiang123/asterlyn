@@ -31,4 +31,6 @@ try{
  if(process.platform!=="win32")symbolFixtures.push("symlink_outside_workspace_cannot_be_read");
  await gate("workspace-symbols",["test","--locked","-p","asterlyn-workspace","--test","symbols"],symbolFixtures.length,symbolFixtures);
  await gate("native-bindings",["scripts/generate-native-language-contract.mjs","--check"],0,[],process.execPath);
+ await gate("language-catalog",["test","--locked","-p","asterlyn-plugin-package","--features","bindings"],19,["shared_catalog_corpus_is_admitted_or_rejected_without_repair","language_catalog_requires_named_capability_and_default_copy_but_grants_no_execution"]);
+ await gate("catalog-bindings",["scripts/generate-language-catalog-contract.mjs","--check"],0,[],process.execPath);
 }finally{process.removeListener("SIGINT",interrupted);process.removeListener("SIGTERM",interrupted);await writeFile(join(output,"summary.json"),JSON.stringify({schema:1,platform:process.platform,arch:process.arch,node:process.version,results},null,2)+"\n");}

@@ -1,6 +1,6 @@
 # Plugin capabilities and permissions
 
-Status: experimental public catalog rooted at Asterlyn `0.1.28`; current SDK `1.14.0`, package schema `3`, and
+Status: experimental public catalog rooted at Asterlyn `0.1.28`; development SDK `1.15.0` (unpublished), package schema `3`, and
 plugin-host protocol `1`.
 
 Security containment in `0.1.19`: installable packages cannot receive authority from legacy raw
@@ -25,6 +25,7 @@ contributions remain available.
 
 | Capability ID | Plugin-facing use | Required permission(s) | Boundary |
 | --- | --- | --- | --- |
+| `languageServerCatalog` | Declare a bounded static upstream catalog | None | Metadata only; no installation, download, executable or startup authority |
 | `pluginDependencies` | Declare required installed/enabled plugins using stable version bounds | None | Generic lifecycle constraint; does not download packages or grant execution authority |
 | `workspaceCatalog` | Receive bounded workspace evidence for matching and discovery | `host.workspace.catalog.read` | Read-only host snapshot; no path handle or arbitrary file read |
 | `tasks` | Contribute task snapshots, hierarchy, refresh and reviewed run plans | `host.tasks.discover`; `host.tasks.execute` only when executing | Host owns trust, terminal, cancellation, output, artifacts and task state |

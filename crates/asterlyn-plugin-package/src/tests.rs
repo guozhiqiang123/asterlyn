@@ -10,6 +10,59 @@ use super::*;
 const RUNTIME: &[u8] = b"export function activate() {}";
 const LICENSE: &[u8] = b"MIT License";
 
+#[test]
+fn language_catalog_requires_named_capability_and_default_copy_but_grants_no_execution() {
+    let corpus: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../protocol/fixtures/language-server-catalog.json"
+    ))
+    .unwrap();
+    let catalog = &corpus["valid"][0]["catalog"];
+    let package = |capabilities: serde_json::Value, labels: bool| {
+        let manifest = manifest(|value| {
+            value["capabilities"] = capabilities;
+            value["permissions"] = json!([]);
+            value["languageServerCatalog"] = catalog.clone();
+            if labels {
+                value["localization"]["locales"]["en-US"]["language.rust"] = json!("Rust");
+                value["localization"]["locales"]["en-US"]["server.rust"] =
+                    json!("Example Rust server");
+            }
+        });
+        archive(&[
+            (MANIFEST_PATH, &manifest, EntryType::Regular),
+            ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+            ("LICENSE", LICENSE, EntryType::Regular),
+        ])
+    };
+    let mut current = context();
+    current.supported_capabilities = SUPPORTED_CAPABILITIES;
+    let bytes = package(json!(["languageServerCatalog"]), true);
+    let report = inspect_package(&bytes, &current).unwrap();
+    assert!(report.permissions.is_empty());
+    assert_eq!(
+        serde_json::to_value(report.management_manifest.language_server_catalog.unwrap()).unwrap(),
+        *catalog
+    );
+    assert!(
+        inspect_package(&bytes, &context()).is_err(),
+        "old hosts reject the unknown capability"
+    );
+    assert!(inspect_package(&package(json!([]), true), &current).is_err());
+    assert!(inspect_package(&package(json!(["languageServerCatalog"]), false), &current).is_err());
+    let orphan = manifest(|value| value["capabilities"] = json!(["languageServerCatalog"]));
+    assert!(
+        inspect_package(
+            &archive(&[
+                (MANIFEST_PATH, &orphan, EntryType::Regular),
+                ("runtime/plugin.js", RUNTIME, EntryType::Regular),
+                ("LICENSE", LICENSE, EntryType::Regular)
+            ]),
+            &current
+        )
+        .is_err()
+    );
+}
+
 fn context<'a>() -> AdmissionContext<'a> {
     AdmissionContext {
         repository: "asterlyn/example-plugin",

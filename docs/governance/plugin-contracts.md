@@ -69,7 +69,7 @@ required for `stable`.
 
 ## Planned managed-language-server contracts
 
-[ADR-0038](../architecture/decisions/0038-managed-upstream-language-servers.md) and the [2026-11-06 plan](../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) propose the contracts below. They are not supported capabilities or permission IDs today; F0 freezes declarations, versions, numeric bounds and negative/conformance fixtures before implementation.
+[ADR-0038](../architecture/decisions/0038-managed-upstream-language-servers.md) and the [2026-11-06 plan](../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md) govern the contracts below. The logical IDs in this table remain proposals. F0.1 now admits the optional static manifest field and required capability `languageServerCatalog` in development SDK 1.15.0, with native-generated types, strict bounds, localized labels and shared negative fixtures. This metadata-only slice grants no download, installation or execution authority. See the [foundation contract and evidence](../engineering/2026-11-06-lsp-foundation-contract.md); management requests, installation facts and runtime profiles remain pending.
 
 | Logical contract | Owner / consumer | State / version axis | Required boundary and evidence |
 | --- | --- | --- | --- |

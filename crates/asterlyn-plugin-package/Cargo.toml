@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+bindings = ["dep:schemars"]
+
 [dependencies]
 asterlyn-plugin-dependencies = { path = "../asterlyn-plugin-dependencies" }
 flate2.workspace = true
@@ -13,6 +16,12 @@ serde_json.workspace = true
 sha2.workspace = true
 spdx.workspace = true
 tar.workspace = true
+regex.workspace = true
+schemars = { version = "=0.8.22", optional = true }
+
+[[bin]]
+name = "export-language-catalog"
+required-features = ["bindings"]
 
 [dev-dependencies]
 tempfile.workspace = true

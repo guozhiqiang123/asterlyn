@@ -30,7 +30,9 @@
     "test:find:typography": "node scripts/test-find-typography-rendered.mjs",
     "test:find:rendered": "node scripts/test-find-results-rendered.mjs",
     "protocol:native": "node scripts/generate-native-language-contract.mjs",
-    "protocol:native:check": "node scripts/generate-native-language-contract.mjs --check"
+    "protocol:native:check": "node scripts/generate-native-language-contract.mjs --check",
+    "protocol:catalog": "node scripts/generate-language-catalog-contract.mjs",
+    "protocol:catalog:check": "node scripts/generate-language-catalog-contract.mjs --check"
   },
   "dependencies": {
     "@asterlyn/plugin-sdk": "file:packages/plugin-sdk",

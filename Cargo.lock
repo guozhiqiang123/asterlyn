@@ -198,6 +198,8 @@ version = "0.1.0"
 dependencies = [
  "asterlyn-plugin-dependencies",
  "flate2",
+ "regex",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "sha2",

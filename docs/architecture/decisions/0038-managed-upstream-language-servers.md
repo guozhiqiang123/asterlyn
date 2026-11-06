@@ -1,7 +1,7 @@
 # ADR-0038: LSP management plugin and managed upstream language servers
 
 - Date: 2026-11-06.
-- Status: **Direction accepted by the user; planned, not implemented.** Exact SDK/native contracts and upstream versions remain pending.
+- Status: **Accepted; incremental implementation in progress.** Static catalog admission is the first implementation slice; installation/runtime contracts and upstream selections remain pending.
 - Execution owner: [LSP management and upstream server plan](../../engineering/2026-11-06-lsp-management-and-upstream-servers-plan.md).
 
 ## Context
@@ -28,7 +28,7 @@ This decision amends the future direction of ADR-0034/0035/0036, not shipped wir
 
 Keep one owner for each installation/session fact and reuse existing verified facilities. Core services remain UI/Tauri independent. Distinguish installation from semantic readiness, protect active/rollback resources, and preserve editor buffers when stopping a server.
 
-This documentation change implements no capability, changes no dependency/version, installs no tool and authorizes no publication. Runtime changes follow the corresponding plan stage and acceptance.
+The first implementation slice adds metadata-only `languageServerCatalog` admission and development SDK 1.15.0. It does not implement installation/startup or choose an upstream. Exact bounds and stage evidence are recorded in the [foundation contract](../../engineering/2026-11-06-lsp-foundation-contract.md). Runtime changes follow their corresponding stage acceptance; no remote publication is authorized.
 
 ## Revisit triggers
 
