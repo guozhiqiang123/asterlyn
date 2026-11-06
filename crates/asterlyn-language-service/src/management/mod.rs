@@ -13,6 +13,8 @@ mod installer;
 pub use installer::*;
 mod recipe;
 pub use recipe::*;
+mod recipe_registry;
+pub use recipe_registry::*;
 mod storage;
 pub use storage::*;
 mod content_storage;

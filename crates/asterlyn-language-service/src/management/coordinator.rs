@@ -1,5 +1,5 @@
 use super::{
-    model::{digest, opaque, version},
+    model::{digest, identifier, opaque, version},
     *,
 };
 use std::{
@@ -26,18 +26,27 @@ pub struct ManagementAuthority {
 }
 
 impl ManagementAuthority {
-    fn validate(&self, server: &ManagedServerId) -> Result<(), ManagedInstallError> {
-        server.validate()?;
-        if !self.enabled || !self.may_manage || self.plugin_id != server.plugin_id {
+    pub(super) fn validate_identity(&self) -> Result<(), ManagedInstallError> {
+        if !self.enabled || !self.may_manage {
             return Err(ManagedInstallError::PermissionDenied);
         }
-        if !opaque(&self.window_id, 128)
+        if !identifier(&self.plugin_id, 160)
+            || !opaque(&self.window_id, 128)
             || self.activation == 0
             || self.activation > MAX_SAFE_INTEGER
             || !version(&self.plugin_version)
             || !digest(&self.package_digest)
         {
             return Err(ManagedInstallError::InvalidRequest);
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate(&self, server: &ManagedServerId) -> Result<(), ManagedInstallError> {
+        self.validate_identity()?;
+        server.validate()?;
+        if self.plugin_id != server.plugin_id {
+            return Err(ManagedInstallError::PermissionDenied);
         }
         Ok(())
     }

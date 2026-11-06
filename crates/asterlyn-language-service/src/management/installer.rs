@@ -32,10 +32,12 @@ impl ManagedInstallationExecutor {
     pub fn prepare_install(
         &self,
         authority: &ManagementAuthority,
-        recipe: &ManagedInstallRecipe,
+        registered: &ManagedRegisteredRecipe,
         now: Instant,
     ) -> Result<ManagedInstallReview, ManagedInstallError> {
-        self.lock()?.prepare_install(authority, recipe.plan(), now)
+        registered.validate_authority(authority)?;
+        self.lock()?
+            .prepare_install(authority, registered.recipe().plan(), now)
     }
 
     pub fn prepare_remove(
@@ -70,8 +72,12 @@ impl ManagedInstallationExecutor {
         &self,
         authority: &ManagementAuthority,
         ticket: &ManagedOperationTicket,
-        recipe: &ManagedInstallRecipe,
+        registered: &ManagedRegisteredRecipe,
     ) -> Result<ManagedContentInventory, ManagedInstallError> {
+        if let Err(error) = registered.validate_authority(authority) {
+            return self.record_failure(ticket, error);
+        }
+        let recipe = registered.recipe();
         let artifact = recipe.artifact();
         let extraction = recipe.extraction();
         self.execute_confirmed_install_with(
@@ -262,14 +268,30 @@ mod tests {
             },
         };
         recipe_spec.recipe_digest = recipe_spec.calculated_digest().unwrap();
-        let recipe = recipe_spec.admit().unwrap();
+        let registry = ManagedRecipeRegistry::admit([ManagedRecipeCatalogEntry {
+            plugin_version: "1.0.0".into(),
+            package_digest: hash(b"plugin"),
+            spec: recipe_spec,
+            notice_text: "license".into(),
+        }])
+        .unwrap();
+        let authority = authority();
+        let reference = registry
+            .summaries(&authority, "aarch64-apple-darwin")
+            .unwrap()
+            .pop()
+            .unwrap()
+            .reference;
+        let registered = registry.resolve(&authority, &reference).unwrap();
+        let recipe = registered.recipe();
         let artifact = recipe.artifact().clone();
         let extraction = recipe.extraction().clone();
-        let authority = authority();
         let executor =
             ManagedInstallationExecutor::open(root.clone(), "fixture-epoch".into()).unwrap();
         let now = Instant::now();
-        let review = executor.prepare_install(&authority, &recipe, now).unwrap();
+        let review = executor
+            .prepare_install(&authority, &registered, now)
+            .unwrap();
         let ticket = executor.confirm(&authority, &review.id, now).unwrap();
         Fixture {
             _directory: directory,

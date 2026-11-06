@@ -138,3 +138,15 @@ F2.6 仍不是用户可调用的安装器：尚缺受信任目录到原生配方
 4 项配方专项测试覆盖完整绑定、origin 顺序/冗余规范化、来源/格式/大小/SPDX/notice 任一替换导致摘要不匹配，以及 HTTP、本地/非法许可和 schema 拒绝。完整语言库 90 项、桌面库 180 项通过（另有 3 项既有 ignored），Clippy `-D warnings`、原生协议漂移检查及 Windows x86_64 语言服务目标编译通过；测试没有加入真实服务配方、访问网络或修改插件目录 schema。
 
 下一步仍需设计宿主拥有的准入配方注册表，把已批准服务/target/版本映射到 sealed recipe，并验证/保留 notice 内容；随后管理审查和 IPC 只能提交稳定服务/配方引用，不能提交这些底层字段。用户尚未选择任何真实上游，因此本批次不把示例 recipe 加入默认目录或显示安装动作。
+
+## F2.9 宿主原生配方注册表
+
+`ManagedRecipeRegistry` 是非序列化、不可变的宿主原生注册表。输入 `ManagedRecipeCatalogEntry` 除 F2.8 spec 外必须携带精确插件版本、插件包 SHA-256 和将来展示给用户的 UTF-8 notice 原文。注册表重新执行 recipe 准入，并计算 notice 原文字节的 SHA-256 与 recipe 中已绑定的 `noticeDigest` 比较；空 notice、NUL/非换行类控制字符、单项超过 128 KiB、总计超过 1 MiB 或超过 64 个 recipe 均失败关闭。notice 以共享不可变字符串持有，空注册表不占用 notice 内容内存。
+
+注册槽由插件 ID、插件版本、包摘要、server ID 和 target 组成；同槽只允许一个 recipe。查询使用 `ManagedRecipeReference` 再绑定完整 server、target 和 recipe digest，旧界面或旧任务持有的摘要在同槽变化时返回 `state-changed`，不能静默升级。列表摘要只披露审查所需的版本、来源、下载/展开量、归档/内容摘要和许可身份，不包含输出路径、允许重定向或可变请求参数。
+
+解析还要求当前 `ManagementAuthority` 的窗口/activation 形状有效、插件已启用且具有管理资格，并且插件 ID、版本和包摘要与注册 entry 完全一致。`ManagedInstallationExecutor::prepare_install` 和生产下载入口进一步只接受 `ManagedRegisteredRecipe`，并在准备和执行两个边界重新检查 authority；原生调用者不能再绕过注册表，把一个自行构造的 sealed recipe 直接交给宿主执行器。
+
+3 项专项测试覆盖精确包解析和 notice 保留、过期 recipe/换版本/换包/禁用拒绝，以及重复槽、notice 内容/控制字符、64 项上限。完整语言库 93 项、桌面库 180 项通过（另有 3 项既有 ignored），Clippy `-D warnings` 和 Windows x86_64 语言服务目标编译通过。注册表仍没有接入桌面状态或插件包 schema，所有测试条目均为内存夹具；当前产品注册表事实仍为空。
+
+下一步建立只传稳定 reference 的管理协议与宿主任务注册表。配方注册表替换必须与插件 activation 代际协调：撤销/换包时取消未完成 review/job，已经发布的不可变制品继续由索引和租约管理。未完成这一生命周期接线前不开放 capability 或安装按钮。
