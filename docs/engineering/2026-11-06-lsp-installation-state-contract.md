@@ -176,3 +176,13 @@ F2.6 仍不是用户可调用的安装器：尚缺受信任目录到原生配方
 返回模型只包含有界 recipe summary/reference，prepare 只产生 review ID、精确 artifact、索引 revision、资源量、许可/来源摘要和已保留 notice 原文。协议层逐字段拒绝未知字段、重复 reference、非 HTTPS/超长 URL、身份/摘要替换、非安全整数、资源越界、非法 notice 控制字符及超过 128 KiB 的 notice；原生 recipe URL 同步增加 4,096 字节上限。notice 在原生 DTO 中继续共享 `Arc<str>`，仅在最终序列化时读取，不提前复制。
 
 当前宿主 recipe registry 与已发布 LSP 目录的 `servers` 都仍为空：列表稳定返回空集合，任意 prepare 返回 not found，不会创建 review、启动网络或出现确认入口。确认、取消、后台执行、进度事件和 UI 均未开放。完整语言库 97 项、桌面库 182 项通过（另有 3 项 ignored），脚本 1,621 项、TypeScript、Clippy `-D warnings`、桌面生成协议与原生/目录协议漂移检查通过；Windows GNU 语言服务目标编译通过，当前工具链未安装 Windows MSVC target，因此该目标没有复验。
+
+## F2.13 用户确认、后台执行与 Authority 撤销
+
+`confirm_managed_language_install` 只接收插件 ID 和 F2.12 返回的 review ID；宿主再次复验当前插件包与窗口 activation，再由 task registry 将 exact authority、registered recipe 和 coordinator ticket 换成不可伪造的单次工作句柄。确认命令立即返回有界 operation ID，实际 HTTP/解包/提交链进入 Tauri blocking worker。task registry 的 8 项 active 上限在入队前生效，因此调用方不能绕过它创建无界 blocking 工作；worker 句柄未开始即被运行时丢弃时，F2.10 的 `Drop` 仍会取消原生 job。
+
+`cancel_managed_language_install` 同样重新派生 authority，并仅以当前窗口/插件包匹配的 operation ID 请求取消。worker 结束后向发起窗口单播 `asterlyn://managed-language-installation-event`，包含 operation ID、completed/cancelled/failed 结果、固定失败类别和新的安装快照；只有 blocking worker 自身无法完成时快照允许为空。前端严格验证事件结果与快照中同 ID 终态 operation 的 phase/failure 一致，其他窗口收不到该事件。当前没有按字节推送中间进度，管理界面后续可在活动期间读取已有 environment snapshot。
+
+task registry 新增按 plugin+window、plugin 或 window 撤销的宿主生命周期入口。窗口销毁、插件停用及 workspace runtime 替换会清除匹配 review/工作句柄，并通过 coordinator 将未完成 job 记为 cancelled；运行中的 transport 在下一取消边界停止。撤销不删除已发布内容、不改 current/rollback，也不释放真实进程持有的 use lease。专项测试覆盖 pending review 撤销、confirmed handle 迟到执行、取消终态快照及 review/terminal DTO 序列化一致性。
+
+完整语言库 98 项、桌面库 183 项通过（另有 3 项 ignored），脚本 1,621 项、TypeScript、Clippy `-D warnings`、桌面生成协议、原生/目录协议漂移和 Windows GNU 语言服务目标编译通过。产品 registry 仍为空，所以这些命令目前无法形成真实下载；设置页/底部推荐也尚未接 review 对话框和终态事件。下一步应先定义受信任 recipe catalog 的装载/替换事务和首个上游候选，随后才把 host-owned 确认 UI 接到本协议。

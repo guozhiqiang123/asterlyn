@@ -26,6 +26,7 @@ pub(crate) use language_service::{
     request_language_service, start_language_service, stop_language_service,
 };
 pub(crate) use managed_language_installation::{
+    cancel_managed_language_install, confirm_managed_language_install,
     list_managed_language_recipes, prepare_managed_language_install,
     read_managed_language_environment,
 };

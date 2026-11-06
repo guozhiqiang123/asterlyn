@@ -434,6 +434,9 @@ pub(crate) fn deactivate_installed_plugin_runtime(
     process_queries: State<'_, PluginProcessQueryManager>,
     supervisor: State<'_, PluginHostSupervisor>,
 ) {
+    let _ = window
+        .state::<crate::application::ManagedLanguageInstallationState>()
+        .revoke_plugin_window(&plugin_id, window.label());
     if plugin_id == "dev.asterlyn.lsp" {
         window
             .state::<crate::application::LanguageServiceManager>()

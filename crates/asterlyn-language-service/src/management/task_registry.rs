@@ -242,6 +242,28 @@ impl ManagedInstallationTaskRegistry {
         self.inner.executor.cancel(authority, &ticket)
     }
 
+    /// Revoke reviews and jobs when a host window loses this plugin authority.
+    /// Published content and use leases remain owned by the durable coordinator.
+    pub fn revoke_plugin_window(
+        &self,
+        plugin_id: &str,
+        window_id: &str,
+    ) -> Result<(), ManagedInstallError> {
+        self.revoke_matching(|authority| {
+            authority.plugin_id == plugin_id && authority.window_id == window_id
+        })
+    }
+
+    /// Revoke the plugin across all windows after disable or package replacement.
+    pub fn revoke_plugin(&self, plugin_id: &str) -> Result<(), ManagedInstallError> {
+        self.revoke_matching(|authority| authority.plugin_id == plugin_id)
+    }
+
+    /// Revoke every plugin authority owned by a destroyed window.
+    pub fn revoke_window(&self, window_id: &str) -> Result<(), ManagedInstallError> {
+        self.revoke_matching(|authority| authority.window_id == window_id)
+    }
+
     /// Consumes the work exactly once. Hosts run this inside their bounded
     /// blocking pool and then publish a fresh snapshot; no callback occurs here.
     pub fn execute_install_blocking(
@@ -320,6 +342,35 @@ impl ManagedInstallationTaskRegistry {
             .state
             .lock()
             .map_err(|_| ManagedInstallError::StorageFailed)
+    }
+
+    fn revoke_matching(
+        &self,
+        matches: impl Fn(&ManagementAuthority) -> bool,
+    ) -> Result<(), ManagedInstallError> {
+        let mut state = self.lock()?;
+        let mut authorities = BTreeMap::new();
+        for authority in state
+            .pending
+            .values()
+            .map(|pending| &pending.authority)
+            .chain(state.active.values().map(|active| &active.authority))
+            .filter(|authority| matches(authority))
+        {
+            authorities
+                .entry((authority.plugin_id.clone(), authority.window_id.clone()))
+                .or_insert_with(|| authority.clone());
+        }
+        for mut authority in authorities.into_values() {
+            authority.enabled = false;
+            authority.may_manage = false;
+            self.inner.executor.reconcile_authority(&authority)?;
+        }
+        state
+            .pending
+            .retain(|_, pending| !matches(&pending.authority));
+        state.active.retain(|_, active| !matches(&active.authority));
+        Ok(())
     }
 }
 
@@ -485,5 +536,43 @@ mod tests {
             executor.confirm(&owner, &review.review.id, now),
             Err(ManagedInstallError::StaleReview)
         ));
+    }
+
+    #[test]
+    fn host_lifecycle_revocation_removes_matching_review_and_work_handles() {
+        let (_directory, executor, tasks) = tasks();
+        let owner = authority("one");
+        let reference = tasks
+            .recipe_summaries(&owner, "aarch64-apple-darwin")
+            .unwrap()
+            .pop()
+            .unwrap()
+            .reference;
+        let now = Instant::now();
+        let pending = tasks.prepare_install(&owner, &reference, now).unwrap();
+        tasks.revoke_plugin_window(&owner.plugin_id, "one").unwrap();
+        assert!(matches!(
+            executor.confirm(&owner, &pending.review.id, now),
+            Err(ManagedInstallError::StaleReview)
+        ));
+
+        let review = tasks.prepare_install(&owner, &reference, now).unwrap();
+        let work = tasks
+            .confirm_install(&owner, &review.review.id, now)
+            .unwrap();
+        let operation_id = work.operation_id().to_owned();
+        tasks.revoke_window("one").unwrap();
+        assert_eq!(
+            tasks.cancel_install(&owner, &operation_id),
+            Err(ManagedInstallError::NotFound)
+        );
+        assert_eq!(
+            tasks.execute_install_blocking(work),
+            Err(ManagedInstallError::NotFound)
+        );
+        assert_eq!(
+            executor.snapshot().unwrap().operations[0].phase,
+            ManagedOperationPhase::Cancelled
+        );
     }
 }

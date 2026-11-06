@@ -1,9 +1,24 @@
-import type { ManagedArtifact, ManagedServerId } from "./generated-native-language-types.ts";
+import type {
+  ManagedArtifact,
+  ManagedInstallationSnapshot,
+  ManagedInstallError,
+  ManagedServerId,
+} from "./generated-native-language-types.ts";
+import { validateManagedInstallationSnapshot } from "./managed-language-installation.ts";
 
 const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_NOTICE_BYTES = 128 * 1024;
 const encoder = new TextEncoder();
+const INSTALL_ERRORS = new Set<ManagedInstallError>([
+  "invalid-request", "unsupported-schema", "permission-denied", "stale-review", "expired-review",
+  "not-found", "busy", "resource-limit", "integrity-mismatch", "storage-failed",
+  "protected-artifact", "external-artifact", "in-use", "cancelled", "invalid-transition",
+  "unverified", "state-changed",
+]);
+
+export const MANAGED_LANGUAGE_INSTALLATION_EVENT =
+  "asterlyn://managed-language-installation-event";
 
 export interface ManagedLanguageRecipeReference {
   readonly server: ManagedServerId;
@@ -46,6 +61,19 @@ export interface ManagedLanguageInstallReview {
   readonly noticeText: string;
 }
 
+export interface ManagedLanguageInstallStarted {
+  readonly protocolVersion: 1;
+  readonly operationId: string;
+}
+
+export interface ManagedLanguageInstallCompletion {
+  readonly protocolVersion: 1;
+  readonly operationId: string;
+  readonly outcome: "completed" | "cancelled" | "failed";
+  readonly failure: ManagedInstallError | null;
+  readonly installation: ManagedInstallationSnapshot | null;
+}
+
 export function validateManagedLanguageRecipeCatalog(
   value: unknown,
 ): ManagedLanguageRecipeCatalog {
@@ -81,6 +109,40 @@ export function validateManagedLanguageInstallReview(
     || artifact.archiveDigest !== recipe.archiveDigest
     || artifact.contentDigest !== recipe.contentDigest) invalid();
   return value as ManagedLanguageInstallReview;
+}
+
+export function validateManagedLanguageInstallStarted(
+  value: unknown,
+): ManagedLanguageInstallStarted {
+  const item = exactObject(value, ["protocolVersion", "operationId"]);
+  if (item.protocolVersion !== 1 || !opaque(item.operationId, 128)) invalid();
+  return value as ManagedLanguageInstallStarted;
+}
+
+export function parseManagedLanguageInstallCompletion(
+  value: unknown,
+): ManagedLanguageInstallCompletion {
+  const item = exactObject(value, [
+    "protocolVersion", "operationId", "outcome", "failure", "installation",
+  ]);
+  if (item.protocolVersion !== 1 || !opaque(item.operationId, 128)
+    || !["completed", "cancelled", "failed"].includes(String(item.outcome))
+    || item.failure !== null && (typeof item.failure !== "string"
+      || !INSTALL_ERRORS.has(item.failure as ManagedInstallError))
+    || item.outcome === "completed" && item.failure !== null
+    || item.outcome === "cancelled" && item.failure !== "cancelled"
+    || item.outcome === "failed" && item.failure === null
+    || item.failure === "cancelled" && item.outcome !== "cancelled"
+    || item.installation === null && item.outcome !== "failed") invalid();
+  if (item.installation !== null) {
+    validateManagedInstallationSnapshot(item.installation);
+    const installation = item.installation as ManagedInstallationSnapshot;
+    const operation = installation.operations.find(candidate => candidate.id === item.operationId);
+    if (!operation || operation.phase !== item.outcome
+      || item.outcome === "failed" && operation.failure !== item.failure
+      || item.outcome !== "failed" && operation.failure !== null) invalid();
+  }
+  return value as ManagedLanguageInstallCompletion;
 }
 
 function recipeSummary(value: unknown): ManagedLanguageRecipeSummary {

@@ -9,7 +9,7 @@ import type { PluginSourceSnapshot, PluginInstallationSnapshot, InstalledPluginM
 import type { InstalledPluginActivation, InstalledPluginRuntimeDiagnostics, PluginRuntimeTheme, PluginRuntimeValue } from "./plugin-runtime";
 import type { LanguageServiceWorkspaceState, LanguageServiceReview, LanguageServiceTextChange, LanguageServiceResultEnvelope } from "./language-service";
 import type { ManagedLanguageEnvironment } from "./managed-language-environment";
-import type { ManagedLanguageRecipeCatalog, ManagedLanguageInstallReview } from "./managed-language-management";
+import type { ManagedLanguageRecipeCatalog, ManagedLanguageInstallReview, ManagedLanguageInstallStarted } from "./managed-language-management";
 
 export const DESKTOP_PROTOCOL_VERSION = 1 as const;
 export const DESKTOP_DIAGNOSTIC_CONTEXT_COMMANDS = ["activate_installed_plugin_runtime","invoke_installed_plugin_callback","prepare_task_execution","start_task_execution"] as const;
@@ -54,6 +54,8 @@ export interface DesktopCommandMap {
   read_managed_language_environment: { args: Record<string, never>; result: ManagedLanguageEnvironment };
   list_managed_language_recipes: { args: { pluginId: string; }; result: ManagedLanguageRecipeCatalog };
   prepare_managed_language_install: { args: { pluginId: string; serverId: string; recipeDigest: string; }; result: ManagedLanguageInstallReview };
+  confirm_managed_language_install: { args: { pluginId: string; reviewId: string; }; result: ManagedLanguageInstallStarted };
+  cancel_managed_language_install: { args: { pluginId: string; operationId: string; }; result: void };
   start_language_service: { args: { workspaceRoot: string; reviewId: string; serverId?: string; remember?: boolean; refreshModel?: boolean; }; result: string };
   open_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; languageId: string; version: number; text: string; }; result: void };
   change_language_document: { args: { workspaceRoot: string; sessionId: string; uri: string; version: number; changes: Array<LanguageServiceTextChange>; }; result: void };
@@ -229,6 +231,8 @@ export const DESKTOP_RESULT_VALIDATORS: {
   read_managed_language_environment: "featureScoped",
   list_managed_language_recipes: "featureScoped",
   prepare_managed_language_install: "featureScoped",
+  confirm_managed_language_install: "featureScoped",
+  cancel_managed_language_install: "void",
   start_language_service: "string",
   open_language_document: "void",
   change_language_document: "void",

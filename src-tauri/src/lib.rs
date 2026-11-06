@@ -347,6 +347,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if matches!(event, WindowEvent::Destroyed) {
+                let _ = window
+                    .state::<ManagedLanguageInstallationState>()
+                    .revoke_window(window.label());
                 window
                     .state::<LanguageServiceManager>()
                     .cancel_owner(window.label());
@@ -427,6 +430,8 @@ pub fn run() {
             read_managed_language_environment,
             list_managed_language_recipes,
             prepare_managed_language_install,
+            confirm_managed_language_install,
+            cancel_managed_language_install,
             open_language_document,
             change_language_document,
             close_language_document,

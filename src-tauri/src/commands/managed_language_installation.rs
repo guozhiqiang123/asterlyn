@@ -1,10 +1,11 @@
 use asterlyn_language_service::management::{ManagedInstallError, ManagementAuthority};
 use std::time::Instant;
-use tauri::{State, WebviewWindow};
+use tauri::{Emitter, State, WebviewWindow};
 
 use crate::application::{
-    ActiveWorkspaces, ManagedLanguageEnvironment, ManagedLanguageInstallReview,
-    ManagedLanguageInstallationState, ManagedLanguageRecipeCatalog, PluginMarketplaceCoordinator,
+    ActiveWorkspaces, ManagedLanguageEnvironment, ManagedLanguageInstallCompletion,
+    ManagedLanguageInstallReview, ManagedLanguageInstallStarted, ManagedLanguageInstallationState,
+    ManagedLanguageRecipeCatalog, PluginMarketplaceCoordinator,
 };
 
 use super::{
@@ -12,6 +13,9 @@ use super::{
     plugin_marketplace_verification::inspect_verified_installed_package,
     plugin_runtime::select_installed_plugin,
 };
+
+pub(crate) const MANAGED_LANGUAGE_INSTALLATION_EVENT: &str =
+    "asterlyn://managed-language-installation-event";
 
 #[tauri::command]
 pub(crate) fn read_managed_language_environment(
@@ -62,6 +66,70 @@ pub(crate) fn prepare_managed_language_install(
         Some(&server_id),
     )?;
     state.prepare_install(&authority, server_id, recipe_digest, Instant::now())
+}
+
+#[tauri::command]
+pub(crate) fn confirm_managed_language_install(
+    plugin_id: String,
+    review_id: String,
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    active: State<'_, ActiveWorkspaces>,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    state: State<'_, ManagedLanguageInstallationState>,
+) -> Result<ManagedLanguageInstallStarted, ManagedInstallError> {
+    if !management_opaque(&review_id, 128) {
+        return Err(ManagedInstallError::InvalidRequest);
+    }
+    let authority = resolve_management_authority(
+        &app,
+        &active,
+        &marketplace,
+        window.label(),
+        &plugin_id,
+        None,
+    )?;
+    let work = state.confirm_install(&authority, &review_id, Instant::now())?;
+    let started = work.started();
+    let operation_id = started.operation_id().to_owned();
+    let event_app = app.clone();
+    let event_window = window.label().to_owned();
+    tauri::async_runtime::spawn(async move {
+        let completion = match tauri::async_runtime::spawn_blocking(move || work.execute()).await {
+            Ok(completion) => completion,
+            Err(_) => ManagedLanguageInstallCompletion::worker_failed(operation_id),
+        };
+        let _ = event_app.emit_to(
+            &event_window,
+            MANAGED_LANGUAGE_INSTALLATION_EVENT,
+            completion,
+        );
+    });
+    Ok(started)
+}
+
+#[tauri::command]
+pub(crate) fn cancel_managed_language_install(
+    plugin_id: String,
+    operation_id: String,
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    active: State<'_, ActiveWorkspaces>,
+    marketplace: State<'_, PluginMarketplaceCoordinator>,
+    state: State<'_, ManagedLanguageInstallationState>,
+) -> Result<(), ManagedInstallError> {
+    if !management_opaque(&operation_id, 128) {
+        return Err(ManagedInstallError::InvalidRequest);
+    }
+    let authority = resolve_management_authority(
+        &app,
+        &active,
+        &marketplace,
+        window.label(),
+        &plugin_id,
+        None,
+    )?;
+    state.cancel_install(&authority, &operation_id)
 }
 
 fn resolve_management_authority(
@@ -144,9 +212,17 @@ fn management_identifier(value: &str, maximum: usize) -> bool {
         })
 }
 
+fn management_opaque(value: &str, maximum: usize) -> bool {
+    !value.is_empty()
+        && value.len() <= maximum
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::management_identifier;
+    use super::{management_identifier, management_opaque};
 
     #[test]
     fn management_identity_accepts_only_bounded_catalog_identifiers() {
@@ -158,5 +234,7 @@ mod tests {
             &format!("a{}", "b".repeat(160)),
             160
         ));
+        assert!(management_opaque("review-1", 128));
+        assert!(!management_opaque("review/1", 128));
     }
 }

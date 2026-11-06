@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  parseManagedLanguageInstallCompletion,
   validateManagedLanguageInstallReview,
+  validateManagedLanguageInstallStarted,
   validateManagedLanguageRecipeCatalog,
 } from "../src/protocol/managed-language-management.ts";
 
@@ -52,9 +54,39 @@ const review = {
   noticeText: "MIT license notice\n",
 };
 
+const installation = {
+  protocolVersion: 1,
+  epoch: "host-1",
+  revision: 1,
+  indexRevision: 0,
+  artifacts: [],
+  selections: [],
+  operations: [{
+    id: "operation-1",
+    server,
+    artifactId: digest("f"),
+    kind: "install",
+    phase: "cancelled",
+    completedBytes: 0,
+    totalBytes: recipe.downloadBytes,
+    failure: null,
+  }],
+};
+
 test("managed language management accepts exact catalog and review projections", () => {
   assert.equal(validateManagedLanguageRecipeCatalog(catalog), catalog);
   assert.equal(validateManagedLanguageInstallReview(review), review);
+  assert.deepEqual(validateManagedLanguageInstallStarted({
+    protocolVersion: 1,
+    operationId: "operation-1",
+  }), { protocolVersion: 1, operationId: "operation-1" });
+  assert.deepEqual(parseManagedLanguageInstallCompletion({
+    protocolVersion: 1,
+    operationId: "operation-1",
+    outcome: "cancelled",
+    failure: "cancelled",
+    installation,
+  }).installation, installation);
   assert.deepEqual(validateManagedLanguageRecipeCatalog({
     protocolVersion: 1,
     target: "aarch64-apple-darwin",
@@ -79,5 +111,23 @@ test("managed language management rejects drift, substitution and unbounded evid
   assert.throws(() => validateManagedLanguageInstallReview({
     ...review,
     recipe: { ...recipe, source: "http://example.com/server.gz" },
+  }));
+  assert.throws(() => validateManagedLanguageInstallStarted({
+    protocolVersion: 1,
+    operationId: "operation/1",
+  }));
+  assert.throws(() => parseManagedLanguageInstallCompletion({
+    protocolVersion: 1,
+    operationId: "operation-1",
+    outcome: "completed",
+    failure: "storage-failed",
+    installation,
+  }));
+  assert.throws(() => parseManagedLanguageInstallCompletion({
+    protocolVersion: 1,
+    operationId: "operation-1",
+    outcome: "cancelled",
+    failure: "cancelled",
+    installation: null,
   }));
 });

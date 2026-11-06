@@ -28,6 +28,7 @@
     ,"ManagedLanguageEnvironment": "./managed-language-environment"
     ,"ManagedLanguageRecipeCatalog": "./managed-language-management"
     ,"ManagedLanguageInstallReview": "./managed-language-management"
+    ,"ManagedLanguageInstallStarted": "./managed-language-management"
   },
   "diagnosticContextCommands": ["activate_installed_plugin_runtime", "invoke_installed_plugin_callback", "prepare_task_execution", "start_task_execution"],
   "commands": [
@@ -70,6 +71,8 @@
     { "name": "read_managed_language_environment", "args": {}, "result": "ManagedLanguageEnvironment", "validator": "featureScoped" },
     { "name": "list_managed_language_recipes", "args": { "pluginId": "string" }, "result": "ManagedLanguageRecipeCatalog", "validator": "featureScoped" },
     { "name": "prepare_managed_language_install", "args": { "pluginId": "string", "serverId": "string", "recipeDigest": "string" }, "result": "ManagedLanguageInstallReview", "validator": "featureScoped" },
+    { "name": "confirm_managed_language_install", "args": { "pluginId": "string", "reviewId": "string" }, "result": "ManagedLanguageInstallStarted", "validator": "featureScoped" },
+    { "name": "cancel_managed_language_install", "args": { "pluginId": "string", "operationId": "string" }, "result": "void", "validator": "void" },
     { "name": "start_language_service", "args": { "workspaceRoot": "string", "reviewId": "string", "serverId?": "string", "remember?": "boolean", "refreshModel?": "boolean" }, "result": "string", "validator": "string" },
     { "name": "open_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "languageId": "string", "version": "number", "text": "string" }, "result": "void", "validator": "void" },
     { "name": "change_language_document", "args": { "workspaceRoot": "string", "sessionId": "string", "uri": "string", "version": "number", "changes": "array:LanguageServiceTextChange" }, "result": "void", "validator": "void" },

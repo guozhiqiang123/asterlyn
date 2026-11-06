@@ -1,7 +1,8 @@
 use asterlyn_language_service::management::{
-    ManagedArtifact, ManagedInstallError, ManagedInstallationExecutor, ManagedInstallationSnapshot,
-    ManagedInstallationTaskRegistry, ManagedOperationKind, ManagedRecipeReference,
-    ManagedRecipeRegistry, ManagedRecipeSummary, ManagedServerId, ManagementAuthority,
+    ManagedArtifact, ManagedConfirmedInstall, ManagedInstallError, ManagedInstallationExecutor,
+    ManagedInstallationSnapshot, ManagedInstallationTaskRegistry, ManagedOperationKind,
+    ManagedRecipeReference, ManagedRecipeRegistry, ManagedRecipeSummary, ManagedServerId,
+    ManagementAuthority,
 };
 use serde::{Serialize, Serializer};
 use std::sync::Arc;
@@ -69,6 +70,92 @@ pub(crate) struct ManagedLanguageInstallReview {
     recipe: ManagedLanguageRecipeSummary,
     #[serde(serialize_with = "serialize_notice_text")]
     notice_text: Arc<str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedLanguageInstallStarted {
+    protocol_version: u32,
+    operation_id: String,
+}
+
+impl ManagedLanguageInstallStarted {
+    pub(crate) fn operation_id(&self) -> &str {
+        &self.operation_id
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ManagedLanguageInstallOutcome {
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedLanguageInstallCompletion {
+    protocol_version: u32,
+    operation_id: String,
+    outcome: ManagedLanguageInstallOutcome,
+    failure: Option<ManagedInstallError>,
+    installation: Option<ManagedInstallationSnapshot>,
+}
+
+impl ManagedLanguageInstallCompletion {
+    pub(crate) fn worker_failed(operation_id: String) -> Self {
+        Self {
+            protocol_version: 1,
+            operation_id,
+            outcome: ManagedLanguageInstallOutcome::Failed,
+            failure: Some(ManagedInstallError::StorageFailed),
+            installation: None,
+        }
+    }
+}
+
+pub(crate) struct ManagedLanguageInstallWork {
+    operation_id: String,
+    tasks: ManagedInstallationTaskRegistry,
+    work: ManagedConfirmedInstall,
+}
+
+impl ManagedLanguageInstallWork {
+    pub(crate) fn started(&self) -> ManagedLanguageInstallStarted {
+        ManagedLanguageInstallStarted {
+            protocol_version: 1,
+            operation_id: self.operation_id.clone(),
+        }
+    }
+
+    pub(crate) fn execute(self) -> ManagedLanguageInstallCompletion {
+        let result = self.tasks.execute_install_blocking(self.work);
+        let installation = self.tasks.snapshot().ok();
+        let (outcome, failure) = match result {
+            Ok(_) => (ManagedLanguageInstallOutcome::Completed, None),
+            Err(ManagedInstallError::Cancelled | ManagedInstallError::NotFound) => (
+                ManagedLanguageInstallOutcome::Cancelled,
+                Some(ManagedInstallError::Cancelled),
+            ),
+            Err(error) => (ManagedLanguageInstallOutcome::Failed, Some(error)),
+        };
+        let (outcome, failure) = if installation.is_none() {
+            (
+                ManagedLanguageInstallOutcome::Failed,
+                Some(ManagedInstallError::StorageFailed),
+            )
+        } else {
+            (outcome, failure)
+        };
+        ManagedLanguageInstallCompletion {
+            protocol_version: 1,
+            operation_id: self.operation_id,
+            outcome,
+            failure,
+            installation,
+        }
+    }
 }
 
 pub(crate) struct ManagedLanguageInstallationState {
@@ -194,6 +281,69 @@ impl ManagedLanguageInstallationState {
             ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
         }
     }
+
+    pub(crate) fn confirm_install(
+        &self,
+        authority: &ManagementAuthority,
+        review_id: &str,
+        now: Instant,
+    ) -> Result<ManagedLanguageInstallWork, ManagedInstallError> {
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available { tasks, .. } => {
+                let work = tasks.confirm_install(authority, review_id, now)?;
+                Ok(ManagedLanguageInstallWork {
+                    operation_id: work.operation_id().to_owned(),
+                    tasks: tasks.clone(),
+                    work,
+                })
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
+    }
+
+    pub(crate) fn cancel_install(
+        &self,
+        authority: &ManagementAuthority,
+        operation_id: &str,
+    ) -> Result<(), ManagedInstallError> {
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available { tasks, .. } => {
+                tasks.cancel_install(authority, operation_id)
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
+    }
+
+    pub(crate) fn revoke_plugin_window(
+        &self,
+        plugin_id: &str,
+        window_id: &str,
+    ) -> Result<(), ManagedInstallError> {
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available { tasks, .. } => {
+                tasks.revoke_plugin_window(plugin_id, window_id)
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
+    }
+
+    pub(crate) fn revoke_plugin(&self, plugin_id: &str) -> Result<(), ManagedInstallError> {
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available { tasks, .. } => {
+                tasks.revoke_plugin(plugin_id)
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
+    }
+
+    pub(crate) fn revoke_window(&self, window_id: &str) -> Result<(), ManagedInstallError> {
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available { tasks, .. } => {
+                tasks.revoke_window(window_id)
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
+    }
 }
 
 fn serialize_notice_text<S>(value: &Arc<str>, serializer: S) -> Result<S::Ok, S::Error>
@@ -245,7 +395,54 @@ mod tests {
         ManagedLanguageInstallationAvailability, ManagedLanguageInstallationState,
         ManagedRecipeRegistry, ManagementAuthority, native_environment,
     };
+    use asterlyn_language_service::management::{
+        MANAGED_INSTALL_RECIPE_SCHEMA_VERSION, ManagedArchiveFormat, ManagedInstallRecipeSpec,
+        ManagedRecipeCatalogEntry, ManagedRecipeLicense, ManagedServerId,
+    };
+    use sha2::{Digest, Sha256};
     use std::time::Instant;
+
+    const NOTICE: &str = "fixture license notice\n";
+
+    fn hash(value: &[u8]) -> String {
+        format!("sha256:{:x}", Sha256::digest(value))
+    }
+
+    fn recipe_registry() -> ManagedRecipeRegistry {
+        let mut spec = ManagedInstallRecipeSpec {
+            schema_version: MANAGED_INSTALL_RECIPE_SCHEMA_VERSION,
+            server: ManagedServerId {
+                plugin_id: "dev.asterlyn.lsp-manager".into(),
+                server_id: "rust".into(),
+            },
+            version: "1.0.0".into(),
+            target: "aarch64-apple-darwin".into(),
+            recipe_digest: hash(b"placeholder"),
+            archive_digest: hash(b"archive"),
+            content_digest: hash(b"content"),
+            source: "https://downloads.example.com/server.gz".into(),
+            allowed_redirect_origins: Vec::new(),
+            format: ManagedArchiveFormat::Gzip {
+                output_path: "bin/server".into(),
+                executable: true,
+            },
+            download_bytes: 100,
+            expanded_bytes: 200,
+            license: ManagedRecipeLicense {
+                expression: "MIT".into(),
+                notice_url: "https://github.com/example/server/blob/v1/LICENSE".into(),
+                notice_digest: hash(NOTICE.as_bytes()),
+            },
+        };
+        spec.recipe_digest = spec.calculated_digest().expect("recipe digest");
+        ManagedRecipeRegistry::admit([ManagedRecipeCatalogEntry {
+            plugin_version: "1.0.0".into(),
+            package_digest: hash(b"plugin-package"),
+            spec,
+            notice_text: NOTICE.into(),
+        }])
+        .expect("registered recipe")
+    }
 
     #[test]
     fn maps_only_catalog_supported_native_targets() {
@@ -324,5 +521,65 @@ mod tests {
             ),
             Err(ManagedInstallError::NotFound)
         ));
+    }
+
+    #[test]
+    fn confirmed_desktop_work_runs_once_and_publishes_a_terminal_snapshot() {
+        let directory = tempfile::tempdir().expect("temporary installation store");
+        let executor = ManagedInstallationExecutor::open(
+            directory.path().join("managed-language"),
+            "desktop-confirmed-work".into(),
+        )
+        .expect("installation executor");
+        let tasks = ManagedInstallationTaskRegistry::new(executor, recipe_registry());
+        let state = ManagedLanguageInstallationState {
+            state: ManagedLanguageInstallationAvailability::Available {
+                tasks,
+                platform: "macos-arm64",
+                target: "aarch64-apple-darwin",
+            },
+        };
+        let authority = ManagementAuthority {
+            window_id: "main".into(),
+            activation: 1,
+            plugin_id: "dev.asterlyn.lsp-manager".into(),
+            plugin_version: "1.0.0".into(),
+            package_digest: hash(b"plugin-package"),
+            enabled: true,
+            may_manage: true,
+        };
+        let recipe = state
+            .recipe_catalog(&authority)
+            .expect("recipe catalog")
+            .recipes
+            .pop()
+            .expect("registered recipe");
+        let review = state
+            .prepare_install(
+                &authority,
+                recipe.reference.server.server_id,
+                recipe.reference.recipe_digest,
+                Instant::now(),
+            )
+            .expect("install review");
+        assert_eq!(
+            serde_json::to_value(&review).expect("serialized review")["noticeText"],
+            NOTICE
+        );
+        let work = state
+            .confirm_install(&authority, &review.review_id, Instant::now())
+            .expect("confirmed work");
+        let started = work.started();
+        state
+            .cancel_install(&authority, started.operation_id())
+            .expect("cancel confirmed work");
+        let completion = serde_json::to_value(work.execute()).expect("serialized completion");
+        assert_eq!(completion["operationId"], started.operation_id());
+        assert_eq!(completion["outcome"], "cancelled");
+        assert_eq!(completion["failure"], "cancelled");
+        assert_eq!(
+            completion["installation"]["operations"][0]["phase"],
+            "cancelled"
+        );
     }
 }

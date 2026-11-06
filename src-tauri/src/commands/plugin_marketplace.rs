@@ -322,6 +322,9 @@ pub(crate) fn set_installed_plugin_enabled(
             .set_plugin_enabled(&plugin_id, enabled)
             .map_err(|error| error.to_string())?;
         if !enabled {
+            let _ = app
+                .state::<crate::application::ManagedLanguageInstallationState>()
+                .revoke_plugin(&plugin_id);
             tasks.cancel_plugin(&plugin_id);
             process_queries.cancel_plugin(&plugin_id);
             supervisor.stop_plugin_all(&plugin_id, ShutdownReason::Disabled);

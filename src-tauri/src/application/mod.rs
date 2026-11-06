@@ -37,8 +37,8 @@ pub(crate) use diagnostics::DiagnosticsLog;
 pub(crate) use git_operation_coordinator::GitOperationCoordinator;
 pub(crate) use history_page_cache::HistoryPageCacheRegistry;
 pub(crate) use managed_language_installation::{
-    ManagedLanguageEnvironment, ManagedLanguageInstallReview, ManagedLanguageInstallationState,
-    ManagedLanguageRecipeCatalog,
+    ManagedLanguageEnvironment, ManagedLanguageInstallCompletion, ManagedLanguageInstallReview,
+    ManagedLanguageInstallStarted, ManagedLanguageInstallationState, ManagedLanguageRecipeCatalog,
 };
 pub(crate) use operation_supervisor::{RemoteOperationRegistry, ScanRegistry};
 pub(crate) use plugin_marketplace::{PendingPluginAdmission, PluginMarketplaceCoordinator};

@@ -1,6 +1,6 @@
 # LSP 管理插件与上游语言服务改造计划
 
-日期：2026-11-06。状态：**用户已授权实施及分步本地提交；F0 核心契约与基线已落地，F1 推荐交互已进入本机验收收口，F2 已完成原生配方与任务注册表、桌面空目录所有权、宿主派生 authority 的列表/prepare 协议、已审查单次工作句柄、跨进程内容/索引事务、受限 HTTP/TLS 下载、受控解包及不可变发布/卸载恢复基础，具体服务端与版本尚未选定。** 逐步契约与验证见 [基础实施记录](2026-11-06-lsp-foundation-contract.md)。
+日期：2026-11-06。状态：**用户已授权实施及分步本地提交；F0 核心契约与基线已落地，F1 推荐交互已进入本机验收收口，F2 已完成原生配方与任务注册表、桌面空目录所有权、宿主派生 authority 的 review/确认/取消协议、有界后台执行与终态事件、跨进程内容/索引事务、受限 HTTP/TLS 下载、受控解包及不可变发布/卸载恢复基础，具体服务端与版本尚未选定。** 逐步契约与验证见 [基础实施记录](2026-11-06-lsp-foundation-contract.md)。
 
 架构决定：[ADR-0038](../architecture/decisions/0038-managed-upstream-language-servers.md)。本计划取代此前讨论的“分别发布 TS/JS、Rust、Android JVM 语言插件”建议，延续现有语言服务、插件、项目模型与资源治理。
 
@@ -157,5 +157,6 @@ F5 若上游独立导入即可满足需求，不额外依赖 Android Gradle 插�
 | 2026-11-06 | F2.10 绑定 review、ticket 与后台工作句柄 | `ManagedInstallationTaskRegistry` 把精确 authority、registered recipe、5 分钟 review 和 coordinator ticket 保持在原生内存；确认后返回字段私有、单次消费的工作句柄，operation ID 只能用于同 authority 取消，不能伪造执行权。pending/active 分别沿用 32/8 上限；过期 review 清除，入队失败/句柄遗失自动取消，registry 撤销会清除旧 review/job，完成后移除活动句柄。notice 使用同一 `Arc<str>`，不复制有界许可原文。3 项专项测试及语言库 96 项、桌面库 180 项、Clippy、协议漂移和 Windows x86_64 目标编译通过；尚未接桌面 blocking scheduler、事件或 IPC |
 | 2026-11-06 | F2.11 将任务所有者接入桌面状态 | `ManagedLanguageInstallationState` 由恢复后的 executor 和宿主 recipe registry 构造唯一 task registry，环境快照也统一经该所有者读取；当前注入的目录明确为空，所以不会出现安装入口或网络行为，状态释放时沿用 F2.10 撤销语义。临时私有存储专项测试确认 snapshot 和当前 target 的 recipe summary 均为空；桌面库完整 181 项通过（另有 3 项 ignored）。只读列表/prepare 协议、用户确认、后台 worker 和事件仍未接线 |
 | 2026-11-06 | F2.12 开放宿主复验身份的列表与 prepare 协议 | 两条窄 Tauri 命令仅接收插件 ID 及 prepare 的 server ID/recipe digest；宿主重新派生窗口 activation、target、已启用插件版本/包摘要，复验保留包、不可变内容与静态目录，并在返回前再次检查 activation。响应只含有界 summary/reference 或 review；TS 严格验证未知字段、重复/替换、URL/资源/notice 上限，原生 URL 同步限为 4,096 字节。目录和 registry 仍为空，列表为空且 prepare 为 not found，没有确认/下载入口。语言库 97 项、桌面库 182 项（另 3 ignored）、脚本 1,621 项、TypeScript、Clippy、协议漂移及 Windows GNU 语言服务编译通过；本机缺 Windows MSVC target |
+| 2026-11-06 | F2.13 接通确认、取消、后台执行和生命周期撤销 | confirm 重新派生 exact authority，并把 review 换为单次原生工作句柄；最多 8 个 active 任务进入 blocking worker，命令立即返回 operation ID。cancel 只能作用于同窗口/插件包任务；终态结果连同新快照只单播发起窗口，前端复核事件与同 ID operation 的 phase/failure 一致。窗口销毁、插件停用或 workspace runtime 替换会撤销匹配 review/job，不删除已发布内容或 use lease。专项测试覆盖生命周期撤销、迟到句柄、取消终态和 DTO；语言库 98 项、桌面库 183 项（另 3 ignored）、脚本 1,621 项、TypeScript、Clippy、协议漂移及 Windows GNU 目标编译通过。registry 仍为空，确认 UI、真实下载和中间进度事件未开放 |
 
 实施时追加源码/包/工具身份、用户候选决定、测试和实测回执。目录基础不代表运行验收或内存结论。
