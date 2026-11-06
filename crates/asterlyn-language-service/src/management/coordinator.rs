@@ -5,8 +5,8 @@ use super::{
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -151,6 +151,7 @@ struct Review {
 struct Job {
     authority: ManagementAuthority,
     artifact: ManagedArtifact,
+    expanded_bytes: u64,
     state: ManagedInstallOperation,
     cancelled: Arc<AtomicBool>,
 }
@@ -387,12 +388,35 @@ impl ManagedInstallationCoordinator {
             Job {
                 authority: authority.clone(),
                 artifact: review.public.artifact,
+                expanded_bytes: review.public.expanded_bytes,
                 state,
                 cancelled: cancelled.clone(),
             },
         );
         self.revision = revision;
         Ok(ManagedOperationTicket { id, cancelled })
+    }
+
+    /// Bind a native execution adapter to the exact plan that was reviewed and
+    /// confirmed before it performs any blocking acquisition work.
+    pub fn validate_install_execution(
+        &self,
+        ticket: &ManagedOperationTicket,
+        artifact: &ManagedArtifact,
+        download_bytes: u64,
+        expanded_bytes: u64,
+    ) -> Result<(), ManagedInstallError> {
+        self.current()?;
+        let job = self.job(ticket)?;
+        if job.state.kind != ManagedOperationKind::Install
+            || job.state.phase != ManagedOperationPhase::Acquiring
+            || &job.artifact != artifact
+            || job.state.total_bytes != download_bytes
+            || job.expanded_bytes != expanded_bytes
+        {
+            return Err(ManagedInstallError::InvalidTransition);
+        }
+        Ok(())
     }
 
     pub fn progress(

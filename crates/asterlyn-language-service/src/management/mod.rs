@@ -9,6 +9,8 @@ mod download;
 pub use download::*;
 mod http_download;
 pub use http_download::*;
+mod installer;
+pub use installer::*;
 mod storage;
 pub use storage::*;
 mod content_storage;

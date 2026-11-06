@@ -1,12 +1,8 @@
 use asterlyn_language_service::management::{
-    ManagedInstallError, ManagedInstallationContentStore, ManagedInstallationCoordinator,
-    ManagedInstallationSnapshot,
+    ManagedInstallError, ManagedInstallationExecutor, ManagedInstallationSnapshot,
 };
 use serde::Serialize;
-use std::{
-    sync::Mutex,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 const STORE_DIRECTORY: &str = "managed-language-tools-v1";
@@ -26,8 +22,7 @@ pub(crate) struct ManagedLanguageInstallationState {
 
 enum ManagedLanguageInstallationAvailability {
     Available {
-        coordinator: Box<Mutex<ManagedInstallationCoordinator>>,
-        _store: ManagedInstallationContentStore,
+        executor: ManagedInstallationExecutor,
         platform: &'static str,
         target: &'static str,
     },
@@ -50,8 +45,6 @@ impl ManagedLanguageInstallationState {
             .app_local_data_dir()
             .map_err(|_| ManagedInstallError::StorageFailed)?
             .join(STORE_DIRECTORY);
-        let mut store = ManagedInstallationContentStore::new(root);
-        let index = store.load_and_recover()?;
         let (platform, target) = native_environment(std::env::consts::OS, std::env::consts::ARCH)
             .ok_or(ManagedInstallError::InvalidRequest)?;
         let epoch = format!(
@@ -62,10 +55,9 @@ impl ManagedLanguageInstallationState {
                 .unwrap_or_default()
                 .as_millis()
         );
-        let coordinator = ManagedInstallationCoordinator::restore(epoch, index)?;
+        let executor = ManagedInstallationExecutor::open(root, epoch)?;
         Ok(ManagedLanguageInstallationAvailability::Available {
-            coordinator: Box::new(Mutex::new(coordinator)),
-            _store: store,
+            executor,
             platform,
             target,
         })
@@ -74,15 +66,12 @@ impl ManagedLanguageInstallationState {
     pub(crate) fn environment(&self) -> Result<ManagedLanguageEnvironment, ManagedInstallError> {
         match &self.state {
             ManagedLanguageInstallationAvailability::Available {
-                coordinator,
+                executor,
                 platform,
                 target,
                 ..
             } => {
-                let installation = coordinator
-                    .lock()
-                    .map_err(|_| ManagedInstallError::StorageFailed)?
-                    .snapshot()?;
+                let installation = executor.snapshot()?;
                 Ok(ManagedLanguageEnvironment {
                     protocol_version: 1,
                     platform,
