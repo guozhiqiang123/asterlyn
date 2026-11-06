@@ -86,6 +86,7 @@ test("shell view follows persisted activity order and exposes stable feature hos
   assert.doesNotMatch(html, /id="refresh-button"/);
   assert.doesNotMatch(html, /id="git-recoveries-open"/);
   assert.match(html, /class="status-indicator success" id="status-indicator"/);
+  assert.match(html, /id="managed-language-status-host"/);
 });
 
 test("empty workspace is ready, hides tool windows, and disables every activity entry", () => {

@@ -1,0 +1,60 @@
+#managed-language-status-host:empty {
+  display: none;
+}
+
+.managed-language-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.managed-language-status.warning {
+  color: var(--warning-text);
+}
+
+.managed-language-status.progress {
+  color: var(--info-text);
+}
+
+.managed-language-status-message {
+  overflow: hidden;
+  max-width: min(38vw, 520px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.managed-language-status progress {
+  width: 48px;
+  height: 4px;
+  accent-color: var(--accent);
+}
+
+.managed-language-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.managed-language-status-actions button {
+  min-height: 20px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.managed-language-status-actions button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+@media (max-width: 1120px) {
+  .managed-language-status-message {
+    max-width: 260px;
+  }
+}

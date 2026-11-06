@@ -16,6 +16,7 @@ import "./features/files-editor/welcome.css";
 import "./features/files-editor/files-editor.css";
 import "./features/files-editor/language-location-picker.css";
 import "./features/language-services/language-service-status.css";
+import "./features/language-services/managed-language-status.css";
 import "./features/files-editor/read-only-diff.css";
 import "./features/files-editor/editable-diff.css";
 import "./shared/diff-review.css";

@@ -1,6 +1,7 @@
 import {EN_OPEN_IN_WINDOW,ZH_OPEN_IN_WINDOW} from "./result-window-copy.ts";
 import { EN_LANGUAGE_STATUS, ZH_LANGUAGE_STATUS, type LanguageServiceStatusCopy } from "./language-service-status-copy.ts";
 export interface LanguageServiceCopy {
+  management: ManagedLanguageStatusCopy;
   coverage:Record<"complete"|"partial"|"unknown",string>;incompleteEmpty:string;
   excludeImports:string;
   openInWindow:string;referencesTitle:string;definitionsTitle:string;
@@ -11,7 +12,41 @@ export interface LanguageServiceCopy {
   noDefinition: string; invalidDefinition: string; targetUnavailable: string; invalidTargetRange: string; definitionOpened: string;
   findingReferences: string; chooseReference: string; noReferences: string; filterLocations: string; noMatchingLocations: string; limitedLocations: string;
 }
+export interface ManagedLanguageStatusCopy {
+  checking(language: string): string;
+  factsUnavailable(language: string): string;
+  unconfigured(language: string): string;
+  platformUnavailable(language: string): string;
+  projectUnknown(language: string): string;
+  selectionRequired(language: string): string;
+  recipeUnavailable(server: string): string;
+  targetUnavailable(server: string): string;
+  installAvailable(server: string): string;
+  installing(server: string, progress: string): string;
+  removing(server: string): string;
+  verificationRequired(server: string): string;
+  recoveryAvailable(server: string): string;
+  progressLabel(server: string): string;
+  actions: Record<"open" | "install" | "cancel" | "verify" | "recover", string>;
+}
 export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  management: {
+    checking: language => `Checking ${language} language service…`,
+    factsUnavailable: language => `${language} language service status is unavailable`,
+    unconfigured: language => `${language} language service is not configured`,
+    platformUnavailable: language => `${language} language service is unavailable on this platform`,
+    projectUnknown: language => `Checking whether ${language} is supported by this project…`,
+    selectionRequired: language => `Choose a ${language} language service`,
+    recipeUnavailable: server => `${server} installation is not available yet`,
+    targetUnavailable: server => `${server} is unavailable for this device`,
+    installAvailable: server => `${server} is not installed`,
+    installing: (server, progress) => `Installing ${server}${progress ? ` · ${progress}` : ""}`,
+    removing: server => `Waiting to remove ${server}`,
+    verificationRequired: server => `${server} must be verified before use`,
+    recoveryAvailable: server => `${server} has an installed version available for recovery`,
+    progressLabel: server => `${server} installation progress`,
+    actions: { open: "Manage", install: "Install", cancel: "Cancel", verify: "Verify", recover: "Review" },
+  },
   coverage:{complete:"Analysis coverage confirmed",partial:"Results cover part of the project",unknown:"The provider has not confirmed analysis coverage"},incompleteEmpty:"No locations returned; analysis coverage is incomplete or unconfirmed.",
   excludeImports:"Exclude imports",
   openInWindow:EN_OPEN_IN_WINDOW,referencesTitle:"References",definitionsTitle:"Definitions",
@@ -29,6 +64,23 @@ export const EN_US_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
   filterLocations: "Filter by file or path", noMatchingLocations: "No matching locations.", limitedLocations: "Showing the first {count} locations",
 };
 export const ZH_CN_LANGUAGE_SERVICE_COPY: LanguageServiceCopy = {
+  management: {
+    checking: language => `正在检查 ${language} 语言服务…`,
+    factsUnavailable: language => `暂时无法读取 ${language} 语言服务状态`,
+    unconfigured: language => `${language} 语言服务尚未配置`,
+    platformUnavailable: language => `当前平台不支持 ${language} 语言服务`,
+    projectUnknown: language => `正在确认当前项目是否支持 ${language}…`,
+    selectionRequired: language => `请选择 ${language} 语言服务`,
+    recipeUnavailable: server => `${server} 暂无可用安装方案`,
+    targetUnavailable: server => `${server} 不支持当前设备`,
+    installAvailable: server => `${server} 尚未安装`,
+    installing: (server, progress) => `正在安装 ${server}${progress ? ` · ${progress}` : ""}`,
+    removing: server => `正在等待卸载 ${server}`,
+    verificationRequired: server => `${server} 使用前需要重新校验`,
+    recoveryAvailable: server => `${server} 有可恢复的已安装版本`,
+    progressLabel: server => `${server} 安装进度`,
+    actions: { open: "管理", install: "安装", cancel: "取消", verify: "校验", recover: "查看" },
+  },
   coverage:{complete:"已确认分析覆盖范围",partial:"结果仅覆盖部分项目",unknown:"提供者尚未确认分析覆盖范围"},incompleteEmpty:"本次未返回位置；分析范围尚不完整或未确认。",
   excludeImports:"排除 import",
   openInWindow:ZH_OPEN_IN_WINDOW,referencesTitle:"引用",definitionsTitle:"定义",
