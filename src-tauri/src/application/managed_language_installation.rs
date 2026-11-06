@@ -21,14 +21,30 @@ pub(crate) struct ManagedLanguageEnvironment {
 }
 
 pub(crate) struct ManagedLanguageInstallationState {
-    coordinator: Mutex<ManagedInstallationCoordinator>,
-    _store: ManagedInstallationIndexStore,
-    platform: &'static str,
-    target: &'static str,
+    state: ManagedLanguageInstallationAvailability,
+}
+
+enum ManagedLanguageInstallationAvailability {
+    Available {
+        coordinator: Box<Mutex<ManagedInstallationCoordinator>>,
+        _store: ManagedInstallationIndexStore,
+        platform: &'static str,
+        target: &'static str,
+    },
+    Unavailable(ManagedInstallError),
 }
 
 impl ManagedLanguageInstallationState {
-    pub(crate) fn open(app: &tauri::AppHandle) -> Result<Self, ManagedInstallError> {
+    pub(crate) fn open(app: &tauri::AppHandle) -> Self {
+        Self {
+            state: Self::open_available(app)
+                .unwrap_or_else(ManagedLanguageInstallationAvailability::Unavailable),
+        }
+    }
+
+    fn open_available(
+        app: &tauri::AppHandle,
+    ) -> Result<ManagedLanguageInstallationAvailability, ManagedInstallError> {
         let root = app
             .path()
             .app_local_data_dir()
@@ -47,8 +63,8 @@ impl ManagedLanguageInstallationState {
                 .as_millis()
         );
         let coordinator = ManagedInstallationCoordinator::restore(epoch, index)?;
-        Ok(Self {
-            coordinator: Mutex::new(coordinator),
+        Ok(ManagedLanguageInstallationAvailability::Available {
+            coordinator: Box::new(Mutex::new(coordinator)),
             _store: store,
             platform,
             target,
@@ -56,17 +72,26 @@ impl ManagedLanguageInstallationState {
     }
 
     pub(crate) fn environment(&self) -> Result<ManagedLanguageEnvironment, ManagedInstallError> {
-        let installation = self
-            .coordinator
-            .lock()
-            .map_err(|_| ManagedInstallError::StorageFailed)?
-            .snapshot()?;
-        Ok(ManagedLanguageEnvironment {
-            protocol_version: 1,
-            platform: self.platform,
-            target: self.target,
-            installation,
-        })
+        match &self.state {
+            ManagedLanguageInstallationAvailability::Available {
+                coordinator,
+                platform,
+                target,
+                ..
+            } => {
+                let installation = coordinator
+                    .lock()
+                    .map_err(|_| ManagedInstallError::StorageFailed)?
+                    .snapshot()?;
+                Ok(ManagedLanguageEnvironment {
+                    protocol_version: 1,
+                    platform,
+                    target,
+                    installation,
+                })
+            }
+            ManagedLanguageInstallationAvailability::Unavailable(error) => Err(*error),
+        }
     }
 }
 
@@ -84,7 +109,10 @@ fn native_environment(os: &str, architecture: &str) -> Option<(&'static str, &'s
 
 #[cfg(test)]
 mod tests {
-    use super::native_environment;
+    use super::{
+        ManagedInstallError, ManagedLanguageInstallationAvailability,
+        ManagedLanguageInstallationState, native_environment,
+    };
 
     #[test]
     fn maps_only_catalog_supported_native_targets() {
@@ -98,5 +126,18 @@ mod tests {
         );
         assert_eq!(native_environment("freebsd", "x86_64"), None);
         assert_eq!(native_environment("linux", "riscv64"), None);
+    }
+
+    #[test]
+    fn unavailable_installation_facts_do_not_require_a_coordinator() {
+        let state = ManagedLanguageInstallationState {
+            state: ManagedLanguageInstallationAvailability::Unavailable(
+                ManagedInstallError::StorageFailed,
+            ),
+        };
+        assert_eq!(
+            state.environment().unwrap_err(),
+            ManagedInstallError::StorageFailed
+        );
     }
 }

@@ -328,13 +328,7 @@ pub fn run() {
             app.manage(diagnostics);
             app.state::<LanguageServiceManager>()
                 .set_debug(std::env::var("ASTERLYN_LSP_TRACE").as_deref() == Ok("1"));
-            let managed_language_installation =
-                ManagedLanguageInstallationState::open(app.handle()).map_err(|error| {
-                    std::io::Error::other(format!(
-                        "open managed language installation state: {error:?}"
-                    ))
-                })?;
-            app.manage(managed_language_installation);
+            app.manage(ManagedLanguageInstallationState::open(app.handle()));
             ensure_bundled_plugins(app.handle()).map_err(std::io::Error::other)?;
             recover_interrupted_plugin_activations(app.handle()).map_err(std::io::Error::other)?;
             let plugin_hosts = build_plugin_host_supervisor(app.handle().clone())

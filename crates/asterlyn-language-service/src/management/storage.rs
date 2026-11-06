@@ -44,7 +44,7 @@ impl ManagedInstallationIndexStore {
         next: &ManagedInstallationIndex,
     ) -> Result<(), ManagedInstallError> {
         if expected_revision > MAX_SAFE_INTEGER
-            || next.revision != expected_revision.checked_add(1).unwrap_or(u64::MAX)
+            || next.revision != expected_revision.saturating_add(1)
         {
             return Err(ManagedInstallError::InvalidRequest);
         }
