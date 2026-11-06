@@ -14,6 +14,7 @@ import type {
   SdkExecutionTargetProviderContribution,
   SdkRunConfigurationProviderContribution,
   SdkLanguageServiceContribution,
+  SdkLanguageServerCatalog,
   SdkPluginLocalization,
   SdkPluginNotificationCapability,
   SdkPluginNotificationRequest,
@@ -216,6 +217,8 @@ export interface PluginManagementEntry {
   readonly descriptionKey: string;
   readonly localization: PluginLocalization;
   readonly workspaceTool?: PluginWorkspaceToolDescriptor;
+  /** Admitted static metadata. It grants neither management nor execution authority. */
+  readonly languageServerCatalog?: SdkLanguageServerCatalog;
   readonly enabled: boolean;
   readonly matched: boolean;
   readonly active: boolean;
