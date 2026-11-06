@@ -1,5 +1,5 @@
 use asterlyn_language_service::management::{
-    ManagedInstallError, ManagedInstallationCoordinator, ManagedInstallationIndexStore,
+    ManagedInstallError, ManagedInstallationContentStore, ManagedInstallationCoordinator,
     ManagedInstallationSnapshot,
 };
 use serde::Serialize;
@@ -27,7 +27,7 @@ pub(crate) struct ManagedLanguageInstallationState {
 enum ManagedLanguageInstallationAvailability {
     Available {
         coordinator: Box<Mutex<ManagedInstallationCoordinator>>,
-        _store: ManagedInstallationIndexStore,
+        _store: ManagedInstallationContentStore,
         platform: &'static str,
         target: &'static str,
     },
@@ -50,8 +50,8 @@ impl ManagedLanguageInstallationState {
             .app_local_data_dir()
             .map_err(|_| ManagedInstallError::StorageFailed)?
             .join(STORE_DIRECTORY);
-        let store = ManagedInstallationIndexStore::new(root);
-        let index = store.load()?;
+        let mut store = ManagedInstallationContentStore::new(root);
+        let index = store.load_and_recover()?;
         let (platform, target) = native_environment(std::env::consts::OS, std::env::consts::ARCH)
             .ok_or(ManagedInstallError::InvalidRequest)?;
         let epoch = format!(

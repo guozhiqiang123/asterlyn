@@ -5,6 +5,8 @@ mod model;
 pub use model::*;
 mod storage;
 pub use storage::*;
+mod content_storage;
+pub use content_storage::*;
 mod coordinator;
 pub use coordinator::*;
 #[cfg(test)]

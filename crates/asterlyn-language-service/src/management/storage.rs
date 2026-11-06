@@ -43,6 +43,21 @@ impl ManagedInstallationIndexStore {
         expected_revision: u64,
         next: &ManagedInstallationIndex,
     ) -> Result<(), ManagedInstallError> {
+        self.compare_and_swap_transaction(expected_revision, next, || Ok(()), || Ok(()))
+    }
+
+    /// Serialize a content mutation with the durable index compare-and-swap.
+    /// `before_save` must publish or isolate content; `rollback` restores the
+    /// prior content view only when a failed save can be confirmed to have
+    /// retained the expected index. An uncertain save is left for startup
+    /// recovery instead of risking an index/content mismatch.
+    pub(super) fn compare_and_swap_transaction(
+        &self,
+        expected_revision: u64,
+        next: &ManagedInstallationIndex,
+        before_save: impl FnOnce() -> Result<(), ManagedInstallError>,
+        rollback: impl FnOnce() -> Result<(), ManagedInstallError>,
+    ) -> Result<(), ManagedInstallError> {
         if expected_revision > MAX_SAFE_INTEGER
             || next.revision != expected_revision.saturating_add(1)
         {
@@ -56,7 +71,17 @@ impl ManagedInstallationIndexStore {
         if current.revision != expected_revision {
             return Err(ManagedInstallError::StateChanged);
         }
-        self.save_unlocked(next)
+        before_save()?;
+        if let Err(error) = self.save_unlocked(next) {
+            if self
+                .load_unlocked()
+                .is_ok_and(|observed| observed.revision == expected_revision)
+            {
+                rollback()?;
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     fn load_unlocked(&self) -> Result<ManagedInstallationIndex, ManagedInstallError> {
@@ -123,7 +148,7 @@ impl ManagedInstallationIndexStore {
     }
 }
 
-fn ensure_private_root(root: &Path) -> Result<(), ManagedInstallError> {
+pub(super) fn ensure_private_root(root: &Path) -> Result<(), ManagedInstallError> {
     fs::create_dir_all(root).map_err(|_| ManagedInstallError::StorageFailed)?;
     let metadata = fs::symlink_metadata(root).map_err(|_| ManagedInstallError::StorageFailed)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
@@ -189,6 +214,7 @@ fn replace_file(staged: &Path, destination: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
 
     fn advanced(revision: u64) -> ManagedInstallationIndex {
         ManagedInstallationIndex {
@@ -248,5 +274,31 @@ mod tests {
             ManagedInstallationIndexStore::new(root).load(),
             Err(ManagedInstallError::StorageFailed)
         );
+    }
+
+    #[test]
+    fn uncertain_index_save_does_not_rollback_published_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManagedInstallationIndexStore::new(directory.path().join("managed-language"));
+        store.compare_and_swap(0, &advanced(1)).unwrap();
+        let published = Cell::new(false);
+
+        let result = store.compare_and_swap_transaction(
+            1,
+            &advanced(2),
+            || {
+                published.set(true);
+                fs::remove_file(store.index_path()).unwrap();
+                fs::create_dir(store.index_path()).unwrap();
+                Ok(())
+            },
+            || {
+                published.set(false);
+                Ok(())
+            },
+        );
+
+        assert_eq!(result, Err(ManagedInstallError::StorageFailed));
+        assert!(published.get());
     }
 }
