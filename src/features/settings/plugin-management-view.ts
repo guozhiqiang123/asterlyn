@@ -1,3 +1,4 @@
+import { canDeletePluginVersion } from "../../protocol/plugin-marketplace.ts";
 import { installedPluginDependents } from "../../protocol/plugin-dependencies.ts";
 import type {
   PluginManagementEntry,
@@ -79,6 +80,10 @@ export interface PluginManagementCopy {
   readonly knownGood: string;
   readonly quarantined: string;
   readonly rollback: string;
+  readonly deleteVersion: string;
+  readonly confirmDeleteVersion: (version: string) => string;
+  readonly deleteVersionDescription: string;
+  readonly protectedVersion: string;
   readonly repairPlugin: string;
   readonly repairPluginTitle: string;
   readonly uninstallPlugin: string;
@@ -99,6 +104,7 @@ export interface PluginMarketplaceViewState {
   readonly restarting: boolean;
   readonly restartRequired: boolean;
   readonly busyPlugin: string | null;
+  readonly confirmDeleteVersion?: { readonly pluginId: string; readonly version: string; readonly digest: string } | null;
   readonly confirmUninstallPlugin: string | null;
   readonly confirmEnablePlugin?: string | null;
 }
@@ -184,7 +190,11 @@ function renderAdmittedPackages(
       const repair = candidate.runtimeStatus === "quarantined"
         ? `<button class="secondary-button" type="button" data-installed-plugin-repair="${escapeAttribute(plugin.pluginId)}" data-plugin-version="${escapeAttribute(candidate.version)}" data-package-digest="${escapeAttribute(candidate.packageDigest)}" title="${escapeAttribute(copy.repairPluginTitle)}" ${busy ? "disabled" : ""}>${escapeHtml(copy.repairPlugin)}</button>`
         : "";
-      return `<li><span><code>${escapeHtml(candidate.version)}</code><small>${escapeHtml(versionStatus(candidate.runtimeStatus, copy))}</small></span>${rollback}${repair}</li>`;
+      const removable = canDeletePluginVersion(plugin, candidate);
+      const reviewing = removable && state.confirmDeleteVersion?.pluginId === plugin.pluginId && state.confirmDeleteVersion.version === candidate.version && state.confirmDeleteVersion.digest === candidate.packageDigest;
+      const remove = `<button class="secondary-button" type="button" data-installed-plugin-delete="${escapeAttribute(plugin.pluginId)}" data-plugin-version="${escapeAttribute(candidate.version)}" data-package-digest="${escapeAttribute(candidate.packageDigest)}" ${busy || !removable ? "disabled" : ""} ${!removable ? `title="${escapeAttribute(copy.protectedVersion)}"` : ""}>${escapeHtml(copy.deleteVersion)}</button>`;
+      const review = reviewing ? `<div class="plugin-installed-history-review" role="alert"><strong>${escapeHtml(copy.confirmDeleteVersion(candidate.version))}</strong><span>${escapeHtml(copy.deleteVersionDescription)}</span><div class="plugin-installed-version-actions"><button class="secondary-button" type="button" data-installed-plugin-delete-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-installed-plugin-delete-confirm ${busy ? "disabled" : ""}>${escapeHtml(copy.deleteVersion)}</button></div></div>` : "";
+      return `<li><div class="plugin-installed-version-row"><span><code>${escapeHtml(candidate.version)}</code><small>${escapeHtml(versionStatus(candidate.runtimeStatus, copy))}</small></span><div class="plugin-installed-version-actions">${rollback}${repair}${remove}</div></div>${review}</li>`;
     }).join("");
     const uninstallReview = !plugin.bundledFallback && state.confirmUninstallPlugin === plugin.pluginId
       ? `<div class="plugin-installed-uninstall-review" role="alert"><div><strong>${escapeHtml(copy.confirmUninstallPlugin)}</strong><span>${escapeHtml(copy.uninstallKeepsData)}</span></div><button class="secondary-button" type="button" data-installed-plugin-uninstall-cancel>${escapeHtml(copy.cancel)}</button><button class="danger-button" type="button" data-installed-plugin-uninstall-confirm="${escapeAttribute(plugin.pluginId)}" ${busy || dependencyReason ? "disabled" : ""}>${escapeHtml(copy.uninstallPlugin)}</button></div>`

@@ -16,6 +16,7 @@ const copy = {
   officialSource: "Official source", customSource: "Custom source", enableSource: "Enable source", refreshSource: "Check Release", refreshingSource: "Checking…", loadingMarketplace: "Loading sources…", noSources: "No sources.", notChecked: "Not checked", releaseAvailable: "Release available", noRelease: "No stable Release", staleRelease: "cached", packageLabel: "Package: ", checkedLabel: "Checked: ", marketplaceSecurityNote: "Packages are verified before installation.",
   inspectPackage: "Review package", inspectingPackage: "Inspecting…", confirmAdmission: "Admit package", admissionTitle: "Review plugin package", permissions: "Permissions", capabilities: "Capabilities", hostOperations: "Host operations", hostOperationSummary: (id) => `${id} · reviewed query or mutation · trusted workspace required`, license: "License", pendingRuntimeNote: "Pending isolated runtime.",
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
+  deleteVersion: "Delete", confirmDeleteVersion: version => `Delete version ${version}?`, deleteVersionDescription: "Removes historical files only.", protectedVersion: "Current package is protected.",
   enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", repairPlugin: "Repair", repairPluginTitle: "Reverify this package and prepare another isolated activation attempt", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin data is retained.",
 };
 
@@ -283,4 +284,14 @@ test("required plugins stay visibly locked while enabled consumers are inactive 
   assert.doesNotMatch(unlocked, /data-installed-plugin-enabled="dev.asterlyn.android-gradle"[^>]*disabled/u);
   assert.doesNotMatch(unlocked, /data-installed-plugin-uninstall="dev.asterlyn.android-gradle" disabled/u);
   assert.equal(android.enabled, true);
+});
+
+test("history deletion confirms the exact version and protects current recovery and pending rows", () => {
+ const digest=`sha256:${"a".repeat(64)}`;
+ const versions=[{version:"1.0.0",runtimeStatus:"knownGood"},{version:"2.0.0",runtimeStatus:"quarantined"},{version:"3.0.0",runtimeStatus:"knownGood"},{version:"4.0.0",runtimeStatus:"pendingRestart"}].map(v=>({...v,packageDigest:digest,admittedAtEpochMs:1}));
+ const state={tab:"installed",snapshot:null,loading:false,error:null,busyRepository:null,form:null,confirmDeleteRepository:null,admissionReview:null,restarting:false,restartRequired:false,busyPlugin:null,confirmUninstallPlugin:null,confirmDeleteVersion:{pluginId:"dev.example.plugin",version:"1.0.0",digest},installations:{schemaVersion:2,generation:1,recovered:false,plugins:[{pluginId:"dev.example.plugin",repository:"example/plugin",enabled:true,bundledFallback:true,activeVersion:"3.0.0",knownGoodVersion:"3.0.0",pendingVersion:"4.0.0",versions}]}};
+ const html=renderPluginManagementSection({schemaVersion:1,entries:[]},copy,false,state);
+ const controls=[...html.matchAll(/<button[^>]*data-installed-plugin-delete="[^"]+"[^>]*>/gu)].map(m=>m[0]);
+ assert.equal(controls.length,4);assert.ok(!controls[0].includes("disabled"));assert.ok(!controls[1].includes("disabled"));assert.ok(controls[2].includes("disabled"));assert.ok(controls[3].includes("disabled"));
+ assert.match(html,/Delete version 1\.0\.0\?/u);assert.match(html,/data-installed-plugin-delete-cancel/u);assert.match(html,/data-installed-plugin-delete-confirm/u);
 });

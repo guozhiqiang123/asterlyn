@@ -404,6 +404,7 @@ pub fn run() {
             set_installed_plugin_enabled,
             select_installed_plugin_rollback,
             repair_installed_plugin_version,
+            delete_installed_plugin_version,
             uninstall_installed_plugin,
             activate_installed_plugin_runtime,
             confirm_installed_plugin_runtime_healthy,

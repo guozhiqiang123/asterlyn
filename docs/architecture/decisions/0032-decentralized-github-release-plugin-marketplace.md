@@ -85,6 +85,15 @@ Bundled first-party code remains the fallback for the transition period, but the
 and `quarantined`. It must not claim that a downloaded external package is active before the
 isolated runtime has accepted it.
 
+Users can explicitly delete an admitted historical version from Installed settings after confirming
+the exact version. This removes its archive and extracted files without a restart or changes to
+settings, trust, enablement or project files. Active, pending, recovery and final retained versions,
+and packages used by any window's plugin or language process, are protected by native policy.
+Removal stages the version directory, commits the installation index and reclaims disk storage
+outside activation locks; startup restores pre-commit staging or finishes post-commit cleanup.
+An unchanged dependency selection can still clean history while recovering an unrelated failure.
+See the [implementation and acceptance plan](../../engineering/2026-11-06-plugin-history-removal-plan.md).
+
 ## Runtime isolation and capabilities
 
 External plugin JavaScript will not be imported into the main WebView, evaluated through a blob,

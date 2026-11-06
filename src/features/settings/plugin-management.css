@@ -27,7 +27,7 @@
   list-style: none;
 }
 
-.plugin-installed-versions li {
+.plugin-installed-version-row {
   display: flex;
   min-height: 34px;
   align-items: center;
@@ -38,7 +38,7 @@
   background: var(--surface-inset);
 }
 
-.plugin-installed-versions li > span {
+.plugin-installed-version-row > span {
   display: inline-flex;
   min-width: 0;
   align-items: baseline;
@@ -511,3 +511,9 @@
     grid-column: 1;
   }
 }
+
+.plugin-installed-versions li { display: grid; gap: 6px; }
+.plugin-installed-version-row > span { flex: 1; }
+.plugin-installed-version-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plugin-installed-history-review { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 5px; }
+.plugin-installed-history-review > span { color: var(--text-soft); }

@@ -22,6 +22,7 @@ export const EN_US_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   admittedPackage: "Admitted package", pendingRuntime: "Pending isolated runtime", pendingRestart: "Restart required to apply plugin changes", restartToApply: "Restart Asterlyn", restarting: "Restarting…",
   requiredPlugins: "Required plugins (compatible installed plugins will also be enabled)",
   requiredByPlugins: (names: string) => `Required by ${names}. Disable these plugins first.`,
+  deleteVersion: "Delete", confirmDeleteVersion: (version: string) => `Delete version ${version}?`, deleteVersionDescription: "Remove this historical package from disk. You will no longer be able to roll back to it. Plugin settings and project files are kept.", protectedVersion: "Current, pending, recovery and final packages are protected.",
   enableInstalledPlugin: "Enable installed package", enableReviewTitle: "Review exact package authority before enabling", confirmEnablePlugin: "Enable after restart", knownGood: "Known good", quarantined: "Quarantined", rollback: "Roll back", repairPlugin: "Repair", repairPluginTitle: "Reverify this package and prepare another isolated activation attempt", uninstallPlugin: "Uninstall", confirmUninstallPlugin: "Uninstall this plugin package?", uninstallKeepsData: "Plugin settings, trust decisions, and caches will be retained for a later reinstall.",
 };
 
@@ -47,5 +48,6 @@ export const ZH_CN_PLUGIN_MANAGEMENT_COPY: PluginManagementCopy = {
   admittedPackage: "已准入安装包", pendingRuntime: "等待隔离运行时", pendingRestart: "需要重启以应用插件变更", restartToApply: "重启 Asterlyn", restarting: "正在重启…",
   requiredPlugins: "依赖插件（已安装且兼容的依赖将一并启用）",
   requiredByPlugins: (names: string) => `正在被 ${names} 依赖，请先关闭这些插件。`,
+  deleteVersion: "删除", confirmDeleteVersion: (version: string) => `删除版本 ${version}？`, deleteVersionDescription: "删除此历史安装包以释放空间，之后将无法回滚到该版本。插件设置和项目文件会保留。", protectedVersion: "当前版本、待应用版本、自动恢复版本和最后一个安装包不可删除。",
   enableInstalledPlugin: "启用已安装插件", enableReviewTitle: "启用前审查此安装包的确切权限", confirmEnablePlugin: "重启后启用", knownGood: "已验证可用", quarantined: "已隔离", rollback: "回滚", repairPlugin: "修复", repairPluginTitle: "重新校验此安装包，并准备再次进行隔离激活", uninstallPlugin: "卸载", confirmUninstallPlugin: "确定卸载此插件安装包吗？", uninstallKeepsData: "插件设置、信任记录和缓存会保留，重新安装后可继续使用。",
 };

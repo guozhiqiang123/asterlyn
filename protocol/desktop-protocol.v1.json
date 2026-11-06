@@ -48,6 +48,7 @@
     { "name": "set_installed_plugin_enabled", "args": { "pluginId": "string", "enabled": "boolean" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
     { "name": "select_installed_plugin_rollback", "args": { "pluginId": "string", "version": "string", "packageDigest": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
     { "name": "repair_installed_plugin_version", "args": { "pluginId": "string", "version": "string", "packageDigest": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
+    { "name": "delete_installed_plugin_version", "args": { "pluginId": "string", "version": "string", "packageDigest": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
     { "name": "uninstall_installed_plugin", "args": { "pluginId": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },
     { "name": "activate_installed_plugin_runtime", "args": { "pluginId": "string", "workspaceRoot": "string", "workspaceGeneration": "number", "evidence": "PluginRuntimeValue", "locale": "string", "theme": "PluginRuntimeTheme" }, "result": "InstalledPluginActivation", "validator": "installedPluginActivation" },
     { "name": "confirm_installed_plugin_runtime_healthy", "args": { "pluginId": "string", "pluginVersion": "string", "packageDigest": "string", "sessionId": "string" }, "result": "PluginInstallationSnapshot", "validator": "pluginInstallationSnapshot" },

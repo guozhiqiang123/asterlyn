@@ -396,6 +396,52 @@ pub(crate) fn repair_installed_plugin_version(
 }
 
 #[tauri::command]
+pub(crate) async fn delete_installed_plugin_version(
+    plugin_id: String,
+    version: String,
+    package_digest: String,
+    app: tauri::AppHandle,
+) -> Result<PluginInstallationSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let marketplace = app.state::<PluginMarketplaceCoordinator>();
+        let supervisor = app.state::<PluginHostSupervisor>();
+        let languages = app.state::<crate::application::LanguageServiceManager>();
+        let store = installation_store(&app)?;
+        let result = marketplace.run(|| {
+            store
+                .ensure_can_remove_version(&plugin_id, &version, &package_digest)
+                .map_err(|e| e.to_string())?;
+            supervisor
+                .while_package_unused(&plugin_id, &version, &package_digest, || {
+                    languages.while_package_unused(&package_digest, || {
+                        super::plugin_marketplace_cleanup::stage_history_package_removal(
+                            &marketplace_root(&app)?,
+                            &store,
+                            &plugin_id,
+                            &version,
+                            &package_digest,
+                        )
+                    })
+                })
+                .map_err(|e| e.to_string())??
+        });
+        // An index write can commit before reporting a sync failure; refresh every window.
+        if let Ok(snapshot) = store.snapshot() {
+            publish_installations(&app, &snapshot);
+        }
+        let (snapshot, garbage) = result?;
+        // Reclaim outside activation/marketplace/session gates, off the UI thread.
+        if let Some(path) = garbage {
+            remove_marketplace_entry(&path)
+                .map_err(|e| format!("Version removed; disk cleanup will retry at startup: {e}"))?;
+        }
+        Ok(snapshot)
+    })
+    .await
+    .map_err(|_| "plugin history deletion task failed".to_owned())?
+}
+
+#[tauri::command]
 pub(crate) fn uninstall_installed_plugin(
     plugin_id: String,
     app: tauri::AppHandle,

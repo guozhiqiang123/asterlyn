@@ -53,6 +53,7 @@ export interface PluginMarketplaceBridge {
   setInstalledPluginEnabled(pluginId: string, enabled: boolean): Promise<PluginInstallationSnapshot>;
   selectInstalledPluginRollback(pluginId: string, version: string, packageDigest: string): Promise<PluginInstallationSnapshot>;
   repairInstalledPluginVersion(pluginId: string, version: string, packageDigest: string): Promise<PluginInstallationSnapshot>;
+  deleteInstalledPluginVersion(pluginId: string, version: string, packageDigest: string): Promise<PluginInstallationSnapshot>;
   uninstallInstalledPlugin(pluginId: string): Promise<PluginInstallationSnapshot>;
 }
 
@@ -362,4 +363,9 @@ export function validatePluginPackageAdmissionReview(value: unknown, command: De
   for (const field of ["capabilities", "permissions", "hostOperations"] as const) assert(Array.isArray(review[field]) && review[field].every((item) => typeof item === "string"), command, `${field} must be strings`);
   assert(review.enabledAfterInstall === false, command, "new plugins must remain disabled after admission");
   return value as PluginPackageAdmissionReview;
+}
+
+/** UI mirrors the native history policy; runtime references are checked natively. */
+export function canDeletePluginVersion(plugin: InstalledPlugin, version: AdmittedPluginVersion): boolean {
+  return plugin.versions.length > 1 && ![plugin.activeVersion, plugin.pendingVersion, plugin.knownGoodVersion].includes(version.version) && ["knownGood", "quarantined"].includes(version.runtimeStatus);
 }

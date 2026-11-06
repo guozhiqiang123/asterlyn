@@ -414,6 +414,30 @@ impl PluginHostSupervisor {
         Ok(())
     }
 
+    /// Serialize storage reclamation with activation, across every window.
+    pub fn while_package_unused<T>(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        digest: &str,
+        operation: impl FnOnce() -> T,
+    ) -> Result<T, PluginRuntimeError> {
+        let _transition = lock(&self.inner.transition, "runtime transition")?;
+        if lock(&self.inner.sessions, "runtime sessions")?
+            .values()
+            .any(|s| {
+                s.identity.plugin_id == plugin_id
+                    && s.identity.plugin_version == version
+                    && s.identity.package_digest == digest
+            })
+        {
+            return Err(PluginRuntimeError::InvalidConfiguration(
+                "plugin package is still used by a window".into(),
+            ));
+        }
+        Ok(operation())
+    }
+
     pub fn stop_plugin(&self, owner: &str, plugin_id: &str, reason: ShutdownReason) {
         let key = SessionKey {
             owner: owner.to_owned(),
@@ -1272,5 +1296,26 @@ mod tests {
             .err()
             .expect("outside helper rejected");
         assert!(error.to_string().contains("trusted installation root"));
+    }
+}
+
+#[cfg(test)]
+mod package_usage_tests {
+    use super::*;
+    #[test]
+    fn reclamation_holds_the_runtime_activation_gate() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = temp.path().join("fixture");
+        std::fs::write(&helper, "fixture").unwrap();
+        let supervisor = PluginHostSupervisor::from_verified_helper(&helper, temp.path()).unwrap();
+        assert!(
+            supervisor
+                .while_package_unused("dev.example.plugin", "1.0.0", "digest", || {
+                    assert!(supervisor.inner.transition.try_lock().is_err());
+                    true
+                })
+                .unwrap()
+        );
+        assert!(supervisor.inner.transition.try_lock().is_ok());
     }
 }

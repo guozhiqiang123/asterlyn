@@ -2,13 +2,67 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use asterlyn_plugin_marketplace::PluginInstallationSnapshot;
+use asterlyn_plugin_marketplace::{PluginInstallationSnapshot, PluginInstallationStore};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct PluginMarketplaceCleanupReport {
     pub(crate) staging_entries: usize,
     pub(crate) package_entries: usize,
     pub(crate) restored_tombstones: usize,
+}
+
+/// Called under the marketplace coordinator and runtime package-use guards.
+pub(crate) fn stage_history_package_removal(
+    root: &Path,
+    store: &PluginInstallationStore,
+    id: &str,
+    version: &str,
+    digest: &str,
+) -> Result<(PluginInstallationSnapshot, Option<std::path::PathBuf>), String> {
+    store
+        .ensure_can_remove_version(id, version, digest)
+        .map_err(|e| e.to_string())?;
+    let packages = root.join("packages");
+    let plugin = packages.join(id);
+    let source = plugin.join(version);
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "invalid system time")?
+        .as_nanos();
+    let tombstone = plugin.join(format!(".removing-version-{version}-{nonce}"));
+    for parent in [root, packages.as_path(), plugin.as_path()] {
+        if path_exists(parent)? && !is_safe_directory(parent)? {
+            return Err("plugin package parent is not a safe directory".into());
+        }
+    }
+    let staged = path_exists(&source)?;
+    if staged {
+        if !is_safe_directory(&source)? || path_exists(&tombstone)? {
+            return Err("plugin version is not a safe directory".into());
+        }
+        fs::rename(&source, &tombstone)
+            .map_err(|e| format!("stage historical package removal: {e}"))?;
+    }
+    match store.remove_version(id, version, digest) {
+        Ok(snapshot) => Ok((snapshot, staged.then_some(tombstone))),
+        Err(error) => {
+            if staged {
+                // Index publication can succeed before a directory-sync error. Reconcile first.
+                let referenced = store
+                    .snapshot()
+                    .map_err(|e| e.to_string())?
+                    .plugins
+                    .iter()
+                    .any(|p| p.plugin_id == id && p.versions.iter().any(|v| v.version == version));
+                if referenced {
+                    fs::rename(&tombstone, &source).map_err(|e| {
+                        format!("restore historical package after index failure: {e}")
+                    })?;
+                }
+            }
+            Err(error.to_string())
+        }
+    }
 }
 
 pub(crate) fn cleanup_marketplace_storage(
@@ -141,6 +195,31 @@ fn cleanup_plugin_versions(
             removed += 1;
             continue;
         };
+        if version.starts_with(".removing-version-") {
+            let original = referenced
+                .iter()
+                .filter(|(p, v, _)| {
+                    p == plugin_id && version.starts_with(&format!(".removing-version-{v}-"))
+                })
+                .map(|(_, v, _)| v)
+                .max_by_key(|v| v.len());
+            if let Some(original) = original {
+                let restored = plugin_root.join(original);
+                if !path_exists(&restored)? {
+                    if !is_safe_directory(&path)? {
+                        return Err("historical package tombstone is not a safe directory".into());
+                    }
+                    fs::rename(&path, &restored)
+                        .map_err(|e| format!("restore historical package: {e}"))?;
+                    removed +=
+                        cleanup_version_packages(&restored, plugin_id, original, referenced)?;
+                    continue;
+                }
+            }
+            remove_entry(&path)?;
+            removed += 1;
+            continue;
+        }
         if !referenced
             .iter()
             .any(|(candidate_plugin, candidate_version, _)| {
@@ -281,6 +360,9 @@ fn clear_read_only(path: &Path, metadata: &fs::Metadata) -> Result<(), String> {
                 .map_err(|error| format!("inspect {}: {error}", child.display()))?;
             clear_read_only(&child, &child_metadata)?;
         }
+    }
+    if metadata.file_type().is_symlink() {
+        return Ok(());
     }
     let mut permissions = metadata.permissions();
     permissions.set_readonly(false);
@@ -445,5 +527,143 @@ mod tests {
                 }],
             }],
         }
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+    use asterlyn_plugin_marketplace::AdmittedPluginIdentity;
+    const ID: &str = "dev.example.plugin";
+    fn remove_history_package(
+        root: &Path,
+        store: &PluginInstallationStore,
+        id: &str,
+        version: &str,
+        digest: &str,
+    ) -> Result<PluginInstallationSnapshot, String> {
+        let (snapshot, garbage) = stage_history_package_removal(root, store, id, version, digest)?;
+        if let Some(path) = garbage {
+            remove_marketplace_entry(&path)?;
+        }
+        Ok(snapshot)
+    }
+    fn fixture(root: &Path) -> (PluginInstallationStore, String) {
+        let store = PluginInstallationStore::open(root.join("index")).unwrap();
+        let digest = format!("sha256:{}", "a".repeat(64));
+        for version in ["1.0.0", "2.0.0"] {
+            store
+                .record_admitted_with_dependencies(
+                    AdmittedPluginIdentity {
+                        plugin_id: ID,
+                        repository: "example/plugin",
+                        version,
+                        package_digest: &digest,
+                        content_digest: &format!("sha256:{}", "b".repeat(64)),
+                    },
+                    1,
+                    false,
+                    vec![],
+                )
+                .unwrap();
+            store.set_plugin_enabled(ID, true).unwrap();
+            store.recover_interrupted_activations().unwrap();
+            store.begin_activation(ID, version, &digest).unwrap();
+            store.promote_healthy(ID, version, &digest).unwrap();
+            let path = root.join("packages").join(ID).join(version);
+            fs::create_dir_all(path.join("content")).unwrap();
+            fs::write(path.join("content/source"), "fixture").unwrap();
+            fs::write(path.join("archive.asterlyn-plugin.tgz"), "fixture").unwrap();
+        }
+        (store, digest)
+    }
+    #[test]
+    fn history_removal_reclaims_archive_and_extraction_without_touching_current_or_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let (store, digest) = fixture(root);
+        fs::write(root.join("settings"), "keep").unwrap();
+        remove_history_package(root, &store, ID, "1.0.0", &digest).unwrap();
+        assert!(!root.join("packages").join(ID).join("1.0.0").exists());
+        assert!(
+            root.join("packages")
+                .join(ID)
+                .join("2.0.0/content/source")
+                .exists()
+        );
+        assert_eq!(fs::read_to_string(root.join("settings")).unwrap(), "keep");
+        assert!(remove_history_package(root, &store, ID, "2.0.0", &digest).is_err());
+    }
+    #[test]
+    fn index_failure_restores_staged_files_and_does_not_remove_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let (store, digest) = fixture(root);
+        let before = store.snapshot().unwrap();
+        fs::create_dir(root.join("index/installations.v1.next.json")).unwrap();
+        assert!(remove_history_package(root, &store, ID, "1.0.0", &digest).is_err());
+        assert_eq!(store.snapshot().unwrap(), before);
+        assert!(
+            root.join("packages")
+                .join(ID)
+                .join("1.0.0/content/source")
+                .exists()
+        );
+    }
+    #[test]
+    fn startup_recovers_precommit_history_tombstones_and_reclaims_committed_ones() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let (store, digest) = fixture(root);
+        let plugin = root.join("packages").join(ID);
+        let staged = plugin.join(".removing-version-1.0.0-42");
+        // Fixture content names must match the index's immutable digest for normal GC.
+        for version in ["1.0.0", "2.0.0"] {
+            let dir = plugin.join(version);
+            fs::rename(
+                dir.join("content"),
+                dir.join(digest.trim_start_matches("sha256:")),
+            )
+            .unwrap();
+            fs::rename(
+                dir.join("archive.asterlyn-plugin.tgz"),
+                dir.join(format!(
+                    "{}.asterlyn-plugin.tgz",
+                    digest.trim_start_matches("sha256:")
+                )),
+            )
+            .unwrap();
+        }
+        fs::rename(plugin.join("1.0.0"), &staged).unwrap();
+        cleanup_marketplace_storage(root, &store.snapshot().unwrap()).unwrap();
+        assert!(plugin.join("1.0.0").exists());
+        assert!(!staged.exists());
+        fs::rename(plugin.join("1.0.0"), &staged).unwrap();
+        store.remove_version(ID, "1.0.0", &digest).unwrap();
+        cleanup_marketplace_storage(root, &store.snapshot().unwrap()).unwrap();
+        assert!(!staged.exists());
+        assert!(!plugin.join("1.0.0").exists());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn history_removal_rejects_symlinked_parents_and_unlinks_nested_links_only() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let (store, digest) = fixture(root);
+        fs::write(outside.path().join("sentinel"), "keep").unwrap();
+        let plugin = root.join("packages").join(ID);
+        fs::rename(plugin.join("1.0.0"), root.join("saved")).unwrap();
+        symlink(outside.path(), plugin.join("1.0.0")).unwrap();
+        assert!(remove_history_package(root, &store, ID, "1.0.0", &digest).is_err());
+        fs::remove_file(plugin.join("1.0.0")).unwrap();
+        fs::rename(root.join("saved"), plugin.join("1.0.0")).unwrap();
+        symlink(outside.path(), plugin.join("1.0.0/nested")).unwrap();
+        remove_history_package(root, &store, ID, "1.0.0", &digest).unwrap();
+        assert_eq!(
+            fs::read_to_string(outside.path().join("sentinel")).unwrap(),
+            "keep"
+        );
     }
 }

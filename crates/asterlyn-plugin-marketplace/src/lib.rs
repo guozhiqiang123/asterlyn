@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 mod dependencies;
+mod history;
 pub use asterlyn_plugin_dependencies::PluginDependency;
 pub use dependencies::{dependency_nodes, ensure_enabled_dependencies};
 mod installation_identity;

@@ -27,7 +27,7 @@ fn present_maximum<'de, D: serde::Deserializer<'de>>(
 
 /// Versions may contain both active and pending selections during a restart transition.
 /// Their dependency constraints must all remain satisfied until the previous process is gone.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DependencyNode {
     pub id: String,
     pub versions: Vec<String>,

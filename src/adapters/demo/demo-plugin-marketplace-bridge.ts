@@ -1,3 +1,4 @@
+import { canDeletePluginVersion } from "../../protocol/plugin-marketplace.ts";
 import type {
   InstalledPlugin, PluginMarketplaceBridge, PluginSource, PluginSourceSnapshot,
 } from "../../protocol/plugin-marketplace.ts";
@@ -73,6 +74,14 @@ export const demoPluginMarketplaceBridge: PluginMarketplaceBridge = {
     installedPlugins = installedPlugins.map((plugin) => plugin.pluginId === pluginId ? { ...plugin, pendingVersion: version } : plugin);
     installationGeneration += 1;
     return { schemaVersion: 1, generation: installationGeneration, recovered: false, plugins: structuredClone(installedPlugins) };
+  },
+  async deleteInstalledPluginVersion(pluginId, version, digest) {
+    const plugin = installedPlugins.find(p => p.pluginId === pluginId);
+    const candidate = plugin?.versions.find(v => v.version === version && v.packageDigest === digest);
+    if (!plugin || !candidate || !canDeletePluginVersion(plugin, candidate)) throw Error("This plugin version cannot be deleted.");
+    installedPlugins = installedPlugins.map(p => p === plugin ? { ...p, versions: p.versions.filter(v => v !== candidate) } : p);
+    installationGeneration += 1;
+    return { schemaVersion: 2, generation: installationGeneration, plugins: structuredClone(installedPlugins), recovered: false };
   },
   async repairInstalledPluginVersion(pluginId, version) {
     installedPlugins = installedPlugins.map((plugin) => plugin.pluginId === pluginId ? {

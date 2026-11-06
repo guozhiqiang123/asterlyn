@@ -53,6 +53,7 @@ export class PluginManagementBinding {
   private restartRequired = false;
   private busyPlugin: string | null = null;
   private confirmUninstallPlugin: string | null = null;
+  private confirmDeleteVersion: { pluginId: string; version: string; digest: string } | null = null;
   private confirmEnablePlugin: string | null = null;
 
   constructor(
@@ -96,6 +97,7 @@ export class PluginManagementBinding {
       busyPlugin: this.busyPlugin,
       confirmUninstallPlugin: this.confirmUninstallPlugin,
       confirmEnablePlugin: this.confirmEnablePlugin,
+      confirmDeleteVersion: this.confirmDeleteVersion,
     });
   }
 
@@ -255,9 +257,28 @@ export class PluginManagementBinding {
         );
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-delete]").forEach(button => {
+      button.addEventListener("click", () => {
+        const pluginId = button.dataset.installedPluginDelete, version = button.dataset.pluginVersion, digest = button.dataset.packageDigest;
+        if (!pluginId || !version || !digest || button.disabled) return;
+        this.confirmDeleteVersion = { pluginId, version, digest };
+        this.confirmUninstallPlugin = null;
+        this.confirmEnablePlugin = null;
+        this.options.render("[data-installed-plugin-delete-cancel]");
+      });
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-installed-plugin-delete-cancel]")?.addEventListener("click", () => {
+      this.confirmDeleteVersion = null;
+      this.options.render("[data-installed-plugin-delete]");
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-installed-plugin-delete-confirm]")?.addEventListener("click", () => {
+      const target = this.confirmDeleteVersion;
+      if (target) void this.mutateInstallation(target.pluginId, () => this.marketplace.deleteInstalledPluginVersion(target.pluginId, target.version, target.digest), () => { this.confirmDeleteVersion = null; }, false);
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-installed-plugin-uninstall]").forEach((button) => {
       button.addEventListener("click", () => {
         this.confirmUninstallPlugin = button.dataset.installedPluginUninstall ?? null;
+        this.confirmDeleteVersion = null;
         this.confirmEnablePlugin = null;
         this.options.render("[data-installed-plugin-uninstall-cancel]");
       });
@@ -423,7 +444,8 @@ export class PluginManagementBinding {
     this.marketplaceError = null;
     if (this.options.visible()) this.options.render();
     try {
-      this.installations = await operation();
+      const snapshot = await operation();
+      if (!this.installations || !(snapshot.generation < this.installations.generation)) this.installations = snapshot;
       if (!this.installations.plugins.some((plugin) => plugin.pluginId === pluginId && plugin.enabled)) this.options.revokePluginExecution?.(pluginId);
       await this.host.loadPluginManagement();
       this.restartRequired ||= requiresRestart;

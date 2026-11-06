@@ -27,7 +27,7 @@ use diagnostics::rust_diagnostic_item;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
@@ -78,6 +78,7 @@ struct Review {
     authority: u64,
 }
 struct Session {
+    package_digest: String,
     subject: LanguageSubject,
     control: SyncSender<ActorCommand>,
     pid: u32,
@@ -90,7 +91,7 @@ pub struct LanguageServiceManager {
     reviews: Mutex<HashMap<String, Review>>,
     sequence: AtomicU64,
     authority: Arc<AtomicU64>,
-    starting: Mutex<HashSet<String>>,
+    starting: Mutex<HashMap<String, String>>,
     closing: Arc<AtomicBool>,
     resources: Arc<resources::Pool>,
 }
@@ -346,12 +347,14 @@ impl LanguageServiceManager {
         if active_count + starting.len() >= 8 {
             return Err("language service session limit reached".into());
         }
-        if !starting.insert(startup_key.clone()) {
+        if starting.contains_key(&startup_key) {
             return Err("language service is already starting for this window".into());
         }
+        starting.insert(startup_key.clone(), package.digest.clone());
+        let package_digest = package.digest.clone();
         drop(starting);
         struct Startup<'a> {
-            owners: &'a Mutex<HashSet<String>>,
+            owners: &'a Mutex<HashMap<String, String>>,
             owner: String,
         }
         impl Drop for Startup<'_> {
@@ -462,6 +465,7 @@ impl LanguageServiceManager {
         sessions.insert(
             id.clone(),
             Session {
+                package_digest,
                 subject: subject.clone(),
                 control,
                 pid,
@@ -682,6 +686,27 @@ impl LanguageServiceManager {
             sessions.remove(id);
         }
     }
+    /// Keep starting/running language processes' package resources alive during reclamation.
+    pub fn while_package_unused<T>(
+        &self,
+        digest: &str,
+        operation: impl FnOnce() -> T,
+    ) -> Result<T, String> {
+        let starting = self
+            .starting
+            .lock()
+            .map_err(|_| "language startup lock unavailable")?;
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| "language session lock unavailable")?;
+        if starting.values().any(|d| d == digest)
+            || sessions.values().any(|s| s.package_digest == digest)
+        {
+            return Err("plugin package is still used by a language service".into());
+        }
+        Ok(operation())
+    }
     pub fn stop_sessions(&self) {
         self.authority.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut sessions) = self.sessions.lock() {
@@ -810,7 +835,7 @@ mod tests {
                 packaged: None,
             };
             let manager = LanguageServiceManager::default();
-            let mut ids = HashSet::new();
+            let mut ids = std::collections::HashSet::new();
             for _ in 0..2 {
                 let (sender, receiver) = mpsc::channel();
                 let id = manager
@@ -1273,3 +1298,54 @@ mod rust_tests;
 #[cfg(all(test, feature = "process-fixtures"))]
 #[path = "packaged_tests.rs"]
 mod packaged_tests;
+
+#[cfg(test)]
+mod package_usage_tests {
+    use super::*;
+    #[test]
+    fn reclamation_is_excluded_during_startup_or_any_windows_session() {
+        let manager = LanguageServiceManager::default();
+        manager
+            .starting
+            .lock()
+            .unwrap()
+            .insert("other-window".into(), "old-digest".into());
+        assert!(
+            manager
+                .while_package_unused("old-digest", || panic!(
+                    "must not reclaim startup resources"
+                ))
+                .is_err()
+        );
+        manager.starting.lock().unwrap().clear();
+        let (control, _rx) = mpsc::sync_channel(1);
+        manager.sessions.lock().unwrap().insert(
+            "session".into(),
+            Session {
+                package_digest: "old-digest".into(),
+                subject: LanguageSubject {
+                    owner: "other-window".into(),
+                    root: PathBuf::from("/fixture"),
+                    activation: 1,
+                },
+                control,
+                pid: 0,
+                profile: "typescript".into(),
+            },
+        );
+        assert!(
+            manager
+                .while_package_unused("old-digest", || panic!("must not reclaim live resources"))
+                .is_err()
+        );
+        assert!(
+            manager
+                .while_package_unused("unrelated-digest", || {
+                    assert!(manager.starting.try_lock().is_err());
+                    assert!(manager.sessions.try_lock().is_err());
+                    true
+                })
+                .unwrap()
+        );
+    }
+}

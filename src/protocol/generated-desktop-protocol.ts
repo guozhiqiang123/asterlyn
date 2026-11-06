@@ -33,6 +33,7 @@ export interface DesktopCommandMap {
   set_installed_plugin_enabled: { args: { pluginId: string; enabled: boolean; }; result: PluginInstallationSnapshot };
   select_installed_plugin_rollback: { args: { pluginId: string; version: string; packageDigest: string; }; result: PluginInstallationSnapshot };
   repair_installed_plugin_version: { args: { pluginId: string; version: string; packageDigest: string; }; result: PluginInstallationSnapshot };
+  delete_installed_plugin_version: { args: { pluginId: string; version: string; packageDigest: string; }; result: PluginInstallationSnapshot };
   uninstall_installed_plugin: { args: { pluginId: string; }; result: PluginInstallationSnapshot };
   activate_installed_plugin_runtime: { args: { pluginId: string; workspaceRoot: string; workspaceGeneration: number; evidence: PluginRuntimeValue; locale: string; theme: PluginRuntimeTheme; } & { diagnosticTraceId?: string }; result: InstalledPluginActivation };
   confirm_installed_plugin_runtime_healthy: { args: { pluginId: string; pluginVersion: string; packageDigest: string; sessionId: string; }; result: PluginInstallationSnapshot };
@@ -202,6 +203,7 @@ export const DESKTOP_RESULT_VALIDATORS: {
   set_installed_plugin_enabled: "pluginInstallationSnapshot",
   select_installed_plugin_rollback: "pluginInstallationSnapshot",
   repair_installed_plugin_version: "pluginInstallationSnapshot",
+  delete_installed_plugin_version: "pluginInstallationSnapshot",
   uninstall_installed_plugin: "pluginInstallationSnapshot",
   activate_installed_plugin_runtime: "installedPluginActivation",
   confirm_installed_plugin_runtime_healthy: "pluginInstallationSnapshot",
