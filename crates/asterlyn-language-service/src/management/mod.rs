@@ -5,6 +5,8 @@ mod model;
 pub use model::*;
 mod archive;
 pub use archive::*;
+mod download;
+pub use download::*;
 mod storage;
 pub use storage::*;
 mod content_storage;

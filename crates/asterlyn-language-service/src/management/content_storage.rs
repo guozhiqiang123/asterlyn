@@ -10,6 +10,7 @@ use std::{
 const CONTENT_DIRECTORY: &str = "content-v1";
 const STAGING_DIRECTORY: &str = "content-staging-v1";
 const TOMBSTONE_DIRECTORY: &str = "content-tombstones-v1";
+const DOWNLOAD_STAGING_DIRECTORY: &str = "download-staging-v1";
 pub(super) const MAX_CONTENT_ENTRIES: u32 = 65_536;
 const MAX_CONTENT_DEPTH: usize = 64;
 const MAX_CONTENT_PATH_BYTES: usize = 16_384;
@@ -152,6 +153,34 @@ impl ManagedInstallationContentStore {
         result
     }
 
+    /// Stream an admitted native transport into private temporary storage,
+    /// bind progress and cancellation, then enter the archive verification
+    /// and content transaction without exposing a filesystem path to clients.
+    pub fn stage_archive_stream(
+        &mut self,
+        artifact: &ManagedArtifact,
+        extraction: &ManagedArchiveExtraction,
+        source: &mut impl Read,
+        is_cancelled: impl FnMut() -> bool,
+        progress: impl FnMut(u64) -> Result<(), ManagedInstallError>,
+    ) -> Result<ManagedContentInventory, ManagedInstallError> {
+        artifact.validate()?;
+        extraction.validate()?;
+        if self.staged.contains_key(&artifact.id()) {
+            return Err(ManagedInstallError::Busy);
+        }
+        self.ensure_layout()?;
+        let archive = super::download::acquire_verified_archive(
+            &self.download_staging_root(),
+            artifact,
+            extraction,
+            source,
+            is_cancelled,
+            progress,
+        )?;
+        self.stage_archive(artifact, archive.path(), extraction)
+    }
+
     pub fn artifact_path(&self, artifact_id: &str) -> Result<PathBuf, ManagedInstallError> {
         Ok(self.content_root().join(artifact_hex(artifact_id)?))
     }
@@ -162,6 +191,7 @@ impl ManagedInstallationContentStore {
             self.content_root(),
             self.staging_root(),
             self.tombstone_root(),
+            self.download_staging_root(),
         ] {
             ensure_private_root(&directory)?;
         }
@@ -170,6 +200,9 @@ impl ManagedInstallationContentStore {
 
     fn recover_content(&self, index: &ManagedInstallationIndex) -> Result<(), ManagedInstallError> {
         self.ensure_layout()?;
+        for path in owned_files(&self.download_staging_root())? {
+            fs::remove_file(path).map_err(|_| ManagedInstallError::StorageFailed)?;
+        }
         for path in owned_directories(&self.staging_root())? {
             remove_owned_directory(&path)?;
         }
@@ -206,6 +239,7 @@ impl ManagedInstallationContentStore {
         sync_directory(&self.content_root())?;
         sync_directory(&self.staging_root())?;
         sync_directory(&self.tombstone_root())?;
+        sync_directory(&self.download_staging_root())?;
         Ok(())
     }
 
@@ -219,6 +253,10 @@ impl ManagedInstallationContentStore {
 
     fn tombstone_root(&self) -> PathBuf {
         self.root.join(TOMBSTONE_DIRECTORY)
+    }
+
+    fn download_staging_root(&self) -> PathBuf {
+        self.root.join(DOWNLOAD_STAGING_DIRECTORY)
     }
 }
 
@@ -596,6 +634,22 @@ fn owned_directories(directory: &Path) -> Result<Vec<PathBuf>, ManagedInstallErr
         .collect()
 }
 
+fn owned_files(directory: &Path) -> Result<Vec<PathBuf>, ManagedInstallError> {
+    let mut entries = directory_entries(directory)?;
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    entries
+        .into_iter()
+        .map(|(_, path)| {
+            let metadata =
+                fs::symlink_metadata(&path).map_err(|_| ManagedInstallError::StorageFailed)?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(ManagedInstallError::StorageFailed);
+            }
+            Ok(path)
+        })
+        .collect()
+}
+
 fn valid_component(value: &str) -> Result<(), ManagedInstallError> {
     if value.is_empty()
         || value == "."
@@ -743,9 +797,21 @@ fn sync_directory(_path: &Path) -> Result<(), ManagedInstallError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::{Compression, write::GzEncoder};
+    use std::{cell::Cell, io::Cursor};
 
     fn digest(value: &str) -> String {
         format!("sha256:{:x}", Sha256::digest(value.as_bytes()))
+    }
+
+    fn digest_bytes(value: &[u8]) -> String {
+        format!("sha256:{:x}", Sha256::digest(value))
+    }
+
+    fn gzip(value: &[u8]) -> Vec<u8> {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(value).unwrap();
+        encoder.finish().unwrap()
     }
 
     fn fixture_source() -> tempfile::TempDir {
@@ -900,6 +966,117 @@ mod tests {
     }
 
     #[test]
+    fn verified_stream_reports_progress_and_enters_the_private_archive_stage() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("server"), b"server-bytes").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(
+                source.path().join("server"),
+                fs::Permissions::from_mode(0o755),
+            )
+            .unwrap();
+        }
+        let expected = inventory_managed_content(source.path(), MAX_EXPANDED_BYTES).unwrap();
+        let archive = gzip(b"server-bytes");
+        let mut artifact = artifact(source.path());
+        artifact.archive_digest = digest_bytes(&archive);
+        let extraction = ManagedArchiveExtraction {
+            format: ManagedArchiveFormat::Gzip {
+                output_path: "server".into(),
+                executable: true,
+            },
+            download_bytes: archive.len() as u64,
+            expanded_bytes: expected.expanded_bytes,
+        };
+        let root = tempfile::tempdir().unwrap();
+        let mut store = ManagedInstallationContentStore::new(root.path().join("managed"));
+        let mut progress = Vec::new();
+        assert_eq!(
+            store
+                .stage_archive_stream(
+                    &artifact,
+                    &extraction,
+                    &mut Cursor::new(&archive),
+                    || false,
+                    |bytes| {
+                        progress.push(bytes);
+                        Ok(())
+                    },
+                )
+                .unwrap(),
+            expected
+        );
+        assert_eq!(progress.last(), Some(&(archive.len() as u64)));
+        assert!(progress.windows(2).all(|pair| pair[0] < pair[1]));
+        verify_managed_artifact(&artifact, &mut store).unwrap();
+        assert!(
+            owned_files(&store.download_staging_root())
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn cancelled_or_oversized_streams_leave_no_download_or_content_stage() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("server"), b"server-bytes").unwrap();
+        let archive = gzip(b"server-bytes");
+        let mut artifact = artifact(source.path());
+        artifact.archive_digest = digest_bytes(&archive);
+        let extraction = ManagedArchiveExtraction {
+            format: ManagedArchiveFormat::Gzip {
+                output_path: "server".into(),
+                executable: false,
+            },
+            download_bytes: archive.len() as u64,
+            expanded_bytes: b"server-bytes".len() as u64,
+        };
+        let root = tempfile::tempdir().unwrap();
+        let mut store = ManagedInstallationContentStore::new(root.path().join("managed"));
+        let cancelled = Cell::new(false);
+        assert_eq!(
+            store.stage_archive_stream(
+                &artifact,
+                &extraction,
+                &mut Cursor::new(&archive),
+                || cancelled.get(),
+                |_| {
+                    cancelled.set(true);
+                    Ok(())
+                },
+            ),
+            Err(ManagedInstallError::Cancelled)
+        );
+        assert!(
+            owned_files(&store.download_staging_root())
+                .unwrap()
+                .is_empty()
+        );
+        assert!(owned_directories(&store.staging_root()).unwrap().is_empty());
+
+        let mut oversized = archive.clone();
+        oversized.push(0);
+        assert_eq!(
+            store.stage_archive_stream(
+                &artifact,
+                &extraction,
+                &mut Cursor::new(oversized),
+                || false,
+                |_| Ok(()),
+            ),
+            Err(ManagedInstallError::ResourceLimit)
+        );
+        assert!(
+            owned_files(&store.download_staging_root())
+                .unwrap()
+                .is_empty()
+        );
+        assert!(owned_directories(&store.staging_root()).unwrap().is_empty());
+    }
+
+    #[test]
     fn stale_index_never_publishes_content_and_discards_the_private_stage() {
         let directory = tempfile::tempdir().unwrap();
         let source = fixture_source();
@@ -944,6 +1121,8 @@ mod tests {
         let abandoned_stage = store.staging_root().join("stage-abandoned");
         fs::create_dir(&abandoned_stage).unwrap();
         fs::write(abandoned_stage.join("partial"), b"partial").unwrap();
+        let abandoned_download = store.download_staging_root().join("download-abandoned");
+        fs::write(&abandoned_download, b"partial").unwrap();
 
         drop(store);
         let mut restarted = ManagedInstallationContentStore::new(directory.path().join("managed"));
@@ -954,6 +1133,7 @@ mod tests {
         assert!(destination.join("bin/server").is_file());
         assert!(!orphan.exists());
         assert!(!abandoned_stage.exists());
+        assert!(!abandoned_download.exists());
         assert!(
             owned_directories(&restarted.tombstone_root())
                 .unwrap()
