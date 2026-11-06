@@ -14,7 +14,7 @@ export interface CatalogProvider {
 }
 
 export interface CatalogSelectionContext {
-  readonly document: {
+  readonly source: {
     readonly workspacePath: string;
     readonly kind: "editable-source" | "read-only-source" | "historical" | "dependency" | "other";
   } | null;
@@ -71,8 +71,8 @@ export class LanguageCatalogIndex {
 
   select(context: CatalogSelectionContext): CatalogSelection {
     if (!context.hasWorkspace || context.activePluginIds.size === 0) return { kind: "inactive" };
-    if (context.document?.kind !== "editable-source") return { kind: "ineligible-document" };
-    const path = context.document.workspacePath;
+    if (context.source?.kind !== "editable-source") return { kind: "ineligible-document" };
+    const path = context.source.workspacePath;
     if (path.length === 0 || path.length > MAX_CATALOG_DOCUMENT_PATH || path.startsWith("/") || /^[A-Za-z]:\//u.test(path) || path.includes("\\") || /[\u0000-\u001f\u007f]/u.test(path)
       || path.split("/").some(part => !part || part === "." || part === "..")) return { kind: "ineligible-document" };
     const name = path.slice(path.lastIndexOf("/") + 1);

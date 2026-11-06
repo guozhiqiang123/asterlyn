@@ -22,7 +22,7 @@ for (const [name, pluginCount, languageCount, serverCount, suffixCount] of [
       })),
     },
   }));
-  const context = { document: { kind: "editable-source", workspacePath: "src/file.l0.s0" }, hasWorkspace: true,
+  const context = { source: { kind: "editable-source", workspacePath: "src/file.l0.s0" }, hasWorkspace: true,
     activePluginIds: new Set(registrations.map(value => value.pluginId)), platform: "macos-arm64", rootMarkers: new Set(["marker"]), rootMarkersComplete: true, preferredProvider: null };
   const compile = [], queries = [], preferredQueries = [];
   let compiled;

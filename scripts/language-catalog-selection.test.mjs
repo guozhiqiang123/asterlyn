@@ -7,7 +7,7 @@ const fixture = JSON.parse(readFileSync(new URL("../protocol/fixtures/language-s
 const pluginId = "dev.asterlyn.lsp";
 const catalog = () => structuredClone(fixture);
 const context = (path = "src/main.rs", overrides = {}) => ({
-  document: { kind: "editable-source", workspacePath: path }, hasWorkspace: true, activePluginIds: new Set([pluginId]),
+  source: { kind: "editable-source", workspacePath: path }, hasWorkspace: true, activePluginIds: new Set([pluginId]),
   platform: "macos-arm64", rootMarkers: new Set(["Cargo.toml"]), rootMarkersComplete: true, preferredProvider: null, ...overrides,
 });
 const index = (value = catalog()) => new LanguageCatalogIndex([{ pluginId, catalog: value }]);
@@ -31,8 +31,8 @@ test("disabled/unavailable plugins and workspace transitions immediately remove 
 });
 
 test("read-only/history/dependency/image/absent sources never qualify", () => {
-  for (const kind of ["read-only-source", "historical", "dependency", "other"]) assert.equal(index().select(context(undefined, { document: { workspacePath: "main.rs", kind } })).kind, "ineligible-document");
-  assert.equal(index().select(context(undefined, { document: null })).kind, "ineligible-document");
+  for (const kind of ["read-only-source", "historical", "dependency", "other"]) assert.equal(index().select(context(undefined, { source: { workspacePath: "main.rs", kind } })).kind, "ineligible-document");
+  assert.equal(index().select(context(undefined, { source: null })).kind, "ineligible-document");
 });
 
 test("selectors are case sensitive, support Unicode parent paths and reject malformed paths", () => {
